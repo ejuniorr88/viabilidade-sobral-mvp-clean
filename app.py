@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,11 @@ RUAS_FILE = DATA_DIR / "ruas.json"
 
 @st.cache_resource(show_spinner=False)
 def _zones():
-    return load_zones(ZONE_FILE)
+    # load_zones -> lista preparada (shapely) para lookup
+    # Para desenhar no mapa, também precisamos do GeoJSON bruto.
+    with ZONE_FILE.open("r", encoding="utf-8") as f:
+        gj = json.load(f)
+    return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
 
 
 @st.cache_resource(show_spinner=False)
