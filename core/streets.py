@@ -15,7 +15,7 @@ DATA_DIR = Path("data")
 RUAS_FILE = DATA_DIR / "ruas.json"
 
 # Lat/Lon -> WebMercator (meters)
-_TO_3857 = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+point = Point(lon, lat)
 
 @dataclass(frozen=True)
 class StreetHit:
