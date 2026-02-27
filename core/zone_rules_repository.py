@@ -18,6 +18,24 @@ class ZoneRule:
     recuo_fundos_m: float
     def get(self, key, default=None):
     return getattr(self, key, default)
+        def get(self, key: str, default=None):
+        """
+        Compatibilidade com código antigo que trata ZoneRule como dict.
+        Também aceita aliases usados no app.
+        """
+        alias = {
+            # nomes "genéricos" usados no app
+            "to_max": "to_max_pct",
+            "tp_min": "tp_min_pct",
+            "ia_max": "ia_max",
+
+            # recuos (aliases)
+            "setback_front_m": "recuo_frontal_m",
+            "setback_side_m": "recuo_lateral_m",
+            "setback_back_m": "recuo_fundos_m",
+        }
+        attr = alias.get(key, key)
+        return getattr(self, attr, default)
 
 
 def get_zone_rule(zone_sigla: str, use_type_code: str) -> Optional[ZoneRule]:
