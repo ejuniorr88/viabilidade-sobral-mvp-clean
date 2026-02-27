@@ -1,98 +1,155 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from shapely.geometry import Point, shape
+from shapely.ops import transform
+from shapely.strtree import STRtree
+from pyproj import Transformer
+
+# =============================
+# Files
+# =============================
+DATA_DIR = Path("data")
+RUAS_FILE = DATA_DIR / "ruas.json"
 
 
-def _safe_float(x: Any) -> Optional[float]:
-    try:
-        if x is None or x == "":
-            return None
-        return float(x)
-    except Exception:
-        return None
+@dataclass(frozen=True)
+class StreetHit:
+    name: str
+    street_type: Optional[str]
+    distance_m: float
 
 
-def _rule_get(rule: Any, key: str) -> Any:
-    """Read rule value from dict-like OR attribute-like objects."""
-    if rule is None:
-        return None
-    if hasattr(rule, "get"):
-        try:
-            v = rule.get(key)
-            if v is not None:
-                return v
-        except Exception:
-            pass
-    return getattr(rule, key, None)
+def _infer_name(props: Dict[str, Any]) -> str:
+    for k in ("nome", "name", "logradouro", "rua", "via"):
+        v = props.get(k)
+        if v:
+            return str(v)
+    return "Via (sem nome)"
 
 
-def _pick_first(rule: Any, *keys: str) -> Optional[float]:
-    for k in keys:
-        v = _safe_float(_rule_get(rule, k))
-        if v is not None:
-            return v
+def _infer_type(props: Dict[str, Any]) -> Optional[str]:
+    for k in ("tipo", "type", "categoria", "class", "highway"):
+        v = props.get(k)
+        if v:
+            return str(v)
     return None
 
 
-def compute(
-    *,
-    area_lote_m2: float,
-    testada_m: Optional[float] = None,
-    largura_m: Optional[float] = None,   # compatibilidade
-    profundidade_m: Optional[float] = None,
-    area_terreo_m2: float = 0.0,
-    zone_rule: Any = None,
-) -> Dict[str, Any]:
-    """Calcula TO / TP / IA e checks básicos.
+def _looks_lonlat(x: float, y: float) -> bool:
+    return (-180.0 <= x <= 180.0) and (-90.0 <= y <= 90.0)
 
-    Compatível com chamadas antigas e novas:
-    - aceita `testada_m=` (novo) e `largura_m=` (antigo).
-    - `zone_rule` pode ser dict, ZoneRule(dict-like) ou objeto com atributos.
+
+class StreetsIndex:
+    """Índice espacial das vias (ruas.json).
+
+    Assume ruas.json em EPSG:4326 (lon/lat) e projeta para EPSG:3857 (metros)
+    para cálculo de distâncias.
+
+    Importante: always_xy=True evita inversão de eixo (lat/lon), que é a causa
+    mais comum de 'Via não encontrada' mesmo com o pin em cima da rua.
     """
 
-    largura_real = testada_m if (testada_m not in (None, 0)) else largura_m
+    def __init__(self) -> None:
+        self._tree: Optional[STRtree] = None
+        self._geoms_3857: List[Any] = []
+        self._props: List[Dict[str, Any]] = []
 
-    to_max = _pick_first(zone_rule, "to_max_pct", "to_max", "to", "taxa_ocupacao_max")
-    tp_min = _pick_first(zone_rule, "tp_min_pct", "tp_min", "tp", "taxa_permeabilidade_min")
-    ia_max = _pick_first(zone_rule, "ia_max", "ia", "indice_aproveitamento_max")
+        self._to_3857 = Transformer.from_crs(
+            "EPSG:4326", "EPSG:3857", always_xy=True
+        ).transform
 
-    recuo_frontal = _pick_first(zone_rule, "recuo_frontal_m", "setback_front_m")
-    recuo_lateral = _pick_first(zone_rule, "recuo_lateral_m", "setback_side_m")
-    recuo_fundos = _pick_first(zone_rule, "recuo_fundos_m", "setback_back_m")
+    def load(self) -> None:
+        if self._tree is not None:
+            return
 
-    max_area_ocupada = (area_lote_m2 * to_max) if to_max is not None else None
-    min_area_permeavel = (area_lote_m2 * tp_min) if tp_min is not None else None
-    max_area_total = (area_lote_m2 * ia_max) if ia_max is not None else None
+        if not RUAS_FILE.exists():
+            raise FileNotFoundError(f"Arquivo não encontrado: {RUAS_FILE}")
 
-    ok_to = None
-    if max_area_ocupada is not None:
-        ok_to = float(area_terreo_m2) <= float(max_area_ocupada) + 1e-9
+        with RUAS_FILE.open("r", encoding="utf-8") as f:
+            gj = json.load(f)
 
-    return {
-        "inputs": {
-            "area_lote_m2": float(area_lote_m2),
-            "testada_m": None if largura_real is None else float(largura_real),
-            "profundidade_m": None if profundidade_m is None else float(profundidade_m),
-            "area_terreo_m2": float(area_terreo_m2),
-        },
-        "indices": {
-            "to_max": to_max,
-            "tp_min": tp_min,
-            "ia_max": ia_max,
-        },
-        "recuos": {
-            "recuo_frontal_m": recuo_frontal,
-            "recuo_lateral_m": recuo_lateral,
-            "recuo_fundos_m": recuo_fundos,
-        },
-        "areas": {
-            "max_area_ocupada_m2": max_area_ocupada,
-            "min_area_permeavel_m2": min_area_permeavel,
-            "max_area_total_m2": max_area_total,
-        },
-        "checks": {
-            "to_ok": ok_to,
-            "tp_ok": None,
-            "ia_ok": None,
-        },
-    }
+        feats = gj.get("features") if isinstance(gj, dict) else None
+        if not feats:
+            raise RuntimeError("ruas.json inválido: esperado FeatureCollection com 'features'.")
+
+        geoms_3857: List[Any] = []
+        props_list: List[Dict[str, Any]] = []
+
+        for feat in feats:
+            geom = feat.get("geometry")
+            props = feat.get("properties") or {}
+            if not geom:
+                continue
+
+            g = shape(geom)  # em 4326
+            g3857 = transform(self._to_3857, g)  # em metros
+
+            geoms_3857.append(g3857)
+            props_list.append(props)
+
+        if not geoms_3857:
+            raise RuntimeError("ruas.json não contém geometrias válidas.")
+
+        self._geoms_3857 = geoms_3857
+        self._props = props_list
+        self._tree = STRtree(self._geoms_3857)
+
+    def nearest_street(self, lon: float, lat: float, radius_m: float) -> Optional[StreetHit]:
+        self.load()
+        assert self._tree is not None
+
+        # Se o app mandar invertido, tenta corrigir
+        if _looks_lonlat(lat, lon) and not _looks_lonlat(lon, lat):
+            lon, lat = lat, lon
+
+        p = Point(float(lon), float(lat))
+        p3857 = transform(self._to_3857, p)
+
+        buf = p3857.buffer(float(radius_m))
+        candidates = self._tree.query(buf)
+        if not candidates:
+            return None
+
+        best_idx: Optional[int] = None
+        best_d: Optional[float] = None
+
+        # STRtree retorna geometrias; achamos índice pelo objeto
+        for g in candidates:
+            try:
+                i = self._geoms_3857.index(g)
+            except ValueError:
+                continue
+            d = float(p3857.distance(g))
+            if best_d is None or d < best_d:
+                best_d = d
+                best_idx = i
+
+        if best_idx is None or best_d is None or best_d > float(radius_m):
+            return None
+
+        props = self._props[best_idx]
+        return StreetHit(
+            name=_infer_name(props),
+            street_type=_infer_type(props),
+            distance_m=best_d,
+        )
+
+
+_INDEX: Optional[StreetsIndex] = None
+
+
+def get_streets_index() -> StreetsIndex:
+    global _INDEX
+    if _INDEX is None:
+        _INDEX = StreetsIndex()
+    return _INDEX
+
+
+def find_street(lon: float, lat: float, radius_m: float) -> Optional[StreetHit]:
+    idx = get_streets_index()
+    return idx.nearest_street(lon=lon, lat=lat, radius_m=radius_m)
