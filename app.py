@@ -171,14 +171,7 @@ zones = _zones()
 zones_gj = zones["geojson"]
 
 st.subheader("1) Selecione o ponto no mapa")
-radius_m = st.number_input(
-    "Raio para encontrar via (m)",
-    min_value=10,
-    max_value=50000,
-    value=1000,
-    step=50,
-    help="Se aparecer 'Via não encontrada', aumente o raio. Em algumas áreas o dataset de vias pode ter apenas rodovias/vias classificadas.",
-)
+radius_m = st.number_input("Raio para encontrar via (m)", min_value=10, max_value=1000, value=100, step=10)
 
 last_click = st.session_state.get("last_click")
 click_lat = last_click.get("lat") if last_click else None
@@ -207,7 +200,7 @@ st.subheader("2) Localização (zona + via)")
 
 street_info = None
 if lat is not None and lon is not None:
-    street_info = _nearest_street(lat, lon, radius_m)
+    street_info = _nearest_street(lon, lat, radius_m)
 
     colA, colB, colC = st.columns(3)
     with colA:
@@ -268,9 +261,9 @@ if rule:
             testada_m=float(testada),
             profundidade_m=float(profundidade),
             built_ground_m2=float(built_ground),
-            to_max_pct=rule.get("to_max_pct"),
-            tp_min_pct=rule.get("tp_min_pct"),
-            ia_max=rule.get("ia_max"),
+            to_max_pct=(rule.get("to_max_pct") or rule.get("to_max") or rule.get("to_sub_max")),
+            tp_min_pct=(rule.get("tp_min_pct") or rule.get("tp_min")),
+            ia_max=(rule.get("ia_max") or rule.get("ia") or rule.get("ia_maximo")),
             recuo_frontal_m=rule.get("recuo_frontal_m"),
             recuo_lateral_m=rule.get("recuo_lateral_m"),
             recuo_fundos_m=rule.get("recuo_fundos_m"),
