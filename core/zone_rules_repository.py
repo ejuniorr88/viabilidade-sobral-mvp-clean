@@ -16,6 +16,8 @@ class ZoneRule:
     recuo_frontal_m: float
     recuo_lateral_m: float
     recuo_fundos_m: float
+    def get(self, key, default=None):
+    return getattr(self, key, default)
 
 
 def get_zone_rule(zone_sigla: str, use_type_code: str) -> Optional[ZoneRule]:
