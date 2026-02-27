@@ -1,69 +1,76 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from .supabase_client import get_supabase
 
 
-@dataclass(frozen=True)
-class ZoneRule:
-    zone_sigla: str
-    use_type_code: str
-    to_max_pct: float
-    tp_min_pct: float
-    ia_max: float
-    recuo_frontal_m: float
-    recuo_lateral_m: float
-    recuo_fundos_m: float
+class ZoneRule(dict):
+    """Dict-like rule object (JSON-serializable) with attribute access.
 
-    # 👇 ADICIONE ISSO AQUI (resolve o erro do .get)
-    def get(self, key: str, default=None):
-        alias = {
-            "to_max": "to_max_pct",
-            "tp_min": "tp_min_pct",
-            "setback_front_m": "recuo_frontal_m",
-            "setback_side_m": "recuo_lateral_m",
-            "setback_back_m": "recuo_fundos_m",
-        }
-        attr = alias.get(key, key)
-        return getattr(self, attr, default)
+    Why this exists:
+    - Streamlit `st.json()` expects a real JSON object (dict/list). A dataclass may break the UI.
+    - Older code may call `rule.get(...)` (dict-style) or `rule.to_max_pct` (attribute-style).
+    This class supports both.
+    """
+
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError as e:
+            raise AttributeError(name) from e
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # keep dict + attributes in sync
+        self[name] = value
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(self)
 
 
-def get_zone_rule(zone_sigla: str, use_type_code: str) -> Optional[ZoneRule]:
+def get_zone_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO") -> Optional[ZoneRule]:
+    """Fonte única: tabela public.zone_rules (Supabase).
 
+    IMPORTANT:
+    - Seu schema atual tem UNIQUE (zone_sigla, use_type_code, subzone_code) e subzone_code NOT NULL.
+    - Para regra geral, usamos subzone_code='PADRAO'.
+    """
     sb = get_supabase()
+    if sb is None:
+        return None
 
     resp = (
         sb.table("zone_rules")
-        .select(
-            "zone_sigla,use_type_code,to_max_pct,tp_min_pct,ia_max,recuo_frontal_m,recuo_lateral_m,recuo_fundos_m"
-        )
+        .select("*")
         .eq("zone_sigla", zone_sigla)
         .eq("use_type_code", use_type_code)
+        .eq("subzone_code", subzone_code)
         .limit(1)
         .execute()
     )
 
     data = getattr(resp, "data", None) or []
     if not data:
-        return None
+        # fallback: tenta achar qualquer subzona se não existir PADRAO
+        resp2 = (
+            sb.table("zone_rules")
+            .select("*")
+            .eq("zone_sigla", zone_sigla)
+            .eq("use_type_code", use_type_code)
+            .limit(1)
+            .execute()
+        )
+        data2 = getattr(resp2, "data", None) or []
+        if not data2:
+            return None
+        row = data2[0]
+    else:
+        row = data[0]
 
-    row: Dict[str, Any] = data[0]
+    if not isinstance(row, dict):
+        row = dict(row)
 
-    def _f(k: str) -> float:
-        v = row.get(k)
-        if v is None:
-            raise RuntimeError(f"Campo obrigatório ausente em zone_rules: {k}")
-        return float(v)
-
-    return ZoneRule(
-        zone_sigla=str(row.get("zone_sigla")),
-        use_type_code=str(row.get("use_type_code")),
-        to_max_pct=_f("to_max_pct"),
-        tp_min_pct=_f("tp_min_pct"),
-        ia_max=_f("ia_max"),
-        recuo_frontal_m=_f("recuo_frontal_m"),
-        recuo_lateral_m=_f("recuo_lateral_m"),
-        recuo_fundos_m=_f("recuo_fundos_m"),
-    )
+    return ZoneRule(**row)
