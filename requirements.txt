@@ -1,0 +1,21 @@
+streamlit
+folium
+streamlit-folium
+
+# força ferramentas de build e pkg_resources (evita surpresas)
+setuptools==69.5.1
+wheel
+
+# base numérica compatível
+numpy==1.26.4
+
+# geometrias (wheels prontos p/ py311)
+shapely==2.0.3
+
+# projeção (wheels prontos com PROJ embutido em geral)
+pyproj==3.6.1
+
+# caso use supabase
+supabase
+python-dotenv
+requests
