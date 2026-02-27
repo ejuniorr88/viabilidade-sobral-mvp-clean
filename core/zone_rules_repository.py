@@ -16,20 +16,12 @@ class ZoneRule:
     recuo_frontal_m: float
     recuo_lateral_m: float
     recuo_fundos_m: float
-    def get(self, key, default=None):
-    return getattr(self, key, default)
-        def get(self, key: str, default=None):
-        """
-        Compatibilidade com código antigo que trata ZoneRule como dict.
-        Também aceita aliases usados no app.
-        """
+
+    # 👇 ADICIONE ISSO AQUI (resolve o erro do .get)
+    def get(self, key: str, default=None):
         alias = {
-            # nomes "genéricos" usados no app
             "to_max": "to_max_pct",
             "tp_min": "tp_min_pct",
-            "ia_max": "ia_max",
-
-            # recuos (aliases)
             "setback_front_m": "recuo_frontal_m",
             "setback_side_m": "recuo_lateral_m",
             "setback_back_m": "recuo_fundos_m",
@@ -39,21 +31,6 @@ class ZoneRule:
 
 
 def get_zone_rule(zone_sigla: str, use_type_code: str) -> Optional[ZoneRule]:
-    """Fonte única: tabela public.zone_rules (Supabase).
-
-    Chave lógica: (zone_sigla, use_type_code)
-    Colunas esperadas (mínimo):
-      - zone_sigla
-      - use_type_code
-      - to_max_pct
-      - tp_min_pct
-      - ia_max
-      - recuo_frontal_m
-      - recuo_lateral_m
-      - recuo_fundos_m
-
-    Sem fallback fixo: retorna None se não existir.
-    """
 
     sb = get_supabase()
 
