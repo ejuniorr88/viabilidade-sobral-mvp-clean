@@ -171,7 +171,14 @@ zones = _zones()
 zones_gj = zones["geojson"]
 
 st.subheader("1) Selecione o ponto no mapa")
-radius_m = st.number_input("Raio para encontrar via (m)", min_value=10, max_value=1000, value=100, step=10)
+radius_m = st.number_input(
+    "Raio para encontrar via (m)",
+    min_value=10,
+    max_value=50000,
+    value=1000,
+    step=50,
+    help="Se aparecer 'Via não encontrada', aumente o raio. Em algumas áreas o dataset de vias pode ter apenas rodovias/vias classificadas.",
+)
 
 last_click = st.session_state.get("last_click")
 click_lat = last_click.get("lat") if last_click else None
