@@ -21,7 +21,7 @@ from core.supabase_client import get_supabase
 
 
 APP_VERSION = "v1.1-streets"
-APP_TITLE = "Viabilidade Sobral — Residencial Unifamiliar (v1.1)"
+APP_TITLE = "Viabilidade (v1.1)"
 DATA_DIR = Path(__file__).parent / "data"
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 RUAS_FILE = DATA_DIR / "ruas.json"

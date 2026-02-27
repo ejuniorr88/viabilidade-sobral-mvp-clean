@@ -1,62 +1,98 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 
-@dataclass(frozen=True)
-class CalcResult:
-    to_max_area: float
-    tp_min_area: float
-    ia_max_area_total: float
-
-    buildable_area_standard: float
-    max_terreo_standard: float
-
-    buildable_area_art112: float
-    max_terreo_art112: float
+def _safe_float(x: Any) -> Optional[float]:
+    try:
+        if x is None or x == "":
+            return None
+        return float(x)
+    except Exception:
+        return None
 
 
-def clamp0(x: float) -> float:
-    return x if x > 0 else 0.0
+def _rule_get(rule: Any, key: str) -> Any:
+    """Read rule value from dict-like OR attribute-like objects."""
+    if rule is None:
+        return None
+    if hasattr(rule, "get"):
+        try:
+            v = rule.get(key)
+            if v is not None:
+                return v
+        except Exception:
+            pass
+    return getattr(rule, key, None)
+
+
+def _pick_first(rule: Any, *keys: str) -> Optional[float]:
+    for k in keys:
+        v = _safe_float(_rule_get(rule, k))
+        if v is not None:
+            return v
+    return None
 
 
 def compute(
-    lot_area_m2: float,
-    lot_width_m: float,
-    lot_depth_m: float,
-    to_max_pct: float,
-    tp_min_pct: float,
-    ia_max: float,
-    recuo_frontal_m: float,
-    recuo_lateral_m: float,
-    recuo_fundos_m: float,
-) -> CalcResult:
-    lot_area_m2 = float(lot_area_m2)
-    lot_width_m = float(lot_width_m)
-    lot_depth_m = float(lot_depth_m)
+    *,
+    area_lote_m2: float,
+    testada_m: Optional[float] = None,
+    largura_m: Optional[float] = None,   # compatibilidade
+    profundidade_m: Optional[float] = None,
+    area_terreo_m2: float = 0.0,
+    zone_rule: Any = None,
+) -> Dict[str, Any]:
+    """Calcula TO / TP / IA e checks básicos.
 
-    to_max_area = lot_area_m2 * (float(to_max_pct) / 100.0)
-    tp_min_area = lot_area_m2 * (float(tp_min_pct) / 100.0)
-    ia_max_area_total = lot_area_m2 * float(ia_max)
+    Compatível com chamadas antigas e novas:
+    - aceita `testada_m=` (novo) e `largura_m=` (antigo).
+    - `zone_rule` pode ser dict, ZoneRule(dict-like) ou objeto com atributos.
+    """
 
-    # Opção 1: recuos padrão
-    bw = clamp0(lot_width_m - 2.0 * float(recuo_lateral_m))
-    bd = clamp0(lot_depth_m - float(recuo_frontal_m) - float(recuo_fundos_m))
-    buildable_standard = bw * bd
-    max_terreo_standard = min(to_max_area, buildable_standard)
+    largura_real = testada_m if (testada_m not in (None, 0)) else largura_m
 
-    # Opção 2: Art. 112 (zerar frontal e laterais, manter fundos)
-    bw2 = clamp0(lot_width_m)
-    bd2 = clamp0(lot_depth_m - float(recuo_fundos_m))
-    buildable_art112 = bw2 * bd2
-    max_terreo_art112 = min(to_max_area, buildable_art112)
+    to_max = _pick_first(zone_rule, "to_max_pct", "to_max", "to", "taxa_ocupacao_max")
+    tp_min = _pick_first(zone_rule, "tp_min_pct", "tp_min", "tp", "taxa_permeabilidade_min")
+    ia_max = _pick_first(zone_rule, "ia_max", "ia", "indice_aproveitamento_max")
 
-    return CalcResult(
-        to_max_area=to_max_area,
-        tp_min_area=tp_min_area,
-        ia_max_area_total=ia_max_area_total,
-        buildable_area_standard=buildable_standard,
-        max_terreo_standard=max_terreo_standard,
-        buildable_area_art112=buildable_art112,
-        max_terreo_art112=max_terreo_art112,
-    )
+    recuo_frontal = _pick_first(zone_rule, "recuo_frontal_m", "setback_front_m")
+    recuo_lateral = _pick_first(zone_rule, "recuo_lateral_m", "setback_side_m")
+    recuo_fundos = _pick_first(zone_rule, "recuo_fundos_m", "setback_back_m")
+
+    max_area_ocupada = (area_lote_m2 * to_max) if to_max is not None else None
+    min_area_permeavel = (area_lote_m2 * tp_min) if tp_min is not None else None
+    max_area_total = (area_lote_m2 * ia_max) if ia_max is not None else None
+
+    ok_to = None
+    if max_area_ocupada is not None:
+        ok_to = float(area_terreo_m2) <= float(max_area_ocupada) + 1e-9
+
+    return {
+        "inputs": {
+            "area_lote_m2": float(area_lote_m2),
+            "testada_m": None if largura_real is None else float(largura_real),
+            "profundidade_m": None if profundidade_m is None else float(profundidade_m),
+            "area_terreo_m2": float(area_terreo_m2),
+        },
+        "indices": {
+            "to_max": to_max,
+            "tp_min": tp_min,
+            "ia_max": ia_max,
+        },
+        "recuos": {
+            "recuo_frontal_m": recuo_frontal,
+            "recuo_lateral_m": recuo_lateral,
+            "recuo_fundos_m": recuo_fundos,
+        },
+        "areas": {
+            "max_area_ocupada_m2": max_area_ocupada,
+            "min_area_permeavel_m2": min_area_permeavel,
+            "max_area_total_m2": max_area_total,
+        },
+        "checks": {
+            "to_ok": ok_to,
+            "tp_ok": None,
+            "ia_ok": None,
+        },
+    }
