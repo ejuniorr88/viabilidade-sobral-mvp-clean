@@ -1,113 +1,138 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from shapely.geometry import shape, Point
-from shapely.strtree import STRtree
 from shapely.ops import transform
+from shapely.strtree import STRtree
 from pyproj import Transformer
 
+DATA_DIR = Path("data")
+RUAS_FILE = DATA_DIR / "ruas.json"
+
+# Lat/Lon -> WebMercator (meters)
+_TO_3857 = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
 
 @dataclass(frozen=True)
 class StreetHit:
     name: str
-    hierarchy: str
+    street_type: Optional[str]
     distance_m: float
 
+def _infer_name(props: Dict[str, Any]) -> str:
+    for k in ("nome", "name", "logradouro", "rua", "via"):
+        v = props.get(k)
+        if v:
+            return str(v)
+    return "Via (sem nome)"
+
+def _infer_type(props: Dict[str, Any]) -> Optional[str]:
+    for k in ("tipo", "type", "categoria", "class", "highway"):
+        v = props.get(k)
+        if v:
+            return str(v)
+    return None
+
+def _looks_lonlat(bounds_list: List[Tuple[float, float, float, float]]) -> bool:
+    if not bounds_list:
+        return True
+    for minx, miny, maxx, maxy in bounds_list:
+        if any(math.isnan(v) for v in (minx, miny, maxx, maxy)):
+            continue
+        if not (-180 <= minx <= 180 and -180 <= maxx <= 180 and -90 <= miny <= 90 and -90 <= maxy <= 90):
+            return False
+    return True
 
 class StreetsIndex:
-    """
-    Índice espacial (STRtree) das geometrias de ruas em UTM (metros),
-    para buscar a rua mais próxima do ponto clicado.
-    """
+    def __init__(self, features: List[Dict[str, Any]]):
+        self._features = features
+        self._geoms = [f["_geom"] for f in features]
+        self._tree = STRtree(self._geoms)
 
-    def __init__(self, geoms_utm: List[Any], props_by_id: Dict[int, Dict[str, Any]]):
-        self._tree = STRtree(geoms_utm)
-        self._props_by_id = props_by_id
+    @staticmethod
+    def load(path: Path = RUAS_FILE) -> "StreetsIndex":
+        if not path.exists():
+            raise FileNotFoundError(f"Arquivo não encontrado: {path}")
 
-    def nearest(self, pt_utm: Point, max_distance_m: float = 60.0) -> Optional[StreetHit]:
-        if len(self._tree.geometries) == 0:
+        gj = json.loads(path.read_text(encoding="utf-8"))
+        feats = gj.get("features") or []
+        if not feats:
+            return StreetsIndex([])
+
+        sample_bounds: List[Tuple[float, float, float, float]] = []
+        for f in feats[:20]:
+            try:
+                g = shape(f.get("geometry"))
+                sample_bounds.append(g.bounds)
+            except Exception:
+                continue
+
+        lonlat = _looks_lonlat(sample_bounds)
+
+        out: List[Dict[str, Any]] = []
+        for f in feats:
+            geom = f.get("geometry")
+            if not geom:
+                continue
+            try:
+                g = shape(geom)
+            except Exception:
+                continue
+
+            props = f.get("properties") or {}
+            name = _infer_name(props)
+            stype = _infer_type(props)
+
+            g_m = transform(_TO_3857.transform, g) if lonlat else g
+
+            out.append({"_geom": g_m, "name": name, "type": stype})
+
+        return StreetsIndex(out)
+
+    def nearest_street(self, lon: float, lat: float, radius_m: float) -> Optional[StreetHit]:
+        if not self._features:
             return None
 
-        nearest_geom = self._tree.nearest(pt_utm)
-        if nearest_geom is None:
+        p_m = Point(*_TO_3857.transform(lon, lat))
+        candidates = self._tree.query(p_m.buffer(radius_m))
+        if not candidates:
             return None
 
-        dist = float(nearest_geom.distance(pt_utm))
-        if dist > max_distance_m:
+        best_d = None
+        best_feat = None
+
+        # map geom object id -> index for speed
+        geom_id_to_idx = {id(g): i for i, g in enumerate(self._geoms)}
+
+        for g in candidates:
+            try:
+                d = float(g.distance(p_m))
+            except Exception:
+                continue
+            if d <= radius_m and (best_d is None or d < best_d):
+                best_d = d
+                best_feat = self._features[geom_id_to_idx[id(g)]]
+
+        if best_d is None or best_feat is None:
             return None
 
-        props = self._props_by_id.get(id(nearest_geom), {}) or {}
-        name = (props.get("log_ofic") or props.get("nome") or props.get("name") or "").strip()
-        hierarchy = (props.get("hierarquia") or props.get("classe") or props.get("type") or "").strip()
+        return StreetHit(name=str(best_feat["name"]), street_type=best_feat.get("type"), distance_m=best_d)
 
-        # fallback legível
-        if not name:
-            name = "Rua (sem nome no dataset)"
-        if not hierarchy:
-            hierarchy = "Tipo não informado"
+_INDEX: Optional[StreetsIndex] = None
 
-        return StreetHit(name=name, hierarchy=hierarchy, distance_m=dist)
+def get_streets_index() -> StreetsIndex:
+    global _INDEX
+    if _INDEX is None:
+        _INDEX = StreetsIndex.load()
+    return _INDEX
 
-
-def load_streets_index(ruas_file: Path) -> StreetsIndex:
-    """
-    Espera GeoJSON em data/ruas.json.
-    Converte todas as linhas para UTM 24S (SIRGAS 2000) para medir distância em metros.
-    """
-    data = json.loads(ruas_file.read_text(encoding="utf-8"))
-
-    feats = []
-    if isinstance(data, dict) and "features" in data:
-        feats = data["features"] or []
-    elif isinstance(data, list):
-        feats = data
-    else:
-        feats = []
-
-    # Sobral: SIRGAS 2000 / UTM 24S (EPSG:31984)
-    transformer = Transformer.from_crs("EPSG:4326", "EPSG:31984", always_xy=True)
-
-    def _to_utm(x, y, z=None):
-        return transformer.transform(x, y)
-
-    geoms_utm: List[Any] = []
-    props_by_id: Dict[int, Dict[str, Any]] = {}
-
-    for f in feats:
-        geom = (f or {}).get("geometry")
-        props = (f or {}).get("properties") or {}
-
-        if not geom:
-            continue
-
-        try:
-            g = shape(geom)
-        except Exception:
-            continue
-
-        # Converte para UTM (m)
-        try:
-            g_utm = transform(_to_utm, g)
-        except Exception:
-            continue
-
-        geoms_utm.append(g_utm)
-        props_by_id[id(g_utm)] = props
-
-    return StreetsIndex(geoms_utm=geoms_utm, props_by_id=props_by_id)
-
-
-def nearest_street_from_latlon(
-    streets_index: StreetsIndex,
-    lat: float,
-    lon: float,
-    max_distance_m: float = 60.0,
-) -> Optional[StreetHit]:
-    transformer = Transformer.from_crs("EPSG:4326", "EPSG:31984", always_xy=True)
-    x, y = transformer.transform(lon, lat)
-    pt_utm = Point(x, y)
-    return streets_index.nearest(pt_utm, max_distance_m=max_distance_m)
+def find_street(lon: float, lat: float, radius_m: float = 100.0) -> Tuple[Optional[str], Optional[str], Optional[float]]:
+    idx = get_streets_index()
+    hit = idx.nearest_street(lon, lat, radius_m)
+    if not hit:
+        return None, None, None
+    return hit.name, hit.street_type, hit.distance_m
