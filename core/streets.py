@@ -1,27 +1,28 @@
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-from shapely.geometry import shape, Point
+from shapely.geometry import Point, shape
 from shapely.ops import transform
 from shapely.strtree import STRtree
 from pyproj import Transformer
 
+# =============================
+# Files
+# =============================
 DATA_DIR = Path("data")
 RUAS_FILE = DATA_DIR / "ruas.json"
 
-# Lat/Lon -> WebMercator (meters)
-point = Point(lon, lat)
 
 @dataclass(frozen=True)
 class StreetHit:
     name: str
     street_type: Optional[str]
     distance_m: float
+
 
 def _infer_name(props: Dict[str, Any]) -> str:
     for k in ("nome", "name", "logradouro", "rua", "via"):
@@ -30,6 +31,7 @@ def _infer_name(props: Dict[str, Any]) -> str:
             return str(v)
     return "Via (sem nome)"
 
+
 def _infer_type(props: Dict[str, Any]) -> Optional[str]:
     for k in ("tipo", "type", "categoria", "class", "highway"):
         v = props.get(k)
@@ -37,102 +39,117 @@ def _infer_type(props: Dict[str, Any]) -> Optional[str]:
             return str(v)
     return None
 
-def _looks_lonlat(bounds_list: List[Tuple[float, float, float, float]]) -> bool:
-    if not bounds_list:
-        return True
-    for minx, miny, maxx, maxy in bounds_list:
-        if any(math.isnan(v) for v in (minx, miny, maxx, maxy)):
-            continue
-        if not (-180 <= minx <= 180 and -180 <= maxx <= 180 and -90 <= miny <= 90 and -90 <= maxy <= 90):
-            return False
-    return True
+
+def _looks_lonlat(x: float, y: float) -> bool:
+    return (-180.0 <= x <= 180.0) and (-90.0 <= y <= 90.0)
+
 
 class StreetsIndex:
-    def __init__(self, features: List[Dict[str, Any]]):
-        self._features = features
-        self._geoms = [f["_geom"] for f in features]
-        self._tree = STRtree(self._geoms)
+    """Índice espacial das vias (ruas.json).
 
-    @staticmethod
-    def load(path: Path = RUAS_FILE) -> "StreetsIndex":
-        if not path.exists():
-            raise FileNotFoundError(f"Arquivo não encontrado: {path}")
+    Assume ruas.json em EPSG:4326 (lon/lat) e projeta para EPSG:3857 (metros)
+    para cálculo de distâncias.
 
-        gj = json.loads(path.read_text(encoding="utf-8"))
-        feats = gj.get("features") or []
+    Importante: always_xy=True evita inversão de eixo (lat/lon), que é a causa
+    mais comum de 'Via não encontrada' mesmo com o pin em cima da rua.
+    """
+
+    def __init__(self) -> None:
+        self._tree: Optional[STRtree] = None
+        self._geoms_3857: List[Any] = []
+        self._props: List[Dict[str, Any]] = []
+
+        self._to_3857 = Transformer.from_crs(
+            "EPSG:4326", "EPSG:3857", always_xy=True
+        ).transform
+
+    def load(self) -> None:
+        if self._tree is not None:
+            return
+
+        if not RUAS_FILE.exists():
+            raise FileNotFoundError(f"Arquivo não encontrado: {RUAS_FILE}")
+
+        with RUAS_FILE.open("r", encoding="utf-8") as f:
+            gj = json.load(f)
+
+        feats = gj.get("features") if isinstance(gj, dict) else None
         if not feats:
-            return StreetsIndex([])
+            raise RuntimeError("ruas.json inválido: esperado FeatureCollection com 'features'.")
 
-        sample_bounds: List[Tuple[float, float, float, float]] = []
-        for f in feats[:20]:
-            try:
-                g = shape(f.get("geometry"))
-                sample_bounds.append(g.bounds)
-            except Exception:
-                continue
+        geoms_3857: List[Any] = []
+        props_list: List[Dict[str, Any]] = []
 
-        lonlat = _looks_lonlat(sample_bounds)
-
-        out: List[Dict[str, Any]] = []
-        for f in feats:
-            geom = f.get("geometry")
+        for feat in feats:
+            geom = feat.get("geometry")
+            props = feat.get("properties") or {}
             if not geom:
                 continue
-            try:
-                g = shape(geom)
-            except Exception:
-                continue
 
-            props = f.get("properties") or {}
-            name = _infer_name(props)
-            stype = _infer_type(props)
+            g = shape(geom)  # em 4326
+            g3857 = transform(self._to_3857, g)  # em metros
 
-            g_m = transform(_TO_3857.transform, g) if lonlat else g
+            geoms_3857.append(g3857)
+            props_list.append(props)
 
-            out.append({"_geom": g_m, "name": name, "type": stype})
+        if not geoms_3857:
+            raise RuntimeError("ruas.json não contém geometrias válidas.")
 
-        return StreetsIndex(out)
+        self._geoms_3857 = geoms_3857
+        self._props = props_list
+        self._tree = STRtree(self._geoms_3857)
 
     def nearest_street(self, lon: float, lat: float, radius_m: float) -> Optional[StreetHit]:
-        if not self._features:
-            return None
+        self.load()
+        assert self._tree is not None
 
-        p_m = Point(*_TO_3857.transform(lon, lat))
-        candidates = self._tree.query(p_m.buffer(radius_m))
+        # Se o app mandar invertido, tenta corrigir
+        if _looks_lonlat(lat, lon) and not _looks_lonlat(lon, lat):
+            lon, lat = lat, lon
+
+        p = Point(float(lon), float(lat))
+        p3857 = transform(self._to_3857, p)
+
+        buf = p3857.buffer(float(radius_m))
+        candidates = self._tree.query(buf)
         if not candidates:
             return None
 
-        best_d = None
-        best_feat = None
+        best_idx: Optional[int] = None
+        best_d: Optional[float] = None
 
-        # map geom object id -> index for speed
-        geom_id_to_idx = {id(g): i for i, g in enumerate(self._geoms)}
-
+        # STRtree retorna geometrias; achamos índice pelo objeto
         for g in candidates:
             try:
-                d = float(g.distance(p_m))
-            except Exception:
+                i = self._geoms_3857.index(g)
+            except ValueError:
                 continue
-            if d <= radius_m and (best_d is None or d < best_d):
+            d = float(p3857.distance(g))
+            if best_d is None or d < best_d:
                 best_d = d
-                best_feat = self._features[geom_id_to_idx[id(g)]]
+                best_idx = i
 
-        if best_d is None or best_feat is None:
+        if best_idx is None or best_d is None or best_d > float(radius_m):
             return None
 
-        return StreetHit(name=str(best_feat["name"]), street_type=best_feat.get("type"), distance_m=best_d)
+        props = self._props[best_idx]
+        return StreetHit(
+            name=_infer_name(props),
+            street_type=_infer_type(props),
+            distance_m=best_d,
+        )
+
 
 _INDEX: Optional[StreetsIndex] = None
+
 
 def get_streets_index() -> StreetsIndex:
     global _INDEX
     if _INDEX is None:
-        _INDEX = StreetsIndex.load()
+        _INDEX = StreetsIndex()
     return _INDEX
 
-def find_street(lon: float, lat: float, radius_m: float = 100.0) -> Tuple[Optional[str], Optional[str], Optional[float]]:
+
+def find_street(lon: float, lat: float, radius_m: float) -> Optional[StreetHit]:
     idx = get_streets_index()
-    hit = idx.nearest_street(lon, lat, radius_m)
-    if not hit:
-        return None, None, None
-    return hit.name, hit.street_type, hit.distance_m
+    return idx.nearest_street(lon=lon, lat=lat, radius_m=radius_m)
