@@ -13,7 +13,7 @@ from core.zone_rules_repository import get_zone_rule
 from core.zones_map import load_zones, zone_from_latlon
 from core.calculations import compute
 from core.supabase_client import get_supabase
-from core.streets import find_street, streets_health
+from core.streets import find_street
 APP_VERSION = "v1.1-streets"
 APP_TITLE = "Viabilidade (v1.1) TESTE"
 DATA_DIR = Path(__file__).parent / "data"
