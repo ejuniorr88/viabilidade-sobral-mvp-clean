@@ -83,7 +83,7 @@ def _streets_index() -> dict[str, Any]:
     }
 
 
-def _nearest_street(lat: float, lon: float, radius_m: float) -> dict[str, Any]:
+def _nearest_street(lon: float, lat: float, radius_m: float) -> dict[str, Any]:
     idx = _streets_index()
     if not idx.get("ok"):
         return {"found": False, "reason": idx.get("reason", "Falha ao carregar ruas.")}
@@ -96,27 +96,20 @@ def _nearest_street(lat: float, lon: float, radius_m: float) -> dict[str, Any]:
     x, y = ll_to_utm(lon, lat)
     p = Point(x, y)
 
-    # Verifica se encontrou alguma via
-if nearest_road is None:
-    return None, None, "Via não encontrada."
+    try:
+        g_near = tree.nearest(p)
+        if g_near is None:
+            return {"found": False, "reason": "Nenhuma via encontrada."}
+        dist = float(p.distance(g_near))
+    except Exception:
+        return {"found": False, "reason": "Erro ao buscar via mais próxima."}
 
-# Calcula distância
-dist = point_proj.distance(nearest_geom_proj)
-
-# Sempre retorna a via mais próxima
-road_name = nearest_road.get("nome", "Via sem nome")
-road_type = nearest_road.get("tipo", None)
-
-outside_reason = None
-
-# Se estiver fora do raio, apenas gera aviso
-if dist > radius_m:
-    outside_reason = (
-        f"Via mais próxima a {dist:.1f} m "
-        f"(fora do raio de {radius_m:.0f} m)."
-    )
-
-return road_name, road_type, outside_reason
+    if dist > float(radius_m):
+        return {
+            "found": False,
+            "distance_m": dist,
+            "reason": f"Via não encontrada no raio de {radius_m:.0f} m (mais próxima a {dist:.1f} m).",
+        }
 
     try:
         i = geoms_utm.index(g_near)
@@ -133,8 +126,6 @@ return road_name, road_type, outside_reason
 
     return {
         "found": True,
-        "within_radius": (not outside),
-        "warning": outside_reason,
         "name": name or "Sem nome (cadastro)",
         "type": road_type or "Sem classificação (cadastro)",
         "distance_m": dist,
@@ -209,7 +200,7 @@ st.subheader("2) Localização (zona + via)")
 
 street_info = None
 if lat is not None and lon is not None:
-    street_info = _nearest_street(lat, lon, radius_m)
+    street_info = _nearest_street(lon, lat, radius_m)
 
     colA, colB, colC = st.columns(3)
     with colA:
@@ -270,9 +261,9 @@ if rule:
             testada_m=float(testada),
             profundidade_m=float(profundidade),
             built_ground_m2=float(built_ground),
-            to_max_pct=rule.get("to_max_pct"),
-            tp_min_pct=rule.get("tp_min_pct"),
-            ia_max=rule.get("ia_max"),
+            to_max_pct=(rule.get("to_max_pct") or rule.get("to_max") or rule.get("to_sub_max")),
+            tp_min_pct=(rule.get("tp_min_pct") or rule.get("tp_min")),
+            ia_max=(rule.get("ia_max") or rule.get("ia") or rule.get("ia_maximo")),
             recuo_frontal_m=rule.get("recuo_frontal_m"),
             recuo_lateral_m=rule.get("recuo_lateral_m"),
             recuo_fundos_m=rule.get("recuo_fundos_m"),
@@ -314,8 +305,6 @@ if rule:
         if lat is not None and lon is not None:
             street_name = street_info.get("name") if street_info else None
             street_type = street_info.get("type") if street_info else None
-            if street_info and street_info.get("warning"):
-                st.warning(street_info["warning"])
             street_dist = street_info.get("distance_m") if street_info else None
 
             _log_query(
