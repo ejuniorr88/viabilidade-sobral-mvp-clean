@@ -11,9 +11,7 @@ import streamlit as st
 # Diagnóstico RUAS (fail-safe)
 # =============================
 def _diagnostico_ruas_json():
-    """Diagnóstico simples do data/ruas.json.
-    Não interfere nos cálculos e NUNCA pode quebrar o app.
-    """
+    """Diagnóstico simples do data/ruas.json (nunca quebra o app)."""
     try:
         import json
         from pathlib import Path
@@ -146,6 +144,22 @@ if out and out.get("last_clicked"):
 st.divider()
 
 st.subheader("2) Localização (zona + via)")
+# --- Diagnóstico (ruas.json) ---
+with st.expander("Diagnóstico (ruas.json)", expanded=False):
+    info = _diagnostico_ruas_json()
+    st.write("Caminho procurado:", info.get("ruas_path"))
+    st.write("Existe no deploy?:", "SIM" if info.get("exists") else "NÃO")
+    st.write("Quantidade de vias carregadas:", info.get("streets_loaded", 0))
+    keys = info.get("sample_property_keys")
+    if keys:
+        st.write("Exemplo de chaves em properties (1ª via):", keys)
+    if info.get("error"):
+        st.warning("Erro ao ler ruas.json: " + str(info.get("error")))
+    if not info.get("exists"):
+        st.warning("O arquivo data/ruas.json não foi encontrado no deploy. Confirme se está commitado na branch DEV exatamente em /data/ruas.json.")
+    elif info.get("streets_loaded", 0) == 0:
+        st.warning("ruas.json existe, mas nenhuma via foi carregada. Isso explica 'Via não encontrada' sempre.")
+
 
 street_info = None
 if lat is not None and lon is not None:
