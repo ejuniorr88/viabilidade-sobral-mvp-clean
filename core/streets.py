@@ -1,23 +1,53 @@
 from __future__ import annotations
 
+"""Streets (ruas) — rebuilt, simple, robust, isolated.
+
+BLOCO 2 — RECONSTRUÇÃO DO STREETS DO ZERO
+Escopo:
+- Leitura de data/ruas.json
+- CRS correto e distância em metros via UTM 24S (SIRGAS 2000) EPSG:31984
+- Índice espacial com STRtree
+- nearest (via mais próxima dentro de radius_m)
+Regras:
+- Se via não for encontrada -> retorna None (app continua)
+- Sem fallback hardcoded
+- Sem inventar propriedades
+- Nenhuma exceção deve quebrar o app
+
+Interface preservada para integração:
+- find_street(lat, lon, radius_m=150.0) -> dict | None
+- get_streets_index() -> StreetsIndex (singleton lazy)
+"""
+
 import json
 from dataclasses import dataclass
+from math import cos, radians
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple
 
-from shapely.geometry import Point, shape
+from pyproj import Transformer
+from shapely.geometry import Point, box, shape
 from shapely.ops import transform as shp_transform
 from shapely.strtree import STRtree
-from pyproj import Transformer
 
+
+# -----------------------------
+# Paths
+# -----------------------------
 DATA_DIR = Path("data")
 RUAS_FILE = DATA_DIR / "ruas.json"
 
-# Usamos UTM 24S (SIRGAS 2000) para distância em metros.
-# (Sobral/CE cai aqui.)
-_WGS84_TO_UTM24S = Transformer.from_crs("EPSG:4326", "EPSG:31984", always_xy=True)
+
+# -----------------------------
+# CRS / Transformer
+# -----------------------------
+# WGS84 lon/lat (EPSG:4326) -> SIRGAS 2000 / UTM 24S (EPSG:31984), metros
+_WGS84_TO_UTM24S = Transformer.from_crs("EPSG:4326", "EPSG:31984", always_xy=True).transform
 
 
+# -----------------------------
+# Types
+# -----------------------------
 @dataclass(frozen=True)
 class StreetHit:
     name: str
@@ -25,160 +55,183 @@ class StreetHit:
     distance_m: float
 
 
-def _infer_name(props: Dict[str, Any]) -> str:
-    # prioridade: log_ofic primeiro (seu arquivo tem muito isso)
-    for k in ("log_ofic", "nome", "name", "logradouro", "rua", "via"):
-        v = props.get(k)
-        if v:
-            s = str(v).strip()
-            if s:
-                return s
-    return "Via (sem nome)"
-
-
-def _infer_type(props: Dict[str, Any]) -> Optional[str]:
-    for k in ("hierarquia", "tipo", "type", "categoria", "class", "highway"):
-        v = props.get(k)
-        if v:
-            s = str(v).strip()
-            if s:
-                return s
-    return None
-
-
 class StreetsIndex:
-    """
-    Índice espacial robusto:
-    - Funciona com Shapely 1.x (STRtree.query -> geometrias)
-    - Funciona com Shapely 2.x (STRtree.query -> índices / numpy array)
+    """Índice de ruas (STRtree) com cálculo de distância em metros.
+
+    Design:
+    - Armazena geometrias em WGS84 (para indexação)
+    - Converte para UTM apenas durante cálculo de distância (metros)
+    - Carregamento e consultas são fail-safe (nunca levantam exceção para fora)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, ruas_file: Path = RUAS_FILE) -> None:
+        self.ruas_file = ruas_file
         self._tree: Optional[STRtree] = None
-        self._geoms_utm: List[Any] = []
-        self._props: List[Dict[str, Any]] = []
-        self._id_to_idx: Dict[int, int] = {}
-        self._loaded: bool = False
+        self._geoms: List[Any] = []
+        self._meta_by_geom_id: Dict[int, Dict[str, Any]] = {}
+        self._built: bool = False
 
-    def load(self) -> None:
-        if self._loaded:
-            return
-        self._loaded = True
+    # ---------- Build ----------
+    def build(self) -> "StreetsIndex":
+        """Carrega ruas.json e constrói a STRtree.
 
-        if not RUAS_FILE.exists():
-            self._tree = STRtree([])
-            self._geoms_utm = []
-            self._props = []
-            self._id_to_idx = {}
-            return
-
-        data = json.loads(RUAS_FILE.read_text(encoding="utf-8"))
-        feats = data.get("features", []) or []
-
-        geoms: List[Any] = []
-        props_list: List[Dict[str, Any]] = []
-
-        ll_to_utm = _WGS84_TO_UTM24S.transform
-
-        for f in feats:
-            g = f.get("geometry")
-            if not g:
-                continue
-            try:
-                geom_ll = shape(g)
-            except Exception:
-                continue
-
-            try:
-                geom_utm = shp_transform(ll_to_utm, geom_ll)
-            except Exception:
-                continue
-
-            props = f.get("properties", {}) or {}
-            geoms.append(geom_utm)
-            props_list.append(props)
-
-        self._geoms_utm = geoms
-        self._props = props_list
-        self._id_to_idx = {id(g): i for i, g in enumerate(self._geoms_utm)}
-        self._tree = STRtree(self._geoms_utm)
-
-    def nearest_street(self, lat: float, lon: float, radius_m: float = 200.0) -> Optional[StreetHit]:
-        self.load()
-        if not self._tree or not self._geoms_utm:
-            return None
-
-        # ponto em UTM (m)
-        x, y = _WGS84_TO_UTM24S.transform(float(lon), float(lat))
-        p = Point(x, y)
-
-        # candidatos no buffer (m)
-        buf = p.buffer(float(radius_m))
-        cand = self._tree.query(buf)
-
-        if cand is None:
-            return None
-
-        # Shapely 2 pode devolver array de índices; Shapely 1 devolve geometrias
-        cand_list: List[Union[int, Any]]
+        Fail-safe:
+        - Se arquivo não existir, JSON inválido, geometria inválida, etc -> índice vazio.
+        """
         try:
-            cand_list = list(cand)
+            features = self._load_features(self.ruas_file)
+            self._ingest(features)
+            self._tree = STRtree(self._geoms) if self._geoms else None
         except Exception:
-            cand_list = []
+            self._tree = None
+            self._geoms = []
+            self._meta_by_geom_id = {}
+        self._built = True
+        return self
 
-        if not cand_list:
+    @staticmethod
+    def _load_features(path: Path) -> List[Dict[str, Any]]:
+        if not path.exists():
+            return []
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+
+        # Aceita FeatureCollection ou lista de features
+        if isinstance(data, dict) and data.get("type") == "FeatureCollection":
+            feats = data.get("features") or []
+            return feats if isinstance(feats, list) else []
+        if isinstance(data, list):
+            return data
+        return []
+
+    def _ingest(self, features: List[Dict[str, Any]]) -> None:
+        geoms: List[Any] = []
+        meta: Dict[int, Dict[str, Any]] = {}
+
+        for feat in features:
+            try:
+                geom_obj = feat.get("geometry") if isinstance(feat, dict) else None
+                if not geom_obj:
+                    continue
+
+                geom = shape(geom_obj)
+                if geom.is_empty:
+                    continue
+
+                props = feat.get("properties") if isinstance(feat, dict) else None
+                props = props if isinstance(props, dict) else {}
+
+                # Sem inventar: tenta chaves comuns, senão string vazia
+                name = (
+                    props.get("name")
+                    or props.get("nome")
+                    or props.get("rua")
+                    or props.get("logradouro")
+                    or ""
+                )
+                street_type = props.get("type") or props.get("tipo") or None
+
+                geoms.append(geom)
+                meta[id(geom)] = {
+                    "name": str(name).strip(),
+                    "type": (str(street_type).strip() if street_type is not None else None),
+                }
+            except Exception:
+                continue
+
+        self._geoms = geoms
+        self._meta_by_geom_id = meta
+
+    # ---------- Query ----------
+    def nearest(self, lat: float, lon: float, radius_m: float = 150.0) -> Optional[StreetHit]:
+        """Retorna a via mais próxima dentro de radius_m (metros) ou None.
+
+        Fail-safe total: nunca levanta exceção para fora.
+        """
+        try:
+            if not self._built:
+                self.build()
+
+            if not self._tree or not self._geoms:
+                return None
+
+            radius_m = float(radius_m)
+            if radius_m <= 0:
+                return None
+
+            lat_f = float(lat)
+            lon_f = float(lon)
+
+            pt_wgs = Point(lon_f, lat_f)
+
+            # Bounding-box aproximado em graus (apenas para filtrar candidatos do STRtree)
+            # 1 grau latitude ~ 111_320 m; longitude ajusta por cos(lat).
+            deg_lat = radius_m / 111_320.0
+            deg_lon = radius_m / (111_320.0 * max(0.1, cos(radians(lat_f))))
+
+            query_geom = box(pt_wgs.x - deg_lon, pt_wgs.y - deg_lat, pt_wgs.x + deg_lon, pt_wgs.y + deg_lat)
+
+            candidates = list(self._tree.query(query_geom))
+            if not candidates:
+                return None
+
+            # Distância em metros: converte ponto e cada candidato para UTM e mede distância
+            pt_utm = shp_transform(_WGS84_TO_UTM24S, pt_wgs)
+
+            best: Optional[Tuple[float, Any]] = None
+            for g in candidates:
+                try:
+                    g_utm = shp_transform(_WGS84_TO_UTM24S, g)
+                    d = float(pt_utm.distance(g_utm))
+                    if best is None or d < best[0]:
+                        best = (d, g)
+                except Exception:
+                    continue
+
+            if best is None:
+                return None
+
+            best_d, best_geom = best
+            if best_d > radius_m:
+                return None
+
+            m = self._meta_by_geom_id.get(id(best_geom), {})
+            return StreetHit(
+                name=m.get("name", ""),
+                street_type=m.get("type", None),
+                distance_m=best_d,
+            )
+        except Exception:
             return None
 
-        best_idx: Optional[int] = None
-        best_dist = float("inf")
 
-        first = cand_list[0]
-        if isinstance(first, (int,)):
-            # shapely 2 (índices)
-            for idx in cand_list:
-                if not isinstance(idx, int):
-                    continue
-                if idx < 0 or idx >= len(self._geoms_utm):
-                    continue
-                g = self._geoms_utm[idx]
-                d = float(p.distance(g))
-                if d < best_dist:
-                    best_dist = d
-                    best_idx = idx
-        else:
-            # shapely 1 (geometrias)
-            for g in cand_list:
-                idx = self._id_to_idx.get(id(g))
-                if idx is None:
-                    continue
-                d = float(p.distance(g))
-                if d < best_dist:
-                    best_dist = d
-                    best_idx = idx
-
-        if best_idx is None or best_dist > float(radius_m):
-            return None
-
-        props = self._props[best_idx]
-        return StreetHit(
-            name=_infer_name(props),
-            street_type=_infer_type(props),
-            distance_m=float(best_dist),
-        )
-
-
-_INDEX: Optional[StreetsIndex] = None
+# -----------------------------
+# Singleton + public API
+# -----------------------------
+_INDEX_SINGLETON: Optional[StreetsIndex] = None
 
 
 def get_streets_index() -> StreetsIndex:
-    global _INDEX
-    if _INDEX is None:
-        _INDEX = StreetsIndex()
-    return _INDEX
+    """Obtém singleton do índice de ruas (lazy)."""
+    global _INDEX_SINGLETON
+    if _INDEX_SINGLETON is None:
+        _INDEX_SINGLETON = StreetsIndex().build()
+    return _INDEX_SINGLETON
 
 
-def find_street(lat: float, lon: float, radius_m: float = 200.0) -> Optional[Dict[str, Any]]:
-    hit = get_streets_index().nearest_street(lat=lat, lon=lon, radius_m=radius_m)
-    if not hit:
+def find_street(lat: float, lon: float, radius_m: float = 150.0) -> Optional[Dict[str, Any]]:
+    """API usada pelo app: retorna dict simples ou None.
+
+    Nunca levanta exceção para fora.
+    """
+    try:
+        hit = get_streets_index().nearest(lat=lat, lon=lon, radius_m=radius_m)
+        if hit is None:
+            return None
+        return {
+            "name": hit.name,
+            "type": hit.street_type,
+            "distance_m": hit.distance_m,
+        }
+    except Exception:
         return None
-    return {"name": hit.name, "type": hit.street_type, "distance_m": hit.distance_m}
