@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 
 # --- Diagnóstico RUAS (não afeta cálculos) ---
 with st.expander("Diagnóstico (ruas.json)", expanded=False):
@@ -40,9 +42,6 @@ with st.expander("Diagnóstico (ruas.json)", expanded=False):
             st.warning("ruas.json NÃO está chegando no deploy. Confirme se está commitado na branch DEV exatamente em /data/ruas.json.")
     except Exception as e:
         st.info(f"Diagnóstico indisponível (mas o app segue funcionando). Motivo: {e}")
-
-from __future__ import annotations
-
 import json
 import uuid
 from pathlib import Path
