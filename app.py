@@ -1,3 +1,46 @@
+
+# --- Diagnóstico RUAS (não afeta cálculos) ---
+with st.expander("Diagnóstico (ruas.json)", expanded=False):
+    try:
+        from pathlib import Path
+        import json
+
+        repo_root = Path(__file__).resolve().parent
+        ruas_path = repo_root / "data" / "ruas.json"
+        st.write("Caminho procurado:", str(ruas_path))
+        st.write("Existe no deploy?:", "SIM" if ruas_path.exists() else "NÃO")
+
+        streets_loaded = 0
+        sample_info = None
+
+        if ruas_path.exists():
+            try:
+                data = json.loads(ruas_path.read_text(encoding="utf-8"))
+                if isinstance(data, dict) and data.get("type") == "FeatureCollection":
+                    feats = data.get("features") or []
+                    streets_loaded = len(feats) if isinstance(feats, list) else 0
+                    if streets_loaded > 0 and isinstance(feats[0], dict):
+                        props = feats[0].get("properties") or {}
+                        if isinstance(props, dict):
+                            sample_info = list(props.keys())[:10]
+                elif isinstance(data, list):
+                    streets_loaded = len(data)
+                else:
+                    streets_loaded = 0
+            except Exception as e:
+                st.warning(f"Falha ao ler ruas.json (JSON inválido ou muito diferente do esperado). Erro: {e}")
+
+        st.write("Quantidade de vias carregadas:", streets_loaded)
+        if sample_info:
+            st.write("Exemplo de chaves em properties (1ª via):", sample_info)
+
+        if ruas_path.exists() and streets_loaded == 0:
+            st.warning("ruas.json existe, mas o app não conseguiu carregar vias. Isso explica 'Via não encontrada' sempre.")
+        if not ruas_path.exists():
+            st.warning("ruas.json NÃO está chegando no deploy. Confirme se está commitado na branch DEV exatamente em /data/ruas.json.")
+    except Exception as e:
+        st.info(f"Diagnóstico indisponível (mas o app segue funcionando). Motivo: {e}")
+
 from __future__ import annotations
 
 import json
@@ -14,8 +57,10 @@ from core.zones_map import load_zones, zone_from_latlon
 from core.calculations import compute
 from core.supabase_client import get_supabase
 from core.streets import find_street
+
+
 APP_VERSION = "v1.1-streets"
-APP_TITLE = "Viabilidade (v1.1) TESTE"
+APP_TITLE = "Viabilidade (v1.1)"
 DATA_DIR = Path(__file__).parent / "data"
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 
