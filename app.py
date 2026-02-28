@@ -83,7 +83,7 @@ def _streets_index() -> dict[str, Any]:
     }
 
 
-def _nearest_street(lat: float, lon: float, radius_m: float) -> dict[str, Any]:
+def _nearest_street(lon: float, lat: float, radius_m: float) -> dict[str, Any]:
     idx = _streets_index()
     if not idx.get("ok"):
         return {"found": False, "reason": idx.get("reason", "Falha ao carregar ruas.")}
