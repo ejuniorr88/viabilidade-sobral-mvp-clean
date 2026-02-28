@@ -96,21 +96,27 @@ def _nearest_street(lat: float, lon: float, radius_m: float) -> dict[str, Any]:
     x, y = ll_to_utm(lon, lat)
     p = Point(x, y)
 
-    try:
-        g_near = tree.nearest(p)
-        if g_near is None:
-            return {"found": False, "reason": "Nenhuma via encontrada."}
-        dist = float(p.distance(g_near))
-    except Exception:
-        return {"found": False, "reason": "Erro ao buscar via mais próxima."}
+    # Verifica se encontrou alguma via
+if nearest_road is None:
+    return None, None, "Via não encontrada."
 
-    if dist > float(radius_m):
-    # Ainda retornamos a via mais próxima, mas marcamos que está fora do raio.
-    outside_reason = f"Via mais próxima a {dist:.1f} m (fora do raio de {radius_m:.0f} m)."
-    outside = True
-else:
-    outside_reason = None
-    outside = False
+# Calcula distância
+dist = point_proj.distance(nearest_geom_proj)
+
+# Sempre retorna a via mais próxima
+road_name = nearest_road.get("nome", "Via sem nome")
+road_type = nearest_road.get("tipo", None)
+
+outside_reason = None
+
+# Se estiver fora do raio, apenas gera aviso
+if dist > radius_m:
+    outside_reason = (
+        f"Via mais próxima a {dist:.1f} m "
+        f"(fora do raio de {radius_m:.0f} m)."
+    )
+
+return road_name, road_type, outside_reason
 
     try:
         i = geoms_utm.index(g_near)
