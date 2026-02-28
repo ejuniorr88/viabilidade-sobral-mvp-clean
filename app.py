@@ -7,13 +7,65 @@ from typing import Any
 
 import folium
 import streamlit as st
+# =============================
+# Diagnóstico RUAS (fail-safe)
+# =============================
+def _diagnostico_ruas_json():
+    """Diagnóstico simples do data/ruas.json.
+    Não interfere nos cálculos e NUNCA pode quebrar o app.
+    """
+    try:
+        import json
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parent
+        ruas_path = repo_root / "data" / "ruas.json"
+
+        info = {
+            "ruas_path": str(ruas_path),
+            "exists": bool(ruas_path.exists()),
+            "streets_loaded": 0,
+            "sample_property_keys": None,
+            "error": None,
+        }
+
+        if not ruas_path.exists():
+            return info
+
+        data = json.loads(ruas_path.read_text(encoding="utf-8"))
+
+        features = None
+        if isinstance(data, dict) and data.get("type") == "FeatureCollection":
+            features = data.get("features")
+        elif isinstance(data, list):
+            features = data
+
+        if isinstance(features, list):
+            info["streets_loaded"] = len(features)
+            if len(features) > 0 and isinstance(features[0], dict):
+                props = features[0].get("properties")
+                if isinstance(props, dict):
+                    info["sample_property_keys"] = list(props.keys())[:10]
+
+        return info
+    except Exception as e:
+        return {
+            "ruas_path": "desconhecido",
+            "exists": False,
+            "streets_loaded": 0,
+            "sample_property_keys": None,
+            "error": str(e),
+        }
+
 from streamlit_folium import st_folium
 
 from core.zone_rules_repository import get_zone_rule
 from core.zones_map import load_zones, zone_from_latlon
 from core.calculations import compute
 from core.supabase_client import get_supabase
-from core.streets import find_street, streets_health
+from core.streets import find_street
+
+
 APP_VERSION = "v1.1-streets"
 APP_TITLE = "Viabilidade (v1.1)"
 DATA_DIR = Path(__file__).parent / "data"
