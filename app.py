@@ -9,131 +9,28 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
-from shapely.geometry import Point, shape
-from shapely.ops import transform as shp_transform
-from shapely.strtree import STRtree
-from pyproj import Transformer
-
 from core.zone_rules_repository import get_zone_rule
 from core.zones_map import load_zones, zone_from_latlon
 from core.calculations import compute
 from core.supabase_client import get_supabase
+
+from core.streets import find_street  # ✅ agora vem do core/streets.py
 
 
 APP_VERSION = "v1.1-streets"
 APP_TITLE = "Viabilidade (v1.1)"
 DATA_DIR = Path(__file__).parent / "data"
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
-RUAS_FILE = DATA_DIR / "ruas.json"
 
 
 @st.cache_resource(show_spinner=False)
-def _zones():
-    # load_zones -> lista preparada (shapely) para lookup
-    # Para desenhar no mapa, também precisamos do GeoJSON bruto.
+def _zones() -> dict[str, Any]:
     with ZONE_FILE.open("r", encoding="utf-8") as f:
         gj = json.load(f)
     return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
 
 
-@st.cache_resource(show_spinner=False)
-def _streets_index() -> dict[str, Any]:
-    """Carrega ruas e cria índice espacial em UTM (m).
-
-    Espera GeoJSON FeatureCollection em RUAS_FILE.
-    Usa EPSG:31984 (SIRGAS 2000 / UTM 24S) para medir distância em metros.
-    """
-    if not RUAS_FILE.exists():
-        return {"ok": False, "reason": f"Arquivo não encontrado: {RUAS_FILE}"}
-
-    import json
-
-    with open(RUAS_FILE, "r", encoding="utf-8") as f:
-        gj = json.load(f)
-
-    feats = gj.get("features", [])
-
-    # Transformador para medir em metros (UTM 24S SIRGAS 2000)
-    ll_to_utm = Transformer.from_crs("EPSG:4326", "EPSG:31984", always_xy=True).transform
-
-    geoms_utm = []
-    props_list = []
-    for feat in feats:
-        geom = feat.get("geometry")
-        if not geom:
-            continue
-        try:
-            g_ll = shape(geom)
-            g_utm = shp_transform(ll_to_utm, g_ll)
-            geoms_utm.append(g_utm)
-            props_list.append(feat.get("properties", {}) or {})
-        except Exception:
-            continue
-
-    if not geoms_utm:
-        return {"ok": False, "reason": "Nenhuma geometria de rua válida no GeoJSON."}
-
-    tree = STRtree(geoms_utm)
-    return {
-        "ok": True,
-        "tree": tree,
-        "geoms_utm": geoms_utm,
-        "props": props_list,
-        "ll_to_utm": ll_to_utm,
-    }
-
-
-def _nearest_street(lon: float, lat: float, radius_m: float) -> dict[str, Any]:
-    idx = _streets_index()
-    if not idx.get("ok"):
-        return {"found": False, "reason": idx.get("reason", "Falha ao carregar ruas.")}
-
-    tree: STRtree = idx["tree"]
-    geoms_utm = idx["geoms_utm"]
-    props_list = idx["props"]
-    ll_to_utm = idx["ll_to_utm"]
-
-    x, y = ll_to_utm(lon, lat)
-    p = Point(x, y)
-
-    try:
-        g_near = tree.nearest(p)
-        if g_near is None:
-            return {"found": False, "reason": "Nenhuma via encontrada."}
-        dist = float(p.distance(g_near))
-    except Exception:
-        return {"found": False, "reason": "Erro ao buscar via mais próxima."}
-
-    if dist > float(radius_m):
-        return {
-            "found": False,
-            "distance_m": dist,
-            "reason": f"Via não encontrada no raio de {radius_m:.0f} m (mais próxima a {dist:.1f} m).",
-        }
-
-    try:
-        i = geoms_utm.index(g_near)
-    except ValueError:
-        i = 0
-        for j, g in enumerate(geoms_utm):
-            if g.equals(g_near):
-                i = j
-                break
-
-    props = props_list[i]
-    name = (props.get("log_ofic") or props.get("nome") or props.get("name") or "").strip()
-    road_type = (props.get("hierarquia") or props.get("tipo") or props.get("class") or "").strip()
-
-    return {
-        "found": True,
-        "name": name or "Sem nome (cadastro)",
-        "type": road_type or "Sem classificação (cadastro)",
-        "distance_m": dist,
-    }
-
-
 def _log_query(payload: dict[str, Any]) -> None:
-    """Grava log no Supabase em `query_logs` (se existir)."""
     try:
         sb = get_supabase()
         sb.table("query_logs").insert(payload).execute()
@@ -152,10 +49,7 @@ def _render_map(zones_gj, lat0=-3.689, lon0=-40.349, click_lat=None, click_lon=N
     ).add_to(m)
 
     if click_lat is not None and click_lon is not None:
-        folium.Marker(
-            location=[click_lat, click_lon],
-            tooltip="Ponto selecionado",
-        ).add_to(m)
+        folium.Marker(location=[click_lat, click_lon], tooltip="Ponto selecionado").add_to(m)
 
     folium.LayerControl(collapsed=True).add_to(m)
     return m
@@ -171,7 +65,13 @@ zones = _zones()
 zones_gj = zones["geojson"]
 
 st.subheader("1) Selecione o ponto no mapa")
-radius_m = st.number_input("Raio para encontrar via (m)", min_value=10, max_value=1000, value=100, step=10)
+radius_m = st.number_input(
+    "Raio para encontrar via (m)",
+    min_value=10,
+    max_value=50000,
+    value=100,
+    step=10,
+)
 
 last_click = st.session_state.get("last_click")
 click_lat = last_click.get("lat") if last_click else None
@@ -198,9 +98,9 @@ st.divider()
 
 st.subheader("2) Localização (zona + via)")
 
-street_info = None
+street_hit = None
 if lat is not None and lon is not None:
-    street_info = _nearest_street(lon, lat, radius_m)
+    street_hit = find_street(lon, lat, float(radius_m))
 
     colA, colB, colC = st.columns(3)
     with colA:
@@ -208,19 +108,15 @@ if lat is not None and lon is not None:
         st.write(zone or "—")
     with colB:
         st.write("**Rua / Logradouro**")
-        st.write(street_info["name"] if street_info.get("found") else "Via não encontrada")
+        st.write(street_hit.name if street_hit.distance_m != float("inf") else "Via não encontrada")
     with colC:
         st.write("**Tipo de via**")
-        st.write(street_info["type"] if street_info.get("found") else "—")
+        st.write(street_hit.street_type or "—")
 
-    if street_info.get("found"):
-        st.caption(f"Distância até o eixo da via: {street_info['distance_m']:.1f} m (raio {radius_m:.0f} m).")
+    if street_hit.reason:
+        st.warning(f"Via não encontrada. {street_hit.reason}")
     else:
-        dist = street_info.get("distance_m")
-        if dist is not None:
-            st.warning(f"Via não encontrada no raio de {radius_m:.0f} m. Mais próxima a {dist:.1f} m. Tente aumentar o raio.")
-        else:
-            st.warning(f"Via não encontrada. Tente aumentar o raio para > {radius_m:.0f} m.")
+        st.caption(f"Distância até o eixo da via: {street_hit.distance_m:.1f} m (raio {radius_m:.0f} m).")
 else:
     st.info("Clique no mapa para identificar zona e via.")
 
@@ -303,9 +199,9 @@ if rule:
 
         # Log no Supabase (opcional)
         if lat is not None and lon is not None:
-            street_name = street_info.get("name") if street_info else None
-            street_type = street_info.get("type") if street_info else None
-            street_dist = street_info.get("distance_m") if street_info else None
+            street_name = street_hit.name if street_hit and not street_hit.reason else None
+            street_type = street_hit.street_type if street_hit and not street_hit.reason else None
+            street_dist = street_hit.distance_m if street_hit and not street_hit.reason else None
 
             _log_query(
                 {
