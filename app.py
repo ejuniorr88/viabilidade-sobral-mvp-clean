@@ -83,7 +83,7 @@ def _streets_index() -> dict[str, Any]:
     }
 
 
-def _nearest_street(lat: float, lon: float, radius_m: float) -> dict[str, Any]:
+def _nearest_street(lon: float, lat: float, radius_m: float) -> dict[str, Any]:
     idx = _streets_index()
     if not idx.get("ok"):
         return {"found": False, "reason": idx.get("reason", "Falha ao carregar ruas.")}
@@ -200,7 +200,7 @@ st.subheader("2) Localização (zona + via)")
 
 street_info = None
 if lat is not None and lon is not None:
-    street_info = _nearest_street(lat, lon, radius_m)
+    street_info = _nearest_street(lon, lat, radius_m)
 
     colA, colB, colC = st.columns(3)
     with colA:
@@ -261,9 +261,9 @@ if rule:
             testada_m=float(testada),
             profundidade_m=float(profundidade),
             built_ground_m2=float(built_ground),
-            to_max_pct=rule.get("to_max_pct"),
-            tp_min_pct=rule.get("tp_min_pct"),
-            ia_max=rule.get("ia_max"),
+            to_max_pct=(rule.get("to_max_pct") or rule.get("to_max") or rule.get("to_sub_max")),
+            tp_min_pct=(rule.get("tp_min_pct") or rule.get("tp_min")),
+            ia_max=(rule.get("ia_max") or rule.get("ia") or rule.get("ia_maximo")),
             recuo_frontal_m=rule.get("recuo_frontal_m"),
             recuo_lateral_m=rule.get("recuo_lateral_m"),
             recuo_fundos_m=rule.get("recuo_fundos_m"),
