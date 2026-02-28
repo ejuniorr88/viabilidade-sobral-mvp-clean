@@ -13,8 +13,7 @@ from core.zone_rules_repository import get_zone_rule
 from core.zones_map import load_zones, zone_from_latlon
 from core.calculations import compute
 from core.supabase_client import get_supabase
-
-from core.streets import find_street  # ✅ agora vem do core/streets.py
+from core.streets import find_street
 
 
 APP_VERSION = "v1.1-streets"
@@ -24,13 +23,16 @@ ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 
 
 @st.cache_resource(show_spinner=False)
-def _zones() -> dict[str, Any]:
+def _zones():
+    # load_zones -> lista preparada (shapely) para lookup
+    # Para desenhar no mapa, também precisamos do GeoJSON bruto.
     with ZONE_FILE.open("r", encoding="utf-8") as f:
         gj = json.load(f)
     return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
 
 
 def _log_query(payload: dict[str, Any]) -> None:
+    """Grava log no Supabase em `query_logs` (se existir)."""
     try:
         sb = get_supabase()
         sb.table("query_logs").insert(payload).execute()
@@ -49,7 +51,10 @@ def _render_map(zones_gj, lat0=-3.689, lon0=-40.349, click_lat=None, click_lon=N
     ).add_to(m)
 
     if click_lat is not None and click_lon is not None:
-        folium.Marker(location=[click_lat, click_lon], tooltip="Ponto selecionado").add_to(m)
+        folium.Marker(
+            location=[click_lat, click_lon],
+            tooltip="Ponto selecionado",
+        ).add_to(m)
 
     folium.LayerControl(collapsed=True).add_to(m)
     return m
@@ -65,13 +70,7 @@ zones = _zones()
 zones_gj = zones["geojson"]
 
 st.subheader("1) Selecione o ponto no mapa")
-radius_m = st.number_input(
-    "Raio para encontrar via (m)",
-    min_value=10,
-    max_value=50000,
-    value=100,
-    step=10,
-)
+radius_m = st.number_input("Raio para encontrar via (m)", min_value=10, max_value=100000, value=100, step=10)
 
 last_click = st.session_state.get("last_click")
 click_lat = last_click.get("lat") if last_click else None
@@ -98,9 +97,9 @@ st.divider()
 
 st.subheader("2) Localização (zona + via)")
 
-street_hit = None
+street_info = None
 if lat is not None and lon is not None:
-    street_hit = find_street(lon, lat, float(radius_m))
+    street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
 
     colA, colB, colC = st.columns(3)
     with colA:
@@ -108,15 +107,15 @@ if lat is not None and lon is not None:
         st.write(zone or "—")
     with colB:
         st.write("**Rua / Logradouro**")
-        st.write(street_hit.name if street_hit.distance_m != float("inf") else "Via não encontrada")
+        st.write(street_info["name"] if street_info else "Via não encontrada")
     with colC:
         st.write("**Tipo de via**")
-        st.write(street_hit.street_type or "—")
+        st.write(street_info["type"] if street_info else "—")
 
-    if street_hit.reason:
-        st.warning(f"Via não encontrada. {street_hit.reason}")
+    if street_info:
+        st.caption(f"Distância até o eixo da via: {street_info['distance_m']:.1f} m (raio {radius_m:.0f} m).")
     else:
-        st.caption(f"Distância até o eixo da via: {street_hit.distance_m:.1f} m (raio {radius_m:.0f} m).")
+        st.warning(f"Via não encontrada. Tente aumentar o raio para > {radius_m:.0f} m.")
 else:
     st.info("Clique no mapa para identificar zona e via.")
 
@@ -157,9 +156,11 @@ if rule:
             testada_m=float(testada),
             profundidade_m=float(profundidade),
             built_ground_m2=float(built_ground),
+            # percentuais / índices
             to_max_pct=(rule.get("to_max_pct") or rule.get("to_max") or rule.get("to_sub_max")),
             tp_min_pct=(rule.get("tp_min_pct") or rule.get("tp_min")),
             ia_max=(rule.get("ia_max") or rule.get("ia") or rule.get("ia_maximo")),
+            # recuos
             recuo_frontal_m=rule.get("recuo_frontal_m"),
             recuo_lateral_m=rule.get("recuo_lateral_m"),
             recuo_fundos_m=rule.get("recuo_fundos_m"),
@@ -199,9 +200,9 @@ if rule:
 
         # Log no Supabase (opcional)
         if lat is not None and lon is not None:
-            street_name = street_hit.name if street_hit and not street_hit.reason else None
-            street_type = street_hit.street_type if street_hit and not street_hit.reason else None
-            street_dist = street_hit.distance_m if street_hit and not street_hit.reason else None
+            street_name = street_info.get("name") if street_info else None
+            street_type = street_info.get("type") if street_info else None
+            street_dist = street_info.get("distance_m") if street_info else None
 
             _log_query(
                 {
