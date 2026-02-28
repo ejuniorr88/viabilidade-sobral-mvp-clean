@@ -34,7 +34,8 @@ from shapely.strtree import STRtree
 # -----------------------------
 # Paths
 # -----------------------------
-DATA_DIR = Path("data")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = REPO_ROOT / "data"
 RUAS_FILE = DATA_DIR / "ruas.json"
 
 
@@ -203,6 +204,38 @@ class StreetsIndex:
             )
         except Exception:
             return None
+
+def streets_health() -> Dict[str, Any]:
+    """Retorna informações simples para diagnóstico (sem quebrar o app)."""
+    try:
+        idx = get_streets_index()
+        file_exists = RUAS_FILE.exists()
+        count = len(getattr(idx, "_geoms", []))
+        # bbox aproximado das geometrias (WGS84) se existir
+        bbox = None
+        if count:
+            try:
+                minx = min(g.bounds[0] for g in idx._geoms)  # type: ignore[attr-defined]
+                miny = min(g.bounds[1] for g in idx._geoms)  # type: ignore[attr-defined]
+                maxx = max(g.bounds[2] for g in idx._geoms)  # type: ignore[attr-defined]
+                maxy = max(g.bounds[3] for g in idx._geoms)  # type: ignore[attr-defined]
+                bbox = {"min_lon": float(minx), "min_lat": float(miny), "max_lon": float(maxx), "max_lat": float(maxy)}
+            except Exception:
+                bbox = None
+
+        return {
+            "ruas_file": str(RUAS_FILE),
+            "ruas_file_exists": bool(file_exists),
+            "streets_loaded": int(count),
+            "bbox_wgs84": bbox,
+        }
+    except Exception:
+        return {
+            "ruas_file": str(RUAS_FILE),
+            "ruas_file_exists": bool(RUAS_FILE.exists()),
+            "streets_loaded": 0,
+            "bbox_wgs84": None,
+        }
 
 
 # -----------------------------
