@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-# STREETS_FIX_SHAPELY2_INTEGRAL_ONLY
-# Fix do crash: removido "Union" (não existe em numbers).
-# Objetivo: aceitar índices numpy.int64 retornados pelo STRtree.query (Shapely 2),
-# usando numbers.Integral para checagem de "inteiro".
+# STREETS_DIAG_V1
+# - Mantém find_street(lat, lon, radius_m) como função segura (retorna dict ou None)
+# - Adiciona diagnose(lat, lon, radius_m) para depuração (retorna SOMENTE dict JSON-serializável)
 
 import json
 from dataclasses import dataclass
@@ -20,7 +19,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data"
 RUAS_FILE = DATA_DIR / "ruas.json"
 
-_WGS84_TO_UTM24S = Transformer.from_crs("EPSG:4326", "EPSG:31984", always_xy=True).transform
+SRC_EPSG = "EPSG:4326"
+DST_EPSG = "EPSG:31984"  # UTM 24S (SIRGAS 2000) - metros
+
+_WGS84_TO_UTM24S = Transformer.from_crs(SRC_EPSG, DST_EPSG, always_xy=True).transform
 
 
 @dataclass(frozen=True)
@@ -37,16 +39,19 @@ class StreetsIndex:
         self._geoms_utm: List[Any] = []
         self._meta_by_id: Dict[int, Dict[str, Any]] = {}
         self._built: bool = False
+        self._features_count: int = 0
 
     def build(self) -> "StreetsIndex":
         try:
             features = self._load_features(self.ruas_file)
+            self._features_count = len(features)
             self._ingest_to_utm(features)
             self._tree_utm = STRtree(self._geoms_utm) if self._geoms_utm else None
         except Exception:
             self._tree_utm = None
             self._geoms_utm = []
             self._meta_by_id = {}
+            self._features_count = 0
         self._built = True
         return self
 
@@ -82,14 +87,31 @@ class StreetsIndex:
                 props = props if isinstance(props, dict) else {}
 
                 name = (
-                    props.get("name")
-                    or props.get("log_ofic")
+                    props.get("log_ofic")
                     or props.get("logradouro")
                     or props.get("rua")
                     or props.get("nome")
+                    or props.get("name")
                     or ""
                 )
-                street_type = props.get("hierarquia") or props.get("type") or props.get("tipo") or None
+
+                street_type = (
+                    props.get("hierarquia")
+                    or props.get("type")
+                    or props.get("tipo")
+                    or None
+                )
+
+                # Heurística: alguns exports colocam a classificação (ex.: "via_arterial_existente")
+                # no campo "name". Se isso acontecer e existir um logradouro oficial, usamos ele.
+                if isinstance(name, str) and isinstance(street_type, str):
+                    n = name.strip()
+                    t = street_type.strip()
+                    if n and t and (n == t or n.lower().startswith("via_")):
+                        alt = (props.get("log_ofic") or props.get("logradouro") or "").strip()
+                        if alt:
+                            name = alt
+
 
                 geoms_utm.append(geom_utm)
                 meta[id(geom_utm)] = {
@@ -115,7 +137,6 @@ class StreetsIndex:
 
             pt_utm = shp_transform(_WGS84_TO_UTM24S, Point(float(lon), float(lat)))
 
-            # Shapely 2 pode retornar lista de índices (numpy.int64 etc.)
             candidates = self._tree_utm.query(pt_utm.buffer(radius_m))
             if candidates is None or len(candidates) == 0:
                 return None
@@ -123,7 +144,6 @@ class StreetsIndex:
             best_geom = None
             best_d = None
 
-            # Se vierem índices
             first = candidates[0]
             if isinstance(first, Integral):
                 for idx in candidates:
@@ -139,7 +159,6 @@ class StreetsIndex:
                     except Exception:
                         continue
             else:
-                # Se vierem geometrias
                 for g in candidates:
                     try:
                         d = float(pt_utm.distance(g))
@@ -157,6 +176,88 @@ class StreetsIndex:
         except Exception:
             return None
 
+    def diagnose(self, lat: float, lon: float, radius_m: float) -> Dict[str, Any]:
+        out: Dict[str, Any] = {
+            "ruas_file": str(self.ruas_file),
+            "ruas_file_exists": bool(self.ruas_file.exists()),
+            "src_epsg": SRC_EPSG,
+            "dst_epsg": DST_EPSG,
+            "built": bool(self._built),
+            "features_count": int(getattr(self, "_features_count", 0)),
+            "geoms_count": int(len(self._geoms_utm)),
+            "tree_built": bool(self._tree_utm is not None),
+            "input": {"lat": float(lat), "lon": float(lon), "radius_m": float(radius_m)},
+            "query": {},
+            "best": None,
+        }
+        try:
+            if not self._built:
+                self.build()
+                out["built"] = True
+                out["features_count"] = int(getattr(self, "_features_count", 0))
+                out["geoms_count"] = int(len(self._geoms_utm))
+                out["tree_built"] = bool(self._tree_utm is not None)
+
+            if not self._tree_utm or not self._geoms_utm:
+                out["query"] = {"candidates_count": 0, "candidates_mode": None}
+                return out
+
+            radius_m = float(radius_m)
+            pt_utm = shp_transform(_WGS84_TO_UTM24S, Point(float(lon), float(lat)))
+            buf = pt_utm.buffer(radius_m)
+            candidates = self._tree_utm.query(buf)
+
+            candidates_count = int(0 if candidates is None else len(candidates))
+            mode = None
+            if candidates_count > 0:
+                mode = "indices" if isinstance(candidates[0], Integral) else "geoms"
+
+            out["query"] = {"candidates_count": candidates_count, "candidates_mode": mode}
+
+            if candidates_count == 0:
+                return out
+
+            best_geom = None
+            best_d = None
+
+            if mode == "indices":
+                for idx in candidates:
+                    try:
+                        i = int(idx)
+                        if i < 0 or i >= len(self._geoms_utm):
+                            continue
+                        g = self._geoms_utm[i]
+                        d = float(pt_utm.distance(g))
+                        if best_d is None or d < best_d:
+                            best_d = d
+                            best_geom = g
+                    except Exception:
+                        continue
+            else:
+                for g in candidates:
+                    try:
+                        d = float(pt_utm.distance(g))
+                        if best_d is None or d < best_d:
+                            best_d = d
+                            best_geom = g
+                    except Exception:
+                        continue
+
+            if best_geom is None or best_d is None:
+                return out
+
+            m = self._meta_by_id.get(id(best_geom), {})
+            out["best"] = {
+                "distance_m": float(best_d),
+                "within_radius": bool(best_d <= radius_m),
+                "name": str(m.get("name", "")),
+                "type": (m.get("type", None) if m.get("type", None) is None else str(m.get("type", ""))),
+            }
+            return out
+        except Exception as e:
+            out["error"] = {"message": str(e)}
+            return out
+
 
 _INDEX: Optional[StreetsIndex] = None
 
@@ -173,6 +274,18 @@ def find_street(lat: float, lon: float, radius_m: float = 150.0) -> Optional[Dic
         hit = _get_index().nearest(lat=lat, lon=lon, radius_m=radius_m)
         if hit is None:
             return None
-        return {"name": hit.name, "type": hit.street_type, "distance_m": hit.distance_m}
+        return {"name": hit.name, "type": hit.street_type, "distance_m": float(hit.distance_m)}
     except Exception:
         return None
+
+
+def diagnose(lat: float, lon: float, radius_m: float = 150.0) -> Dict[str, Any]:
+    try:
+        return _get_index().diagnose(lat=lat, lon=lon, radius_m=radius_m)
+    except Exception as e:
+        return {
+            "ruas_file": str(RUAS_FILE),
+            "ruas_file_exists": bool(RUAS_FILE.exists()),
+            "built": False,
+            "error": {"message": str(e)},
+        }
