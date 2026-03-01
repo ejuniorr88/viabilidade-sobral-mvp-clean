@@ -12,6 +12,7 @@ from core.zones_map import load_zones, zone_from_latlon
 from core.streets import find_street
 from core.zone_rules_repository import get_zone_rule
 from core.ui_map import render_map_section
+from core.ui_lote import render_lote_section
 
 APP_TITLE = "Viabilidade"
 
@@ -148,17 +149,11 @@ st.divider()
 # 2) Dados do lote
 # =============================
 
-st.subheader("2) Dados do lote")
+# =============================
+# 2) Dados do lote (MODULARIZADO)
+# =============================
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    lot_area = st.number_input("Área do lote (m²)", min_value=1.0, value=300.0, step=10.0)
-with col2:
-    testada = st.number_input("Largura (testada) (m)", min_value=1.0, value=10.0, step=0.5)
-with col3:
-    profundidade = st.number_input("Profundidade (m)", min_value=1.0, value=30.0, step=0.5)
-
-built_ground = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
+lot_area, testada, profundidade, built_ground = render_lote_section()
 
 st.divider()
 
