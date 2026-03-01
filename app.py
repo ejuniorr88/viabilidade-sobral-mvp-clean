@@ -84,16 +84,26 @@ m = _render_map(
 
 out = st_folium(m, width=None, height=420)
 
+out = st_folium(m, width=None, height=420)
+
 if out and out.get("last_clicked"):
+
     new_lat = float(out["last_clicked"]["lat"])
     new_lon = float(out["last_clicked"]["lng"])
 
-    st.session_state.last_click = {
-        "lat": new_lat,
-        "lon": new_lon,
-    }
+    last_click = st.session_state.get("last_click")
 
-    st.caption(f"Coordenadas selecionadas: lat {new_lat:.6f} | lon {new_lon:.6f}")
+    # Só atualiza se for clique diferente
+    if (
+        not last_click
+        or abs(new_lat - last_click["lat"]) > 1e-9
+        or abs(new_lon - last_click["lon"]) > 1e-9
+    ):
+        st.session_state.last_click = {
+            "lat": new_lat,
+            "lon": new_lon,
+        }
+        st.rerun()
 
 calcular = st.button("Calcular viabilidade", type="primary")
 
