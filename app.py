@@ -121,7 +121,8 @@ def _ensure_state():
             "street_info": None,
             "rule": None,
             "use_type_code": "RES_UNI",
-            "radius_m": 100.0,
+	            # manter como int para compatibilidade com st.number_input
+	            "radius_m": 100,
             "ok": False,
             "err": None,
         }
@@ -148,7 +149,9 @@ radius_m = st.number_input(
     "Raio para encontrar via (m)",
     min_value=10,
     max_value=100000,
-    value=float(st.session_state.calc.get("radius_m") or 100),
+    # IMPORTANT: Streamlit não aceita misturar tipos numéricos (int vs float)
+    # no number_input. Mantemos tudo como int aqui.
+    value=int(st.session_state.calc.get("radius_m") or 100),
     step=10,
 )
 
@@ -227,7 +230,7 @@ if calcular and st.session_state.last_click:
     st.session_state.calc["lat"] = lat
     st.session_state.calc["lon"] = lon
     st.session_state.calc["use_type_code"] = use_type_code
-    st.session_state.calc["radius_m"] = float(radius_m)
+    st.session_state.calc["radius_m"] = int(radius_m)
 
     # zone + street
     zone = zone_from_latlon(zones["prepared"], lat, lon)
