@@ -72,7 +72,7 @@ zones_gj = zones["geojson"]
 
 
 # =============================
-# 1) Seleção no mapa (CLIQUE ÚNICO REAL)
+# 1) Seleção no mapa (clique único real)
 # =============================
 
 st.subheader("1) Selecione o ponto no mapa")
@@ -85,7 +85,6 @@ radius_m = st.number_input(
     step=10,
 )
 
-# Controle seguro de clique
 if "last_click" not in st.session_state:
     st.session_state.last_click = None
 
@@ -117,7 +116,6 @@ if out and out.get("last_clicked"):
         st.session_state.click_hash = new_hash
         st.rerun()
 
-# Mostrar coordenadas
 if st.session_state.last_click:
     st.caption(
         f"📍 Coordenadas selecionadas: "
@@ -139,6 +137,9 @@ st.divider()
 # =============================
 
 st.subheader("2) Localização (zona + via)")
+
+zone = None
+street_info = None
 
 if calcular and st.session_state.last_click:
 
@@ -180,5 +181,81 @@ if calcular and st.session_state.last_click:
         )
     else:
         st.warning(f"Via não encontrada dentro de {radius_m:.0f} m.")
+
+st.divider()
+
+
+# =============================
+# 3) Dados do lote
+# =============================
+
+st.subheader("3) Dados do lote")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    lot_area = st.number_input("Área do lote (m²)", min_value=1.0, value=300.0, step=10.0)
+
+with col2:
+    testada = st.number_input("Largura (testada) (m)", min_value=1.0, value=10.0, step=0.5)
+
+with col3:
+    profundidade = st.number_input("Profundidade (m)", min_value=1.0, value=30.0, step=0.5)
+
+built_ground = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
+
+st.subheader("4) Regras (Supabase)")
+
+use_type_code = st.text_input("use_type_code", value="RES_UNI")
+
+
+if calcular and zone:
+
+    try:
+        rule = get_zone_rule(zone, use_type_code)
+
+        if rule:
+
+            st.success("Regra encontrada no Supabase")
+            st.json(rule, expanded=False)
+
+            st.subheader("5) Análise Urbanística")
+
+            to_max = rule.get("to_max_pct")
+            ia_max = rule.get("ia_max")
+            tp_min = rule.get("tp_min_pct")
+
+            colA, colB, colC = st.columns(3)
+
+            with colA:
+                st.metric("TO Máxima (%)", to_max if to_max else "—")
+
+            with colB:
+                st.metric("IA Máximo", ia_max if ia_max else "—")
+
+            with colC:
+                st.metric("TP Mínima (%)", tp_min if tp_min else "—")
+
+            if to_max:
+                to_utilizada = (built_ground / lot_area) * 100
+                st.write(f"TO utilizada: {to_utilizada:.2f}%")
+                if to_utilizada <= to_max:
+                    st.success("Taxa de Ocupação dentro do permitido")
+                else:
+                    st.error("Taxa de Ocupação EXCEDE o permitido")
+
+            if ia_max:
+                ia_utilizado = built_ground / lot_area
+                st.write(f"IA utilizado: {ia_utilizado:.2f}")
+                if ia_utilizado <= ia_max:
+                    st.success("Índice de Aproveitamento dentro do permitido")
+                else:
+                    st.error("Índice de Aproveitamento EXCEDE o permitido")
+
+        else:
+            st.warning("Nenhuma regra encontrada para (zona + uso).")
+
+    except Exception as e:
+        st.error(f"Erro ao consultar Supabase: {e}")
 
 st.divider()
