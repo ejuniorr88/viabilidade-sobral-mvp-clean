@@ -1,19 +1,11 @@
 from __future__ import annotations
 
-"""core.streets — módulo de ruas (robusto, isolado e compatível)
-
-Garantias:
-- Lê data/ruas.json (GeoJSON FeatureCollection).
-- Índice espacial em UTM 24S (metros) e busca por candidatos via STRtree.query(buffer).
-- Distância em metros correta.
-- Se não achar via no raio -> retorna None.
-- Nunca retorna dicionário de erro.
-- Nunca levanta exceção para o app.
-
-API:
-- find_street(lat, lon, radius_m=150.0) -> dict | None
-  dict: {"name": str, "type": str|None, "distance_m": float}
-"""
+# STREETS_V20260228_2320
+# Se você está vendo este texto no GitHub, então o core/streets.py correto foi aplicado.
+# Regra: find_street() só pode retornar:
+#   - None (quando não achou ou quando falhou)
+#   - dict com keys: name, type, distance_m
+# NUNCA retorna { "ERROR": ... }
 
 import json
 from dataclasses import dataclass
