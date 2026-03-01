@@ -72,7 +72,7 @@ zones_gj = zones["geojson"]
 
 
 # =============================
-# 1) Seleção no mapa
+# 1) Seleção no mapa (CLIQUE ÚNICO REAL)
 # =============================
 
 st.subheader("1) Selecione o ponto no mapa")
@@ -85,7 +85,14 @@ radius_m = st.number_input(
     step=10,
 )
 
-last_click = st.session_state.get("last_click")
+# Controle seguro de clique
+if "last_click" not in st.session_state:
+    st.session_state.last_click = None
+
+if "click_hash" not in st.session_state:
+    st.session_state.click_hash = None
+
+last_click = st.session_state.last_click
 
 m = _render_map(
     zones_gj,
@@ -96,15 +103,22 @@ m = _render_map(
 out = st_folium(m, width=None, height=420)
 
 if out and out.get("last_clicked"):
+
     new_lat = float(out["last_clicked"]["lat"])
     new_lon = float(out["last_clicked"]["lng"])
 
-    st.session_state.last_click = {
-        "lat": new_lat,
-        "lon": new_lon,
-    }
+    new_hash = f"{new_lat:.8f}_{new_lon:.8f}"
 
-if st.session_state.get("last_click"):
+    if new_hash != st.session_state.click_hash:
+        st.session_state.last_click = {
+            "lat": new_lat,
+            "lon": new_lon,
+        }
+        st.session_state.click_hash = new_hash
+        st.rerun()
+
+# Mostrar coordenadas
+if st.session_state.last_click:
     st.caption(
         f"📍 Coordenadas selecionadas: "
         f"lat {st.session_state.last_click['lat']:.6f} | "
@@ -114,7 +128,7 @@ if st.session_state.get("last_click"):
 calcular = st.button(
     "🔎 Calcular viabilidade",
     type="primary",
-    disabled=not st.session_state.get("last_click"),
+    disabled=not st.session_state.last_click,
 )
 
 st.divider()
@@ -126,7 +140,7 @@ st.divider()
 
 st.subheader("2) Localização (zona + via)")
 
-if calcular and st.session_state.get("last_click"):
+if calcular and st.session_state.last_click:
 
     lat = st.session_state.last_click["lat"]
     lon = st.session_state.last_click["lon"]
