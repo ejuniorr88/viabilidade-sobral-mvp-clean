@@ -275,34 +275,77 @@ if st.session_state.calc_ready and zone:
 
 # Normaliza chaves (porque o schema pode variar)
 to_max_pct = _to_float(_first_value(rule, ["to_max_pct", "to_max", "taxa_ocupacao_max", "taxa_ocupacao_max_pct"]))
+to_subsoil_max_pct = _to_float(_first_value(rule, [
+    "to_subsoil_max_pct",
+    "to_subsolo_max_pct",
+    "to_subsolo_pct",
+    "taxa_ocupacao_subsolo_max",
+    "taxa_ocupacao_subsolo_max_pct",
+]))
 ia_max = _to_float(_first_value(rule, ["ia_max", "ia_maximo", "ia_max_ratio", "ia_maximum"]))
+ia_min = _to_float(_first_value(rule, ["ia_min", "ia_minimo", "ia_min_ratio", "ia_minimum"]))
 tp_min_pct = _to_float(_first_value(rule, ["tp_min_pct", "tp_min", "permeabilidade_min", "permeabilidade_min_pct"]))
 height_max_m = _to_float(_first_value(rule, ["height_max_m", "altura_max_m", "height_max", "altura_max"]))
 front_setback_m = _to_float(_first_value(rule, ["setback_front_m", "recuo_frontal_m", "setback_front", "recuo_frontal"]))
 side_setback_m = _to_float(_first_value(rule, ["setback_side_m", "recuo_lateral_m", "setback_side", "recuo_lateral"]))
 back_setback_m = _to_float(_first_value(rule, ["setback_back_m", "recuo_fundos_m", "setback_back", "recuo_fundos"]))
+
+lot_area_min_m2 = _to_float(_first_value(rule, [
+    "lot_area_min_m2",
+    "area_min_lote_m2",
+    "area_min_lote",
+    "area_lote_min",
+]))
+lot_area_max_m2 = _to_float(_first_value(rule, [
+    "lot_area_max_m2",
+    "area_max_lote_m2",
+    "area_max_lote",
+    "area_lote_max",
+]))
+
+frontage_min_m = _to_float(_first_value(rule, [
+    "frontage_min_m",
+    "testada_min_m",
+    "testada_min",
+]))
+frontage_max_m = _to_float(_first_value(rule, [
+    "frontage_max_m",
+    "testada_max_m",
+    "testada_max",
+    "testada_maxima",
+]))
 allow_attach_one_side = _first_value(rule, ["allow_attach_one_side"])
 notes = _first_value(rule, ["notes", "observacoes", "obs"])
 
 if st.session_state.calc_ready and zone:
-    # Quadro “bacana” (sem depender de chaves específicas)
-    rows = [
-        ("TO Máxima", _fmt(to_max_pct, "%") if to_max_pct is not None else "—"),
-        ("IA Máximo", _fmt(ia_max) if ia_max is not None else "—"),
-        ("TP Mínima", _fmt(tp_min_pct, "%") if tp_min_pct is not None else "—"),
-        ("Altura Máxima", _fmt(height_max_m, " m") if height_max_m is not None else "—"),
-        ("Recuo Frontal", _fmt(front_setback_m, " m") if front_setback_m is not None else "—"),
-        ("Recuo Lateral", _fmt(side_setback_m, " m") if side_setback_m is not None else "—"),
-        ("Recuo Fundos", _fmt(back_setback_m, " m") if back_setback_m is not None else "—"),
-        ("Pode encostar em 1 lado", _fmt(allow_attach_one_side) if allow_attach_one_side is not None else "—"),
-    ]
+    # Quadro “bacana” com TODOS os parâmetros solicitados
+    def _val(v: Any, suffix: str = "") -> str:
+        return _fmt(v, suffix) if v is not None else "—"
 
-    st.table(
-        {
-            "Parâmetro": [r[0] for r in rows],
-            "Valor": [r[1] for r in rows],
-        }
-    )
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Zona", zone)
+    c2.metric("Taxa de permeabilidade (TP mínima)", _val(tp_min_pct, "%"))
+    c3.metric("Taxa de ocupação (TO máxima)", _val(to_max_pct, "%"))
+
+    c4, c5, c6 = st.columns(3)
+    c4.metric("TO do subsolo (máx.)", _val(to_subsoil_max_pct, "%"))
+    c5.metric("Índice de aproveitamento (IA máximo)", _val(ia_max))
+    c6.metric("Índice de aproveitamento (IA mínimo)", _val(ia_min))
+
+    c7, c8, c9 = st.columns(3)
+    c7.metric("Recuo de frente", _val(front_setback_m, " m"))
+    c8.metric("Recuo de fundo", _val(back_setback_m, " m"))
+    c9.metric("Recuo de lateral", _val(side_setback_m, " m"))
+
+    c10, c11, c12 = st.columns(3)
+    c10.metric("Área mínima do lote", _val(lot_area_min_m2, " m²"))
+    c11.metric("Testada mínima", _val(frontage_min_m, " m"))
+    c12.metric("Altura máxima permitida", _val(height_max_m, " m"))
+
+    c13, c14, c15 = st.columns(3)
+    c13.metric("Área máxima do lote", _val(lot_area_max_m2, " m²"))
+    c14.metric("Testada máxima", _val(frontage_max_m, " m"))
+    c15.metric("Pode encostar em 1 lado", _val(allow_attach_one_side))
 
     if notes:
         st.info(f"**Observações:** {notes}")
