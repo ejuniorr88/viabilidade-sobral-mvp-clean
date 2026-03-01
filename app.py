@@ -298,7 +298,19 @@ elif rule:
     # Map fields (support multiple key names)
     to_max = _pick(rule, "to_max_pct", "to_max", "taxa_ocupacao_max_pct", "to")
     tp_min = _pick(rule, "tp_min_pct", "tp_min", "taxa_permeabilidade_min_pct", "tp")
-    to_subsolo = _pick(rule, "to_subsolo_max_pct", "to_subsolo_pct", "to_subsolo")
+    # TO do subsolo aparece com nomes diferentes em versões do dump.
+    to_subsolo = _pick(
+        rule,
+        "to_subsolo_max_pct",
+        "to_subsolo_pct",
+        "to_subsolo",
+        "to_subsolo_max",
+        "to_subsolo_maximo_pct",
+        "to_subsolo_maximo",
+        "to_subsolo_max_percent",
+        "to_subsolo_maxima_pct",
+        "tos_max_pct",
+    )
     ia_max = _pick(rule, "ia_max", "ia_maximo", "indice_aproveitamento_max")
     ia_min = _pick(rule, "ia_min", "ia_minimo", "indice_aproveitamento_min")
     rec_frente = _pick(rule, "recuo_frontal_m", "recuo_frente_m", "recuo_frente")
@@ -306,8 +318,28 @@ elif rule:
     rec_lateral = _pick(rule, "recuo_lateral_m", "recuo_lateral")
     area_min = _pick(rule, "area_min_lote_m2", "area_min_lote", "lote_area_min_m2")
     area_max = _pick(rule, "area_max_lote_m2", "area_max_lote", "lote_area_max_m2")
-    test_min = _pick(rule, "testada_min_m", "testada_min", "lote_testada_min_m")
-    test_max = _pick(rule, "testada_max_m", "testada_max", "lote_testada_max_m")
+    test_min = _pick(
+        rule,
+        "testada_min_m",
+        "testada_min",
+        "lote_testada_min_m",
+        "testada_minima_m",
+        "testada_minima",
+        "testada_minima_lote_m",
+        "testada_minima_lote",
+        "frontage_min_m",
+    )
+    test_max = _pick(
+        rule,
+        "testada_max_m",
+        "testada_max",
+        "lote_testada_max_m",
+        "testada_maxima_m",
+        "testada_maxima",
+        "testada_maxima_lote_m",
+        "testada_maxima_lote",
+        "frontage_max_m",
+    )
     # gabarito/altura
     altura_max = _pick(rule, "altura_max_m", "gabarito_m", "altura_maxima_m", "altura_max")
 
