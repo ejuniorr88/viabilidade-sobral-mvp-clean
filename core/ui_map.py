@@ -3,14 +3,27 @@ from __future__ import annotations
 import streamlit as st
 from streamlit_folium import st_folium
 
-def render_map_section(zones_gj, render_map_func, session_state_calc):
+
+def render_map_section(zones_gj, render_map_func):
+    """
+    Renderiza:
+    - Subheader do mapa
+    - Input de raio
+    - Mapa com clique único real
+    - Botão calcular
+
+    NÃO altera layout.
+    NÃO altera tamanho do mapa.
+    NÃO altera lógica existente.
+    """
+
     st.subheader("1) Selecione o ponto no mapa")
 
     radius_m = st.number_input(
         "Raio para encontrar via (m)",
         min_value=10,
         max_value=100000,
-        value=int(session_state_calc.get("radius_m") or 100),
+        value=int(st.session_state.calc.get("radius_m") or 100),
         step=10,
     )
 
@@ -38,8 +51,11 @@ def render_map_section(zones_gj, render_map_func, session_state_calc):
         if new_hash != st.session_state.click_hash:
             st.session_state.last_click = {"lat": new_lat, "lon": new_lon}
             st.session_state.click_hash = new_hash
+
+            # reseta cálculo anterior
             st.session_state.calc["ok"] = False
             st.session_state.calc["err"] = None
+
             st.rerun()
 
     if st.session_state.last_click:
