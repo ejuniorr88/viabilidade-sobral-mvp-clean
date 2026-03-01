@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-"""core.streets — módulo de ruas (compatível e robusto)
+"""core.streets — módulo de ruas (robusto, isolado e compatível)
 
-Correção:
-- Indexa as geometrias do ruas.json em UTM (metros) e usa STRtree.query(buffer)
-  (método mais compatível) para buscar candidatos dentro do raio.
-- Escolhe o menor distance() em metros.
-- Se não achar -> None. Nunca quebra o app.
+Garantias:
+- Lê data/ruas.json (GeoJSON FeatureCollection).
+- Índice espacial em UTM 24S (metros) e busca por candidatos via STRtree.query(buffer).
+- Distância em metros correta.
+- Se não achar via no raio -> retorna None.
+- Nunca retorna dicionário de erro.
+- Nunca levanta exceção para o app.
 
 API:
 - find_street(lat, lon, radius_m=150.0) -> dict | None
+  dict: {"name": str, "type": str|None, "distance_m": float}
 """
 
 import json
