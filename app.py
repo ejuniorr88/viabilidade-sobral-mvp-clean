@@ -42,7 +42,12 @@ def _log_query(payload: dict[str, Any]) -> None:
 
 def _render_map(zones_gj, lat0=-3.689, lon0=-40.349, click_lat=None, click_lon=None):
     m = folium.Map(location=[lat0, lon0], zoom_start=12, tiles="OpenStreetMap", control_scale=True)
-
+# folium.GeoJson(
+#     zones_gj,
+#     name="Zonas",
+#     style_function=lambda _: {"fillOpacity": 0.08, "weight": 1},
+#     tooltip=folium.GeoJsonTooltip(fields=["sigla"], aliases=["Zona"]),
+# ).add_to(m)
     folium.GeoJson(
         zones_gj,
         name="Zonas",
