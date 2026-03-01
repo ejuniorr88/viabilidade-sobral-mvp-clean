@@ -7,54 +7,6 @@ from typing import Any
 
 import folium
 import streamlit as st
-# =============================
-# Diagnóstico RUAS (fail-safe)
-# =============================
-def _diagnostico_ruas_json():
-    """Diagnóstico simples do data/ruas.json (nunca quebra o app)."""
-    try:
-        import json
-        from pathlib import Path
-
-        repo_root = Path(__file__).resolve().parent
-        ruas_path = repo_root / "data" / "ruas.json"
-
-        info = {
-            "ruas_path": str(ruas_path),
-            "exists": bool(ruas_path.exists()),
-            "streets_loaded": 0,
-            "sample_property_keys": None,
-            "error": None,
-        }
-
-        if not ruas_path.exists():
-            return info
-
-        data = json.loads(ruas_path.read_text(encoding="utf-8"))
-
-        features = None
-        if isinstance(data, dict) and data.get("type") == "FeatureCollection":
-            features = data.get("features")
-        elif isinstance(data, list):
-            features = data
-
-        if isinstance(features, list):
-            info["streets_loaded"] = len(features)
-            if len(features) > 0 and isinstance(features[0], dict):
-                props = features[0].get("properties")
-                if isinstance(props, dict):
-                    info["sample_property_keys"] = list(props.keys())[:10]
-
-        return info
-    except Exception as e:
-        return {
-            "ruas_path": "desconhecido",
-            "exists": False,
-            "streets_loaded": 0,
-            "sample_property_keys": None,
-            "error": str(e),
-        }
-
 from streamlit_folium import st_folium
 
 from core.zone_rules_repository import get_zone_rule
@@ -134,6 +86,7 @@ if out and out.get("last_clicked"):
     lat = float(out["last_clicked"]["lat"])
     lon = float(out["last_clicked"]["lng"])
     st.session_state.last_click = {"lat": lat, "lon": lon}
+    st.caption(f"📍 Coordenadas selecionadas: lat {lat:.6f} | lon {lon:.6f}")
 
     zone = zone_from_latlon(zones["prepared"], lat, lon)
     if zone:
@@ -144,26 +97,22 @@ if out and out.get("last_clicked"):
 st.divider()
 
 st.subheader("2) Localização (zona + via)")
-# --- Diagnóstico (ruas.json) ---
-with st.expander("Diagnóstico (ruas.json)", expanded=False):
-    info = _diagnostico_ruas_json()
-    st.write("Caminho procurado:", info.get("ruas_path"))
-    st.write("Existe no deploy?:", "SIM" if info.get("exists") else "NÃO")
-    st.write("Quantidade de vias carregadas:", info.get("streets_loaded", 0))
-    keys = info.get("sample_property_keys")
-    if keys:
-        st.write("Exemplo de chaves em properties (1ª via):", keys)
-    if info.get("error"):
-        st.warning("Erro ao ler ruas.json: " + str(info.get("error")))
-    if not info.get("exists"):
-        st.warning("O arquivo data/ruas.json não foi encontrado no deploy. Confirme se está commitado na branch DEV exatamente em /data/ruas.json.")
-    elif info.get("streets_loaded", 0) == 0:
-        st.warning("ruas.json existe, mas nenhuma via foi carregada. Isso explica 'Via não encontrada' sempre.")
-
 
 street_info = None
+
+# --- Debug (coordenadas e retorno do streets) ---
+with st.expander("Debug (coordenadas e streets)", expanded=False):
+    st.write("lat:", lat)
+    st.write("lon:", lon)
+    st.write("raio (m):", radius_m)
+    if lat is None or lon is None:
+        st.info("Nenhum ponto foi clicado no mapa ainda.")
+    else:
+        st.write("retorno streets (bruto):")
+        st.json(st.session_state.get("debug_street_info"))
 if lat is not None and lon is not None:
     street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
+    st.session_state.debug_street_info = street_info
 
     colA, colB, colC = st.columns(3)
     with colA:
