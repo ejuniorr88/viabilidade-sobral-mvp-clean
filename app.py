@@ -13,6 +13,7 @@ from core.zones_map import load_zones, zone_from_latlon
 from core.streets import find_street
 from core.zone_rules_repository import get_zone_rule
 from core.ui_localizacao import render_localizacao_section
+from core.ui_indices import render_indices_section
 
 APP_TITLE = "Viabilidade"
 
@@ -235,101 +236,15 @@ st.divider()
 # 4) Índices Urbanísticos (Supabase)
 # =============================
 
-st.subheader("4) Índices Urbanísticos (Supabase)")
+# =============================
+# 4) Índices Urbanísticos (Supabase) (MODULARIZADO)
+# =============================
 
-rule = calc.get("rule") if calc.get("ok") else None
-
-if not calc.get("ok"):
-    st.info("Clique em **Calcular viabilidade** para carregar zona, via e regras do Supabase.")
-elif zone and not rule and not calc.get("err"):
-    st.warning("Nenhuma regra encontrada para (zona + uso) no Supabase.")
-elif rule:
-    # Map fields (support multiple key names)
-    to_max = _pick(rule, "to_max_pct", "to_max", "taxa_ocupacao_max_pct", "to")
-    tp_min = _pick(rule, "tp_min_pct", "tp_min", "taxa_permeabilidade_min_pct", "tp")
-    # TO do subsolo aparece com nomes diferentes em versões do dump.
-    to_subsolo = _pick(
-        rule,
-        "to_subsolo_max",
-        "to_subsolo_max_pct",
-        "to_subsolo_pct",
-        "to_subsolo",
-    )
-    ia_max = _pick(rule, "ia_max", "ia_maximo", "indice_aproveitamento_max")
-    ia_min = _pick(rule, "ia_min", "ia_minimo", "indice_aproveitamento_min")
-    rec_frente = _pick(rule, "recuo_frontal_m", "recuo_frente_m", "recuo_frente")
-    rec_fundo = _pick(rule, "recuo_fundo_m", "recuo_fundos_m", "recuo_fundo")
-    rec_lateral = _pick(rule, "recuo_lateral_m", "recuo_lateral")
-    area_min = _pick(rule, "area_min_lote_m2", "area_min_lote", "lote_area_min_m2")
-    area_max = _pick(rule, "area_max_lote_m2", "area_max_lote", "lote_area_max_m2")
-    test_min = _pick(
-        rule,
-        "testada_min_meio_m",
-        "testada_min_esquina_m",
-        "testada_min_m",
-        "testada_min",
-        "lote_testada_min_m",
-        "testada_minima_m",
-        "testada_minima",
-        "testada_minima_lote_m",
-        "testada_minima_lote",
-        "frontage_min_m",
-    )
-    test_max = _pick(
-        rule,
-        "testada_max_m",
-        "testada_max",
-        "lote_testada_max_m",
-        "testada_maxima_m",
-        "testada_maxima",
-        "testada_maxima_lote_m",
-        "testada_maxima_lote",
-        "frontage_max_m",
-    )
-    # gabarito/altura
-    altura_max = _pick(rule, "altura_max_m", "gabarito_m", "altura_maxima_m", "altura_max")
-
-    # Layout cards
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        _card("Zona", zone)
-    with c2:
-        _card("Taxa de Permeabilidade (TP) mínima", tp_min, "%")
-    with c3:
-        _card("Taxa de Ocupação (TO) máxima", to_max, "%")
-
-    c4, c5, c6 = st.columns(3)
-    with c4:
-        _card("TO do Subsolo máxima", to_subsolo, "%")
-    with c5:
-        _card("Índice de Aproveitamento (IA) máximo", ia_max)
-    with c6:
-        _card("Índice de Aproveitamento (IA) mínimo", ia_min)
-
-    c7, c8, c9 = st.columns(3)
-    with c7:
-        _card("Recuo de Frente", rec_frente, " m")
-    with c8:
-        _card("Recuo de Fundo", rec_fundo, " m")
-    with c9:
-        _card("Recuo Lateral", rec_lateral, " m")
-
-    c10, c11, c12 = st.columns(3)
-    with c10:
-        _card("Área mínima do lote", area_min, " m²")
-    with c11:
-        _card("Testada mínima", test_min, " m")
-    with c12:
-        _card("Altura máxima (gabarito)", altura_max, " m")
-
-    c13, c14, _ = st.columns(3)
-    with c13:
-        _card("Área máxima do lote", area_max, " m²")
-    with c14:
-        _card("Testada máxima", test_max, " m")
-
-    with st.expander("Ver regra bruta (JSON do Supabase)", expanded=False):
-        st.json(rule)
+render_indices_section(
+    calc=st.session_state.calc,
+    pick_func=_pick,
+    card_func=_card,
+)
 
 st.divider()
 
