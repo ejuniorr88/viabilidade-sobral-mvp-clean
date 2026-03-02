@@ -2,10 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from ui.indices import render_indices_section
-
-__all__ = ['render_indices_section']
-
 import streamlit as st
 
 
