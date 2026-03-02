@@ -9,14 +9,12 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 
-from core.zones_mapa import load_zones, zone_from_latlon
-from core.streets import find_street
-from core.zone_rules_repository import get_zone_rule
+# ✅ core: nomes corretos
+from core.zones_map import load_zones, zone_from_latlon
 
-# UI modules (pasta /ui)
+# ✅ ui: módulos modularizados (pasta /ui)
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
-from ui.analise import render_analise
 
 APP_TITLE = "Viabilidade"
 
@@ -248,15 +246,49 @@ render_indices_section(
 st.divider()
 
 # =============================
-# 5) Análise Urbanística (MODULARIZADO)
+# 5) Análise Urbanística
 # =============================
 
-render_analise(
-    calc_ok=bool(st.session_state.calc.get("ok")),
-    zone=st.session_state.calc.get("zone"),
-    rule=st.session_state.calc.get("rule"),
-    lot_area=float(lot_area),
-    testada=float(testada),
-    profundidade=float(profundidade),
-    built_ground=float(built_ground),
-)
+st.subheader("5) Análise Urbanística")
+calc = st.session_state.calc
+rule = calc.get("rule")
+
+if not calc.get("ok"):
+    st.info("Clique em **Calcular viabilidade** para gerar a análise.")
+elif not rule:
+    st.info("Sem regra do Supabase — não é possível validar índices.")
+else:
+    # Pull values safely
+    to_max_f = _as_float(_pick(rule, "to_max_pct", "to_max"))
+    ia_max_f = _as_float(_pick(rule, "ia_max", "ia_maximo"))
+    tp_min_f = _as_float(_pick(rule, "tp_min_pct", "tp_min"))
+
+    # Compute used metrics
+    ia_utilizado = (built_ground / lot_area) if lot_area else 0.0
+    to_utilizada = ((built_ground / lot_area) * 100) if lot_area else 0.0
+
+    # TP prevista: não temos área permeável informada aqui; manter como 0 (ou pedir input depois)
+    tp_prevista = 0.0
+
+    st.write(f"IA utilizado: **{ia_utilizado:.2f}**")
+    st.write(f"TO utilizada: **{to_utilizada:.1f}%**")
+    st.write(f"TP prevista: **{tp_prevista:.1f}%**")
+
+    # Validations (only if rule has values)
+    if to_max_f is not None:
+        if to_utilizada <= to_max_f:
+            st.success("✅ Taxa de Ocupação dentro do permitido")
+        else:
+            st.error("❌ Taxa de Ocupação EXCEDE o permitido")
+
+    if ia_max_f is not None:
+        if ia_utilizado <= ia_max_f:
+            st.success("✅ Índice de Aproveitamento dentro do permitido")
+        else:
+            st.error("❌ Índice de Aproveitamento EXCEDE o permitido")
+
+    if tp_min_f is not None:
+        if tp_prevista >= tp_min_f:
+            st.success("✅ Taxa de Permeabilidade atende o mínimo")
+        else:
+            st.warning("⚠️ Taxa de Permeabilidade ainda não foi informada / está abaixo do mínimo (precisamos do input de área permeável).")
