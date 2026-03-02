@@ -10,12 +10,12 @@ import folium
 from streamlit_folium import st_folium
 
 # NOTE: o módulo correto do projeto é zones_map (não zones_mapa)
-from core.zones_map import load_zones
-from ui.localizacao import render_localizacao_section
+from core.ui_mapa import render_mapa_section
+from core.ui_lote import render_lote_section
+from core.ui_localizacao import render_localizacao_section
 from core.ui_indices import render_indices_section
-
-from ui.analise import render_analise_section
-from ui.relatorio import render_relatorio_section
+from core.ui_analise import render_analise_section
+from core.ui_relatorio import render_relatorio_section
 
 APP_TITLE = "Viabilidade"
 
