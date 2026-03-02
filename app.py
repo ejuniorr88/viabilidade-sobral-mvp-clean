@@ -11,8 +11,8 @@ from streamlit_folium import st_folium
 
 # NOTE: o módulo correto do projeto é zones_map (não zones_mapa)
 from core.zones_map import load_zones
-from core.ui_localizacao import render_localizacao_section
-from core.ui_indices import render_indices_section
+from ui.localizacao import render_localizacao_section
+from ui.indices import render_indices_section
 
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
