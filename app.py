@@ -9,16 +9,20 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 
-# ✅ IMPORT CORRETO (o arquivo no repo é core/zones_map.py)
-from core.zones_map import load_zones, zone_from_latlon
+# Zones (o arquivo no repo pode ser zones_map.py; alguns commits usaram zones_mapa.py)
+try:
+    from core.zones_map import load_zones, zone_from_latlon
+except Exception:
+    from core.zones_mapa import load_zones, zone_from_latlon  # type: ignore
 
 from core.streets import find_street
 from core.zone_rules_repository import get_zone_rule
 
-# ✅ UI modularizada fica em /ui (conforme sua estrutura atual)
+# UI modular
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
+from ui.relatorio import render_relatorio_section
 
 APP_TITLE = "Viabilidade"
 
@@ -73,6 +77,7 @@ def _as_float(x: Any) -> Optional[float]:
 
 
 def _pick(rule: Dict[str, Any], *keys: str) -> Any:
+    """Return first non-None value for given keys."""
     for k in keys:
         if k in rule and rule.get(k) is not None:
             return rule.get(k)
@@ -142,7 +147,10 @@ _ensure_state()
 zones = _zones()
 zones_gj = zones["geojson"]
 
-# 1) Mapa
+# =============================
+# 1) Selecione o ponto no mapa
+# =============================
+
 st.subheader("1) Selecione o ponto no mapa")
 
 radius_m = st.number_input(
@@ -180,11 +188,18 @@ if st.session_state.last_click:
         f"lon {st.session_state.last_click['lon']:.6f}"
     )
 
-calcular = st.button("🔎 Calcular viabilidade", type="primary", disabled=not st.session_state.last_click)
+calcular = st.button(
+    "🔎 Calcular viabilidade",
+    type="primary",
+    disabled=not st.session_state.last_click,
+)
 
 st.divider()
 
-# 2) Lote
+# =============================
+# 2) Dados do lote
+# =============================
+
 st.subheader("2) Dados do lote")
 
 col1, col2, col3 = st.columns(3)
@@ -199,16 +214,26 @@ built_ground = st.number_input("Área pretendida no térreo (m²)", min_value=0.
 
 st.divider()
 
-# 3) Localização (mod)
+# =============================
+# 3) Localização (zona + via) (MODULARIZADO)
+# =============================
+
 render_localizacao_section(
     calcular=calcular,
     zones_prepared=zones["prepared"],
     radius_m=int(radius_m),
 )
 
+calc = st.session_state.calc
+zone = calc.get("zone")
+street_info = calc.get("street_info")
+
 st.divider()
 
-# 4) Índices (mod)
+# =============================
+# 4) Índices Urbanísticos (Supabase) (MODULARIZADO)
+# =============================
+
 render_indices_section(
     calc=st.session_state.calc,
     pick_func=_pick,
@@ -217,11 +242,29 @@ render_indices_section(
 
 st.divider()
 
-# 5) Análise (mod)
+# =============================
+# 5) Análise Urbanística (MODULARIZADO)
+# =============================
+
 render_analise_section(
     calc=st.session_state.calc,
-    lot_area=float(lot_area),
-    built_ground=float(built_ground),
+    lot_area=lot_area,
+    built_ground=built_ground,
+    as_float=_as_float,
     pick_func=_pick,
-    as_float_func=_as_float,
+)
+
+st.divider()
+
+# =============================
+# 6) Relatório Urbanístico (MODULARIZADO)
+# =============================
+
+render_relatorio_section(
+    calc=st.session_state.calc,
+    lot_area=lot_area,
+    testada=testada,
+    profundidade=profundidade,
+    built_ground=built_ground,
+    pick_func=_pick,
 )
