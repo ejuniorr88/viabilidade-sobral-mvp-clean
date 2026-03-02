@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Callable
 
+from ui.analise import render_analise_section
+
+__all__ = ['render_analise_section']
+
+
 import streamlit as st
 
 def _safe_float(x, default=0.0):
