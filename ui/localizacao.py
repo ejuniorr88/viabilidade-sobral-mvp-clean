@@ -5,6 +5,10 @@ import streamlit as st
 from core.zones_map import zone_from_latlon
 from core.streets import find_street
 from core.zone_rules_repository import get_zone_rule
+from ui.localizacao import render_localizacao_section
+
+__all__ = ['render_localizacao_section']
+
 
 
 def render_localizacao_section(*, calcular: bool, zones_prepared, radius_m: int):
