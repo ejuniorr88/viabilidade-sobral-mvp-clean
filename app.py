@@ -9,13 +9,13 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 
-from core.zones_mapa import load_zones, zone_from_latlon
+from core.zones_map import load_zones, zone_from_latlon
 from core.streets import find_street
 from core.zone_rules_repository import get_zone_rule
 
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
-from ui.analise import render_analise_section
+from ui.analise import render_analise_section  # novo bloco 5 (Q&A) + relatório
 
 APP_TITLE = "Viabilidade"
 
@@ -81,7 +81,6 @@ def _fmt(v: Any, suffix: str = "") -> str:
     if v is None or v == "":
         return "—"
     if isinstance(v, (int, float)):
-        # avoid 1.0 showing as 1.0 when it's integer-like
         if isinstance(v, float) and abs(v - round(v)) < 1e-9:
             v = int(round(v))
         return f"{v}{suffix}"
@@ -116,7 +115,6 @@ def _ensure_state():
     if "click_hash" not in st.session_state:
         st.session_state.click_hash = None
 
-    # computed results (only after clicking "Calcular viabilidade")
     if "calc" not in st.session_state:
         st.session_state.calc = {
             "lat": None,
@@ -125,8 +123,7 @@ def _ensure_state():
             "street_info": None,
             "rule": None,
             "use_type_code": "RES_UNI",
-            # manter como int para compatibilidade com st.number_input
-            "radius_m": 100,
+            "radius_m": 100,  # int
             "ok": False,
             "err": None,
         }
@@ -153,13 +150,10 @@ radius_m = st.number_input(
     "Raio para encontrar via (m)",
     min_value=10,
     max_value=100000,
-    # IMPORTANT: Streamlit não aceita misturar tipos numéricos (int vs float)
-    # no number_input. Mantemos tudo como int aqui.
     value=int(st.session_state.calc.get("radius_m") or 100),
     step=10,
 )
 
-# Render map with last click marker
 last_click = st.session_state.last_click
 m = _render_map(
     zones_gj,
@@ -168,7 +162,6 @@ m = _render_map(
 )
 out = st_folium(m, width=None, height=420)
 
-# Single-click update (forces rerun so marker appears immediately)
 if out and out.get("last_clicked"):
     new_lat = float(out["last_clicked"]["lat"])
     new_lon = float(out["last_clicked"]["lng"])
@@ -178,12 +171,10 @@ if out and out.get("last_clicked"):
         st.session_state.last_click = {"lat": new_lat, "lon": new_lon}
         st.session_state.click_hash = new_hash
 
-        # when click changes, mark results as not calculated yet
         st.session_state.calc["ok"] = False
         st.session_state.calc["err"] = None
         st.rerun()
 
-# show coordinates caption
 if st.session_state.last_click:
     st.caption(
         f"📍 Coordenadas selecionadas: "
@@ -227,6 +218,10 @@ render_localizacao_section(
     radius_m=int(radius_m),
 )
 
+calc = st.session_state.calc
+zone = calc.get("zone")
+street_info = calc.get("street_info")
+
 st.divider()
 
 # =============================
@@ -242,11 +237,13 @@ render_indices_section(
 st.divider()
 
 # =============================
-# 5) Análise Urbanística (RELATÓRIO) (MODULARIZADO)
+# 5) Análise Urbanística (MODULARIZADO - relatório em Q&A)
 # =============================
 
 render_analise_section(
     calc=st.session_state.calc,
+    pick_func=_pick,
+    as_float_func=_as_float,
     lot_area=float(lot_area),
     testada=float(testada),
     profundidade=float(profundidade),
