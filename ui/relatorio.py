@@ -5,23 +5,6 @@ from typing import Any, Dict, Optional, Callable
 import streamlit as st
 
 
-
-
-def _safe_float_ptbr(v, default=0.0):
-    """Converte valores PT-BR (ex: '300,00') em float com fallback seguro."""
-    try:
-        if v is None:
-            return default
-        if isinstance(v, (int, float)):
-            return float(v)
-        s = str(v).strip()
-        if s == "":
-            return default
-        s = s.replace(".", "").replace(",", ".")  # remove milhar e troca vírgula
-        return float(s)
-    except Exception:
-        return default
-
 def _to_float(v: Any) -> float:
     if v is None:
         return 0.0
@@ -65,7 +48,6 @@ def render_relatorio_section(
     testada: Any,
     profundidade: Any,
     built_ground: Any,
-    area_permeavel_prevista: Any,
     pick_func: Callable[..., Any],
 ):
     st.subheader("6) Relatório Urbanístico")
@@ -83,7 +65,9 @@ def render_relatorio_section(
     testada_f = _to_float(testada)
     profund_f = _to_float(profundidade)
     built_ground_f = _to_float(built_ground)
-    area_perm_f = _to_float(area_permeavel_prevista)
+    # Área livre (potencialmente permeável) calculada automaticamente.
+    # Considera o "melhor cenário" onde toda área não ocupada no térreo é permeável.
+    area_perm_f = max(0.0, lot_area_f - built_ground_f)
 
     zone = calc.get("zone") or "—"
     use_type = calc.get("use_type_code") or "—"
