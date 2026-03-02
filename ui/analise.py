@@ -4,6 +4,18 @@ from typing import Any, Dict, Optional, Callable
 
 import streamlit as st
 
+def _safe_float(x, default=0.0):
+    """Converte números vindos do Streamlit (float) ou strings com vírgula."""
+    if x is None:
+        return default
+    try:
+        if isinstance(x, str):
+            x = x.strip().replace('.', '').replace(',', '.') if ',' in x else x.strip()
+        return float(x)
+    except Exception:
+        return default
+
+
 
 def _to_float_ptbr(x: Any, default: float = 0.0) -> float:
     """Parse numbers coming either as float/int or as pt-BR strings like '300,00' or '1.234,56'."""
@@ -26,6 +38,7 @@ def render_analise_section(
     calc: Dict[str, Any],
     lot_area: Any,
     built_ground: Any,
+    permeable_area: Any,
     pick_func: Callable[[Dict[str, Any], str], Any] | Callable[..., Any],
 ) -> None:
     """Renderiza a seção 5) Análise Urbanística.
@@ -46,10 +59,7 @@ def render_analise_section(
 
     lot_area_f = _to_float_ptbr(lot_area, 0.0)
     built_ground_f = _to_float_ptbr(built_ground, 0.0)
-    # Área permeável prevista (melhor cenário): o que sobra no lote após a ocupação no térreo.
-    # Obs.: na prática, parte dessa área pode virar piso impermeável; aqui o objetivo é dar
-    # uma leitura automática quando o usuário não informa nada.
-    permeable_area_f = max(0.0, lot_area_f - built_ground_f)
+    permeable_area_f = _to_float_ptbr(permeable_area, 0.0)
 
     # Pull values safely
     to_max_f = _to_float_ptbr(pick_func(rule, "to_max_pct", "to_max"), None) if pick_func else None
