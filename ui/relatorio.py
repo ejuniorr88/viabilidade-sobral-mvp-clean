@@ -48,6 +48,7 @@ def render_relatorio_section(
     testada: Any,
     profundidade: Any,
     built_ground: Any,
+    area_permeavel_prevista: Any,
     pick_func: Callable[..., Any],
 ):
     st.subheader("6) Relatório Urbanístico")
@@ -65,9 +66,7 @@ def render_relatorio_section(
     testada_f = _to_float(testada)
     profund_f = _to_float(profundidade)
     built_ground_f = _to_float(built_ground)
-    # Área livre (potencialmente permeável) calculada automaticamente.
-    # Considera o "melhor cenário" onde toda área não ocupada no térreo é permeável.
-    area_perm_f = max(0.0, lot_area_f - built_ground_f)
+    area_perm_f = _to_float(area_permeavel_prevista)
 
     zone = calc.get("zone") or "—"
     use_type = calc.get("use_type_code") or "—"
@@ -79,7 +78,11 @@ def render_relatorio_section(
 
     rec_frente = _as_float(pick_func(rule, "recuo_frontal_m", "front_setback_m", "recuo_frontal")) or 0.0
     rec_lateral = _as_float(pick_func(rule, "recuo_lateral_m", "side_setback_m", "recuo_lateral")) or 0.0
-    rec_fundo = _as_float(pick_func(rule, "recuo_fundo_m", "rear_setback_m", "recuo_fundo")) or 0.0
+    # OBS: no Supabase usamos principalmente `recuo_fundos_m`.
+    # Alguns patches antigos usavam variações (recuo_fundo_m / recuo_fundo).
+    rec_fundo = _as_float(
+        pick_func(rule, "recuo_fundo_m", "recuo_fundos_m", "recuo_fundo", "rear_setback_m")
+    ) or 0.0
 
     # Se não informar área pretendida, assumir máximo da TO
     if (built_ground_f <= 0) and (to_max is not None) and lot_area_f > 0:
