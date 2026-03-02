@@ -15,7 +15,8 @@ from core.zone_rules_repository import get_zone_rule
 
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
-from ui.analise import render_analise_section  # novo bloco 5 (Q&A) + relatório
+from ui.lote import render_lote_section
+from ui.analise import render_analise_section
 
 APP_TITLE = "Viabilidade"
 
@@ -123,9 +124,19 @@ def _ensure_state():
             "street_info": None,
             "rule": None,
             "use_type_code": "RES_UNI",
-            "radius_m": 100,  # int
+            "radius_m": 100,
             "ok": False,
             "err": None,
+        }
+
+    # dados do lote (centralizado)
+    if "lote" not in st.session_state:
+        st.session_state.lote = {
+            "lot_area": 300.0,
+            "testada": 10.0,
+            "profundidade": 30.0,
+            "built_ground": 0.0,
+            "area_permeavel": 0.0,
         }
 
 
@@ -170,7 +181,6 @@ if out and out.get("last_clicked"):
     if new_hash != st.session_state.click_hash:
         st.session_state.last_click = {"lat": new_lat, "lon": new_lon}
         st.session_state.click_hash = new_hash
-
         st.session_state.calc["ok"] = False
         st.session_state.calc["err"] = None
         st.rerun()
@@ -191,20 +201,9 @@ calcular = st.button(
 st.divider()
 
 # =============================
-# 2) Dados do lote
+# 2) Dados do lote (MODULARIZADO)
 # =============================
-
-st.subheader("2) Dados do lote")
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    lot_area = st.number_input("Área do lote (m²)", min_value=1.0, value=300.0, step=10.0)
-with col2:
-    testada = st.number_input("Largura (testada) (m)", min_value=1.0, value=10.0, step=0.5)
-with col3:
-    profundidade = st.number_input("Profundidade (m)", min_value=1.0, value=30.0, step=0.5)
-
-built_ground = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
+lote = render_lote_section()
 
 st.divider()
 
@@ -217,10 +216,6 @@ render_localizacao_section(
     zones_prepared=zones["prepared"],
     radius_m=int(radius_m),
 )
-
-calc = st.session_state.calc
-zone = calc.get("zone")
-street_info = calc.get("street_info")
 
 st.divider()
 
@@ -237,15 +232,11 @@ render_indices_section(
 st.divider()
 
 # =============================
-# 5) Análise Urbanística (MODULARIZADO - relatório em Q&A)
+# 5) Análise Urbanística (MODULARIZADO)
 # =============================
 
 render_analise_section(
     calc=st.session_state.calc,
+    lote=st.session_state.lote,
     pick_func=_pick,
-    as_float_func=_as_float,
-    lot_area=float(lot_area),
-    testada=float(testada),
-    profundidade=float(profundidade),
-    built_ground=float(built_ground),
 )
