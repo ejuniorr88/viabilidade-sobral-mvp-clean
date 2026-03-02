@@ -289,3 +289,29 @@ def diagnose(lat: float, lon: float, radius_m: float = 150.0) -> Dict[str, Any]:
             "built": False,
             "error": {"message": str(e)},
         }
+
+
+# ---------------------------------------------------------------------
+# Backward-compatible aliases
+# ---------------------------------------------------------------------
+
+def load_streets() -> StreetsIndex:
+    """Backward compatible: some app.py versions import `load_streets`.
+
+    Current code keeps a cached index internally; this returns it.
+    """
+    return _get_index()
+
+
+def find_nearest_street(lat: float, lon: float, radius_m: float = 150.0) -> Optional[Dict[str, Any]]:
+    """Backward compatible alias for `find_street`."""
+    return find_street(lat=lat, lon=lon, radius_m=radius_m)
+
+
+__all__ = [
+    "StreetsIndex",
+    "find_street",
+    "diagnose",
+    "load_streets",
+    "find_nearest_street",
+]
