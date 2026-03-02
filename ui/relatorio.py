@@ -1,263 +1,219 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Callable
-
+from typing import Any, Dict, Callable, Optional
 import streamlit as st
 
 
-def _as_float(x: Any) -> Optional[float]:
-    if x is None:
-        return None
+def _to_float(x: Any) -> Optional[float]:
     try:
+        if x is None or x == "":
+            return None
         return float(x)
     except Exception:
         return None
 
 
-def _fmt_num(v: Any, decimals: int = 2) -> str:
+def _fmt_m2(v: Optional[float]) -> str:
     if v is None:
         return "—"
-    try:
-        fv = float(v)
-    except Exception:
-        return str(v)
-    if abs(fv - round(fv)) < 1e-9:
-        return f"{int(round(fv))}"
-    return f"{fv:.{decimals}f}"
+    return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " m²"
 
 
-def _m2(v: Any, decimals: int = 2) -> str:
-    return f"{_fmt_num(v, decimals)} m²"
+def _fmt_m(v: Optional[float]) -> str:
+    if v is None:
+        return "—"
+    return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " m"
 
 
-def _m(v: Any, decimals: int = 2) -> str:
-    return f"{_fmt_num(v, decimals)} m"
-
-
-def _pct(v: Any, decimals: int = 1) -> str:
-    return f"{_fmt_num(v, decimals)}%"
+def _fmt_pct(v: Optional[float]) -> str:
+    if v is None:
+        return "—"
+    return f"{v:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".") + "%"
 
 
 def render_relatorio_section(
     *,
     calc: Dict[str, Any],
-    lot_area_m2: float,
-    testada_m: float,
-    profundidade_m: float,
-    built_ground_input_m2: float,
-    pick_func: Callable[..., Any],
+    lot_area: float,
+    testada: float,
+    profundidade: float,
+    built_ground: float,
+    pick_func: Callable[[Dict[str, Any], str], Any],
 ) -> None:
-    \"\"\"Renderiza um relatório em formato 'perguntas e respostas', no estilo do exemplo.
+    st.subheader("6) Relatório Urbanístico")
 
-    Regras:
-    - Se built_ground_input_m2 <= 0: assume automaticamente o máximo permitido (TO limitado por recuos).
-    - Mostra 2 opções:
-        Opção 1: recuos padrão (frente, laterais, fundo)
-        Opção 2: implantação no alinhamento (Art. 112 - zera recuos frontal + laterais, mantém fundo)
-    \"\"\"
-
-    st.subheader("📄 Relatório Urbanístico (perguntas e respostas)")
-
-    ok = bool(calc.get("ok"))
-    zone = calc.get("zone") or "—"
-    rule = calc.get("rule") if ok else None
-    street_info = calc.get("street_info") if ok else None
-
-    if not ok:
+    if not calc.get("ok"):
         st.info("Clique em **Calcular viabilidade** para gerar o relatório.")
         return
+
+    rule = calc.get("rule")
     if not rule:
-        st.warning("Sem regra do Supabase — não é possível gerar relatório completo.")
+        st.info("Sem regra do Supabase — não é possível montar o relatório.")
         return
 
-    use_type_code = (calc.get("use_type_code") or "RES_UNI").strip().upper()
+    zone = calc.get("zone") or "—"
+    street_info = calc.get("street_info") or {}
+    tipo_via = street_info.get("type") or "—"
 
-    # ------- valores de regra (tolerando nomes diferentes) -------
-    to_max_pct = _as_float(pick_func(rule, "to_max_pct", "to_max"))
-    tp_min_pct = _as_float(pick_func(rule, "tp_min_pct", "tp_min"))
-    ia_max = _as_float(pick_func(rule, "ia_max", "ia_maximo"))
-    altura_max = _as_float(pick_func(rule, "altura_max_m", "gabarito_m", "altura_maxima_m", "altura_max"))
+    use_type_code = calc.get("use_type_code") or "RES_UNI"
 
-    rec_frente = _as_float(pick_func(rule, "recuo_frontal_m", "recuo_frente_m", "recuo_frente")) or 0.0
-    rec_fundo = _as_float(pick_func(rule, "recuo_fundo_m", "recuo_fundo")) or 0.0
-    rec_lateral = _as_float(pick_func(rule, "recuo_lateral_m", "recuo_lateral")) or 0.0
+    # Regras (puxar pelos nomes mais comuns no dump)
+    to_max_pct = _to_float(pick_func(rule, "to_max_pct", "to_max", "taxa_ocupacao_max_pct"))
+    tp_min_pct = _to_float(pick_func(rule, "tp_min_pct", "tp_min", "taxa_permeabilidade_min_pct"))
+    ia_max = _to_float(pick_func(rule, "ia_max", "ia_maximo", "indice_aproveitamento_max"))
+    altura_max_m = _to_float(pick_func(rule, "altura_max_m", "gabarito_m", "altura_maxima_m", "altura_max"))
 
-    # Tipo (meio de quadra / esquina) — se não tiver, fica genérico
-    tipo_via = (street_info.get("type") if isinstance(street_info, dict) else None) or "—"
+    rec_frente = _to_float(pick_func(rule, "recuo_frontal_m", "recuo_frente_m", "recuo_frente"))
+    rec_fundo = _to_float(pick_func(rule, "recuo_fundo_m", "recuo_fundos_m", "recuo_fundo"))
+    rec_lateral = _to_float(pick_func(rule, "recuo_lateral_m", "recuo_lateral"))
 
-    # ------- cálculos base -------
-    lot_area = max(0.0, float(lot_area_m2 or 0.0))
-    testada = max(0.0, float(testada_m or 0.0))
-    profundidade = max(0.0, float(profundidade_m or 0.0))
+    # --- 1) Quanto posso ocupar no chão?
+    # Se o usuário não informar área pretendida, assume o máximo permitido pela TO.
+    area_to_max = (lot_area * (to_max_pct / 100.0)) if (to_max_pct is not None) else None
+    area_terreo_base = built_ground if (built_ground and built_ground > 0) else area_to_max
 
-    # limite por TO
-    area_to_max = None
-    if to_max_pct is not None and lot_area > 0:
-        area_to_max = lot_area * (to_max_pct / 100.0)
-
-    # envelope opção 1 (recuos padrão)
-    largura_util_1 = max(0.0, testada - 2.0 * rec_lateral)
-    prof_util_1 = max(0.0, profundidade - rec_frente - rec_fundo)
-    area_recuos_1 = largura_util_1 * prof_util_1
-
-    # envelope opção 2 (alinhamento: zera frente + laterais, mantém fundo)
-    largura_util_2 = max(0.0, testada)
-    prof_util_2 = max(0.0, profundidade - rec_fundo)
-    area_recuos_2 = largura_util_2 * prof_util_2
-
-    # máximos por opção (sempre limitado pela TO se houver)
-    def _limit_by_to(area_candidate: float) -> float:
-        if area_to_max is None:
-            return area_candidate
-        return min(area_candidate, area_to_max)
-
-    max_terreo_op1 = _limit_by_to(area_recuos_1) if area_recuos_1 > 0 else (area_to_max or 0.0)
-    max_terreo_op2 = _limit_by_to(area_recuos_2) if area_recuos_2 > 0 else (area_to_max or 0.0)
-
-    # área adotada para análise (quando usuário não informa)
-    built_input = float(built_ground_input_m2 or 0.0)
-    if built_input <= 0:
-        built_used = max_terreo_op1
-        built_source = "automática (máximo permitido no térreo, Opção 1)"
+    # Opção 1: com recuos padrão (limite físico)
+    area_recuos = None
+    if rec_frente is not None and rec_fundo is not None and rec_lateral is not None:
+        largura_util = max(0.0, testada - 2.0 * rec_lateral)
+        prof_util = max(0.0, profundidade - rec_frente - rec_fundo)
+        area_recuos = largura_util * prof_util
     else:
-        built_used = built_input
-        built_source = "informada pelo usuário"
+        largura_util = None
+        prof_util = None
 
-    # TP: tenta ler do session_state (campo criado na Análise)
-    area_perm_prev_m2 = None
-    if "area_permeavel_prev_m2" in st.session_state:
-        area_perm_prev_m2 = _as_float(st.session_state.get("area_permeavel_prev_m2"))
+    # Limite final no térreo: o menor entre TO e recuos (se ambos existirem)
+    if area_to_max is not None and area_recuos is not None:
+        area_terreo_max_com_recuos = min(area_to_max, area_recuos)
+    else:
+        area_terreo_max_com_recuos = area_recuos if area_recuos is not None else area_to_max
 
-    # métricas usadas
-    to_used_pct = (built_used / lot_area) * 100.0 if lot_area > 0 else 0.0
-    ia_used = (built_used / lot_area) if lot_area > 0 else 0.0
+    # Opção 2: alinhamento (residência unifamiliar) — zera frente e laterais, mantém fundo
+    area_alinhamento = None
+    if rec_fundo is not None:
+        area_alinhamento = max(0.0, testada * max(0.0, profundidade - rec_fundo))
 
-    tp_prev_pct = None
-    if area_perm_prev_m2 is not None and lot_area > 0:
-        tp_prev_pct = (area_perm_prev_m2 / lot_area) * 100.0
+    if area_to_max is not None and area_alinhamento is not None:
+        area_terreo_max_alinhamento = min(area_to_max, area_alinhamento)
+    else:
+        area_terreo_max_alinhamento = area_alinhamento if area_alinhamento is not None else area_to_max
 
-    # IA total máximo
-    area_total_max = lot_area * ia_max if (ia_max is not None and lot_area > 0) else None
+    # --- 2) Permeabilidade
+    area_perm_min = (lot_area * (tp_min_pct / 100.0)) if (tp_min_pct is not None) else None
 
-    # Área permeável mínima
-    area_perm_min_m2 = lot_area * (tp_min_pct / 100.0) if (tp_min_pct is not None and lot_area > 0) else None
+    # --- 3) Total construível (IA)
+    area_total_max = (lot_area * ia_max) if (ia_max is not None) else None
 
-    # ------- relatório (markdown) -------
+    # Render (texto no estilo do exemplo do usuário)
     st.markdown(
-        f\"\"\"
+        f"""
 🏡 **RELATÓRIO URBANÍSTICO**  
-**{use_type_code.replace('_',' ').title()}**
+**{use_type_code}**
 
-**Terreno:** {_m2(lot_area)}  
-**Dimensões:** {_m(testada)} × {_m(profundidade)}  
+**Terreno:** {_fmt_m2(lot_area)}  
+**Dimensões:** {_fmt_m(testada)} × {_fmt_m(profundidade)}  
 **Zona:** **{zone}**  
-**Tipo:** **{tipo_via}**
-\"\"\"
+**Tipo:** {tipo_via}
+"""
     )
 
-    st.markdown("## 📍 1️⃣ Quanto posso ocupar no chão?")
+    st.markdown("📍 **1️⃣ Quanto posso ocupar no chão?**")
 
     if to_max_pct is None or area_to_max is None:
-        st.markdown("Não foi possível identificar a **Taxa de Ocupação (TO) máxima** na regra do Supabase.")
+        st.warning("Não encontrei a **Taxa de Ocupação (TO)** no Supabase para este caso.")
     else:
         st.markdown(
-            f\"\"\"
-A zona permite ocupar até **{_pct(to_max_pct)}** do terreno no térreo.
+            f"""
+A zona permite ocupar até **{_fmt_pct(to_max_pct)}** do terreno no térreo.
 
-👉 {_m2(lot_area)} × **{_pct(to_max_pct)}** = **{_m2(area_to_max)}**
+👉 **{_fmt_m2(lot_area)} × {_fmt_pct(to_max_pct)} = {_fmt_m2(area_to_max)}**
 
 Esse é o limite máximo permitido pela **Taxa de Ocupação**.
-
-Agora veja duas situações possíveis:
-\"\"\"
+"""
         )
 
-        st.markdown("### ✅ Opção 1 – Respeitando os recuos padrão")
-        st.markdown(
-            f\"\"\"
-**Recuos exigidos:**  
-Frontal: {_m(rec_frente)}  
-Laterais: {_m(rec_lateral)} cada  
-Fundo: {_m(rec_fundo)}  
+        st.markdown("Agora veja duas situações possíveis:")
 
-**Área interna disponível:**
+        st.markdown("✅ **Opção 1 – Respeitando os recuos padrão**")
 
-**Largura útil:**  
-{_fmt_num(testada)} − {_fmt_num(rec_lateral)} − {_fmt_num(rec_lateral)} = **{_fmt_num(largura_util_1)} m**
-
-**Profundidade útil:**  
-{_fmt_num(profundidade)} − {_fmt_num(rec_frente)} − {_fmt_num(rec_fundo)} = **{_fmt_num(prof_util_1)} m**
-
-📐 **{_fmt_num(largura_util_1)} × {_fmt_num(prof_util_1)} = {_m2(area_recuos_1)}**
-
-👉 Nesse caso, mesmo podendo ocupar **{_m2(area_to_max)}** pela regra da zona,  
-o limite físico pelos recuos é **{_m2(area_recuos_1)}**.
-
-✅ **Máximo adotável no térreo (Opção 1): {_m2(max_terreo_op1)}**
-\"\"\"
-        )
-
-        st.markdown("### ✅ Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)")
-        if use_type_code != "RES_UNI":
-            st.markdown(
-                "Esta opção foi modelada para **Residencial Unifamiliar (RES_UNI)**. "
-                "Para outros usos, podemos parametrizar as exceções depois."
-            )
+        if area_recuos is None or largura_util is None or prof_util is None:
+            st.info("Não há recuos suficientes no Supabase para calcular a área útil interna por recuos.")
         else:
             st.markdown(
-                f\"\"\"
-Por se tratar de **residência unifamiliar**, a legislação permite **zerar os recuos frontal e laterais**, desde que:
+                f"""
+**Recuos exigidos:**  
+- Frontal: **{_fmt_m(rec_frente)}**  
+- Laterais: **{_fmt_m(rec_lateral)}** cada  
+- Fundo: **{_fmt_m(rec_fundo)}**
 
-- Seja respeitada a **Taxa de Ocupação**  
-- Seja respeitada a **Taxa de Permeabilidade**  
+**Área interna disponível (limitada pelos recuos):**
 
-Nesse caso, você pode utilizar:
+Largura útil:  
+**{testada:.2f} − {rec_lateral:.2f} − {rec_lateral:.2f} = {largura_util:.2f} m**
 
-👉 **{_m2(area_to_max)}** no térreo *(limitado pela TO)*
+Profundidade útil:  
+**{profundidade:.2f} − {rec_frente:.2f} − {rec_fundo:.2f} = {prof_util:.2f} m**
 
-⚠ O recuo de fundo permanece obrigatório.
-
-**Envelope físico com fundo obrigatório:**  
-Profundidade útil: { _fmt_num(profundidade)} − { _fmt_num(rec_fundo)} = **{_fmt_num(prof_util_2)} m**  
-📐 **{_fmt_num(testada)} × {_fmt_num(prof_util_2)} = {_m2(area_recuos_2)}**
-
-✅ **Máximo adotável no térreo (Opção 2): {_m2(max_terreo_op2)}**
-\"\"\"
+📐 **{largura_util:.2f} × {prof_util:.2f} = {area_recuos:,.2f} m²**
+""".replace(",", "X").replace(".", ",").replace("X", ".")
             )
 
-    st.markdown("## 🌿 2️⃣ Quanto preciso deixar livre?")
-    if tp_min_pct is None or area_perm_min_m2 is None:
-        st.markdown("Não foi possível identificar a **Taxa de Permeabilidade (TP) mínima** na regra do Supabase.")
+            if area_terreo_max_com_recuos is not None:
+                st.markdown(
+                    f"""
+👉 Nesse caso, mesmo podendo ocupar **{_fmt_m2(area_to_max)}** pela regra da zona,  
+o limite final no térreo fica em **{_fmt_m2(area_terreo_max_com_recuos)}** (o menor entre TO e recuos).
+"""
+                )
+
+        st.markdown("✅ **Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)**")
+        st.markdown(
+            """
+Por se tratar de **residência unifamiliar**, a legislação pode permitir zerar os recuos **frontal e laterais**,
+desde que:
+
+- Seja respeitada a **Taxa de Ocupação**
+- Seja respeitada a **Taxa de Permeabilidade**
+
+⚠ O **recuo de fundo** permanece obrigatório.
+"""
+        )
+
+        if area_terreo_max_alinhamento is not None:
+            st.markdown(f"👉 Nesse cenário, você pode utilizar até **{_fmt_m2(area_terreo_max_alinhamento)}** no térreo.")
+
+    st.markdown("🌿 **2️⃣ Quanto preciso deixar livre?**")
+    if area_perm_min is None or tp_min_pct is None:
+        st.warning("Não encontrei a **Taxa de Permeabilidade (TP)** no Supabase para este caso.")
     else:
         st.markdown(
-            f\"\"\"
-A zona exige **{_pct(tp_min_pct)}** de área permeável.
+            f"""
+A zona exige **{_fmt_pct(tp_min_pct)}** de área permeável.
 
-👉 {_m2(lot_area)} × **{_pct(tp_min_pct)}** = **{_m2(area_perm_min_m2)}** obrigatórios permeáveis
-\"\"\"
+👉 **{_fmt_m2(lot_area)} × {_fmt_pct(tp_min_pct)} = {_fmt_m2(area_perm_min)}** obrigatórios permeáveis
+"""
         )
 
-        area_restante = max(0.0, lot_area - built_used)
+        # Se o usuário não informou built_ground, usa o máximo (alinhamento como melhor aproveitamento)
+        area_terreo_para_conta = area_terreo_base if area_terreo_base is not None else 0.0
+        area_restante = max(0.0, lot_area - area_terreo_para_conta)
+        area_imperm_possivel = max(0.0, area_restante - area_perm_min)
+
         st.markdown(
-            f\"\"\"
-Se você utilizar **{_m2(built_used)}** no térreo *(área {built_source})*:
+            f"""
+Se você utilizar **{_fmt_m2(area_terreo_para_conta)}** no térreo:
 
 Área restante no lote:  
-{_m2(lot_area)} − {_m2(built_used)} = **{_m2(area_restante)}**
-\"\"\"
-        )
+**{_fmt_m2(lot_area)} − {_fmt_m2(area_terreo_para_conta)} = {_fmt_m2(area_restante)}**
 
-        area_imperv_max = max(0.0, area_restante - area_perm_min_m2)
-        st.markdown(
-            f\"\"\"
 Desses:
-- **{_m2(area_perm_min_m2)}** devem permitir infiltração no solo  
-- **{_m2(area_imperv_max)}** podem receber piso impermeável
-\"\"\"
+- **{_fmt_m2(area_perm_min)}** devem permitir infiltração no solo  
+- **{_fmt_m2(area_imperm_possivel)}** podem receber piso impermeável
+"""
         )
 
         st.markdown(
-            \"\"\"
+            """
 🧱 **Tipos de piso e quanto contam como permeáveis** *(LC 90/2023 – Art. 108)*
 
 | Tipo de Piso | Percentual considerado permeável |
@@ -269,81 +225,35 @@ Desses:
 | Pedra portuguesa / intertravado | 25% |
 
 Isso significa que nem todo piso “externo” conta 100% como permeável.
-\"\"\"
+"""
         )
 
-        if tp_prev_pct is not None:
-            st.caption(f"TP prevista (com base na área permeável informada): {_pct(tp_prev_pct)}.")
-        else:
-            st.caption("Para validar a TP prevista, informe a **área permeável prevista (m²)** no campo da Análise.")
-
-    st.markdown("## 🏢 3️⃣ Posso construir mais andares?")
-    if ia_max is None or area_total_max is None:
-        st.markdown("Não foi possível identificar o **Índice de Aproveitamento (IA) máximo** na regra do Supabase.")
+    st.markdown("🏢 **3️⃣ Posso construir mais andares?**")
+    if area_total_max is None or ia_max is None:
+        st.warning("Não encontrei o **Índice de Aproveitamento (IA)** no Supabase para este caso.")
     else:
         st.markdown(
-            f\"\"\"
+            f"""
 Além do limite no chão, existe o limite total permitido.
 
-Índice de Aproveitamento (IA): **{_fmt_num(ia_max)}**
+**Índice de Aproveitamento (IA): {ia_max:.2f}**
 
-👉 {_m2(lot_area)} × **{_fmt_num(ia_max)}** = **{_m2(area_total_max)}** no total
+👉 **{_fmt_m2(lot_area)} × {ia_max:.2f} = {_fmt_m2(area_total_max)}** no total
 
-Isso significa que você pode distribuir até **{_m2(area_total_max)}** somando todos os pavimentos.
-\"\"\"
+Isso significa que você pode distribuir até **{_fmt_m2(area_total_max)}** somando todos os pavimentos.
+"""
         )
 
-    if altura_max is not None:
-        st.markdown(
-            f\"\"\"
-Altura máxima da zona: **{_m(altura_max)}**
+    if altura_max_m is not None:
+        st.markdown(f"**Altura máxima da zona:** **{_fmt_m(altura_max_m)}**")
+        st.caption("A quantidade de pavimentos depende do projeto (pé-direito, cobertura, etc.).")
 
-Essa altura normalmente comporta cerca de **3 pavimentos confortáveis**, dependendo do projeto.
-\"\"\"
-        )
-
-    st.markdown("## 🚗 4️⃣ Estacionamento")
+    st.markdown("🚗 **4️⃣ Estacionamento**")
     st.markdown(
-        \"\"\"
-*(Configuração inicial)*  
-Para **RES_UNI**, normalmente não há exigência mínima de vagas no Anexo IV, enquanto para multifamiliar e outros usos há exigências específicas.
-
-➡️ Próximo passo: integrar automaticamente o **Anexo IV** conforme o uso selecionado.
-\"\"\"
+        """
+De acordo com o **Anexo IV da LC 90/2023**, em geral **não há previsão de vagas mínimas para residência unifamiliar**.
+A exigência costuma aplicar-se a residências multifamiliares e demais atividades listadas no Anexo IV.
+"""
     )
 
-    st.markdown("## 🧾 QUADRO TÉCNICO – PARÂMETROS DOS AMBIENTES")
-    st.markdown(
-        \"\"\"
-*(Configuração inicial — modelo igual ao exemplo. Próximo passo: buscar automaticamente do Anexo II conforme o uso.)*
-
-| AMBIENTE | CÍRCULO INSCRITO | ÁREA MÍNIMA | ILUMINAÇÃO | VENTILAÇÃO | PÉ-DIREITO | OBS. |
-|---|---:|---:|---:|---:|---:|---:|
-| Sala de estar | 2,00 m | 8,00 m² | 1/8 | 1/12 | 2,50 m | 7 |
-| Sala de jantar | 2,00 m | 6,00 m² | 1/8 | 1/12 | 2,50 m | 7 |
-| Cozinha | 1,80 m | 5,00 m² | 1/8 | 1/12 | 2,50 m | 1-7 |
-| 1º e 2º quartos | 2,00 m | 8,00 m² | 1/8 | 1/12 | 2,50 m | – |
-| Demais quartos | 2,00 m | 5,00 m² | 1/8 | 1/12 | 2,50 m | – |
-| Banheiro | 1,00 m | 1,50 m² | 1/10 | 1/16 | 2,20 m | 1-2-3 |
-| Área de serviço | 1,20 m | 1,80 m² | 1/10 | 1/16 | 2,20 m | 1-2-7 |
-| Garagem | 2,20 m | 9,00 m² | 1/14 | 1/24 | 2,20 m | 7 |
-| Escada | 0,80 m | – | – | – | 2,10 m | 8-11-12-13 |
-
-**Observações aplicáveis (Anexo II – LC 90/2023)**  
-- Tolera-se iluminação e ventilação zenital.  
-- Admite-se ventilação mecânica ou indireta nos casos permitidos.  
-- Banheiro não pode comunicar-se diretamente com cozinha ou sala de jantar.  
-- Corredores com mais de 5,00m devem ter largura mínima de 1,00m.  
-- Corredores com mais de 10,00m exigem ventilação mínima proporcional.  
-- Área de porta com veneziana pode ser computada como ventilação.  
-- Escadas devem ser de material incombustível ou tratado.  
-- Patamar obrigatório quando houver mudança de direção ou altura superior a 2,90m.  
-- Largura mínima do degrau: 0,25m.  
-- Altura máxima do degrau: 0,19m.  
-\"\"\"
-    )
-
-    st.caption(
-        f"Resumo numérico: TO utilizada (pela área adotada) = {_pct(to_used_pct)} | "
-        f"IA (térreo/área do lote) = {_fmt_num(ia_used, 2)}."
-    )
+    st.caption("Obs.: este relatório é automático e serve como apoio inicial. Para casos especiais, confira a legislação e exceções da zona/uso.")
