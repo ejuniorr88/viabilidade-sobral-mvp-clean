@@ -5,6 +5,23 @@ from typing import Any, Dict, Optional, Callable
 import streamlit as st
 
 
+
+
+def _safe_float_ptbr(v, default=0.0):
+    """Converte valores PT-BR (ex: '300,00') em float com fallback seguro."""
+    try:
+        if v is None:
+            return default
+        if isinstance(v, (int, float)):
+            return float(v)
+        s = str(v).strip()
+        if s == "":
+            return default
+        s = s.replace(".", "").replace(",", ".")  # remove milhar e troca vírgula
+        return float(s)
+    except Exception:
+        return default
+
 def _to_float_ptbr(x: Any, default: float = 0.0) -> float:
     """Parse numbers coming either as float/int or as pt-BR strings like '300,00' or '1.234,56'."""
     if x is None:
