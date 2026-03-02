@@ -32,10 +32,13 @@ ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 def _zones():
     with ZONE_FILE.open("r", encoding="utf-8") as f:
         gj = json.load(f)
-    import json  # garanta que existe no topo do app.py
+   import json
+import streamlit as st
 
-gj = json.loads(ZONE_FILE.read_text(encoding="utf-8"))
-return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
+@st.cache_data(show_spinner=False)
+def _zones():
+    gj = json.loads(ZONE_FILE.read_text(encoding="utf-8"))
+    return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
 
 
 def _render_map(zones_gj, lat0=-3.689, lon0=-40.349, click_lat=None, click_lon=None):
