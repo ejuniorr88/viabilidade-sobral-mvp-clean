@@ -9,15 +9,11 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 
-# FIX: módulo correto é zones_map.py (não zones_mapa.py)
-from core.zones_map import load_zones, zone_from_latlon  # type: ignore
-from core.streets import find_street
-from core.zone_rules_repository import get_zone_rule
+# NOTE: o módulo correto do projeto é zones_map (não zones_mapa)
+from core.zones_map import load_zones
+from core.ui_localizacao import render_localizacao_section
+from core.ui_indices import render_indices_section
 
-from ui.mapa import render_mapa_section
-from ui.lote import render_lote_section
-from ui.localizacao import render_localizacao_section
-from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
 
@@ -28,11 +24,40 @@ DATA_DIR = BASE_DIR / "data"
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 
 
+# =============================
+# Helpers
+# =============================
+
 @st.cache_resource(show_spinner=False)
 def _zones():
     with ZONE_FILE.open("r", encoding="utf-8") as f:
         gj = json.load(f)
     return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
+
+
+def _render_map(zones_gj, lat0=-3.689, lon0=-40.349, click_lat=None, click_lon=None):
+    m = folium.Map(
+        location=[lat0, lon0],
+        zoom_start=12,
+        tiles="OpenStreetMap",
+        control_scale=True,
+    )
+
+    folium.GeoJson(
+        zones_gj,
+        name="Zonas",
+        style_function=lambda _: {"fillOpacity": 0.08, "weight": 1},
+        tooltip=folium.GeoJsonTooltip(fields=["sigla"], aliases=["Zona"]),
+    ).add_to(m)
+
+    if click_lat is not None and click_lon is not None:
+        folium.Marker(
+            location=[click_lat, click_lon],
+            tooltip="Ponto selecionado",
+        ).add_to(m)
+
+    folium.LayerControl(collapsed=True).add_to(m)
+    return m
 
 
 def _as_float(x: Any) -> Optional[float]:
@@ -45,6 +70,7 @@ def _as_float(x: Any) -> Optional[float]:
 
 
 def _pick(rule: Dict[str, Any], *keys: str) -> Any:
+    """Return first non-None value for given keys."""
     for k in keys:
         if k in rule and rule.get(k) is not None:
             return rule.get(k)
@@ -89,6 +115,7 @@ def _ensure_state():
     if "click_hash" not in st.session_state:
         st.session_state.click_hash = None
 
+    # computed results (only after clicking "Calcular viabilidade")
     if "calc" not in st.session_state:
         st.session_state.calc = {
             "lat": None,
@@ -97,11 +124,16 @@ def _ensure_state():
             "street_info": None,
             "rule": None,
             "use_type_code": "RES_UNI",
+            # manter como int para compatibilidade com st.number_input
             "radius_m": 100,
             "ok": False,
             "err": None,
         }
 
+
+# =============================
+# App
+# =============================
 
 st.set_page_config(layout="wide", page_title=APP_TITLE)
 st.title(APP_TITLE)
@@ -110,26 +142,95 @@ _ensure_state()
 zones = _zones()
 zones_gj = zones["geojson"]
 
-# 1) Mapa
-radius_m = render_mapa_section(zones_gj)
+# =============================
+# 1) Selecione o ponto no mapa
+# =============================
+
+st.subheader("1) Selecione o ponto no mapa")
+
+radius_m = st.number_input(
+    "Raio para encontrar via (m)",
+    min_value=10,
+    max_value=100000,
+    value=int(st.session_state.calc.get("radius_m") or 100),
+    step=10,
+)
+
+# Render map with last click marker
+last_click = st.session_state.last_click
+m = _render_map(
+    zones_gj,
+    click_lat=last_click["lat"] if last_click else None,
+    click_lon=last_click["lon"] if last_click else None,
+)
+out = st_folium(m, width=None, height=420)
+
+# Single-click update (forces rerun so marker appears immediately)
+if out and out.get("last_clicked"):
+    new_lat = float(out["last_clicked"]["lat"])
+    new_lon = float(out["last_clicked"]["lng"])
+    new_hash = f"{new_lat:.8f}_{new_lon:.8f}"
+
+    if new_hash != st.session_state.click_hash:
+        st.session_state.last_click = {"lat": new_lat, "lon": new_lon}
+        st.session_state.click_hash = new_hash
+
+        # when click changes, mark results as not calculated yet
+        st.session_state.calc["ok"] = False
+        st.session_state.calc["err"] = None
+        st.rerun()
+
+# show coordinates caption
+if st.session_state.last_click:
+    st.caption(
+        f"📍 Coordenadas selecionadas: "
+        f"lat {st.session_state.last_click['lat']:.6f} | "
+        f"lon {st.session_state.last_click['lon']:.6f}"
+    )
+
+calcular = st.button(
+    "🔎 Calcular viabilidade",
+    type="primary",
+    disabled=not st.session_state.last_click,
+)
 
 st.divider()
 
-# 2) Lote
-lot_area, testada, profundidade, built_ground = render_lote_section()
+# =============================
+# 2) Dados do lote
+# =============================
+
+st.subheader("2) Dados do lote")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    lot_area = st.number_input("Área do lote (m²)", min_value=1.0, value=300.0, step=10.0)
+with col2:
+    testada = st.number_input("Largura (testada) (m)", min_value=1.0, value=10.0, step=0.5)
+with col3:
+    profundidade = st.number_input("Profundidade (m)", min_value=1.0, value=30.0, step=0.5)
+
+built_ground = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
+area_permeavel_prevista = st.number_input("Área permeável prevista (m²)", min_value=0.0, value=0.0, step=5.0)
 
 st.divider()
 
-# 3) Localização (zona + via)
+# =============================
+# 3) Localização (zona + via) (MODULARIZADO)
+# =============================
+
 render_localizacao_section(
-    calcular=None,  # o botão fica no mapa, se seu módulo usa outro fluxo ajuste aqui
+    calcular=calcular,
     zones_prepared=zones["prepared"],
     radius_m=int(radius_m),
 )
 
 st.divider()
 
-# 4) Índices (Supabase)
+# =============================
+# 4) Índices Urbanísticos (Supabase) (MODULARIZADO)
+# =============================
+
 render_indices_section(
     calc=st.session_state.calc,
     pick_func=_pick,
@@ -138,24 +239,30 @@ render_indices_section(
 
 st.divider()
 
-# 5) Análise (cálculos simples)
+# =============================
+# 5) Análise Urbanística (CALCULADA)
+# =============================
+
 render_analise_section(
+    calc=st.session_state.calc,
     lot_area=lot_area,
     built_ground=built_ground,
-    testada=testada,
-    profundidade=profundidade,
+    area_permeavel_prevista=area_permeavel_prevista,
     pick_func=_pick,
-    as_float_func=_as_float,
 )
 
 st.divider()
 
-# 6) Relatório (perguntas e respostas)
+# =============================
+# 6) Relatório Urbanístico (texto estilo laudo)
+# =============================
+
 render_relatorio_section(
+    calc=st.session_state.calc,
     lot_area=lot_area,
     testada=testada,
     profundidade=profundidade,
     built_ground=built_ground,
+    area_permeavel_prevista=area_permeavel_prevista,
     pick_func=_pick,
-    as_float_func=_as_float,
 )
