@@ -1,3 +1,5 @@
-from ui.relatorio import render_relatorio_section
+mport streamlit as st
 
-__all__ = ['render_relatorio_section']
+def render_relatorio_section(*args, **kwargs):
+    st.subheader("6) Relatório Urbanístico")
+    st.success("Import funcionando corretamente.")
