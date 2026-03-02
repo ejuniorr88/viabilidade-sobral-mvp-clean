@@ -11,8 +11,8 @@ from streamlit_folium import st_folium
 
 # NOTE: o módulo correto do projeto é zones_map (não zones_mapa)
 from core.zones_map import load_zones
-from core.ui_localizacao import render_localizacao_section
-from core.ui_indices import render_indices_section
+from ui.localizacao import render_localizacao_section
+from ui.indices import render_indices_section
 
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
@@ -212,6 +212,8 @@ with col3:
 
 built_ground = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
 
+st.divider()
+
 # =============================
 # 3) Localização (zona + via) (MODULARIZADO)
 # =============================
@@ -244,7 +246,6 @@ render_analise_section(
     calc=st.session_state.calc,
     lot_area=lot_area,
     built_ground=built_ground,
-    permeable_area=None,
     pick_func=_pick,
 )
 
@@ -260,6 +261,5 @@ render_relatorio_section(
     testada=testada,
     profundidade=profundidade,
     built_ground=built_ground,
-    area_permeavel_prevista=None,
     pick_func=_pick,
 )
