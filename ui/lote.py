@@ -1,6 +1,11 @@
 from __future__ import annotations
+from ui.lote import render_lote_section
+
+__all__ = ['render_lote_section']
+
 
 import streamlit as st
+
 
 
 def render_lote_section() -> dict:
