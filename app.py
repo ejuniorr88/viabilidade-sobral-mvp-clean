@@ -15,7 +15,6 @@ from core.zone_rules_repository import get_zone_rule
 
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
-from ui.lote import render_lote_section
 from ui.analise import render_analise_section
 
 APP_TITLE = "Viabilidade"
@@ -24,10 +23,6 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 
-
-# =============================
-# Helpers
-# =============================
 
 @st.cache_resource(show_spinner=False)
 def _zones():
@@ -71,7 +66,6 @@ def _as_float(x: Any) -> Optional[float]:
 
 
 def _pick(rule: Dict[str, Any], *keys: str) -> Any:
-    """Return first non-None value for given keys."""
     for k in keys:
         if k in rule and rule.get(k) is not None:
             return rule.get(k)
@@ -109,10 +103,8 @@ def _card(title: str, value: Any, suffix: str = ""):
 def _ensure_state():
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-
     if "last_click" not in st.session_state:
         st.session_state.last_click = None
-
     if "click_hash" not in st.session_state:
         st.session_state.click_hash = None
 
@@ -127,22 +119,14 @@ def _ensure_state():
             "radius_m": 100,
             "ok": False,
             "err": None,
+            # ✅ lote (persistência p/ seção 5)
+            "lot_area_m2": 300.0,
+            "testada_m": 10.0,
+            "profundidade_m": 30.0,
+            "built_ground_m2": 0.0,
+            "area_permeavel_prevista_m2": 0.0,
         }
 
-    # dados do lote (centralizado)
-    if "lote" not in st.session_state:
-        st.session_state.lote = {
-            "lot_area": 300.0,
-            "testada": 10.0,
-            "profundidade": 30.0,
-            "built_ground": 0.0,
-            "area_permeavel": 0.0,
-        }
-
-
-# =============================
-# App
-# =============================
 
 st.set_page_config(layout="wide", page_title=APP_TITLE)
 st.title(APP_TITLE)
@@ -150,10 +134,6 @@ st.title(APP_TITLE)
 _ensure_state()
 zones = _zones()
 zones_gj = zones["geojson"]
-
-# =============================
-# 1) Selecione o ponto no mapa
-# =============================
 
 st.subheader("1) Selecione o ponto no mapa")
 
@@ -200,16 +180,46 @@ calcular = st.button(
 
 st.divider()
 
-# =============================
-# 2) Dados do lote (MODULARIZADO)
-# =============================
-lote = render_lote_section()
+st.subheader("2) Dados do lote")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    lot_area = st.number_input(
+        "Área do lote (m²)",
+        min_value=1.0,
+        value=float(st.session_state.calc.get("lot_area_m2") or 300.0),
+        step=10.0,
+    )
+with col2:
+    testada = st.number_input(
+        "Largura (testada) (m)",
+        min_value=1.0,
+        value=float(st.session_state.calc.get("testada_m") or 10.0),
+        step=0.5,
+    )
+with col3:
+    profundidade = st.number_input(
+        "Profundidade (m)",
+        min_value=1.0,
+        value=float(st.session_state.calc.get("profundidade_m") or 30.0),
+        step=0.5,
+    )
+
+built_ground = st.number_input(
+    "Área pretendida no térreo (m²)",
+    min_value=0.0,
+    value=float(st.session_state.calc.get("built_ground_m2") or 0.0),
+    step=5.0,
+)
+
+# ✅ salvar no estado (corrige IA/TO zerados)
+st.session_state.calc["lot_area_m2"] = float(lot_area)
+st.session_state.calc["testada_m"] = float(testada)
+st.session_state.calc["profundidade_m"] = float(profundidade)
+st.session_state.calc["built_ground_m2"] = float(built_ground)
+st.session_state.calc["radius_m"] = int(radius_m)
 
 st.divider()
-
-# =============================
-# 3) Localização (zona + via) (MODULARIZADO)
-# =============================
 
 render_localizacao_section(
     calcular=calcular,
@@ -219,10 +229,6 @@ render_localizacao_section(
 
 st.divider()
 
-# =============================
-# 4) Índices Urbanísticos (Supabase) (MODULARIZADO)
-# =============================
-
 render_indices_section(
     calc=st.session_state.calc,
     pick_func=_pick,
@@ -231,12 +237,8 @@ render_indices_section(
 
 st.divider()
 
-# =============================
-# 5) Análise Urbanística (MODULARIZADO)
-# =============================
-
 render_analise_section(
     calc=st.session_state.calc,
-    lote=st.session_state.lote,
     pick_func=_pick,
+    as_float_func=_as_float,
 )
