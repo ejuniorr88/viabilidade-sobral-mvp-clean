@@ -9,7 +9,7 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 
-from core.zones_map import load_zones, zone_from_latlon
+from core.zones_mapa import load_zones, zone_from_latlon
 from core.streets import find_street
 from core.zone_rules_repository import get_zone_rule
 from core.ui_localizacao import render_localizacao_section
