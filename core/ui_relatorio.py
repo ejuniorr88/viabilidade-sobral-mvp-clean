@@ -1,7 +1,3 @@
-import streamlit as st
-
-def render_relatorio_section(*args, **kwargs):
-    st.subheader("6) Relatório Urbanístico")
-    st.success("ui_relatorio carregou OK (import funcionando).")
+from ui.relatorio import render_relatorio_section
 
 __all__ = ["render_relatorio_section"]
