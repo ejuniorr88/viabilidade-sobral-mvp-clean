@@ -1,74 +1,83 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
+
 import streamlit as st
 
 
-def _as_float(x: Any) -> Optional[float]:
-    if x is None or x == "":
-        return None
-    try:
+def _to_float_ptbr(x: Any, default: float = 0.0) -> float:
+    """Parse numbers coming either as float/int or as pt-BR strings like '300,00' or '1.234,56'."""
+    if x is None:
+        return default
+    if isinstance(x, (int, float)):
         return float(x)
+    try:
+        s = str(x).strip()
+        if s == "":
+            return default
+        # remove thousands separators and normalize decimal comma to dot
+        s = s.replace(".", "").replace(",", ".")
+        return float(s)
     except Exception:
-        return None
+        return default
 
 
-def _pick(rule: Dict[str, Any], *keys: str) -> Any:
-    for k in keys:
-        if k in rule and rule.get(k) is not None:
-            return rule.get(k)
-    return None
+def render_analise_section(
+    calc: Dict[str, Any],
+    lot_area: Any,
+    built_ground: Any,
+    permeable_area: Any,
+    pick_func: Callable[[Dict[str, Any], str], Any] | Callable[..., Any],
+) -> None:
+    """Renderiza a seção 5) Análise Urbanística.
 
-
-def render_analise_section(**kwargs: Any) -> None:
-    """
-    Seção 5) Análise Urbanística
-
-    ✅ Robustez:
-    - aceita **kwargs para evitar TypeError quando o app.py mudar.
-    - busca dados por nomes comuns (calc, lot_area, built_ground, area_permeavel_prevista).
+    **PATCH mínimo**: apenas corrige parsing de números (ex.: '300,00') para evitar ValueError.
+    Não altera layout do app.py.
     """
     st.subheader("5) Análise Urbanística")
 
-    calc: Dict[str, Any] = kwargs.get("calc") or st.session_state.get("calc", {}) or {}
-    rule: Optional[Dict[str, Any]] = calc.get("rule") if isinstance(calc, dict) else None
-
-    lot_area = kwargs.get("lot_area", st.session_state.get("lot_area"))
-    built_ground = kwargs.get("built_ground", st.session_state.get("built_ground"))
-    area_perm = kwargs.get("area_permeavel_prevista", st.session_state.get("area_permeavel_prevista"))
-
-    lot_area_f = float(lot_area) if lot_area not in (None, "") else 0.0
-    built_ground_f = float(built_ground) if built_ground not in (None, "") else 0.0
-    area_perm_f = float(area_perm) if area_perm not in (None, "") else 0.0
-
-    if not calc or not calc.get("ok"):
+    if not calc.get("ok"):
         st.info("Clique em **Calcular viabilidade** para gerar a análise.")
         return
+
+    rule = calc.get("rule")
     if not rule:
         st.info("Sem regra do Supabase — não é possível validar índices.")
         return
 
-    # se não informar área pretendida, assume o máximo pela TO
-    if built_ground_f <= 0 and lot_area_f > 0:
-        to_max_pct = _as_float(_pick(rule, "to_max_pct", "to_max"))
-        if to_max_pct is not None:
-            built_ground_f = lot_area_f * (to_max_pct / 100.0)
+    lot_area_f = _to_float_ptbr(lot_area, 0.0)
+    built_ground_f = _to_float_ptbr(built_ground, 0.0)
+    permeable_area_f = _to_float_ptbr(permeable_area, 0.0)
 
-    to_max_f = _as_float(_pick(rule, "to_max_pct", "to_max"))
-    ia_max_f = _as_float(_pick(rule, "ia_max", "ia_maximo"))
-    tp_min_f = _as_float(_pick(rule, "tp_min_pct", "tp_min"))
+    # Pull values safely
+    to_max_f = _to_float_ptbr(pick_func(rule, "to_max_pct", "to_max"), None) if pick_func else None
+    ia_max_f = _to_float_ptbr(pick_func(rule, "ia_max", "ia_maximo"), None) if pick_func else None
+    tp_min_f = _to_float_ptbr(pick_func(rule, "tp_min_pct", "tp_min"), None) if pick_func else None
 
+    # Compute used metrics
     ia_utilizado = (built_ground_f / lot_area_f) if lot_area_f else 0.0
-    to_utilizada = ((built_ground_f / lot_area_f) * 100.0) if lot_area_f else 0.0
-    tp_prevista = ((area_perm_f / lot_area_f) * 100.0) if lot_area_f else 0.0
+    to_utilizada = ((built_ground_f / lot_area_f) * 100) if lot_area_f else 0.0
+    tp_prevista = ((permeable_area_f / lot_area_f) * 100) if lot_area_f else 0.0
 
     st.write(f"IA utilizado: **{ia_utilizado:.2f}**")
     st.write(f"TO utilizada: **{to_utilizada:.1f}%**")
     st.write(f"TP prevista: **{tp_prevista:.1f}%**")
 
+    # Validations (only if rule has values)
     if to_max_f is not None:
-        st.success("✅ Taxa de Ocupação dentro do permitido") if to_utilizada <= to_max_f + 1e-9 else st.error("❌ Taxa de Ocupação EXCEDE o permitido")
+        if to_utilizada <= to_max_f:
+            st.success("✅ Taxa de Ocupação dentro do permitido")
+        else:
+            st.error("❌ Taxa de Ocupação EXCEDE o permitido")
+
     if ia_max_f is not None:
-        st.success("✅ Índice de Aproveitamento dentro do permitido") if ia_utilizado <= ia_max_f + 1e-9 else st.error("❌ Índice de Aproveitamento EXCEDE o permitido")
+        if ia_utilizado <= ia_max_f:
+            st.success("✅ Índice de Aproveitamento dentro do permitido")
+        else:
+            st.error("❌ Índice de Aproveitamento EXCEDE o permitido")
+
     if tp_min_f is not None:
-        st.success("✅ Taxa de Permeabilidade atende o mínimo") if tp_prevista >= tp_min_f - 1e-9 else st.warning("⚠️ Taxa de Permeabilidade está abaixo do mínimo exigido.")
+        if tp_prevista >= tp_min_f:
+            st.success("✅ Taxa de Permeabilidade atende o mínimo")
+        else:
+            st.warning("⚠️ Taxa de Permeabilidade está abaixo do mínimo exigido.")
