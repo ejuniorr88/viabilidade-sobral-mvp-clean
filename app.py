@@ -9,18 +9,12 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 
-# Zones (o arquivo no repo pode ser zones_map.py; alguns commits usaram zones_mapa.py)
-try:
-    from core.zones_map import load_zones, zone_from_latlon
-except Exception:
-    from core.zones_mapa import load_zones, zone_from_latlon  # type: ignore
+from core.zones_mapa import load_zones
+from core.ui_localizacao import render_localizacao_section
+from core.ui_indices import render_indices_section
 
-from core.streets import find_street
-from core.zone_rules_repository import get_zone_rule
-
-# UI modular
-from ui.localizacao import render_localizacao_section
-from ui.indices import render_indices_section
+# UI modules (pasta /ui)
+from ui.lote import render_lote_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
 
@@ -122,6 +116,15 @@ def _ensure_state():
     if "click_hash" not in st.session_state:
         st.session_state.click_hash = None
 
+    if "lote" not in st.session_state:
+        st.session_state.lote = {
+            "area_m2": 300.0,
+            "testada_m": 10.0,
+            "profundidade_m": 30.0,
+            "area_terreo_m2": 0.0,
+        }
+
+    # computed results (only after clicking "Calcular viabilidade")
     if "calc" not in st.session_state:
         st.session_state.calc = {
             "lat": None,
@@ -130,7 +133,7 @@ def _ensure_state():
             "street_info": None,
             "rule": None,
             "use_type_code": "RES_UNI",
-            "radius_m": 100,
+            "radius_m": 100,  # int
             "ok": False,
             "err": None,
         }
@@ -197,20 +200,14 @@ calcular = st.button(
 st.divider()
 
 # =============================
-# 2) Dados do lote
+# 2) Dados do lote (MODULARIZADO)
 # =============================
 
-st.subheader("2) Dados do lote")
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    lot_area = st.number_input("Área do lote (m²)", min_value=1.0, value=300.0, step=10.0)
-with col2:
-    testada = st.number_input("Largura (testada) (m)", min_value=1.0, value=10.0, step=0.5)
-with col3:
-    profundidade = st.number_input("Profundidade (m)", min_value=1.0, value=30.0, step=0.5)
-
-built_ground = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
+lote = render_lote_section()
+lot_area = float(lote["area_m2"])
+testada = float(lote["testada_m"])
+profundidade = float(lote["profundidade_m"])
+built_ground = float(lote["area_terreo_m2"])
 
 st.divider()
 
@@ -223,10 +220,6 @@ render_localizacao_section(
     zones_prepared=zones["prepared"],
     radius_m=int(radius_m),
 )
-
-calc = st.session_state.calc
-zone = calc.get("zone")
-street_info = calc.get("street_info")
 
 st.divider()
 
@@ -250,8 +243,8 @@ render_analise_section(
     calc=st.session_state.calc,
     lot_area=lot_area,
     built_ground=built_ground,
-    as_float=_as_float,
     pick_func=_pick,
+    as_float_func=_as_float,
 )
 
 st.divider()
@@ -267,4 +260,5 @@ render_relatorio_section(
     profundidade=profundidade,
     built_ground=built_ground,
     pick_func=_pick,
+    as_float_func=_as_float,
 )
