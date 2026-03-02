@@ -41,7 +41,9 @@ def _fmt_m(v: float) -> str:
     return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " m"
 
 
-def render_relatorio_section(
+def render_relatorio_section(*, lot_area, frontage, depth, zone_sigla, via_tipo, use_type_code, rule, area_terreo=None, area_permeavel_prevista=None, pick_func=None, **kwargs):
+    if pick_func is None:
+        pick_func = lambda r,*ks: next((r.get(k) for k in ks if isinstance(r, dict) and r.get(k) not in (None,'')), None)
     *,
     calc: Dict[str, Any],
     lot_area: Any,
@@ -78,11 +80,7 @@ def render_relatorio_section(
 
     rec_frente = _as_float(pick_func(rule, "recuo_frontal_m", "front_setback_m", "recuo_frontal")) or 0.0
     rec_lateral = _as_float(pick_func(rule, "recuo_lateral_m", "side_setback_m", "recuo_lateral")) or 0.0
-    # OBS: no Supabase usamos principalmente `recuo_fundos_m`.
-    # Alguns patches antigos usavam variações (recuo_fundo_m / recuo_fundo).
-    rec_fundo = _as_float(
-        pick_func(rule, "recuo_fundo_m", "recuo_fundos_m", "recuo_fundo", "rear_setback_m")
-    ) or 0.0
+    rec_fundo = _to_float(pick_func(rule, 'recuo_fundo_m', 'recuo_fundos_m', 'recuo_fundo', 'recuo_fundos'))
 
     # Se não informar área pretendida, assumir máximo da TO
     if (built_ground_f <= 0) and (to_max is not None) and lot_area_f > 0:
