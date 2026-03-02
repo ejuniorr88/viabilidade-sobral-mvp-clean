@@ -1,274 +1,169 @@
-from __future__ import annotations
-
-import uuid
+import os
 import json
+import math
+import re
 from pathlib import Path
-from typing import Any, Optional, Dict
+from typing import Optional, Dict, Any, Tuple
+from numbers import Integral
 
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
 
-# NOTE: o módulo correto do projeto é zones_map (não zones_mapa)
-from core.ui_mapa import render_mapa_section
-from core.ui_lote import render_lote_section
-from core.ui_localizacao import render_localizacao_section
-from core.ui_indices import render_indices_section
-from core.ui_analise import render_analise_section
-from core.ui_relatorio import render_relatorio_section
+from shapely.geometry import shape, Point
+from shapely.ops import transform
+from shapely.prepared import prep
+from shapely.strtree import STRtree
+from pyproj import Transformer
 
-APP_TITLE = "Viabilidade"
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-ZONE_FILE = DATA_DIR / "zoneamento_light.json"
+# =============================
+# Config
+# =============================
+st.set_page_config(layout="wide", page_title="Viabilidade")
+st.title("Viabilidade")
+
+DATA_DIR = Path("data")
+ZONE_FILE = DATA_DIR / "zones.geojson"
+RUAS_FILE = DATA_DIR / "streets.geojson"
+
+
+# =============================
+# Imports do projeto (robustos)
+# =============================
+# Zonas (alguns branches renomearam o módulo)
+try:
+    from core.zones_map import load_zones
+except Exception:
+    from core.zones_mapa import load_zones  # type: ignore
+
+from core.streets import load_streets, find_nearest_street
+
+# UI (mantém layout/sections como no MVP)
+from ui.mapa import render_mapa_section
+from ui.lote import render_lote_section
+from ui.localizacao import render_localizacao_section
+from ui.indices import render_indices_section
+from ui.analise import render_analise_section
+from ui.relatorio import render_relatorio_section
 
 
 # =============================
 # Helpers
 # =============================
+def _to_float(v: Any, default: float = 0.0) -> float:
+    """Converte número vindo do Streamlit aceitando ',' como separador decimal."""
+    if v is None:
+        return default
+    if isinstance(v, (int, float)):
+        try:
+            return float(v)
+        except Exception:
+            return default
+    s = str(v).strip()
+    if s == "":
+        return default
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except Exception:
+        return default
 
-@st.cache_resource(show_spinner=False)
-def _zones():
-    with ZONE_FILE.open("r", encoding="utf-8") as f:
-        gj = json.load(f)
-   import json
-import streamlit as st
 
 @st.cache_data(show_spinner=False)
 def _zones():
-    gj = json.loads(ZONE_FILE.read_text(encoding="utf-8"))
+    # Retorna: preparado (STRtree/prep) e geojson bruto (para map)
+    with open(ZONE_FILE, "r", encoding="utf-8") as f:
+        gj = json.load(f)
     return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
 
 
-def _render_map(zones_gj, lat0=-3.689, lon0=-40.349, click_lat=None, click_lon=None):
-    m = folium.Map(
-        location=[lat0, lon0],
-        zoom_start=12,
-        tiles="OpenStreetMap",
-        control_scale=True,
-    )
-
-    folium.GeoJson(
-        zones_gj,
-        name="Zonas",
-        style_function=lambda _: {"fillOpacity": 0.08, "weight": 1},
-        tooltip=folium.GeoJsonTooltip(fields=["sigla"], aliases=["Zona"]),
-    ).add_to(m)
-
-    if click_lat is not None and click_lon is not None:
-        folium.Marker(
-            location=[click_lat, click_lon],
-            tooltip="Ponto selecionado",
-        ).add_to(m)
-
-    folium.LayerControl(collapsed=True).add_to(m)
-    return m
-
-
-def _as_float(x: Any) -> Optional[float]:
-    if x is None:
-        return None
-    try:
-        return float(x)
-    except Exception:
-        return None
-
-
-def _pick(rule: Dict[str, Any], *keys: str) -> Any:
-    """Return first non-None value for given keys."""
-    for k in keys:
-        if k in rule and rule.get(k) is not None:
-            return rule.get(k)
-    return None
-
-
-def _fmt(v: Any, suffix: str = "") -> str:
-    if v is None or v == "":
-        return "—"
-    if isinstance(v, (int, float)):
-        if isinstance(v, float) and abs(v - round(v)) < 1e-9:
-            v = int(round(v))
-        return f"{v}{suffix}"
-    return f"{v}{suffix}"
-
-
-def _card(title: str, value: Any, suffix: str = ""):
-    st.markdown(
-        f"""
-        <div style="
-            border:1px solid rgba(0,0,0,.08);
-            border-radius:14px;
-            padding:14px 14px 10px 14px;
-            background:#fff;
-            height:86px;
-        ">
-          <div style="font-size:12px; opacity:.7; margin-bottom:6px;">{title}</div>
-          <div style="font-size:22px; font-weight:700;">{_fmt(value, suffix)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _ensure_state():
-    if "session_id" not in st.session_state:
-        st.session_state.session_id = str(uuid.uuid4())
-
-    if "last_click" not in st.session_state:
-        st.session_state.last_click = None
-
-    if "click_hash" not in st.session_state:
-        st.session_state.click_hash = None
-
-    # computed results (only after clicking "Calcular viabilidade")
-    if "calc" not in st.session_state:
-        st.session_state.calc = {
-            "lat": None,
-            "lon": None,
-            "zone": None,
-            "street_info": None,
-            "rule": None,
-            "use_type_code": "RES_UNI",
-            # manter como int para compatibilidade com st.number_input
-            "radius_m": 100,
-            "ok": False,
-            "err": None,
-        }
+@st.cache_data(show_spinner=False)
+def _streets():
+    with open(RUAS_FILE, "r", encoding="utf-8") as f:
+        gj = json.load(f)
+    return {"prepared": load_streets(RUAS_FILE), "geojson": gj}
 
 
 # =============================
-# App
+# Estado inicial
 # =============================
+if "selected_lat" not in st.session_state:
+    st.session_state.selected_lat = None
+if "selected_lon" not in st.session_state:
+    st.session_state.selected_lon = None
+if "zone_sigla" not in st.session_state:
+    st.session_state.zone_sigla = None
+if "via_nome" not in st.session_state:
+    st.session_state.via_nome = None
+if "via_tipo" not in st.session_state:
+    st.session_state.via_tipo = None
+if "via_dist_m" not in st.session_state:
+    st.session_state.via_dist_m = None
+if "use_type_code" not in st.session_state:
+    st.session_state.use_type_code = "RES_UNI"
 
-st.set_page_config(layout="wide", page_title=APP_TITLE)
-st.title(APP_TITLE)
-
-_ensure_state()
-zones = _zones()
-zones_gj = zones["geojson"]
 
 # =============================
-# 1) Selecione o ponto no mapa
+# Carregar bases (cache)
 # =============================
+Z = _zones()
+R = _streets()
 
-st.subheader("1) Selecione o ponto no mapa")
 
-radius_m = st.number_input(
-    "Raio para encontrar via (m)",
-    min_value=10,
-    max_value=100000,
-    value=int(st.session_state.calc.get("radius_m") or 100),
-    step=10,
-)
+# =============================
+# 1) Mapa
+# =============================
+render_mapa_section(Z, R)
 
-# Render map with last click marker
-last_click = st.session_state.last_click
-m = _render_map(
-    zones_gj,
-    click_lat=last_click["lat"] if last_click else None,
-    click_lon=last_click["lon"] if last_click else None,
-)
-out = st_folium(m, width=None, height=420)
+# Botão (não mexe no layout: fica logo abaixo do mapa, como no fluxo anterior)
+st.button("🔎 Calcular viabilidade", key="btn_calc")
 
-# Single-click update (forces rerun so marker appears immediately)
-if out and out.get("last_clicked"):
-    new_lat = float(out["last_clicked"]["lat"])
-    new_lon = float(out["last_clicked"]["lng"])
-    new_hash = f"{new_lat:.8f}_{new_lon:.8f}"
-
-    if new_hash != st.session_state.click_hash:
-        st.session_state.last_click = {"lat": new_lat, "lon": new_lon}
-        st.session_state.click_hash = new_hash
-
-        # when click changes, mark results as not calculated yet
-        st.session_state.calc["ok"] = False
-        st.session_state.calc["err"] = None
-        st.rerun()
-
-# show coordinates caption
-if st.session_state.last_click:
-    st.caption(
-        f"📍 Coordenadas selecionadas: "
-        f"lat {st.session_state.last_click['lat']:.6f} | "
-        f"lon {st.session_state.last_click['lon']:.6f}"
-    )
-
-calcular = st.button(
-    "🔎 Calcular viabilidade",
-    type="primary",
-    disabled=not st.session_state.last_click,
-)
-
-st.divider()
 
 # =============================
 # 2) Dados do lote
 # =============================
+# OBS: removi o campo "Área permeável prevista" conforme você pediu.
+# A permeabilidade deve ser calculada automaticamente (área do lote - área ocupada no térreo).
+with st.container():
+    st.subheader("2) Dados do lote")
+    c1, c2, c3 = st.columns(3)
 
-st.subheader("2) Dados do lote")
+    with c1:
+        lot_area = st.number_input("Área do lote (m²)", min_value=0.0, value=300.0, step=10.0)
+    with c2:
+        lot_front = st.number_input("Largura (testada) (m)", min_value=0.0, value=10.0, step=0.5)
+    with c3:
+        lot_depth = st.number_input("Profundidade (m)", min_value=0.0, value=30.0, step=0.5)
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    lot_area = st.number_input("Área do lote (m²)", min_value=1.0, value=300.0, step=10.0)
-with col2:
-    testada = st.number_input("Largura (testada) (m)", min_value=1.0, value=10.0, step=0.5)
-with col3:
-    profundidade = st.number_input("Profundidade (m)", min_value=1.0, value=30.0, step=0.5)
+    area_terreo_usuario = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
 
-built_ground = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
-area_permeavel_prevista = None  # calculada automaticamente (área livre no lote)
+# Persistir
+st.session_state.lot_area = float(lot_area)
+st.session_state.lot_front = float(lot_front)
+st.session_state.lot_depth = float(lot_depth)
+st.session_state.area_terreo_usuario = float(area_terreo_usuario)
 
-st.divider()
-
-# =============================
-# 3) Localização (zona + via) (MODULARIZADO)
-# =============================
-
-render_localizacao_section(
-    calcular=calcular,
-    zones_prepared=zones["prepared"],
-    radius_m=int(radius_m),
-)
-
-st.divider()
 
 # =============================
-# 4) Índices Urbanísticos (Supabase) (MODULARIZADO)
+# 3) Localização (zona + via)
 # =============================
+render_localizacao_section(Z, R)
 
-render_indices_section(
-    calc=st.session_state.calc,
-    pick_func=_pick,
-    card_func=_card,
-)
-
-st.divider()
 
 # =============================
-# 5) Análise Urbanística (CALCULADA)
+# 4) Índices Urbanísticos (Supabase)
 # =============================
+render_indices_section()
 
-render_analise_section(
-    calc=st.session_state.calc,
-    lot_area=lot_area,
-    built_ground=built_ground,
-    area_permeavel_prevista=area_permeavel_prevista,
-    pick_func=_pick,
-)
-
-st.divider()
 
 # =============================
-# 6) Relatório Urbanístico (texto estilo laudo)
+# 5) Análise Urbanística
 # =============================
+render_analise_section()
 
-render_relatorio_section(
-    calc=st.session_state.calc,
-    lot_area=lot_area,
-    testada=testada,
-    profundidade=profundidade,
-    built_ground=built_ground,
-    area_permeavel_prevista=area_permeavel_prevista,
-    pick_func=_pick,
-)
+
+# =============================
+# 6) Relatório Urbanístico
+# =============================
+render_relatorio_section()
