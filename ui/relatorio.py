@@ -10,11 +10,12 @@ def render_relatorio(
     rule: dict,
     built_ground: float,
 ):
-
     if not rule:
         return
 
-    # ===== PARÂMETROS =====
+    # =========================
+    # PARÂMETROS DA ZONA
+    # =========================
     to_max = rule.get("to_max_pct") or 0
     tp_min = rule.get("tp_min_pct") or 0
     ia_max = rule.get("ia_max") or 0
@@ -24,7 +25,9 @@ def render_relatorio(
     rec_fundo = rule.get("recuo_fundo_m") or 0
     rec_lateral = rule.get("recuo_lateral_m") or 0
 
-    # ===== CÁLCULOS =====
+    # =========================
+    # CÁLCULOS
+    # =========================
     ocupacao_max_m2 = lot_area * (to_max / 100)
     area_permeavel_obrig = lot_area * (tp_min / 100)
     area_total_max = lot_area * ia_max
@@ -38,7 +41,9 @@ def render_relatorio(
 
     restante_lote = lot_area - ocupacao_max_m2
 
-    # ===== RELATÓRIO =====
+    # =========================
+    # RELATÓRIO
+    # =========================
 
     st.markdown("## 🏡 RELATÓRIO URBANÍSTICO")
     st.markdown("### Residencial Unifamiliar")
@@ -51,9 +56,7 @@ Zona: **{zone}**
 
     st.markdown("---")
 
-    # ========================
     # 1️⃣ OCUPAÇÃO
-    # ========================
     st.markdown("## 📍 1️⃣ Quanto posso ocupar no chão?")
 
     st.markdown(f"""
@@ -88,9 +91,7 @@ Profundidade útil:
 
     st.markdown("---")
 
-    # ========================
     # 2️⃣ PERMEABILIDADE
-    # ========================
     st.markdown("## 🌿 2️⃣ Quanto preciso deixar livre?")
 
     st.markdown(f"""
@@ -108,9 +109,7 @@ Se utilizar o máximo de {ocupacao_max_m2:.2f} m² no térreo:
 
     st.markdown("---")
 
-    # ========================
     # 3️⃣ IA
-    # ========================
     st.markdown("## 🏢 3️⃣ Posso construir mais andares?")
 
     st.markdown(f"""
