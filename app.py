@@ -253,7 +253,8 @@ st.divider()
 # =============================
 
 st.subheader("5) Análise Urbanística")
-
+calc = st.session_state.calc
+rule = calc.get("rule")
 if not calc.get("ok"):
     st.info("Clique em **Calcular viabilidade** para gerar a análise.")
 elif not rule:
