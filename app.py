@@ -21,6 +21,38 @@ from pyproj import Transformer
 # Config
 # =============================
 st.set_page_config(layout="wide", page_title="Viabilidade")
+
+# =============================
+# Helpers (UI)
+# =============================
+def pick_rule_value(rule: dict | None, *keys, default=None):
+    """Pick first non-empty value from rule for the given keys."""
+    if not rule:
+        return default
+    for k in keys:
+        if k in rule and rule[k] is not None and rule[k] != "":
+            return rule[k]
+    return default
+
+def card(title: str, value, suffix: str = ""):
+    try:
+        txt = f"**{title}:** {value}{suffix}"
+    except Exception:
+        txt = f"**{title}:** {value}"
+    st.markdown(txt)
+
+def _pct_to_frac(v):
+    if v is None:
+        return None
+    try:
+        v = float(v)
+    except Exception:
+        return None
+    # aceita 0-1 (fração) ou 0-100 (percentual)
+    if v > 1.0:
+        return v / 100.0
+    return v
+
 st.title("Viabilidade")
 
 DATA_DIR = Path("data")
@@ -154,16 +186,40 @@ render_localizacao_section(Z, R)
 # =============================
 # 4) Índices Urbanísticos (Supabase)
 # =============================
-render_indices_section()
+
+# =============================
+# Dados para índices/análise/relatório
+# =============================
+calc = st.session_state.get('calc') or {}
+rule = calc.get('rule') or {}
+lote = st.session_state.get('lote') or {}
+
+lot_area = float(lote.get('area_lote') or 0) if lote else 0.0
+frontage = float(lote.get('largura_testada') or 0) if lote else 0.0
+depth = float(lote.get('profundidade') or 0) if lote else 0.0
+
+# área de térreo (se o usuário informou). Caso contrário, usa TO máxima como referência.
+built_ground = float(lote.get('area_terreo') or 0) if lote else 0.0
+to_max = pick_rule_value(rule, 'to_max_pct', 'to_max', 'to', default=None)
+to_frac = _pct_to_frac(to_max)
+if built_ground <= 0 and lot_area > 0 and to_frac is not None:
+    built_ground = lot_area * to_frac
+
+# área permeável: se não foi informada, calcula como área livre (lote - térreo)
+permeable_area = float(lote.get('area_permeavel') or lote.get('area_permeavel_prevista') or 0) if lote else 0.0
+if permeable_area <= 0 and lot_area > 0 and built_ground >= 0:
+    permeable_area = max(lot_area - built_ground, 0.0)
+
+render_indices_section(calc, rule, lot_area, built_ground, permeable_area, pick_rule_value, card)
 
 
 # =============================
 # 5) Análise Urbanística
 # =============================
-render_analise_section()
+render_analise_section(calc, lot_area, built_ground, permeable_area, pick_rule_value)
 
 
 # =============================
 # 6) Relatório Urbanístico
 # =============================
-render_relatorio_section()
+render_relatorio_section(calc, rule, lot_area, frontage, depth, pick_rule_value, card)
