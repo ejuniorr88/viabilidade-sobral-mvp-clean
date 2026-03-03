@@ -1,28 +1,64 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Callable, Optional
 
 import streamlit as st
 
 
-def render_indices_section(*, calc: Dict[str, Any], pick_func, card_func):
+def _pick_value(rule: Dict[str, Any], *keys: str) -> Any:
+    """Retorna o primeiro valor não-nulo/não-vazio para as chaves informadas."""
+    for k in keys:
+        if k in rule:
+            v = rule.get(k)
+            if v is not None and v != "":
+                return v
+    return None
+
+
+def render_indices_section(
+    *,
+    calc: Dict[str, Any],
+    card_func: Callable[..., Any],
+    # opcionais para compatibilidade
+    pick_func: Optional[Callable[[Dict[str, Any], str], Any]] = None,
+    # novo: função para buscar regra caso não exista em calc
+    get_rule_func: Optional[Callable[[str, str], Optional[Dict[str, Any]]]] = None,
+):
     """Bloco 4) Índices Urbanísticos (Supabase)
 
     Mantém o layout atual (cards + expander do JSON).
-    Apenas lê 'calc' (st.session_state.calc) e renderiza.
+    Se 'calc["rule"]' não vier preenchido, tenta buscar via get_rule_func(zone, use_type_code).
     """
 
     st.subheader("4) Índices Urbanísticos (Supabase)")
 
+    # Compat: se não passar pick_func, usa o interno
+    if pick_func is None:
+        pick_func = lambda rule, *keys: _pick_value(rule, *keys)
+
     zone = calc.get("zone")
-    rule = calc.get("rule") if calc.get("ok") else None
+    use_type = calc.get("use_type_code") or "RES_UNI"
 
     if not calc.get("ok"):
         st.info("Clique em **Calcular viabilidade** para carregar zona, via e regras do Supabase.")
         return
 
+    # Se não tem regra ainda, tenta buscar aqui (opção B)
+    rule = calc.get("rule") if not calc.get("err") else None
+    if zone and not rule and get_rule_func is not None:
+        try:
+            rule = get_rule_func(zone, use_type)
+            calc["rule"] = rule
+        except Exception as e:
+            calc["err"] = f"Erro ao consultar Supabase: {e}"
+            rule = None
+
     if zone and not rule and not calc.get("err"):
         st.warning("Nenhuma regra encontrada para (zona + uso) no Supabase.")
+        return
+
+    if calc.get("err") and not rule:
+        st.error(str(calc.get("err")))
         return
 
     if not rule:
@@ -32,7 +68,6 @@ def render_indices_section(*, calc: Dict[str, Any], pick_func, card_func):
     to_max = pick_func(rule, "to_max_pct", "to_max", "taxa_ocupacao_max_pct", "to")
     tp_min = pick_func(rule, "tp_min_pct", "tp_min", "taxa_permeabilidade_min_pct", "tp")
 
-    # TO do subsolo — colunas reais do banco + compat
     to_subsolo = pick_func(
         rule,
         "to_subsolo_max",
