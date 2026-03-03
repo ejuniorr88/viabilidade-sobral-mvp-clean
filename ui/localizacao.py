@@ -5,14 +5,44 @@ import streamlit as st
 from core.zones_map import zone_from_latlon
 from core.streets import find_street
 from core.zone_rules_repository import get_zone_rule
-def render_localizacao_section(*, calcular: bool, zones_prepared, radius_m: int):
+
+
+def render_localizacao_section(*args, **kwargs):
     """Renderiza o bloco 3) Localização (zona + via), sem alterar layout.
+
+    Compatibilidade:
+    - **Novo (clean):** render_localizacao_section(calcular=..., zones_prepared=..., radius_m=...)
+    - **Antigo (MVP):** render_localizacao_section((lat, lon), radius_m=...)
 
     - Mantém o input de use_type_code
     - Só roda a busca quando clicar em 'Calcular viabilidade'
     - Atualiza st.session_state.calc (zona, rua, regra, erros)
     - Renderiza as 3 colunas (Zona/Rua/Tipo) + distância + warning
     """
+    # ----------------------------
+    # Compat: chamada antiga com (lat, lon)
+    # ----------------------------
+    if args and len(args) >= 1 and isinstance(args[0], (tuple, list)) and len(args[0]) == 2:
+        lat = float(args[0][0])
+        lon = float(args[0][1])
+        radius_m = int(kwargs.get("radius_m", 150))
+        st.subheader("3) Localização (zona + via)")
+        street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
+        if street_info and "distance_m" in street_info:
+            st.caption(
+                f"Distância até o eixo da via: {float(street_info['distance_m']):.1f} m (raio {radius_m} m)."
+            )
+        if street_info:
+            st.success(f"Rua mais próxima: {street_info.get('name','')} ({street_info.get('type','')})")
+        else:
+            st.warning("Não foi possível identificar a rua mais próxima.")
+        return street_info
+
+    # Novo estilo (kwargs)
+    calcular = bool(kwargs.get("calcular", False))
+    zones_prepared = kwargs.get("zones_prepared")
+    radius_m = int(kwargs.get("radius_m", 150))
+
     st.subheader("3) Localização (zona + via)")
 
     use_type_code = st.text_input(
