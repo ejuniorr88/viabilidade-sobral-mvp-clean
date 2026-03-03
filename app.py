@@ -1,3 +1,8 @@
+import os, pathlib, streamlit as st
+st.write("APP VERSION MARKER: 2026-03-03-XYZ")
+st.write("CWD:", os.getcwd())
+st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
+
 import os
 import json
 import math
