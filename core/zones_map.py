@@ -45,35 +45,3 @@ def zone_from_latlon(zones: List[ZoneFeature], lat: float, lon: float) -> Option
         if z.geom_prep.contains(p):
             return z.sigla
     return None
-# =============================
-# Compat layer (older app imports)
-# =============================
-
-def load_geojson(path: str):
-    """Load a GeoJSON file (dict). Compatibility helper."""
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def find_zone(prepared, lat: float | None = None, lon: float | None = None, point=None):
-    """Find zone feature for a location.
-
-    Compatibility helper for older code that expects `find_zone(prepared, lat, lon)`.
-    Returns the matched feature (or None).
-    """
-    if point is not None:
-        # assume shapely Point-like
-        try:
-            lat = point.y
-            lon = point.x
-        except Exception:
-            pass
-    if lat is None or lon is None:
-        raise ValueError("find_zone requires lat/lon or a point")
-    return zone_from_latlon(prepared, lat, lon)
-
-__all__ = [
-    "load_zones",
-    "load_geojson",
-    "find_zone",
-    "zone_from_latlon",
-]
