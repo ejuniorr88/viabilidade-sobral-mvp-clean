@@ -117,47 +117,19 @@ def compute(
             "terreo_ok_envelope_std": (terreo <= env_std) if env_std > 0 else None,
         },
     }
-# =============================
-# Compat layer (older app imports)
-# =============================
+
 
 def calculate_basic_indices(
-    lot_area_m2: float,
-    built_ground_m2: float,
-    to_max_pct: float,
-    tp_min_pct: float,
-    ia_max: float | None = None,
-    total_built_m2: float | None = None,
-):
-    """Compatibility helper used by older `app.py`.
+    lote_area_m2: float,
+    area_construida_m2: float,
+    area_terreo_m2: float,
+    area_permeavel_m2: float,
+) -> dict:
+    """Backward-compatible helper used by older app.py versions."""
+    return compute(
+        lote_area_m2=lote_area_m2,
+        area_construida_m2=area_construida_m2,
+        area_terreo_m2=area_terreo_m2,
+        area_permeavel_m2=area_permeavel_m2,
+    )
 
-    - TO (taxa de ocupação): built_ground_m2 / lot_area_m2
-    - TP (taxa permeável): derived minimum area from tp_min_pct
-    - IA (índice de aproveitamento): total_built_m2 / lot_area_m2 (if total provided)
-    """
-    lot_area_m2 = float(lot_area_m2) if lot_area_m2 else 0.0
-    built_ground_m2 = float(built_ground_m2) if built_ground_m2 else 0.0
-    to_pct = (built_ground_m2 / lot_area_m2 * 100.0) if lot_area_m2 > 0 else 0.0
-    to_ok = to_pct <= float(to_max_pct)
-
-    tp_min_area_m2 = lot_area_m2 * (float(tp_min_pct) / 100.0) if lot_area_m2 > 0 else 0.0
-
-    ia_val = None
-    ia_ok = None
-    if total_built_m2 is not None and lot_area_m2 > 0:
-        ia_val = float(total_built_m2) / lot_area_m2
-        if ia_max is not None:
-            ia_ok = ia_val <= float(ia_max)
-
-    return {
-        "lot_area_m2": lot_area_m2,
-        "built_ground_m2": built_ground_m2,
-        "to_max_pct": float(to_max_pct),
-        "to_pct": to_pct,
-        "to_ok": to_ok,
-        "tp_min_pct": float(tp_min_pct),
-        "tp_min_area_m2": tp_min_area_m2,
-        "ia_max": float(ia_max) if ia_max is not None else None,
-        "ia": ia_val,
-        "ia_ok": ia_ok,
-    }
