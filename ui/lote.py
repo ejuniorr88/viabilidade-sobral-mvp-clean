@@ -1,13 +1,18 @@
 from __future__ import annotations
 import streamlit as st
-def render_lote_section() -> dict:
+def render_lote_section(lote: dict | None = None) -> dict:
     """Seção 2: Dados do lote.
 
     Salva tudo em st.session_state.lote para uso nos módulos (análise/relatório).
     """
     st.subheader("2) Dados do lote")
 
-    lote = st.session_state.get("lote") or {}
+    # compat: permite que app.py passe um dict `lote` (posicional) sem quebrar.
+    if lote is None:
+        lote = st.session_state.get("lote") or {}
+    else:
+        st.session_state.lote = lote
+
     area0 = float(lote.get("area_m2") or 300.0)
     testada0 = float(lote.get("testada_m") or 10.0)
     prof0 = float(lote.get("profundidade_m") or 30.0)
