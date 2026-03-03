@@ -23,13 +23,9 @@ from pyproj import Transformer
 st.set_page_config(layout="wide", page_title="Viabilidade")
 st.title("Viabilidade")
 
-# Session defaults (avoid AttributeError when UI reads st.session_state.calc)
-if "calc" not in st.session_state:
-    st.session_state.calc = {}
-
 DATA_DIR = Path("data")
-ZONE_FILE = DATA_DIR / "zoneamento_light.json"
-RUAS_FILE = DATA_DIR / "ruas.json"
+ZONE_FILE = DATA_DIR / "zones.geojson"
+RUAS_FILE = DATA_DIR / "streets.geojson"
 
 
 # =============================
@@ -74,7 +70,7 @@ def _to_float(v: Any, default: float = 0.0) -> float:
         return default
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def _zones():
     # Retorna: preparado (STRtree/prep) e geojson bruto (para map)
     with open(ZONE_FILE, "r", encoding="utf-8") as f:
@@ -82,7 +78,7 @@ def _zones():
     return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def _streets():
     with open(RUAS_FILE, "r", encoding="utf-8") as f:
         gj = json.load(f)
