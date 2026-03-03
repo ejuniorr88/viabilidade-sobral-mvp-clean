@@ -1,78 +1,74 @@
-"""Seção do relatório (texto final para o usuário copiar/colar).
-
-⚠️ Histórico do bug:
-Este módulo estava com um erro de sintaxe (um bloco solto começando com `*, calc: ...`)
-que fazia o import `from ui.relatorio import render_relatorio_section` falhar e,
-consequentemente, derrubava o app.
-
-Abaixo está uma versão estável e simples do relatório.
-"""
-
-from __future__ import annotations
-
-from typing import Any, Dict, Optional
-
 import streamlit as st
+from typing import Any, Dict
 
 
-def _fmt_num(v: Any, nd: int = 2) -> str:
-    try:
-        return f"{float(v):.{nd}f}"
-    except Exception:
-        return "-"
+def render_relatorio_section(calc: Dict[str, Any]) -> None:
+    """Renderiza um resumo/relatório final.
 
-
-def render_relatorio_section(
-    *,
-    zone_sigla: str,
-    via_tipo: str,
-    lote: Optional[Dict[str, float]] = None,
-    calc: Optional[Dict[str, Any]] = None,
-    rule: Optional[Dict[str, Any]] = None,
-    street_info: Optional[Dict[str, Any]] = None,
-    zoning_info: Optional[Dict[str, Any]] = None,
-) -> None:
-    """Renderiza o relatório final em formato de texto (copiar/colar)."""
-
-    lote = lote or {}
-    calc = calc or {}
-    rule = rule or {}
+    Este módulo já estava corrompido no branch (SyntaxError).
+    Mantive um relatório simples, mas compatível com a estrutura calc usada no app.
+    """
 
     st.subheader("6) Relatório Urbanístico")
 
-    with st.expander("Dados usados no relatório (debug)", expanded=False):
-        st.json(
-            {
-                "zone_sigla": zone_sigla,
-                "via_tipo": via_tipo,
-                "lote": lote,
-                "calc": calc,
-                "rule": rule,
-                "street_info": street_info,
-                "zoning_info": zoning_info,
-            }
+    if not isinstance(calc, dict) or not calc:
+        st.info("Preencha os dados e clique em **Calcular viabilidade** para gerar o relatório.")
+        return
+
+    zone_sigla = calc.get("zone_sigla")
+    street_name = calc.get("street_name")
+    street_type = calc.get("street_type")
+    street_dist = calc.get("street_dist")
+    use_type_code = calc.get("use_type_code")
+
+    st.markdown("### Identificação")
+    c1, c2, c3 = st.columns(3)
+    c1.write(f"**Zona:** {zone_sigla or '—'}")
+    c2.write(f"**Via:** {street_name or '—'}")
+    c3.write(f"**Uso:** {use_type_code or '—'}")
+
+    if street_type or street_dist is not None:
+        st.caption(
+            f"Tipo de via: {street_type or '—'} | Distância: {street_dist if street_dist is not None else '—'} m"
         )
 
-    st.markdown(
-        f"""
-### Relatório de Viabilidade Urbanística
+    st.markdown("### Índices e parâmetros (regra)")
+    rule = calc.get("rule") or {}
+    if isinstance(rule, dict) and rule:
+        # mostra apenas campos comuns
+        keys = [
+            "ia_max",
+            "to_max",
+            "tp_min",
+            "recuo_frontal_min",
+            "recuo_lateral_min",
+            "recuo_fundos_min",
+            "height_max_m",
+            "notes",
+        ]
+        shown = {k: rule.get(k) for k in keys if k in rule}
+        st.json(shown if shown else rule)
+    else:
+        st.info("Nenhuma regra carregada ainda (verifique o Supabase / seleção de uso e zona).")
 
-**Zona:** {zone_sigla}  
-**Tipo de via:** {via_tipo}
+    st.markdown("### Cálculos básicos")
+    basic = calc.get("basic") or {}
+    if isinstance(basic, dict) and basic:
+        st.json(basic)
+    else:
+        st.info("Cálculos básicos ainda não disponíveis.")
 
-#### Dados do lote
-- Área do terreno: {_fmt_num(lote.get('area'))} m²
-- Testada: {_fmt_num(lote.get('testada'))} m
-- Profundidade: {_fmt_num(lote.get('profundidade'))} m
-
-#### Índices (Supabase)
-- Taxa de Ocupação (TO) máx: {_fmt_num(calc.get('to_max_pct'))}%
-- Taxa Permeável (TP) mín: {_fmt_num(calc.get('tp_min_pct'))}%
-- Índice de Aproveitamento (IA) máx: {_fmt_num(calc.get('ia_max'))}
-
-#### Recuos (m)
-- Frontal: {_fmt_num(calc.get('front_setback_m'))}
-- Lateral: {_fmt_num(calc.get('side_setback_m'))}
-- Fundo: {_fmt_num(calc.get('rear_setback_m'))}
-"""
+    st.markdown("### Quadro final")
+    # Quadro final simples (sem inventar norma)
+    st.write(
+        {
+            "Zona": zone_sigla,
+            "Via": street_name,
+            "Tipo de via": street_type,
+            "Distância à via (m)": street_dist,
+            "Uso": use_type_code,
+            "IA calculado": (basic.get("ia") if isinstance(basic, dict) else None),
+            "TO calculada": (basic.get("to") if isinstance(basic, dict) else None),
+            "TP calculada": (basic.get("tp") if isinstance(basic, dict) else None),
+        }
     )
