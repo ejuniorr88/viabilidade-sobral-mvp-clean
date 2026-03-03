@@ -1,8 +1,3 @@
-import os, pathlib, streamlit as st
-st.write("APP VERSION MARKER: 2026-03-03-XYZ")
-st.write("CWD:", os.getcwd())
-st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
-
 import os
 import json
 import math
@@ -21,6 +16,12 @@ from shapely.prepared import prep
 from shapely.strtree import STRtree
 from pyproj import Transformer
 
+# =============================
+# Debug markers (para garantir que o deploy está lendo o app.py correto)
+# =============================
+st.write("APP VERSION MARKER: 2026-03-03-XYZ")
+st.write("CWD:", os.getcwd())
+st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
 # =============================
 # Config
@@ -31,7 +32,6 @@ st.title("Viabilidade")
 DATA_DIR = Path("data")
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 RUAS_FILE = DATA_DIR / "ruas.json"
-
 
 # =============================
 # Imports do projeto (robustos)
@@ -57,7 +57,7 @@ from ui.relatorio import render_relatorio_section
 # Helpers
 # =============================
 def _to_float(v: Any, default: float = 0.0) -> float:
-    """Converte número vindo do Streamlit aceitando ',' como separador decimal."""
+    \"\"\"Converte número vindo do Streamlit aceitando ',' como separador decimal.\"\"\"
     if v is None:
         return default
     if isinstance(v, (int, float)):
@@ -75,19 +75,29 @@ def _to_float(v: Any, default: float = 0.0) -> float:
         return default
 
 
+# =============================
+# Cache (CORREÇÃO DO ERRO UnserializableReturnValueError)
+# - st.cache_data: SOMENTE dados serializáveis (JSON/dict/list/str/int/float)
+# - st.cache_resource: objetos "vivos" / não-serializáveis (STRtree, shapely, prep, etc)
+# =============================
 @st.cache_data(show_spinner=False)
-def _zones():
-    # Retorna: preparado (STRtree/prep) e geojson bruto (para map)
+def _zones_geojson() -> Dict[str, Any]:
     with open(ZONE_FILE, "r", encoding="utf-8") as f:
-        gj = json.load(f)
-    return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
+        return json.load(f)
 
+@st.cache_resource(show_spinner=False)
+def _zones_prepared():
+    # Retorna estruturas com shapely/STRtree/prep (não serializável)
+    return load_zones(ZONE_FILE)
 
 @st.cache_data(show_spinner=False)
-def _streets():
+def _streets_geojson() -> Dict[str, Any]:
     with open(RUAS_FILE, "r", encoding="utf-8") as f:
-        gj = json.load(f)
-    return {"prepared": load_streets(RUAS_FILE), "geojson": gj}
+        return json.load(f)
+
+@st.cache_resource(show_spinner=False)
+def _streets_prepared():
+    return load_streets(RUAS_FILE)
 
 
 # =============================
@@ -112,8 +122,8 @@ if "use_type_code" not in st.session_state:
 # =============================
 # Carregar bases (cache)
 # =============================
-Z = _zones()
-R = _streets()
+Z = {"geojson": _zones_geojson(), "prepared": _zones_prepared()}
+R = {"geojson": _streets_geojson(), "prepared": _streets_prepared()}
 
 
 # =============================
