@@ -1,22 +1,20 @@
-from __future__ import annotations
-
+import os
 import json
+import math
+import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional, Dict, Any, Tuple
+from numbers import Integral
 
 import streamlit as st
+import folium
+from streamlit_folium import st_folium
 
-from core.calculations import calculate_basic_indices
-from core.streets import find_street
-from core.zone_rules_repository import get_zone_rule
-from core.zones_map import load_geojson, load_zones, find_zone
-
-from ui.lote import render_lote_section
-from ui.mapa import render_mapa_section
-from ui.localizacao import render_localizacao_section
-from ui.indices import render_indices_section
-from ui.analise import render_analise_section
-from ui.relatorio import render_relatorio_section
+from shapely.geometry import shape, Point
+from shapely.ops import transform
+from shapely.prepared import prep
+from shapely.strtree import STRtree
+from pyproj import Transformer
 
 
 # =============================
@@ -25,133 +23,151 @@ from ui.relatorio import render_relatorio_section
 st.set_page_config(layout="wide", page_title="Viabilidade")
 st.title("Viabilidade")
 
+# Session defaults (avoid AttributeError when UI reads st.session_state.calc)
+if "calc" not in st.session_state:
+    st.session_state.calc = {}
+
 DATA_DIR = Path("data")
-ZONE_FILE = DATA_DIR / "zoneamento_light.json"  # existe no repo
-RUAS_FILE = DATA_DIR / "ruas.json"              # existe no repo
+ZONE_FILE = DATA_DIR / "zoneamento_light.json"
+RUAS_FILE = DATA_DIR / "ruas.json"
+
+
+# =============================
+# Imports do projeto (robustos)
+# =============================
+# Zonas (alguns branches renomearam o módulo)
+try:
+    from core.zones_map import load_zones
+except Exception:
+    from core.zones_mapa import load_zones  # type: ignore
+
+from core.streets import load_streets, find_nearest_street
+
+# UI (mantém layout/sections como no MVP)
+from ui.mapa import render_mapa_section
+from ui.lote import render_lote_section
+from ui.localizacao import render_localizacao_section
+from ui.indices import render_indices_section
+from ui.analise import render_analise_section
+from ui.relatorio import render_relatorio_section
+
+
+# =============================
+# Helpers
+# =============================
+def _to_float(v: Any, default: float = 0.0) -> float:
+    """Converte número vindo do Streamlit aceitando ',' como separador decimal."""
+    if v is None:
+        return default
+    if isinstance(v, (int, float)):
+        try:
+            return float(v)
+        except Exception:
+            return default
+    s = str(v).strip()
+    if s == "":
+        return default
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except Exception:
+        return default
 
 
 @st.cache_data(show_spinner=False)
-def _zones_geojson() -> Dict[str, Any]:
-    return load_geojson(ZONE_FILE)
+def _zones():
+    # Retorna: preparado (STRtree/prep) e geojson bruto (para map)
+    with open(ZONE_FILE, "r", encoding="utf-8") as f:
+        gj = json.load(f)
+    return {"prepared": load_zones(ZONE_FILE), "geojson": gj}
 
 
 @st.cache_data(show_spinner=False)
-def _zones_prepared() -> Any:
-    # lista de dicts com geometry preparada
-    return load_zones(ZONE_FILE)
-
-
-@st.cache_data(show_spinner=False)
-def _streets_geojson() -> Dict[str, Any]:
-    # ui/localizacao usa find_street() que carrega internamente, mas aqui mantemos o arquivo validado
+def _streets():
     with open(RUAS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _get_lote_defaults() -> Dict[str, float]:
-    return {
-        "area": 300.0,
-        "testada": 10.0,
-        "profundidade": 30.0,
-    }
+        gj = json.load(f)
+    return {"prepared": load_streets(RUAS_FILE), "geojson": gj}
 
 
 # =============================
-# Estado
+# Estado inicial
 # =============================
-if "lote" not in st.session_state:
-    st.session_state.lote = _get_lote_defaults()
-
+if "selected_lat" not in st.session_state:
+    st.session_state.selected_lat = None
+if "selected_lon" not in st.session_state:
+    st.session_state.selected_lon = None
+if "zone_sigla" not in st.session_state:
+    st.session_state.zone_sigla = None
+if "via_nome" not in st.session_state:
+    st.session_state.via_nome = None
+if "via_tipo" not in st.session_state:
+    st.session_state.via_tipo = None
+if "via_dist_m" not in st.session_state:
+    st.session_state.via_dist_m = None
 if "use_type_code" not in st.session_state:
     st.session_state.use_type_code = "RES_UNI"
 
 
 # =============================
-# 1) Dados do lote
+# Carregar bases (cache)
 # =============================
-st.session_state.lote = render_lote_section(st.session_state.lote)
-
-
-# =============================
-# 2) Mapa
-# =============================
-zones_gj = _zones_geojson()
-_ = _streets_geojson()  # só valida arquivo e evita FileNotFound silencioso
-
-latlon = render_mapa_section(zones_gj)
+Z = _zones()
+R = _streets()
 
 
 # =============================
-# 3) Localização
+# 1) Mapa
 # =============================
-street_info = render_localizacao_section(latlon)
+render_mapa_section(Z, R)
 
-# Determinar zona pelo ponto (se houver)
-zone_sigla: Optional[str] = None
-via_tipo: str = "-"
+# Botão (não mexe no layout: fica logo abaixo do mapa, como no fluxo anterior)
+st.button("🔎 Calcular viabilidade", key="btn_calc")
 
-if latlon and latlon.get("lat") is not None and latlon.get("lon") is not None:
-    prepared = _zones_prepared()
-    zone_sigla = find_zone(prepared, latlon["lat"], latlon["lon"])
 
-if street_info and isinstance(street_info, dict):
-    # tenta achar um campo de tipo de via
-    via_tipo = (
-        street_info.get("tipo")
-        or street_info.get("type")
-        or street_info.get("via_tipo")
-        or "via local"
-    )
+# =============================
+# 2) Dados do lote
+# =============================
+# OBS: removi o campo "Área permeável prevista" conforme você pediu.
+# A permeabilidade deve ser calculada automaticamente (área do lote - área ocupada no térreo).
+with st.container():
+    st.subheader("2) Dados do lote")
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        lot_area = st.number_input("Área do lote (m²)", min_value=0.0, value=300.0, step=10.0)
+    with c2:
+        lot_front = st.number_input("Largura (testada) (m)", min_value=0.0, value=10.0, step=0.5)
+    with c3:
+        lot_depth = st.number_input("Profundidade (m)", min_value=0.0, value=30.0, step=0.5)
+
+    area_terreo_usuario = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
+
+# Persistir
+st.session_state.lot_area = float(lot_area)
+st.session_state.lot_front = float(lot_front)
+st.session_state.lot_depth = float(lot_depth)
+st.session_state.area_terreo_usuario = float(area_terreo_usuario)
+
+
+# =============================
+# 3) Localização (zona + via)
+# =============================
+render_localizacao_section(Z, R)
 
 
 # =============================
 # 4) Índices Urbanísticos (Supabase)
 # =============================
-st.subheader("4) Índices Urbanísticos (Supabase)")
+render_indices_section()
 
-use_type_code = st.selectbox(
-    "Uso principal",
-    options=["RES_UNI", "RES_MULTI", "COM_SERV"],
-    index=["RES_UNI", "RES_MULTI", "COM_SERV"].index(st.session_state.use_type_code)
-    if st.session_state.use_type_code in ["RES_UNI", "RES_MULTI", "COM_SERV"]
-    else 0,
-)
 
-st.session_state.use_type_code = use_type_code
+# =============================
+# 5) Análise Urbanística
+# =============================
+render_analise_section()
 
-if not zone_sigla:
-    st.info("Selecione um ponto no mapa para identificar a zona.")
 
-calc: Dict[str, Any] = {}
-rule: Dict[str, Any] = {}
-
-btn = st.button("Calcular viabilidade")
-
-if btn:
-    if not zone_sigla:
-        st.error("Não foi possível identificar a zona. Selecione um ponto dentro do perímetro do zoneamento.")
-    else:
-        # 1) regra do supabase
-        rule = get_zone_rule(zone_sigla, use_type_code, subzone_code="")
-
-        # 2) cálculos básicos
-        lote = st.session_state.lote
-        calc = calculate_basic_indices(lote_area=float(lote.get("area", 0.0)), rule=rule)
-
-        # 3) “coloca” recuos no calc para o relatório/analise (compat)
-        calc["front_setback_m"] = rule.get("front_setback_m")
-        calc["side_setback_m"] = rule.get("side_setback_m")
-        calc["rear_setback_m"] = rule.get("rear_setback_m")
-
-        # 4) exibe
-        render_indices_section(rule=rule, calc=calc)
-        render_analise_section(calc=calc, zone_sigla=zone_sigla, via_tipo=via_tipo)
-        render_relatorio_section(
-            zone_sigla=zone_sigla,
-            via_tipo=via_tipo,
-            lote=lote,
-            calc=calc,
-            rule=rule,
-            street_info=street_info,
-            zoning_info={"zone_sigla": zone_sigla},
-        )
+# =============================
+# 6) Relatório Urbanístico
+# =============================
+render_relatorio_section()
