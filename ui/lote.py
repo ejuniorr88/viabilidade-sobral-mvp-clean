@@ -1,13 +1,17 @@
 from __future__ import annotations
+
 import streamlit as st
-def render_lote_section(lote: dict | None = None) -> dict:
+
+
+def render_lote_section(lote: dict | None = None):
     """Seção 2: Dados do lote.
 
-    Salva tudo em st.session_state.lote para uso nos módulos (análise/relatório).
+    - Mantém os dados em st.session_state.lote (dict)
+    - Retorna (lot_area, built_ground, permeable_area) para compatibilidade com app.py
     """
     st.subheader("2) Dados do lote")
 
-    # compat: permite que app.py passe um dict `lote` (posicional) sem quebrar.
+    # compat: permite que app.py passe um dict `lote` sem quebrar
     if lote is None:
         lote = st.session_state.get("lote") or {}
     else:
@@ -33,10 +37,15 @@ def render_lote_section(lote: dict | None = None) -> dict:
         step=5.0,
     )
 
+    # Calcula permeável automaticamente (como você queria)
+    permeable_area = max(float(lot_area) - float(built_ground), 0.0)
+
     st.session_state.lote = {
         "area_m2": float(lot_area),
         "testada_m": float(testada),
         "profundidade_m": float(profundidade),
         "area_terreo_m2": float(built_ground),
+        "area_permeavel_m2": float(permeable_area),
     }
-    return st.session_state.lote
+
+    return float(lot_area), float(built_ground), float(permeable_area)
