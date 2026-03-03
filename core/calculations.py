@@ -117,3 +117,21 @@ def compute(
             "terreo_ok_envelope_std": (terreo <= env_std) if env_std > 0 else None,
         },
     }
+
+# ---------------------------------------------------------------------
+# Backward-compat aliases (older app.py / patches may import these)
+# ---------------------------------------------------------------------
+
+def calculate_basic_indices(*args, **kwargs):
+    """Backward compatible wrapper for older app.py imports.
+
+    Older versions of the app used `calculate_basic_indices(...)`.
+    The current implementation is `compute(...)`.
+    This wrapper delegates to `compute`, accepting any args/kwargs.
+    """
+    # `compute` is keyword-only, but we accept *args defensively.
+    if args:
+        raise TypeError("calculate_basic_indices() only accepts keyword arguments")
+    return compute(**kwargs)
+
+__all__ = ["compute", "calculate_basic_indices"]
