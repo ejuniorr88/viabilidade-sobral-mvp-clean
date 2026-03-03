@@ -2,6 +2,7 @@ import os
 import json
 import math
 import re
+import pathlib
 from pathlib import Path
 from typing import Dict, Any
 
@@ -9,18 +10,24 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 
-# =============================
-# Config (PRECISA ser a 1ª chamada Streamlit)
-# =============================
-st.set_page_config(layout="wide", page_title="Viabilidade")
-st.title("Viabilidade")
+from shapely.geometry import shape, Point
+from shapely.ops import transform
+from shapely.prepared import prep
+from shapely.strtree import STRtree
+from pyproj import Transformer
 
 # =============================
 # Debug markers (para garantir que o deploy está lendo o app.py correto)
 # =============================
 st.write("APP VERSION MARKER: 2026-03-03-XYZ")
 st.write("CWD:", os.getcwd())
-st.write("FILES in data/:", [p.name for p in Path("data").glob("*")])
+st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
+
+# =============================
+# Config
+# =============================
+st.set_page_config(layout="wide", page_title="Viabilidade")
+st.title("Viabilidade")
 
 DATA_DIR = Path("data")
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
@@ -29,6 +36,7 @@ RUAS_FILE = DATA_DIR / "ruas.json"
 # =============================
 # Imports do projeto (robustos)
 # =============================
+# Zonas (alguns branches renomearam o módulo)
 try:
     from core.zones_map import load_zones
 except Exception:
@@ -36,8 +44,8 @@ except Exception:
 
 from core.streets import load_streets, find_nearest_street
 
+# UI (mantém layout/sections como no MVP)
 from ui.mapa import render_mapa_section
-from ui.lote import render_lote_section
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
@@ -69,7 +77,7 @@ def _to_float(v: Any, default: float = 0.0) -> float:
 # =============================
 # Cache (CORREÇÃO DO ERRO UnserializableReturnValueError)
 # - st.cache_data: SOMENTE dados serializáveis (JSON/dict/list/str/int/float)
-# - st.cache_resource: objetos NÃO serializáveis (STRtree, shapely, prep, etc)
+# - st.cache_resource: objetos "vivos" / não-serializáveis (STRtree, shapely, prep, etc)
 # =============================
 @st.cache_data(show_spinner=False)
 def _zones_geojson() -> Dict[str, Any]:
@@ -79,6 +87,7 @@ def _zones_geojson() -> Dict[str, Any]:
 
 @st.cache_resource(show_spinner=False)
 def _zones_prepared():
+    # Retorna estruturas com shapely/STRtree/prep (não serializável)
     return load_zones(ZONE_FILE)
 
 
@@ -90,7 +99,12 @@ def _streets_geojson() -> Dict[str, Any]:
 
 @st.cache_resource(show_spinner=False)
 def _streets_prepared():
-    return load_streets(RUAS_FILE)
+    """Compat: em alguns branches load_streets() não recebe path."""
+    try:
+        return load_streets(RUAS_FILE)  # type: ignore[arg-type]
+    except TypeError:
+        # Implementação atual no seu repo: load_streets() usa Path("data")/"ruas.json" internamente
+        return load_streets()  # type: ignore[call-arg]
 
 
 # =============================
@@ -111,6 +125,16 @@ if "via_dist_m" not in st.session_state:
 if "use_type_code" not in st.session_state:
     st.session_state.use_type_code = "RES_UNI"
 
+# (lote)
+if "lot_area" not in st.session_state:
+    st.session_state.lot_area = 300.0
+if "lot_front" not in st.session_state:
+    st.session_state.lot_front = 10.0
+if "lot_depth" not in st.session_state:
+    st.session_state.lot_depth = 30.0
+if "area_terreo_usuario" not in st.session_state:
+    st.session_state.area_terreo_usuario = 0.0
+
 
 # =============================
 # Carregar bases (cache)
@@ -124,25 +148,34 @@ R = {"geojson": _streets_geojson(), "prepared": _streets_prepared()}
 # =============================
 render_mapa_section(Z, R)
 
+# Botão (não mexe no layout: fica logo abaixo do mapa, como no fluxo anterior)
 st.button("🔎 Calcular viabilidade", key="btn_calc")
 
 
 # =============================
 # 2) Dados do lote
 # =============================
+# OBS: removi o campo "Área permeável prevista" conforme você pediu.
+# A permeabilidade deve ser calculada automaticamente (área do lote - área ocupada no térreo).
 with st.container():
     st.subheader("2) Dados do lote")
     c1, c2, c3 = st.columns(3)
 
     with c1:
-        lot_area = st.number_input("Área do lote (m²)", min_value=0.0, value=300.0, step=10.0)
+        lot_area = st.number_input("Área do lote (m²)", min_value=0.0, value=float(st.session_state.lot_area), step=10.0)
     with c2:
-        lot_front = st.number_input("Largura (testada) (m)", min_value=0.0, value=10.0, step=0.5)
+        lot_front = st.number_input("Largura (testada) (m)", min_value=0.0, value=float(st.session_state.lot_front), step=0.5)
     with c3:
-        lot_depth = st.number_input("Profundidade (m)", min_value=0.0, value=30.0, step=0.5)
+        lot_depth = st.number_input("Profundidade (m)", min_value=0.0, value=float(st.session_state.lot_depth), step=0.5)
 
-    area_terreo_usuario = st.number_input("Área pretendida no térreo (m²)", min_value=0.0, value=0.0, step=5.0)
+    area_terreo_usuario = st.number_input(
+        "Área pretendida no térreo (m²)",
+        min_value=0.0,
+        value=float(st.session_state.area_terreo_usuario),
+        step=5.0,
+    )
 
+# Persistir
 st.session_state.lot_area = float(lot_area)
 st.session_state.lot_front = float(lot_front)
 st.session_state.lot_depth = float(lot_depth)
