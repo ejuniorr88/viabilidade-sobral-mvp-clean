@@ -133,7 +133,7 @@ def render_indices_section(
     rule = calc.get("rule")
     if not rule and get_rule_func is not None:
         try:
-            rule = get_rule_func(zone_sigla=zone, use_type_code=use_type)
+            rule = get_rule_func(zone_sigla=zone, use_type_code=use_type, subzone_code=calc.get('subzone_code','PADRAO'))
             calc["rule"] = rule
         except Exception:
             rule = None
