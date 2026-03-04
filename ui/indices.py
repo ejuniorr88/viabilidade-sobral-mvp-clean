@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
 
 import streamlit as st
 
@@ -14,7 +14,7 @@ def _to_float(v: Any) -> Optional[float]:
         s = str(v).strip()
         if not s:
             return None
-        # pt-BR safety
+        # pt-BR safety: "1.234,56" -> "1234.56"
         s = s.replace(".", "").replace(",", ".")
         return float(s)
     except Exception:
@@ -33,7 +33,6 @@ def _pct_from_rule(rule: Dict[str, Any], pct_key: str, frac_key: str) -> Optiona
     frac = _to_float(rule.get(frac_key))
     if frac is None:
         return None
-    # se vier como fração (0..1), converte; se vier já em %, mantém
     return frac * 100.0 if 0 <= frac <= 1 else frac
 
 
@@ -41,24 +40,16 @@ def _fmt(v: Any, *, unit: str = "") -> str:
     if v is None or v == "":
         return "—"
     if isinstance(v, (int, float)):
-        # manter formatação simples, sem mexer em cores/estilos
-        s = f"{v:.1f}" if abs(float(v)) >= 10 and float(v).is_integer() is False else f"{v:.2f}"
-        # limpar .00 quando for inteiro
-        try:
-            fv = float(v)
-            if abs(fv - round(fv)) < 1e-9:
-                s = f"{int(round(fv))}"
-        except Exception:
-            pass
+        fv = float(v)
+        if abs(fv - round(fv)) < 1e-9:
+            s = str(int(round(fv)))
+        else:
+            s = f"{fv:.2f}"
         return f"{s}{unit}"
     return f"{v}{unit}"
 
 
-def render_indices_section(*, calc: Dict[str, Any]) -> None:
-    """
-    Item 4 - NÃO muda layout/ordem geral do app.
-    Apenas completa parâmetros que já existem no schema.
-    """
+def _render_indices_core(calc: Dict[str, Any]) -> None:
     st.header("4) Índices Urbanísticos (Supabase)")
 
     zone = calc.get("zone") or calc.get("zone_sigla")
@@ -73,13 +64,12 @@ def render_indices_section(*, calc: Dict[str, Any]) -> None:
         st.info("Clique em Calcular viabilidade para carregar zona, via e regras do Supabase.")
         return
 
-    # Normalizações
+    # Percentuais normalizados
     tp_min_pct = _pct_from_rule(rule, "tp_min_pct", "tp_min")
     to_max_pct = _pct_from_rule(rule, "to_max_pct", "to_max")
 
-    # TO subsolo: pode ter dois campos no schema
-    to_sub_pct = None
-    # alguns bancos podem armazenar como fração 0..1 também
+    # TO subsolo: dois campos possíveis (podem vir como fração ou %)
+    to_sub_pct: Optional[float] = None
     if rule.get("to_sub_max") is not None:
         to_sub_pct = _pct_from_rule(rule, "to_sub_max", "to_sub_max")
     elif rule.get("to_subsolo_max") is not None:
@@ -100,11 +90,9 @@ def render_indices_section(*, calc: Dict[str, Any]) -> None:
     test_max = _to_float(rule.get("testada_max_m"))
 
     gabarito_m = _to_float(rule.get("gabarito_m"))
-    # gabarito_pav é opcional (não é “parâmetro do item 4” obrigatório, mas útil)
     gabarito_pav = rule.get("gabarito_pav")
 
-    # ============ CARDS ============
-    # Mantém grid de 3 colunas como está, só completa com novos cards.
+    # ===== Cards (mantém estilo existente) =====
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric("Zona", zone or "—")
@@ -133,19 +121,17 @@ def render_indices_section(*, calc: Dict[str, Any]) -> None:
     with c10:
         st.metric("Área mínima do lote", _fmt(area_min, unit=" m²") if area_min is not None else "—")
     with c11:
-        # manter o label "Testada mínima", mas agora mostrar as duas
+        # "Testada mínima" com detalhe (meio + esquina)
         if test_min_meio is None and test_min_esq is None:
             st.metric("Testada mínima", "—")
         else:
-            # métrica não suporta múltiplas linhas, então colocamos a principal e detalhamos abaixo
-            primary = _fmt(test_min_meio, unit=" m") if test_min_meio is not None else (_fmt(test_min_esq, unit=" m") if test_min_esq is not None else "—")
-            st.metric("Testada mínima", primary)
+            primary = test_min_meio if test_min_meio is not None else test_min_esq
+            st.metric("Testada mínima", _fmt(primary, unit=" m") if primary is not None else "—")
             st.caption(
                 f"Meio de quadra: {(_fmt(test_min_meio, unit=' m') if test_min_meio is not None else '—')}  |  "
                 f"Esquina: {(_fmt(test_min_esq, unit=' m') if test_min_esq is not None else '—')}"
             )
     with c12:
-        # gabarito
         if gabarito_m is None:
             st.metric("Altura máxima (gabarito)", "—")
         else:
@@ -158,7 +144,7 @@ def render_indices_section(*, calc: Dict[str, Any]) -> None:
     with c14:
         st.metric("Testada máxima", _fmt(test_max, unit=" m") if test_max is not None else "—")
     with c15:
-        # espaço reservado para não alterar muito o layout; mostra subzona se relevante
+        # sem mexer no layout: mostra subzona
         subzone = rule.get("subzone_code")
         requires_subzone = rule.get("requires_subzone")
         if requires_subzone:
@@ -168,3 +154,19 @@ def render_indices_section(*, calc: Dict[str, Any]) -> None:
 
     with st.expander("Ver regra bruta (JSON do Supabase)"):
         st.json(rule)
+
+
+def render_indices_section(
+    *,
+    calc: Dict[str, Any],
+    card_func: Optional[Callable[..., Any]] = None,
+    pick_func: Optional[Callable[[Dict[str, Any], str], Any]] = None,
+    get_rule_func: Optional[Callable[..., Any]] = None,
+    **_ignored: Any,
+) -> None:
+    """
+    Wrapper compatível com o app.py atual.
+    O app chama: render_indices_section(calc=calc, card_func=..., pick_func=..., get_rule_func=...)
+    Nós ignoramos card_func/pick_func porque a renderização aqui é direta, mas NÃO quebra.
+    """
+    _render_indices_core(calc)
