@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 import streamlit as st
-from shapely.geometry import Point, shape
+from shapely.geometry import shape, Point
 from shapely.prepared import prep
 from shapely.strtree import STRtree
 
@@ -19,13 +19,10 @@ def _load_geojson(path: Path) -> Dict[str, Any]:
 
 
 @st.cache_resource(show_spinner=False)
-def _build_index() -> Tuple[List[Any], STRtree, List[Dict[str, Any]], Dict[int, int]]:
+def _build_zeip_index() -> Tuple[List[Any], STRtree, List[Dict[str, Any]], Dict[int, int]]:
     """
-    Retorna:
-      geoms: lista de geometrias shapely
-      tree: STRtree para query rápida
-      props: lista de properties (mesmo índice de geoms)
-      id_to_idx: mapa id(geom)->índice em geoms (evita .index() O(n))
+    Carrega os setores ZEIP (GeoJSON) e monta um STRtree.
+    Retorna (geoms, tree, props, id_map) onde id_map mapeia id(geom)->index.
     """
     if not ZEIP_FILE.exists():
         return [], STRtree([]), [], {}
@@ -44,32 +41,43 @@ def _build_index() -> Tuple[List[Any], STRtree, List[Dict[str, Any]], Dict[int, 
             continue
 
     tree = STRtree(geoms) if geoms else STRtree([])
-    id_to_idx = {id(g): i for i, g in enumerate(geoms)}
-    return geoms, tree, props, id_to_idx
+    id_map = {id(g): i for i, g in enumerate(geoms)}
+    return geoms, tree, props, id_map
 
 
 def zeip_sector_from_latlon(lat: float, lon: float) -> Optional[str]:
     """
-    Retorna 'ZEIP_1'..'ZEIP_9' se o ponto cair em algum setor, senão None.
+    Retorna o subzone_code do setor ZEIP onde o ponto cai (ex.: 'ZEIP_1'..'ZEIP_9').
+    Se não encontrar, retorna None.
+
+    Observação: usa covers() (inclui bordas) para evitar falhas quando o clique cai na linha do polígono.
     """
-    geoms, tree, props, id_to_idx = _build_index()
+    geoms, tree, props, id_map = _build_zeip_index()
     if not geoms:
         return None
 
     pt = Point(lon, lat)
-    for g in tree.query(pt):
+    candidates = tree.query(pt)
+
+    for g in candidates:
         try:
-            if prep(g).contains(pt):
-                p = props[id_to_idx.get(id(g), 0)] if props else {}
+            # covers inclui bordas; prepared geometry não tem covers, então usa o próprio geom
+            if g.covers(pt) or g.buffer(1e-12).covers(pt):
+                idx = id_map.get(id(g))
+                if idx is None:
+                    continue
+                p = props[idx] or {}
                 code = p.get("subzone_code")
                 if code:
                     return str(code)
-                # fallback: tentar parsear de 'subzona' / 'name'
+
+                # fallback: tentar pelo nome "ZEIP 1"
+                name = str(p.get("name", ""))
                 import re
-                name = str(p.get("subzona") or p.get("name") or "")
                 m = re.search(r"ZEIP\s*([1-9])", name, re.IGNORECASE)
                 if m:
                     return f"ZEIP_{m.group(1)}"
         except Exception:
             continue
+
     return None
