@@ -31,7 +31,11 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
     calc = st.session_state.calc
 
-    if calcular:
+    # Recalcula quando o usuário clica em 'Calcular' OU quando o ponto mudou (evita zona travada)
+    current_hash = st.session_state.get('click_hash')
+    point_changed = bool(current_hash) and (current_hash != calc.get('_click_hash')) and bool(getattr(st.session_state, 'last_click', None))
+
+    if calcular or point_changed:
         if not getattr(st.session_state, "last_click", None):
             calc["ok"] = False
             calc["err"] = "Clique no mapa para definir o ponto."
@@ -43,6 +47,8 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
             calc["lon"] = lon
             calc["use_type_code"] = use_type_code
             calc["radius_m"] = int(radius_m)
+            if current_hash:
+                calc["_click_hash"] = current_hash
 
             zone = zone_from_latlon(zones_prepared, lat, lon) if zones_prepared else None
             street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
