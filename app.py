@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 import json
 import pathlib
@@ -9,7 +7,7 @@ from typing import Any, Dict
 import streamlit as st
 
 # =============================
-# Debug markers (garantir que o deploy está lendo o app.py correto)
+# Debug markers (garante que o deploy está lendo o app.py correto)
 # =============================
 st.write("APP VERSION MARKER: 2026-03-03-XYZ")
 st.write("CWD:", os.getcwd())
@@ -25,7 +23,7 @@ DATA_DIR = Path("data")
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 
 # =============================
-# Imports do projeto
+# Imports do projeto (robustos)
 # =============================
 # Zonas (alguns branches renomearam o módulo)
 try:
@@ -33,8 +31,18 @@ try:
 except Exception:
     from core.zones_mapa import load_zones  # type: ignore
 
-from core.streets import load_streets
-from core.supabase_rules import fetch_rule, pick_rule  # <-- IMPORT CERTO (busca + pick)
+# Streets (alguns projetos usam load_streets() sem args)
+try:
+    from core.streets import load_streets  # noqa
+except Exception:
+    load_streets = None  # type: ignore
+
+# Supabase rules
+try:
+    from core.supabase_rules import fetch_rule, pick_rule  # type: ignore
+except Exception:
+    # fallback: caso o arquivo tenha outro nome
+    from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
 
 # UI
 from ui.mapa import render_mapa_section
@@ -43,6 +51,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
+
 
 # =============================
 # Cache
@@ -56,11 +65,6 @@ def _zones_geojson() -> Dict[str, Any]:
 def _zones_prepared():
     return load_zones(ZONE_FILE)
 
-@st.cache_resource(show_spinner=False)
-def _streets_index():
-    # core.streets.load_streets() já usa data/ruas.json internamente
-    return load_streets()
-
 # =============================
 # Estado inicial
 # =============================
@@ -70,18 +74,34 @@ if "selected_lon" not in st.session_state:
     st.session_state.selected_lon = None
 
 # A UI usa st.session_state.calc (dict)
-if "calc" not in st.session_state:
+if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
     st.session_state.calc = {}
 
-# default do tipo de uso
+# valor default do tipo de uso
 st.session_state.calc.setdefault("use_type_code", "RES_UNI")
 
+
 # =============================
-# Carregar bases (cache)
+# Carregar bases
 # =============================
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
-_ = _streets_index()  # só garante que ruas estão indexadas/cached
+
+# =============================
+# Pequena função de card (evita dependência externa)
+# =============================
+def _card(title: str, value: Any, suffix: str = "") -> None:
+    v = "—" if value is None or value == "" else f"{value}{suffix}"
+    st.markdown(
+        f"""
+        <div style="padding:12px;border:1px solid #e7e7e7;border-radius:12px;margin-bottom:10px;">
+            <div style="font-size:12px;opacity:.75">{title}</div>
+            <div style="font-size:20px;font-weight:700">{v}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 # =============================
 # 1) Mapa (seleciona lat/lon e define raio)
@@ -92,52 +112,40 @@ radius_m = render_mapa_section(zones_gj)
 calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
 
 # =============================
-# 2) Dados do lote
+# 2) Dados do lote (RETORNA 3 valores SEM erro)
 # =============================
 lot_area, built_ground, permeable_area = render_lote_section()
 
 # =============================
 # 3) Localização (zona + via)
 # =============================
-# Isso deve preencher calc["zone"], calc["via_nome"], etc.
+# Localização escreve em st.session_state.calc (zone, via, tipo_via, dist_m, ok, err)
 _ = render_localizacao_section(calcular, zones_prepared, radius_m)
 
 # =============================
-# “Armar” calc.ok no clique do botão
+# Opção B: garantir que a REGRA vem do Supabase assim que tiver zona
 # =============================
-if calcular:
-    # reset básico de erros para novo cálculo
-    st.session_state.calc["err"] = None
-    # se a zona foi encontrada na seção 3, então ok = True
-    if st.session_state.calc.get("zone"):
-        st.session_state.calc["ok"] = True
-    else:
-        st.session_state.calc["ok"] = False
-        st.session_state.calc["err"] = "Zona não definida (clique no mapa e calcule)."
-        st.session_state.calc["rule"] = None
+calc = st.session_state.calc
+if calcular and calc.get("zone") and not calc.get("rule") and not calc.get("err"):
+    try:
+        rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
+        if rule:
+            calc["rule"] = rule
+        else:
+            calc["err"] = f"Nenhuma regra no Supabase para zona={calc['zone']} e uso={calc.get('use_type_code')}"
+    except Exception as e:
+        calc["err"] = f"Erro ao consultar Supabase: {e}"
 
 # =============================
 # 4) Índices Urbanísticos (Supabase)
 # =============================
-# IMPORTANTE: passar get_rule_func para a Opção B funcionar
-# card_func: se você já tem um card helper em algum lugar, troque aqui.
-# Se não tiver, usamos um fallback simples.
-def _card(title: str, value: Any, suffix: str = ""):
-    v = "-" if value is None or value == "" else value
-    st.metric(title, f"{v}{suffix}")
-
-render_indices_section(
-    calc=st.session_state.calc,
-    card_func=_card,
-    pick_func=pick_rule,
-    get_rule_func=fetch_rule,
-)
+render_indices_section(calc=calc, card_func=_card, pick_func=pick_rule, get_rule_func=fetch_rule)
 
 # =============================
 # 5) Análise Urbanística
 # =============================
 render_analise_section(
-    st.session_state.calc,
+    calc,
     lot_area=lot_area,
     built_ground=built_ground,
     permeable_area=permeable_area,
@@ -147,4 +155,4 @@ render_analise_section(
 # =============================
 # 6) Relatório Urbanístico
 # =============================
-render_relatorio_section(st.session_state.calc)
+render_relatorio_section(calc)
