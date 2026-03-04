@@ -2,45 +2,41 @@ import streamlit as st
 from typing import Any, Dict
 
 
-def _first(calc: Dict[str, Any], *keys: str) -> Any:
-    for k in keys:
-        if k in calc and calc.get(k) not in (None, ""):
-            return calc.get(k)
-    return None
-
-
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
-    """Relatório final (compatível com chaves antigas e novas).
+    """Relatório final compatível com o contrato atual do app.
 
-    Não quebra se calc estiver incompleto.
+    Regras:
+    - Nunca quebrar mesmo com calc parcial
+    - Ler chaves novas e antigas
     """
+
     st.subheader("6) Relatório Urbanístico")
 
     if not isinstance(calc, dict) or not calc:
         st.info("Preencha os dados e clique em **Calcular viabilidade** para gerar o relatório.")
         return
 
-    zone = _first(calc, "zone", "zone_sigla")
-    via_nome = _first(calc, "via_nome", "street_name")
-    via_tipo = _first(calc, "via_tipo", "street_type")
-    via_dist = _first(calc, "via_dist_m", "street_dist")
-    use_type_code = _first(calc, "use_type_code")
+    # Compat: zona/via
+    zone = calc.get("zone") or calc.get("zone_sigla")
+    street_name = calc.get("street_name") or calc.get("via_nome")
+    street_type = calc.get("street_type") or calc.get("via_tipo")
+    street_dist = calc.get("street_dist") or calc.get("via_dist_m")
+    use_type_code = calc.get("use_type_code")
 
     st.markdown("### Identificação")
     c1, c2, c3 = st.columns(3)
     c1.write(f"**Zona:** {zone or '—'}")
-    c2.write(f"**Via:** {via_nome or '—'}")
+    c2.write(f"**Via:** {street_name or '—'}")
     c3.write(f"**Uso:** {use_type_code or '—'}")
 
-    if via_tipo or via_dist is not None:
-        st.caption(
-            f"Tipo de via: {via_tipo or '—'} | Distância: {f'{float(via_dist):.1f}' if isinstance(via_dist, (int,float)) else (via_dist or '—')} m"
-        )
+    if street_type or street_dist is not None:
+        dist_txt = f"{float(street_dist):.1f}" if isinstance(street_dist, (int, float)) else (str(street_dist) if street_dist else "—")
+        st.caption(f"Tipo de via: {street_type or '—'} | Distância: {dist_txt} m")
 
     st.markdown("### Índices e parâmetros (regra Supabase)")
     rule = calc.get("rule") or {}
     if isinstance(rule, dict) and rule:
-        shown_keys = [
+        keys = [
             "ia_max",
             "to_max",
             "tp_min",
@@ -50,22 +46,20 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "gabarito_m",
             "gabarito_pav",
             "allow_attach_one_side",
-            "observacoes",
             "notes",
             "special_area_tag",
-            "source_ref",
         ]
-        shown = {k: rule.get(k) for k in shown_keys if k in rule}
+        shown = {k: rule.get(k) for k in keys if k in rule}
         st.json(shown if shown else rule)
     else:
-        st.info("Nenhuma regra carregada (verifique Supabase / zona / uso).")
+        st.info("Nenhuma regra carregada ainda (verifique Supabase / zona / uso).")
 
     st.markdown("### Cálculos")
-    basic = calc.get("basic") or {}
-    if isinstance(basic, dict) and basic:
+    # Preferir o bloco basic, mas cair para campos individuais
+    basic = calc.get("basic") if isinstance(calc.get("basic"), dict) else {}
+    if basic:
         st.json(basic)
     else:
-        # fallback: usa campos diretos
         st.json(
             {
                 "ia_utilizado": calc.get("ia_utilizado"),
@@ -77,15 +71,17 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.markdown("### Quadro final")
     st.write(
         {
-            "OK": bool(calc.get("ok")),
-            "Erro/Pendências": calc.get("err"),
             "Zona": zone,
-            "Via": via_nome,
-            "Tipo de via": via_tipo,
-            "Distância à via (m)": via_dist,
+            "Via": street_name,
+            "Tipo de via": street_type,
+            "Distância à via (m)": street_dist,
             "Uso": use_type_code,
-            "IA utilizado": calc.get("ia_utilizado"),
-            "TO utilizada (%)": calc.get("to_utilizada_pct"),
-            "TP prevista (%)": calc.get("tp_prevista_pct"),
+            "IA calculado": (basic.get("ia") if basic else calc.get("ia_utilizado")),
+            "TO calculada": (basic.get("to") if basic else calc.get("to_utilizada_pct")),
+            "TP calculada": (basic.get("tp") if basic else calc.get("tp_prevista_pct")),
         }
     )
+
+    # diagnóstico rápido
+    with st.expander("Diagnóstico (calc)", expanded=False):
+        st.json(calc)
