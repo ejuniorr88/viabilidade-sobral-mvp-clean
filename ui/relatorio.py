@@ -8,6 +8,11 @@ import json
 def _build_public_storage_url(bucket: str, path: str) -> str | None:
     """Monta a URL pública do Supabase Storage (bucket público)."""
     base = os.getenv('SUPABASE_URL', '').rstrip('/')
+    if not base:
+        try:
+            base = (st.secrets.get('SUPABASE_URL') or '').rstrip('/')
+        except Exception:
+            base = ''
     if not base or not bucket or not path:
         return None
     path = path.lstrip('/')
@@ -404,6 +409,7 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
                     if url:
                         try:
                             st.image(url, caption=caption or title or '', use_container_width=True)
+                    st.markdown(f"[🔎 Abrir em tamanho real]({url})")
                         except Exception:
                             st.markdown(f"Imagem: {bucket}/{path}")
                     else:
