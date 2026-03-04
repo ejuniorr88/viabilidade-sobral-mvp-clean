@@ -55,10 +55,15 @@ def render_lote_section() -> Tuple[float, float, float]:
     # 2) Área do lote: calculada (regular) OU informada (irregular)
     area_calc = float(testada) * float(profundidade)
 
+    st.caption(
+        f"Área calculada (testada × profundidade): {area_calc:,.2f} m²".replace(",", "X").replace(".", ",").replace("X", ".")
+    )
+
     lot_area_informada = float(st.session_state.get("lot_area_m2", area_calc))
     if terreno_irregular:
+        st.info("Você marcou **Terreno irregular**. Aqui você informa a **área TOTAL do terreno** (m²).\n\nA área **pretendida no térreo** (quanto você quer construir no chão) é o campo logo abaixo.")
         lot_area_informada = st.number_input(
-            "Área do lote (m²)",
+            "Área do lote (m²) — área TOTAL do terreno",
             min_value=0.0,
             value=float(lot_area_informada),
             step=10.0,
@@ -91,7 +96,14 @@ def render_lote_section() -> Tuple[float, float, float]:
         value=0.0,
         step=5.0,
         format="%.2f",
-    )
+    
+    # Validação simples (evita confusão entre área do lote e área do térreo)
+    if float(built_ground) > 0 and float(lot_area) > 0 and float(built_ground) > float(lot_area):
+        st.warning(
+            "A **área pretendida no térreo** está maior que a **área total do lote**. "
+            "Confira os valores: *Área do lote* é o terreno inteiro; *Área pretendida no térreo* é o que você quer construir no chão."
+        )
+)
 
     # Permeável default = lote - térreo (sem input na UI)
     permeable_area = max(0.0, float(lot_area) - float(built_ground))
