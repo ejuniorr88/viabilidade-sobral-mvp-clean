@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import streamlit as st
+from pathlib import Path
 from typing import Any, Dict
 
 
@@ -347,6 +348,24 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
 - Altura máxima do degrau: 0,19m.  
 """
     )
+    
+    # =============================
+    # DICAS VALIOSAS (fixo e acumulativo)
+    # =============================
+    dicas_path = Path('data') / 'dicas_valiosas.md'
+    if dicas_path.exists():
+        st.markdown(dicas_path.read_text(encoding='utf-8'))
+    else:
+        st.markdown(
+            """## 💡 Dicas Valiosas:
+
+**• Largura dos passeios (calçadas)**  
+Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via; na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garantindo continuidade e alinhamento, sendo a análise do licenciamento voltada a confirmar que a proposta não avança sobre a área pública.
+
+**• Piscinas e cálculo de TO/TP (Art. 144)**  
+Se for construída uma piscina, ela não é computada como área construída e, por isso, não entra no cálculo da Taxa de Ocupação (TO). Porém, para a Taxa de Permeabilidade (TP), a piscina é considerada área impermeável, reduzindo a área permeável do lote. Além disso, conforme o Art. 144, piscinas, espelhos d’água, caixas d’água, cisternas e tanques devem manter afastamento mínimo de 0,50 m de todas as divisas do terreno e sempre ser computados como área impermeável no cálculo da TP.
+"""
+        )
 
     with st.expander("Ver regra completa (JSON)"):
         st.json(rule)
