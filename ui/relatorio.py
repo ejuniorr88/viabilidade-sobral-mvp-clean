@@ -1,6 +1,44 @@
 from __future__ import annotations
 
 import streamlit as st
+import os
+import json
+
+
+def _build_public_storage_url(bucket: str, path: str) -> str | None:
+    """Monta a URL pública do Supabase Storage (bucket público)."""
+    base = os.getenv('SUPABASE_URL', '').rstrip('/')
+    if not base:
+        try:
+            base = (st.secrets.get('SUPABASE_URL') or '').rstrip('/')
+        except Exception:
+            base = ''
+    if not base or not bucket or not path:
+        return None
+    path = path.lstrip('/')
+    return f"{base}/storage/v1/object/public/{bucket}/{path}"
+
+
+def _extract_figures_from_rule(rule: Dict[str, Any]) -> list[Dict[str, Any]]:
+    """Lê src.figures (ou src.figuras) da regra do Supabase."""
+    if not isinstance(rule, dict):
+        return []
+    src = rule.get('src') or {}
+    if isinstance(src, str):
+        try:
+            src = json.loads(src)
+        except Exception:
+            src = {}
+    if not isinstance(src, dict):
+        return []
+    figs = src.get('figures') or src.get('figuras') or []
+    if not isinstance(figs, list):
+        return []
+    out: list[Dict[str, Any]] = []
+    for it in figs:
+        if isinstance(it, dict) and it.get('bucket') and it.get('path'):
+            out.append(it)
+    return out
 from typing import Any, Dict
 
 
@@ -348,5 +386,36 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
 """
     )
 
+
+    # =============================
+    # FIGURAS ANEXAS (Supabase Storage) - Anexo V
+    # =============================
+    figs = _extract_figures_from_rule(rule)
+    if figs:
+        st.markdown("---\n### 📎 Figuras anexas (Anexo V)")
+        # Exibir 2 imagens por linha (duas colunas)
+        for i in range(0, len(figs), 2):
+            cols = st.columns(2)
+            pair = figs[i:i+2]
+            for col, f in zip(cols, pair):
+                with col:
+                    title = f.get('title') or f.get('titulo')
+                    caption = f.get('caption') or f.get('legenda')
+                    bucket = f.get('bucket')
+                    path = f.get('path')
+                    url = _build_public_storage_url(bucket, path) if isinstance(bucket, str) and isinstance(path, str) else None
+                    if title:
+                        st.markdown(f"**{title}**")
+                    if url:
+                        try:
+                            st.image(url, caption=caption or title or '', use_container_width=True)
+
+                            st.markdown(f"[🔎 Abrir em tamanho real]({url})")
+                        except Exception:
+                            st.markdown(f"Imagem: {bucket}/{path}")
+                    else:
+                        st.markdown(f"Imagem: {bucket}/{path}")
+                    if caption and caption != title:
+                        st.caption(caption)
     with st.expander("Ver regra completa (JSON)"):
         st.json(rule)
