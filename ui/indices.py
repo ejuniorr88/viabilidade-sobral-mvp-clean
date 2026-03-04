@@ -1,116 +1,170 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Callable, Optional
+from typing import Any, Dict, Optional
 
 import streamlit as st
 
 
-def _pick_value(rule: Dict[str, Any], *keys: str) -> Any:
-    for k in keys:
-        if k in rule:
-            v = rule.get(k)
-            if v is not None and v != "":
-                return v
-    return None
+def _to_float(v: Any) -> Optional[float]:
+    if v is None or v == "":
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        s = str(v).strip()
+        if not s:
+            return None
+        # pt-BR safety
+        s = s.replace(".", "").replace(",", ".")
+        return float(s)
+    except Exception:
+        return None
 
 
-def render_indices_section(
-    *,
-    calc: Dict[str, Any],
-    card_func: Callable[..., Any],
-    pick_func: Optional[Callable[..., Any]] = None,
-    get_rule_func: Optional[Callable[[str, str], Optional[Dict[str, Any]]]] = None,
-) -> None:
-    st.subheader("4) Índices Urbanísticos (Supabase)")
+def _pct_from_rule(rule: Dict[str, Any], pct_key: str, frac_key: str) -> Optional[float]:
+    """
+    Normaliza percentuais:
+      - Se existir *_pct, usa direto (ex.: 60)
+      - Senão, se existir fração 0..1 (ex.: 0.60), converte para 60
+    """
+    pct = _to_float(rule.get(pct_key))
+    if pct is not None:
+        return pct
+    frac = _to_float(rule.get(frac_key))
+    if frac is None:
+        return None
+    # se vier como fração (0..1), converte; se vier já em %, mantém
+    return frac * 100.0 if 0 <= frac <= 1 else frac
 
-    if pick_func is None:
-        pick_func = lambda rule, *keys: _pick_value(rule, *keys)
 
-    zone = calc.get("zone")
-    use_type = calc.get("use_type_code") or "RES_UNI"
-
-    if not calc.get("ok"):
-        st.info("Clique em **Calcular viabilidade** para carregar zona, via e regras do Supabase.")
-        return
-
-    rule = calc.get("rule") if not calc.get("err") else None
-
-    # Se não tiver regra em calc, tenta buscar aqui também (redundante de propósito)
-    if zone and not rule and get_rule_func is not None:
+def _fmt(v: Any, *, unit: str = "") -> str:
+    if v is None or v == "":
+        return "—"
+    if isinstance(v, (int, float)):
+        # manter formatação simples, sem mexer em cores/estilos
+        s = f"{v:.1f}" if abs(float(v)) >= 10 and float(v).is_integer() is False else f"{v:.2f}"
+        # limpar .00 quando for inteiro
         try:
-            rule = get_rule_func(zone, use_type)
-            calc["rule"] = rule
-        except Exception as e:
-            calc["err"] = f"Erro ao consultar Supabase: {e}"
-            rule = None
+            fv = float(v)
+            if abs(fv - round(fv)) < 1e-9:
+                s = f"{int(round(fv))}"
+        except Exception:
+            pass
+        return f"{s}{unit}"
+    return f"{v}{unit}"
 
-    if calc.get("err") and not rule:
-        st.error(str(calc.get("err")))
-        return
 
-    if zone and not rule:
-        st.warning("Nenhuma regra encontrada para (zona + uso) no Supabase.")
+def render_indices_section(*, calc: Dict[str, Any]) -> None:
+    """
+    Item 4 - NÃO muda layout/ordem geral do app.
+    Apenas completa parâmetros que já existem no schema.
+    """
+    st.header("4) Índices Urbanísticos (Supabase)")
+
+    zone = calc.get("zone") or calc.get("zone_sigla")
+    use_type = calc.get("use_type_code")
+    rule = calc.get("rule")
+
+    if not zone or not use_type:
+        st.info("Clique em Calcular viabilidade para carregar zona, via e regras do Supabase.")
         return
 
     if not rule:
+        st.info("Clique em Calcular viabilidade para carregar zona, via e regras do Supabase.")
         return
 
-    to_max = pick_func(rule, "to_max_pct", "to_max", "taxa_ocupacao_max_pct", "to")
-    tp_min = pick_func(rule, "tp_min_pct", "tp_min", "taxa_permeabilidade_min_pct", "tp")
-    to_subsolo = pick_func(rule, "to_subsolo_max", "to_subsolo_max_pct", "to_subsolo_pct", "to_subsolo")
+    # Normalizações
+    tp_min_pct = _pct_from_rule(rule, "tp_min_pct", "tp_min")
+    to_max_pct = _pct_from_rule(rule, "to_max_pct", "to_max")
 
-    ia_max = pick_func(rule, "ia_max", "ia_maximo", "indice_aproveitamento_max")
-    ia_min = pick_func(rule, "ia_min", "ia_minimo", "indice_aproveitamento_min")
+    # TO subsolo: pode ter dois campos no schema
+    to_sub_pct = None
+    # alguns bancos podem armazenar como fração 0..1 também
+    if rule.get("to_sub_max") is not None:
+        to_sub_pct = _pct_from_rule(rule, "to_sub_max", "to_sub_max")
+    elif rule.get("to_subsolo_max") is not None:
+        to_sub_pct = _pct_from_rule(rule, "to_subsolo_max", "to_subsolo_max")
 
-    rec_frente = pick_func(rule, "recuo_frontal_m", "recuo_frente_m", "recuo_frente")
-    rec_fundo = pick_func(rule, "recuo_fundo_m", "recuo_fundos_m", "recuo_fundo")
-    rec_lateral = pick_func(rule, "recuo_lateral_m", "recuo_lateral")
+    ia_max = _to_float(rule.get("ia_max"))
+    ia_min = _to_float(rule.get("ia_min"))
 
-    area_min = pick_func(rule, "area_min_lote_m2", "area_min_lote", "lote_area_min_m2")
-    area_max = pick_func(rule, "area_max_lote_m2", "area_max_lote", "lote_area_max_m2")
+    rf = _to_float(rule.get("recuo_frontal_m"))
+    rl = _to_float(rule.get("recuo_lateral_m"))
+    rfd = _to_float(rule.get("recuo_fundos_m"))
 
-    test_min = pick_func(rule, "testada_min_m", "testada_min", "lote_testada_min_m", "testada_minima_m", "frontage_min_m")
-    test_max = pick_func(rule, "testada_max_m", "testada_max", "lote_testada_max_m", "testada_maxima_m", "frontage_max_m")
+    area_min = _to_float(rule.get("area_min_lote_m2"))
+    area_max = _to_float(rule.get("area_max_lote_m2"))
 
-    altura_max = pick_func(rule, "altura_max_m", "gabarito_m", "altura_maxima_m", "altura_max")
+    test_min_meio = _to_float(rule.get("testada_min_meio_m"))
+    test_min_esq = _to_float(rule.get("testada_min_esquina_m"))
+    test_max = _to_float(rule.get("testada_max_m"))
 
+    gabarito_m = _to_float(rule.get("gabarito_m"))
+    # gabarito_pav é opcional (não é “parâmetro do item 4” obrigatório, mas útil)
+    gabarito_pav = rule.get("gabarito_pav")
+
+    # ============ CARDS ============
+    # Mantém grid de 3 colunas como está, só completa com novos cards.
     c1, c2, c3 = st.columns(3)
     with c1:
-        card_func("Zona", zone)
+        st.metric("Zona", zone or "—")
     with c2:
-        card_func("Taxa de Permeabilidade (TP) mínima", tp_min, "%")
+        st.metric("Taxa de Permeabilidade (TP) mínima", _fmt(tp_min_pct, unit="%") if tp_min_pct is not None else "—")
     with c3:
-        card_func("Taxa de Ocupação (TO) máxima", to_max, "%")
+        st.metric("Taxa de Ocupação (TO) máxima", _fmt(to_max_pct, unit="%") if to_max_pct is not None else "—")
 
     c4, c5, c6 = st.columns(3)
     with c4:
-        card_func("TO do Subsolo máxima", to_subsolo, "%")
+        st.metric("TO do Subsolo máxima", _fmt(to_sub_pct, unit="%") if to_sub_pct is not None else "—")
     with c5:
-        card_func("Índice de Aproveitamento (IA) máximo", ia_max)
+        st.metric("Índice de Aproveitamento (IA) máximo", _fmt(ia_max) if ia_max is not None else "—")
     with c6:
-        card_func("Índice de Aproveitamento (IA) mínimo", ia_min)
+        st.metric("Índice de Aproveitamento (IA) mínimo", _fmt(ia_min) if ia_min is not None else "—")
 
     c7, c8, c9 = st.columns(3)
     with c7:
-        card_func("Recuo de Frente", rec_frente, " m")
+        st.metric("Recuo de Frente", _fmt(rf, unit=" m") if rf is not None else "—")
     with c8:
-        card_func("Recuo de Fundo", rec_fundo, " m")
+        st.metric("Recuo de Fundo", _fmt(rfd, unit=" m") if rfd is not None else "—")
     with c9:
-        card_func("Recuo Lateral", rec_lateral, " m")
+        st.metric("Recuo Lateral", _fmt(rl, unit=" m") if rl is not None else "—")
 
     c10, c11, c12 = st.columns(3)
     with c10:
-        card_func("Área mínima do lote", area_min, " m²")
+        st.metric("Área mínima do lote", _fmt(area_min, unit=" m²") if area_min is not None else "—")
     with c11:
-        card_func("Testada mínima", test_min, " m")
+        # manter o label "Testada mínima", mas agora mostrar as duas
+        if test_min_meio is None and test_min_esq is None:
+            st.metric("Testada mínima", "—")
+        else:
+            # métrica não suporta múltiplas linhas, então colocamos a principal e detalhamos abaixo
+            primary = _fmt(test_min_meio, unit=" m") if test_min_meio is not None else (_fmt(test_min_esq, unit=" m") if test_min_esq is not None else "—")
+            st.metric("Testada mínima", primary)
+            st.caption(
+                f"Meio de quadra: {(_fmt(test_min_meio, unit=' m') if test_min_meio is not None else '—')}  |  "
+                f"Esquina: {(_fmt(test_min_esq, unit=' m') if test_min_esq is not None else '—')}"
+            )
     with c12:
-        card_func("Altura máxima (gabarito)", altura_max, " m")
+        # gabarito
+        if gabarito_m is None:
+            st.metric("Altura máxima (gabarito)", "—")
+        else:
+            extra = f" ({gabarito_pav} pav.)" if isinstance(gabarito_pav, int) and gabarito_pav > 0 else ""
+            st.metric("Altura máxima (gabarito)", f"{_fmt(gabarito_m, unit=' m')}{extra}")
 
-    c13, c14, _ = st.columns(3)
+    c13, c14, c15 = st.columns(3)
     with c13:
-        card_func("Área máxima do lote", area_max, " m²")
+        st.metric("Área máxima do lote", _fmt(area_max, unit=" m²") if area_max is not None else "—")
     with c14:
-        card_func("Testada máxima", test_max, " m")
+        st.metric("Testada máxima", _fmt(test_max, unit=" m") if test_max is not None else "—")
+    with c15:
+        # espaço reservado para não alterar muito o layout; mostra subzona se relevante
+        subzone = rule.get("subzone_code")
+        requires_subzone = rule.get("requires_subzone")
+        if requires_subzone:
+            st.metric("Subzona", subzone or "—")
+        else:
+            st.metric("Subzona", subzone or "PADRAO")
 
-    with st.expander("Ver regra bruta (JSON do Supabase)", expanded=False):
+    with st.expander("Ver regra bruta (JSON do Supabase)"):
         st.json(rule)
