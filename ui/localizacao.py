@@ -4,20 +4,36 @@ import streamlit as st
 
 from core.zones_map import zone_from_latlon
 from core.streets import find_street
-from core.zone_rules_repository import get_zone_rule
+
+
+def _sync_street_fields(calc: dict) -> None:
+    """Normaliza/achata street_info para chaves estáveis usadas por índices/análise/relatório."""
+    si = calc.get("street_info") if isinstance(calc, dict) else None
+    if not isinstance(si, dict):
+        return
+    name = si.get("name")
+    typ = si.get("type")
+    dist = si.get("distance_m")
+    calc["street_name"] = name
+    calc["street_type"] = typ
+    calc["street_dist"] = dist
+    # novos aliases (mantém compat com handoff)
+    calc["via_nome"] = calc.get("via_nome") or name
+    calc["via_tipo"] = calc.get("via_tipo") or typ
+    calc["via_dist_m"] = calc.get("via_dist_m") or dist
 
 
 def render_localizacao_section(*args, **kwargs):
     """Renderiza o bloco 3) Localização (zona + via), sem alterar layout.
 
     Compatibilidade:
-    - **Novo (clean):** render_localizacao_section(calcular=..., zones_prepared=..., radius_m=...)
-    - **Antigo (MVP):** render_localizacao_section((lat, lon), radius_m=...)
+    - Novo (clean): render_localizacao_section(calcular=..., zones_prepared=..., radius_m=...)
+    - Antigo (MVP): render_localizacao_section((lat, lon), radius_m=...)
 
-    - Mantém o input de use_type_code
-    - Só roda a busca quando clicar em 'Calcular viabilidade'
-    - Atualiza st.session_state.calc (zona, rua, regra, erros)
-    - Renderiza as 3 colunas (Zona/Rua/Tipo) + distância + warning
+    Regras do contrato:
+    - Não muda nomes de chaves no calc
+    - Só calcula quando clicar no botão do app (calcular=True)
+    - Não consulta Supabase aqui (regra é responsabilidade do app/indices)
     """
     # ----------------------------
     # Compat: chamada antiga com (lat, lon)
@@ -50,38 +66,46 @@ def render_localizacao_section(*args, **kwargs):
         value=st.session_state.calc.get("use_type_code") or "RES_UNI",
     )
 
-    if calcular and st.session_state.last_click:
-        lat = st.session_state.last_click["lat"]
-        lon = st.session_state.last_click["lon"]
+    # Executa somente quando clicar no botão
+    if calcular:
+        if not st.session_state.get("last_click"):
+            st.session_state.calc["ok"] = False
+            st.session_state.calc["err"] = "Clique no mapa para selecionar um ponto."
+        else:
+            lat = float(st.session_state.last_click["lat"])
+            lon = float(st.session_state.last_click["lon"])
 
-        st.session_state.calc["lat"] = lat
-        st.session_state.calc["lon"] = lon
-        st.session_state.calc["use_type_code"] = use_type_code
-        st.session_state.calc["radius_m"] = int(radius_m)
+            calc = st.session_state.calc
+            calc["lat"] = lat
+            calc["lon"] = lon
+            calc["use_type_code"] = use_type_code
+            calc["radius_m"] = int(radius_m)
 
-        zone = zone_from_latlon(zones_prepared, lat, lon)
-        street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
+            # zona + via
+            zone = zone_from_latlon(zones_prepared, lat, lon)
+            street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
 
-        st.session_state.calc["zone"] = zone
-        st.session_state.calc["street_info"] = street_info
+            calc["zone"] = zone
+            calc["zone_sigla"] = zone  # alias compat (relatório antigo)
+            calc["street_info"] = street_info
 
-        rule = None
-        err = None
-        try:
-            if zone:
-                rule = get_zone_rule(zone, use_type_code)
+            # achata
+            _sync_street_fields(calc)
+
+            # OK only if zone exists; street can be None (não derruba)
+            if not zone:
+                calc["ok"] = False
+                calc["err"] = "Ponto fora das zonas (zoneamento_light.json)."
             else:
-                err = "Clique fora das zonas."
-        except Exception as e:
-            err = f"Erro ao consultar Supabase: {e}"
+                # não zera erro se já existir algo do Supabase; só limpa erro de localização
+                if calc.get("err") in (None, "") or "Ponto fora" in str(calc.get("err")):
+                    calc["err"] = None
+                calc["ok"] = True
 
-        st.session_state.calc["rule"] = rule
-        st.session_state.calc["err"] = err
-        st.session_state.calc["ok"] = True
-
+    # Render (estado atual)
     calc = st.session_state.calc
     zone = calc.get("zone")
-    street_info = calc.get("street_info")
+    street_info = calc.get("street_info") if isinstance(calc.get("street_info"), dict) else None
 
     colA, colB, colC = st.columns(3)
     with colA:
@@ -89,12 +113,12 @@ def render_localizacao_section(*args, **kwargs):
         st.write(zone or "—")
     with colB:
         st.write("Rua / Logradouro")
-        st.write(street_info["name"] if street_info else "—")
+        st.write((street_info.get("name") if street_info else None) or "—")
     with colC:
         st.write("Tipo de via")
-        st.write(street_info["type"] if street_info else "—")
+        st.write((street_info.get("type") if street_info else None) or "—")
 
-    if street_info and "distance_m" in street_info:
+    if street_info and street_info.get("distance_m") is not None:
         st.caption(
             f"Distância até o eixo da via: {float(street_info['distance_m']):.1f} m "
             f"(raio {float(calc.get('radius_m') or radius_m):.0f} m)."
