@@ -2,33 +2,41 @@ import streamlit as st
 from typing import Any, Dict
 
 
-def _fmt_num(v: Any, *, suffix: str = "", decimals: int = 2) -> str:
-    if v is None or v == "":
+def _num(v: Any) -> float | None:
+    if v is None:
+        return None
+    # Decimal (supabase) / int / float / str
+    try:
+        return float(v)
+    except Exception:
+        try:
+            s = str(v).strip().replace(".", "").replace(",", ".")
+            return float(s)
+        except Exception:
+            return None
+
+
+def _pct_from_rule(rule: Dict[str, Any], frac_key: str, pct_key: str) -> float | None:
+    # prefere *_pct (0-100)
+    v_pct = _num(rule.get(pct_key))
+    if v_pct is not None:
+        return v_pct
+    v_frac = _num(rule.get(frac_key))
+    if v_frac is None:
+        return None
+    # to_max/tp_min no schema podem ser 0..1
+    if 0 <= v_frac <= 1.0:
+        return v_frac * 100.0
+    # se já vier em 0..100 por algum motivo, respeita
+    return v_frac
+
+
+def _fmt(v: Any, suffix: str = "") -> str:
+    if v is None:
         return "—"
-    try:
-        # supabase pode vir Decimal
-        x = float(v)
-        if suffix == "%":
-            return f"{x:.{decimals}f}{suffix}"
-        return f"{x:.{decimals}f}{suffix}"
-    except Exception:
-        return str(v)
-
-
-def _to_pct(rule: Dict[str, Any], key_pct: str, key_frac: str) -> Any:
-    """Retorna percentual (0..100). Usa *_pct se existir, senão converte fração 0..1."""
-    if not isinstance(rule, dict):
-        return None
-    v = rule.get(key_pct)
-    if v is not None:
-        return v
-    v2 = rule.get(key_frac)
-    if v2 is None:
-        return None
-    try:
-        return float(v2) * 100.0
-    except Exception:
-        return None
+    if isinstance(v, (int, float)):
+        return f"{v:.2f}{suffix}" if suffix else f"{v:.2f}"
+    return f"{v}{suffix}"
 
 
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
@@ -38,96 +46,91 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         st.info("Preencha os dados e clique em **Calcular viabilidade** para gerar o relatório.")
         return
 
-    # Identificação (aceita chaves novas e antigas)
-    zone = calc.get("zone") or calc.get("zone_sigla")
-    street_name = calc.get("via_nome") or calc.get("street_name")
-    street_type = calc.get("via_tipo") or calc.get("street_type")
-    street_dist = calc.get("via_dist_m") or calc.get("street_dist")
+    # --- Identificação ---
+    zone_sigla = calc.get("zone_sigla") or calc.get("zone")
+    street_name = calc.get("street_name") or calc.get("via_nome")
+    street_type = calc.get("street_type") or calc.get("via_tipo")
+    street_dist = calc.get("street_dist") or calc.get("via_dist_m")
     use_type_code = calc.get("use_type_code")
 
-    # Lote
-    lot_area = calc.get("lot_area_m2")
-    lot_front = calc.get("lot_front_m")
-    lot_depth = calc.get("lot_depth_m")
-    is_corner = bool(calc.get("lot_is_corner", False))
-
     st.markdown("### Identificação")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.write(f"**Zona:** {zone or '—'}")
+    c1, c2, c3 = st.columns(3)
+    c1.write(f"**Zona:** {zone_sigla or '—'}")
     c2.write(f"**Via:** {street_name or '—'}")
     c3.write(f"**Uso:** {use_type_code or '—'}")
-    c4.write(f"**Lote:** {'Esquina' if is_corner else 'Meio de quadra'}")
 
     if street_type or street_dist is not None:
-        st.caption(f"Tipo de via: {street_type or '—'} | Distância: {street_dist if street_dist is not None else '—'} m")
+        st.caption(
+            f"Tipo de via: {street_type or '—'} | Distância: {street_dist if street_dist is not None else '—'} m"
+        )
 
-    st.markdown("### Quadro técnico – Parâmetros urbanísticos (zone_rules)")
-
+    # --- Regra Supabase (quadro técnico) ---
+    st.markdown("### Índices e parâmetros (regra Supabase)")
     rule = calc.get("rule") or {}
     if not isinstance(rule, dict) or not rule:
-        st.info("Regra ainda não carregada (Supabase).")
-        return
+        st.info("Nenhuma regra carregada (verifique Supabase / zona / uso).")
+    else:
+        to_max_pct = _pct_from_rule(rule, "to_max", "to_max_pct")
+        tp_min_pct = _pct_from_rule(rule, "tp_min", "tp_min_pct")
+        to_sub_pct = _pct_from_rule(rule, "to_subsolo_max", "to_subsolo_max_pct")  # raramente existe *_pct
+        if to_sub_pct is None:
+            to_sub_pct = _pct_from_rule(rule, "to_sub_max", "to_sub_max_pct")
 
-    # Normalização TO/TP
-    to_max_pct = _to_pct(rule, "to_max_pct", "to_max")
-    tp_min_pct = _to_pct(rule, "tp_min_pct", "tp_min")
+        ia_max = _num(rule.get("ia_max"))
+        ia_min = _num(rule.get("ia_min"))
 
-    # Campos diretos
-    ia_max = rule.get("ia_max")
-    ia_min = rule.get("ia_min")
-    rec_f = rule.get("recuo_frontal_m")
-    rec_l = rule.get("recuo_lateral_m")
-    rec_fd = rule.get("recuo_fundos_m")
-    g_m = rule.get("gabarito_m")
-    g_pav = rule.get("gabarito_pav")
+        rec_fr = _num(rule.get("recuo_frontal_m"))
+        rec_lat = _num(rule.get("recuo_lateral_m"))
+        rec_fun = _num(rule.get("recuo_fundos_m"))
 
-    area_min = rule.get("area_min_lote_m2")
-    area_max = rule.get("area_max_lote_m2")
-    test_min_meio = rule.get("testada_min_meio_m")
-    test_min_esq = rule.get("testada_min_esquina_m")
-    test_max = rule.get("testada_max_m")
+        area_min = _num(rule.get("area_min_lote_m2"))
+        area_max = _num(rule.get("area_max_lote_m2"))
 
-    to_sub = rule.get("to_sub_max")
-    if to_sub is None:
-        to_sub = rule.get("to_subsolo_max")
+        test_min_meio = _num(rule.get("testada_min_meio_m"))
+        test_min_esq = _num(rule.get("testada_min_esquina_m"))
+        test_max = _num(rule.get("testada_max_m"))
 
-    # Exibição em 2 colunas (sem depender de pandas)
-    left, right = st.columns(2)
+        gab_m = _num(rule.get("gabarito_m"))
+        gab_pav = rule.get("gabarito_pav")
 
-    with left:
-        st.write(f"**Zona:** {zone or '—'}")
-        st.write(f"**TP mínima:** {_fmt_num(tp_min_pct, suffix='%')}")
-        st.write(f"**TO máxima:** {_fmt_num(to_max_pct, suffix='%')}")
-        st.write(f"**TO do Subsolo máxima:** {_fmt_num(to_sub, suffix='%')}")
-        st.write(f"**IA máximo:** {_fmt_num(ia_max, decimals=3)}")
-        st.write(f"**IA mínimo:** {_fmt_num(ia_min, decimals=3)}")
+        # lote esquina (apenas informativo por enquanto)
+        is_corner = bool(calc.get("lote_esquina") or st.session_state.get("lote_esquina", False))
+        st.write(f"**Situação do lote:** {'Esquina' if is_corner else 'Meio de quadra'}")
 
-        st.write(f"**Recuo de Frente:** {_fmt_num(rec_f, suffix=' m')}")
-        st.write(f"**Recuo Lateral:** {_fmt_num(rec_l, suffix=' m')}")
-        st.write(f"**Recuo de Fundo:** {_fmt_num(rec_fd, suffix=' m')}")
+        # Mostra os campos solicitados (sempre)
+        r1, r2, r3 = st.columns(3)
+        r1.metric("TP mínima", _fmt(tp_min_pct, "%"))
+        r2.metric("TO máxima", _fmt(to_max_pct, "%"))
+        r3.metric("TO subsolo máx", _fmt(to_sub_pct, "%"))
 
-    with right:
-        st.write(f"**Área mínima do lote:** {_fmt_num(area_min, suffix=' m²')}")
-        st.write(f"**Área máxima do lote:** {_fmt_num(area_max, suffix=' m²')}")
-        st.write(f"**Testada mínima (meio):** {_fmt_num(test_min_meio, suffix=' m')}")
-        st.write(f"**Testada mínima (esquina):** {_fmt_num(test_min_esq, suffix=' m')}")
-        st.write(f"**Testada máxima:** {_fmt_num(test_max, suffix=' m')}")
+        r4, r5, r6 = st.columns(3)
+        r4.metric("IA máximo", _fmt(ia_max))
+        r5.metric("IA mínimo", _fmt(ia_min))
+        r6.metric("Altura máx (gabarito)", (f"{_fmt(gab_m, ' m')} | {gab_pav} pav." if gab_pav is not None else _fmt(gab_m, ' m')))
 
-        # Gabarito
-        if g_m is None and g_pav is None:
-            st.write("**Altura máxima (gabarito):** —")
-        else:
-            if g_pav is not None:
-                st.write(f"**Altura máxima (gabarito):** {_fmt_num(g_m, suffix=' m')} (≈ {g_pav} pav.)")
-            else:
-                st.write(f"**Altura máxima (gabarito):** {_fmt_num(g_m, suffix=' m')}")
+        r7, r8, r9 = st.columns(3)
+        r7.metric("Recuo de Frente", _fmt(rec_fr, " m"))
+        r8.metric("Recuo Lateral", _fmt(rec_lat, " m"))
+        r9.metric("Recuo de Fundo", _fmt(rec_fun, " m"))
 
-    st.divider()
+        r10, r11, r12 = st.columns(3)
+        r10.metric("Área mín do lote", _fmt(area_min, " m²"))
+        r11.metric("Área máx do lote", _fmt(area_max, " m²"))
+        r12.metric("Testada máx", _fmt(test_max, " m"))
 
-    st.markdown("### Dados do lote (informados)")
-    st.write(f"**Área do lote:** {_fmt_num(lot_area, suffix=' m²')}")
-    st.write(f"**Dimensões:** {_fmt_num(lot_front, suffix=' m')} × {_fmt_num(lot_depth, suffix=' m')}")
-    st.write(f"**Situação:** {'Esquina' if is_corner else 'Meio de quadra'}")
+        # Testadas mínimas (mostrar as duas por enquanto)
+        st.markdown("**Testada mínima:**")
+        ctm1, ctm2 = st.columns(2)
+        ctm1.write(f"- Meio de quadra: **{_fmt(test_min_meio, ' m')}**")
+        ctm2.write(f"- Esquina: **{_fmt(test_min_esq, ' m')}**")
 
-    with st.expander("Ver dados brutos (calc/rule)"):
-        st.json({"calc": calc, "rule": rule})
+        with st.expander("Ver regra completa (JSON)"):
+            st.json(rule)
+
+    # --- Cálculos ---
+    st.markdown("### Cálculos")
+    basic = calc.get("basic") or {}
+    if isinstance(basic, dict) and basic:
+        st.json(basic)
+    else:
+        st.info("Cálculos ainda não disponíveis (clique em **Calcular viabilidade**).")
