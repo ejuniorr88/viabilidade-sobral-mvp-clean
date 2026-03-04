@@ -1,7 +1,39 @@
 from __future__ import annotations
 
 import streamlit as st
-from pathlib import Path
+import os
+import json
+
+
+def _build_public_storage_url(bucket: str, path: str) -> str | None:
+    """Monta a URL pública do Supabase Storage (bucket público)."""
+    base = os.getenv('SUPABASE_URL', '').rstrip('/')
+    if not base or not bucket or not path:
+        return None
+    path = path.lstrip('/')
+    return f"{base}/storage/v1/object/public/{bucket}/{path}"
+
+
+def _extract_figures_from_rule(rule: Dict[str, Any]) -> list[Dict[str, Any]]:
+    """Lê src.figures (ou src.figuras) da regra do Supabase."""
+    if not isinstance(rule, dict):
+        return []
+    src = rule.get('src') or {}
+    if isinstance(src, str):
+        try:
+            src = json.loads(src)
+        except Exception:
+            src = {}
+    if not isinstance(src, dict):
+        return []
+    figs = src.get('figures') or src.get('figuras') or []
+    if not isinstance(figs, list):
+        return []
+    out: list[Dict[str, Any]] = []
+    for it in figs:
+        if isinstance(it, dict) and it.get('bucket') and it.get('path'):
+            out.append(it)
+    return out
 from typing import Any, Dict
 
 
@@ -348,24 +380,30 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
 - Altura máxima do degrau: 0,19m.  
 """
     )
-    
+
+
     # =============================
-    # DICAS VALIOSAS (fixo e acumulativo)
+    # FIGURAS ANEXAS (Supabase Storage) - Anexo V
     # =============================
-    dicas_path = Path('data') / 'dicas_valiosas.md'
-    if dicas_path.exists():
-        st.markdown(dicas_path.read_text(encoding='utf-8'))
-    else:
-        st.markdown(
-            """## 💡 Dicas Valiosas:
-
-**• Largura dos passeios (calçadas)**  
-Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via; na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garantindo continuidade e alinhamento, sendo a análise do licenciamento voltada a confirmar que a proposta não avança sobre a área pública.
-
-**• Piscinas e cálculo de TO/TP (Art. 144)**  
-Se for construída uma piscina, ela não é computada como área construída e, por isso, não entra no cálculo da Taxa de Ocupação (TO). Porém, para a Taxa de Permeabilidade (TP), a piscina é considerada área impermeável, reduzindo a área permeável do lote. Além disso, conforme o Art. 144, piscinas, espelhos d’água, caixas d’água, cisternas e tanques devem manter afastamento mínimo de 0,50 m de todas as divisas do terreno e sempre ser computados como área impermeável no cálculo da TP.
-"""
-        )
-
+    figs = _extract_figures_from_rule(rule)
+    if figs:
+        st.markdown("---\n### 📎 Figuras anexas (Anexo V)")
+        for f in figs:
+            title = f.get('title') or f.get('titulo')
+            caption = f.get('caption') or f.get('legenda')
+            bucket = f.get('bucket')
+            path = f.get('path')
+            url = _build_public_storage_url(bucket, path) if isinstance(bucket, str) and isinstance(path, str) else None
+            if title:
+                st.markdown(f"**{title}**")
+            if url:
+                try:
+                    st.image(url, caption=caption or title or '', use_container_width=True)
+                except Exception:
+                    st.markdown(f"Imagem: {bucket}/{path}")
+            else:
+                st.markdown(f"Imagem: {bucket}/{path}")
+            if caption and caption != title:
+                st.caption(caption)
     with st.expander("Ver regra completa (JSON)"):
         st.json(rule)
