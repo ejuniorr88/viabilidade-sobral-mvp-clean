@@ -57,6 +57,7 @@ def render_analise_section(
 
     lot_area_f = _to_float_ptbr(lot_area, 0.0) or 0.0
     built_ground_in = _to_float_ptbr(built_ground, 0.0) or 0.0
+    calc["built_ground_input_m2"] = built_ground_in
     permeable_area_in = _to_float_ptbr(permeable_area, 0.0) or 0.0
 
     # regra (normalizada)

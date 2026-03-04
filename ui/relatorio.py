@@ -4,6 +4,15 @@ import streamlit as st
 from typing import Any, Dict
 
 
+def _safe_float(v: Any) -> float | None:
+    try:
+        if v is None or v == "":
+            return None
+        return float(v)
+    except Exception:
+        return None
+
+
 def _fmt_num(v: Any, dec: int = 2) -> str:
     try:
         if v is None:
@@ -64,7 +73,12 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     lot_area = float(calc.get("lot_area_m2") or 0.0)
     testada = float(st.session_state.get("lot_front_m") or 0.0)
     profund = float(st.session_state.get("lot_depth_m") or 0.0)
-    is_corner = bool(st.session_state.get("lote_esquina") or st.session_state.get("lot_is_corner") or calc.get("lote_esquina") or False)
+    is_corner = bool(
+        st.session_state.get("lote_esquina")
+        or st.session_state.get("lot_is_corner")
+        or calc.get("lote_esquina")
+        or False
+    )
     tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     # regra normalizada
@@ -179,6 +193,17 @@ Nesse caso, você pode utilizar no térreo até o limite permitido pela TO.
         if A_op2 is not None:
             st.markdown(f"👉 **Térreo máximo nesta opção:** **{_fmt_num(A_op2)} m²**")
 
+        # Se o usuário informou área pretendida no térreo, usar nos cálculos (limitada ao máximo permitido)
+        A_user = _safe_float(calc.get("built_ground_input_m2"))
+        A_adopt = _safe_float(calc.get("built_ground_adopted_m2"))
+        if A_user is not None and A_user > 0 and A_adopt is not None:
+            if A_adopt < A_user:
+                st.warning(
+                    f"Área pretendida no térreo ({_fmt_num(A_user)} m²) excede o permitido; os cálculos usam {_fmt_num(A_adopt)} m²."
+                )
+            else:
+                st.info(f"Área pretendida no térreo informada: {_fmt_num(A_adopt)} m² (usada nos cálculos abaixo).")
+
     st.markdown("---\n### 🌿 2️⃣ Quanto preciso deixar livre?")
     if tp_min is None or A_perm_min is None:
         st.info("Sem TP mínima cadastrada para esta zona/uso.")
@@ -190,11 +215,42 @@ Nesse caso, você pode utilizar no térreo até o limite permitido pela TO.
 """
         )
 
-        if tp1 is not None and A_op1 is not None:
-            A_rest, A_imperm = tp1
-            st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
+        # ✅ Cenário usando a área pretendida (se informada) ou o máximo (padrão)
+        A_user = _safe_float(calc.get("built_ground_input_m2"))
+        A_adopt = _safe_float(calc.get("built_ground_adopted_m2"))
+        A_used = None
+        if A_user is not None and A_user > 0:
+            A_used = A_adopt if (A_adopt is not None and A_adopt > 0) else A_user
+        else:
+            # sem área informada: usar o máximo da Opção 2, se existir; senão, o da Opção 1
+            if A_op2 is not None:
+                A_used = A_op2
+            elif A_op1 is not None:
+                A_used = A_op1
+
+        if A_used is not None:
+            A_rest_used = A - A_used
+            A_imperm_used = A_rest_used - A_perm_min
+            st.markdown("✅ **Cenário com a área adotada para o seu projeto**")
             st.markdown(
-                f"""Se você utilizar **{_fmt_num(A_op1)} m²** no térreo:
+                f"""Se você utilizar **{_fmt_num(A_used)} m²** no térreo:
+
+Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_used)} m² = {_fmt_num(A_rest_used)} m²**
+
+Desses:
+
+- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo
+- **{_fmt_num(A_imperm_used)} m²** podem receber piso impermeável
+"""
+            )
+
+        # ✅ FIX: bloco indentado corretamente dentro do expander
+        with st.expander("Ver cenários usando os máximos das opções"):
+            if tp1 is not None and A_op1 is not None:
+                A_rest, A_imperm = tp1
+                st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
+                st.markdown(
+                    f"""Se você utilizar **{_fmt_num(A_op1)} m²** no térreo:
 
 Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_op1)} m² = {_fmt_num(A_rest)} m²**
 
@@ -203,13 +259,13 @@ Desses:
 - **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo
 - **{_fmt_num(A_imperm)} m²** podem receber piso impermeável
 """
-            )
+                )
 
-        if tp2 is not None and A_op2 is not None:
-            A_rest, A_imperm = tp2
-            st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
-            st.markdown(
-                f"""Se você utilizar **{_fmt_num(A_op2)} m²** no térreo:
+            if tp2 is not None and A_op2 is not None:
+                A_rest, A_imperm = tp2
+                st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
+                st.markdown(
+                    f"""Se você utilizar **{_fmt_num(A_op2)} m²** no térreo:
 
 Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_op2)} m² = {_fmt_num(A_rest)} m²**
 
@@ -218,9 +274,11 @@ Desses:
 - **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo
 - **{_fmt_num(A_imperm)} m²** podem receber piso impermeável
 """
-            )
+                )
 
-        st.markdown("\n🧱 **Tipos de piso e quanto contam como permeáveis**\n(Lei Complementar nº 90/2023 – Art. 108)\n")
+        st.markdown(
+            "\n🧱 **Tipos de piso e quanto contam como permeáveis**\n(Lei Complementar nº 90/2023 – Art. 108)\n"
+        )
         st.markdown(
             _md_table(
                 [
@@ -260,7 +318,6 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
     # QUADRO TÉCNICO (Anexo II) - placeholder simples (mantém sem quebrar)
     # =============================
     st.markdown("---\n### 🧾 QUADRO TÉCNICO – PARÂMETROS DOS AMBIENTES\n(Lei Complementar nº 90/2023 – Anexo II)")
-    # Tabela fixa (sem índice)
     st.markdown(
         """| AMBIENTE | CÍRCULO INSCRITO | ÁREA MÍNIMA | ILUMINAÇÃO | VENTILAÇÃO | PÉ-DIREITO | OBS. |
 |---|---:|---:|---:|---:|---:|---|
