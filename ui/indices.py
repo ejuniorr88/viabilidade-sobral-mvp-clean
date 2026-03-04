@@ -131,6 +131,15 @@ def render_indices_section(
 
     # Garantir regra no calc (sem mudar o fluxo)
     rule = calc.get("rule")
+    # Se estamos em ZEIP e a regra carregada não corresponde ao setor atual, recarregar
+    try:
+        desired_subzone = calc.get('subzone_code') or 'PADRAO'
+        rule_subzone = (rule or {}).get('subzone_code') if isinstance(rule, dict) else None
+        if (calc.get('zone') == 'ZEIP' or calc.get('zone_sigla') == 'ZEIP') and rule and rule_subzone and rule_subzone != desired_subzone:
+            rule = None
+            calc.pop('rule', None)
+    except Exception:
+        pass
     if not rule and get_rule_func is not None:
         try:
             rule = get_rule_func(zone_sigla=zone, use_type_code=use_type, subzone_code=calc.get('subzone_code','PADRAO'))
