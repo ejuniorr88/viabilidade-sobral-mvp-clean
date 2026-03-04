@@ -388,22 +388,27 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
     figs = _extract_figures_from_rule(rule)
     if figs:
         st.markdown("---\n### 📎 Figuras anexas (Anexo V)")
-        for f in figs:
-            title = f.get('title') or f.get('titulo')
-            caption = f.get('caption') or f.get('legenda')
-            bucket = f.get('bucket')
-            path = f.get('path')
-            url = _build_public_storage_url(bucket, path) if isinstance(bucket, str) and isinstance(path, str) else None
-            if title:
-                st.markdown(f"**{title}**")
-            if url:
-                try:
-                    st.image(url, caption=caption or title or '', use_container_width=True)
-                except Exception:
-                    st.markdown(f"Imagem: {bucket}/{path}")
-            else:
-                st.markdown(f"Imagem: {bucket}/{path}")
-            if caption and caption != title:
-                st.caption(caption)
+        # Exibir 2 imagens por linha (duas colunas)
+        for i in range(0, len(figs), 2):
+            cols = st.columns(2)
+            pair = figs[i:i+2]
+            for col, f in zip(cols, pair):
+                with col:
+                    title = f.get('title') or f.get('titulo')
+                    caption = f.get('caption') or f.get('legenda')
+                    bucket = f.get('bucket')
+                    path = f.get('path')
+                    url = _build_public_storage_url(bucket, path) if isinstance(bucket, str) and isinstance(path, str) else None
+                    if title:
+                        st.markdown(f"**{title}**")
+                    if url:
+                        try:
+                            st.image(url, caption=caption or title or '', use_container_width=True)
+                        except Exception:
+                            st.markdown(f"Imagem: {bucket}/{path}")
+                    else:
+                        st.markdown(f"Imagem: {bucket}/{path}")
+                    if caption and caption != title:
+                        st.caption(caption)
     with st.expander("Ver regra completa (JSON)"):
         st.json(rule)
