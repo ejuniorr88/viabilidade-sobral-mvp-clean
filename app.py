@@ -73,34 +73,12 @@ if "selected_lat" not in st.session_state:
 if "selected_lon" not in st.session_state:
     st.session_state.selected_lon = None
 
-# A UI usa st.session_state.calc (dict) - contrato mínimo
+# A UI usa st.session_state.calc (dict)
 if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
     st.session_state.calc = {}
 
-# contrato (não mudar chaves; outras seções dependem)
-_calc_defaults = {
-    "ok": False,
-    "err": None,
-    "zone": None,
-    "zone_sigla": None,  # alias compat
-    "use_type_code": "RES_UNI",
-    "street_info": None,
-    "street_name": None,
-    "street_type": None,
-    "street_dist": None,
-    "via_nome": None,
-    "via_tipo": None,
-    "via_dist_m": None,
-    "rule": None,
-    "ia_utilizado": None,
-    "to_utilizada_pct": None,
-    "tp_prevista_pct": None,
-    "basic": None,
-}
-
-for _k, _v in _calc_defaults.items():
-    st.session_state.calc.setdefault(_k, _v)
-
+# valor default do tipo de uso
+st.session_state.calc.setdefault("use_type_code", "RES_UNI")
 
 
 # =============================
@@ -136,7 +114,15 @@ calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
 # =============================
 # 2) Dados do lote (RETORNA 3 valores SEM erro)
 # =============================
-lot_area, built_ground, permeable_area = render_lote_section()
+lot_area, built_ground, permeable_area = render_lote_section\(\)
+# Guarda inputs do lote no calc (para relatório)
+calc = st.session_state.calc
+calc["lot_area_m2"] = float(lot_area)
+calc["built_ground_m2_input"] = float(built_ground)
+calc["permeable_area_m2_input"] = float(permeable_area)
+calc["testada_m"] = float(st.session_state.get("lot_front_m") or 0.0)
+calc["profundidade_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
+
 
 # =============================
 # 3) Localização (zona + via)
@@ -148,7 +134,7 @@ _ = render_localizacao_section(calcular, zones_prepared, radius_m)
 # Opção B: garantir que a REGRA vem do Supabase assim que tiver zona
 # =============================
 calc = st.session_state.calc
-if calcular and calc.get("ok") and calc.get("zone") and not calc.get("rule") and not calc.get("err"):
+if calcular and calc.get("zone") and not calc.get("rule") and not calc.get("err"):
     try:
         rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
         if rule:
@@ -178,18 +164,3 @@ render_analise_section(
 # 6) Relatório Urbanístico
 # =============================
 render_relatorio_section(calc)
-
-
-# =============================
-# Diagnóstico técnico (opcional)
-# =============================
-with st.expander("🛠️ Diagnóstico técnico (para debug / deploy)"):
-    st.write("Python:", os.sys.version)
-    st.write("Supabase env vars presentes:",
-             bool(os.getenv("SUPABASE_URL")),
-             bool(os.getenv("SUPABASE_ANON_KEY")))
-    st.write("Último clique no mapa (last_click):", st.session_state.get("last_click"))
-    st.write("Raio atual (radius_m):", radius_m)
-    st.write("Lote (inputs):", {"lot_area": lot_area, "built_ground": built_ground, "permeable_area": permeable_area})
-    st.subheader("calc (estado completo)")
-    st.json(st.session_state.calc)
