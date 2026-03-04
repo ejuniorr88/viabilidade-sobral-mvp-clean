@@ -11,8 +11,15 @@ except Exception:
 
 from core.streets import find_street
 
+# ZEIP sectors (subzone_code)
+try:
+    from core.zeip_sectors import zeip_sector_from_latlon
+except Exception:
+    zeip_sector_from_latlon = None  # type: ignore
+
 
 def _coerce_call(args, kwargs) -> Tuple[bool, Any, int]:
+    """Compatibilidade com app.py: render_localizacao_section(calcular, zones_prepared, radius_m)."""
     if len(args) >= 3 and isinstance(args[0], (bool, int)):
         return bool(args[0]), args[1], int(args[2])
     return bool(kwargs.get("calcular", False)), kwargs.get("zones_prepared"), int(kwargs.get("radius_m", 150))
@@ -31,11 +38,7 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
     calc = st.session_state.calc
 
-    # Recalcula quando o usuário clica em 'Calcular' OU quando o ponto mudou (evita zona travada)
-    current_hash = st.session_state.get('click_hash')
-    point_changed = bool(current_hash) and (current_hash != calc.get('_click_hash')) and bool(getattr(st.session_state, 'last_click', None))
-
-    if calcular or point_changed:
+    if calcular:
         if not getattr(st.session_state, "last_click", None):
             calc["ok"] = False
             calc["err"] = "Clique no mapa para definir o ponto."
@@ -47,8 +50,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
             calc["lon"] = lon
             calc["use_type_code"] = use_type_code
             calc["radius_m"] = int(radius_m)
-            if current_hash:
-                calc["_click_hash"] = current_hash
 
             zone = zone_from_latlon(zones_prepared, lat, lon) if zones_prepared else None
             street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
@@ -70,6 +71,24 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                 calc["street_name"] = None
                 calc["street_type"] = None
                 calc["street_dist"] = None
+
+            # Subzona / Setor ZEIP
+            prev_sub = calc.get("subzone_code") or "PADRAO"
+            subzone = "PADRAO"
+            if zone == "ZEIP" and zeip_sector_from_latlon:
+                try:
+                    subzone = zeip_sector_from_latlon(lat, lon) or "PADRAO"
+                except Exception:
+                    subzone = "PADRAO"
+            calc["subzone_code"] = subzone
+
+            # Se o setor mudou, forçar recarregar regra/cálculos (evita ficar preso em PADRAO)
+            if zone == "ZEIP" and subzone != prev_sub:
+                calc.pop("rule", None)
+                calc["basic"] = None
+                calc["ia_utilizado"] = None
+                calc["to_utilizada_pct"] = None
+                calc["tp_prevista_pct"] = None
 
             if not zone:
                 calc["ok"] = False
@@ -93,10 +112,16 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
         st.write("Tipo de via")
         st.write(via_tipo or "—")
 
+    # Mostrar setor ZEIP (sem alterar layout)
+    if zone == "ZEIP":
+        st.caption(f"Setor ZEIP: {calc.get('subzone_code','PADRAO')}")
+
     dist = calc.get("via_dist_m") if calc.get("via_dist_m") is not None else calc.get("street_dist")
     if dist is not None:
         try:
-            st.caption(f"Distância até o eixo da via: {float(dist):.1f} m (raio {float(calc.get('radius_m') or radius_m):.0f} m).")
+            st.caption(
+                f"Distância até o eixo da via: {float(dist):.1f} m (raio {float(calc.get('radius_m') or radius_m):.0f} m)."
+            )
         except Exception:
             pass
 
