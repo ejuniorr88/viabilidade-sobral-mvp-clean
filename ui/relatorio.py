@@ -2,73 +2,90 @@ import streamlit as st
 from typing import Any, Dict
 
 
+def _first(calc: Dict[str, Any], *keys: str) -> Any:
+    for k in keys:
+        if k in calc and calc.get(k) not in (None, ""):
+            return calc.get(k)
+    return None
+
+
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
-    """Renderiza um resumo/relatório final.
+    """Relatório final (compatível com chaves antigas e novas).
 
-    Este módulo já estava corrompido no branch (SyntaxError).
-    Mantive um relatório simples, mas compatível com a estrutura calc usada no app.
+    Não quebra se calc estiver incompleto.
     """
-
     st.subheader("6) Relatório Urbanístico")
 
     if not isinstance(calc, dict) or not calc:
         st.info("Preencha os dados e clique em **Calcular viabilidade** para gerar o relatório.")
         return
 
-    zone_sigla = calc.get("zone_sigla")
-    street_name = calc.get("street_name")
-    street_type = calc.get("street_type")
-    street_dist = calc.get("street_dist")
-    use_type_code = calc.get("use_type_code")
+    zone = _first(calc, "zone", "zone_sigla")
+    via_nome = _first(calc, "via_nome", "street_name")
+    via_tipo = _first(calc, "via_tipo", "street_type")
+    via_dist = _first(calc, "via_dist_m", "street_dist")
+    use_type_code = _first(calc, "use_type_code")
 
     st.markdown("### Identificação")
     c1, c2, c3 = st.columns(3)
-    c1.write(f"**Zona:** {zone_sigla or '—'}")
-    c2.write(f"**Via:** {street_name or '—'}")
+    c1.write(f"**Zona:** {zone or '—'}")
+    c2.write(f"**Via:** {via_nome or '—'}")
     c3.write(f"**Uso:** {use_type_code or '—'}")
 
-    if street_type or street_dist is not None:
+    if via_tipo or via_dist is not None:
         st.caption(
-            f"Tipo de via: {street_type or '—'} | Distância: {street_dist if street_dist is not None else '—'} m"
+            f"Tipo de via: {via_tipo or '—'} | Distância: {f'{float(via_dist):.1f}' if isinstance(via_dist, (int,float)) else (via_dist or '—')} m"
         )
 
-    st.markdown("### Índices e parâmetros (regra)")
+    st.markdown("### Índices e parâmetros (regra Supabase)")
     rule = calc.get("rule") or {}
     if isinstance(rule, dict) and rule:
-        # mostra apenas campos comuns
-        keys = [
+        shown_keys = [
             "ia_max",
             "to_max",
             "tp_min",
-            "recuo_frontal_min",
-            "recuo_lateral_min",
-            "recuo_fundos_min",
-            "height_max_m",
+            "recuo_frontal_m",
+            "recuo_lateral_m",
+            "recuo_fundos_m",
+            "gabarito_m",
+            "gabarito_pav",
+            "allow_attach_one_side",
+            "observacoes",
             "notes",
+            "special_area_tag",
+            "source_ref",
         ]
-        shown = {k: rule.get(k) for k in keys if k in rule}
+        shown = {k: rule.get(k) for k in shown_keys if k in rule}
         st.json(shown if shown else rule)
     else:
-        st.info("Nenhuma regra carregada ainda (verifique o Supabase / seleção de uso e zona).")
+        st.info("Nenhuma regra carregada (verifique Supabase / zona / uso).")
 
-    st.markdown("### Cálculos básicos")
+    st.markdown("### Cálculos")
     basic = calc.get("basic") or {}
     if isinstance(basic, dict) and basic:
         st.json(basic)
     else:
-        st.info("Cálculos básicos ainda não disponíveis.")
+        # fallback: usa campos diretos
+        st.json(
+            {
+                "ia_utilizado": calc.get("ia_utilizado"),
+                "to_utilizada_pct": calc.get("to_utilizada_pct"),
+                "tp_prevista_pct": calc.get("tp_prevista_pct"),
+            }
+        )
 
     st.markdown("### Quadro final")
-    # Quadro final simples (sem inventar norma)
     st.write(
         {
-            "Zona": zone_sigla,
-            "Via": street_name,
-            "Tipo de via": street_type,
-            "Distância à via (m)": street_dist,
+            "OK": bool(calc.get("ok")),
+            "Erro/Pendências": calc.get("err"),
+            "Zona": zone,
+            "Via": via_nome,
+            "Tipo de via": via_tipo,
+            "Distância à via (m)": via_dist,
             "Uso": use_type_code,
-            "IA calculado": (basic.get("ia") if isinstance(basic, dict) else None),
-            "TO calculada": (basic.get("to") if isinstance(basic, dict) else None),
-            "TP calculada": (basic.get("tp") if isinstance(basic, dict) else None),
+            "IA utilizado": calc.get("ia_utilizado"),
+            "TO utilizada (%)": calc.get("to_utilizada_pct"),
+            "TP prevista (%)": calc.get("tp_prevista_pct"),
         }
     )
