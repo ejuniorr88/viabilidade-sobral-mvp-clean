@@ -13,65 +13,17 @@ except Exception:  # pragma: no cover
 def _require_env(name: str) -> str:
     v = os.getenv(name, "").strip()
     if not v:
-        raise RuntimeError(f"Variável de ambiente ausente: {name} (configure em Streamlit → Settings → Secrets)")
+        raise RuntimeError(f"Variável de ambiente ausente: {name}")
     return v
 
 
 def get_supabase():
-    """Cria client do Supabase (supabase-py) usando Secrets:
-      - SUPABASE_URL
-      - SUPABASE_ANON_KEY
-    """
+    """Cria client do Supabase usando SUPABASE_URL e SUPABASE_ANON_KEY."""
     if create_client is None:
-        raise RuntimeError("Pacote 'supabase' não está instalado. Adicione em requirements.txt: supabase==2.28.0")
+        raise RuntimeError("Pacote 'supabase' não está instalado. Adicione: supabase==2.28.0")
     url = _require_env("SUPABASE_URL")
     key = _require_env("SUPABASE_ANON_KEY")
     return create_client(url, key)
-
-
-def _jsonify_value(v: Any) -> Any:
-    """Converte tipos não-JSON (Decimal, datetime, etc.) para algo serializável."""
-    # Decimal -> float
-    try:
-        import decimal
-        if isinstance(v, decimal.Decimal):
-            return float(v)
-    except Exception:
-        pass
-    # bytes -> str
-    if isinstance(v, (bytes, bytearray)):
-        try:
-            return v.decode("utf-8", errors="ignore")
-        except Exception:
-            return str(v)
-    return v
-
-
-def normalize_rule(rule: Any) -> Optional[Dict[str, Any]]:
-    if rule is None:
-        return None
-    if isinstance(rule, list):
-        rule = rule[0] if rule else None
-    if rule is None:
-        return None
-    if not isinstance(rule, dict):
-        try:
-            rule = dict(rule)  # type: ignore
-        except Exception:
-            return None
-
-    out: Dict[str, Any] = {}
-    for k, v in rule.items():
-        out[k] = _jsonify_value(v)
-
-    # aliases úteis (mantém compat sem duplicar lógica na UI)
-    # schema real: to_max / tp_min / ia_max
-    if "to_max" in out and "to_max_pct" not in out:
-        out["to_max_pct"] = out["to_max"]
-    if "tp_min" in out and "tp_min_pct" not in out:
-        out["tp_min_pct"] = out["tp_min"]
-
-    return out
 
 
 def pick_value(obj: Dict[str, Any], *keys: str, default: Any = None) -> Any:
@@ -82,28 +34,93 @@ def pick_value(obj: Dict[str, Any], *keys: str, default: Any = None) -> Any:
 
 
 def pick_rule(rule: Any, *keys: str, default: Any = None) -> Any:
-    nr = normalize_rule(rule)
-    if not nr:
+    if isinstance(rule, list):
+        rule = rule[0] if rule else {}
+    if not isinstance(rule, dict):
         return default
-    return pick_value(nr, *keys, default=default)
+    return pick_value(rule, *keys, default=default)
 
 
-@lru_cache(maxsize=512)
-def fetch_rule(zone_sigla: str, use_type_code: str) -> Optional[Dict[str, Any]]:
-    """Busca a regra em public.zone_rules filtrando por zone_sigla + use_type_code.
+def _to_float(v: Any) -> Optional[float]:
+    if v is None or v == "":
+        return None
+    if isinstance(v, bool):
+        return float(v)
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        return float(v)  # Decimal etc.
+    except Exception:
+        return None
 
-    Observação: esta função tem cache em memória (por processo) via lru_cache.
-    """
+
+def normalize_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
+    """Garante to_max_pct e tp_min_pct em % (0..100), mesmo que só exista fração (0..1)."""
+    if not isinstance(rule, dict):
+        return {}
+    r = dict(rule)
+
+    to_pct = _to_float(r.get("to_max_pct"))
+    if to_pct is None:
+        to_frac = _to_float(r.get("to_max"))
+        to_pct = (to_frac * 100.0) if to_frac is not None else None
+    if to_pct is not None:
+        r["to_max_pct"] = float(to_pct)
+
+    tp_pct = _to_float(r.get("tp_min_pct"))
+    if tp_pct is None:
+        tp_frac = _to_float(r.get("tp_min"))
+        tp_pct = (tp_frac * 100.0) if tp_frac is not None else None
+    if tp_pct is not None:
+        r["tp_min_pct"] = float(tp_pct)
+
+    ia_max = _to_float(r.get("ia_max"))
+    if ia_max is not None:
+        r["ia_max"] = float(ia_max)
+
+    for k in ["recuo_frontal_m","recuo_lateral_m","recuo_fundos_m","gabarito_m",
+              "area_min_lote_m2","testada_min_meio_m","testada_min_esquina_m",
+              "ia_min","to_subsolo_max","to_sub_max","area_max_lote_m2","testada_max_m"]:
+        if k in r:
+            fv = _to_float(r.get(k))
+            if fv is not None:
+                r[k] = float(fv)
+
+    if "gabarito_pav" in r and r["gabarito_pav"] is not None:
+        try:
+            r["gabarito_pav"] = int(r["gabarito_pav"])
+        except Exception:
+            pass
+
+    return r
+
+
+@lru_cache(maxsize=256)
+def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO") -> Optional[Dict[str, Any]]:
+    """Busca regra em zone_rules por (zone_sigla,use_type_code,subzone_code='PADRAO')."""
     sb = get_supabase()
     q = (
         sb.table("zone_rules")
         .select("*")
         .eq("zone_sigla", zone_sigla)
         .eq("use_type_code", use_type_code)
+        .eq("subzone_code", subzone_code)
         .limit(1)
     )
     res = q.execute()
-    data = getattr(res, "data", None) or []
+    data = getattr(res, "data", None)
     if not data:
-        return None
+        # compat: bancos sem subzone_code
+        q2 = (
+            sb.table("zone_rules")
+            .select("*")
+            .eq("zone_sigla", zone_sigla)
+            .eq("use_type_code", use_type_code)
+            .limit(1)
+        )
+        res2 = q2.execute()
+        data2 = getattr(res2, "data", None)
+        if not data2:
+            return None
+        return normalize_rule(data2[0])
     return normalize_rule(data[0])
