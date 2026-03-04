@@ -409,7 +409,8 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
                     if url:
                         try:
                             st.image(url, caption=caption or title or '', use_container_width=True)
-                    st.markdown(f"[🔎 Abrir em tamanho real]({url})")
+
+                            st.markdown(f"[🔎 Abrir em tamanho real]({url})")
                         except Exception:
                             st.markdown(f"Imagem: {bucket}/{path}")
                     else:
