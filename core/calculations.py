@@ -117,3 +117,19 @@ def compute(
             "terreo_ok_envelope_std": (terreo <= env_std) if env_std > 0 else None,
         },
     }
+
+
+def calculate_basic_indices(
+    lote_area_m2: float,
+    area_construida_m2: float,
+    area_terreo_m2: float,
+    area_permeavel_m2: float,
+) -> dict:
+    """Backward-compatible helper used by older app.py versions."""
+    return compute(
+        lote_area_m2=lote_area_m2,
+        area_construida_m2=area_construida_m2,
+        area_terreo_m2=area_terreo_m2,
+        area_permeavel_m2=area_permeavel_m2,
+    )
+
