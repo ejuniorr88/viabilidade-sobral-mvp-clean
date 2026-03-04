@@ -12,8 +12,8 @@ def render_lote_section() -> Tuple[float, float, float]:
       (lot_area_m2, built_ground_m2, permeable_area_m2)
 
     - built_ground_m2: área pretendida no térreo.
-    - permeable_area_m2: calculada automaticamente (lot_area - built_ground).
-      **Não é um campo de input**: a TP será indicada a partir da TO.
+    - permeable_area_m2: calculada automaticamente (lot_area - built_ground),
+      mas o usuário pode ajustar se quiser (mantive o campo para compat).
     """
     st.subheader("2) Dados do lote")
 
@@ -25,6 +25,8 @@ def render_lote_section() -> Tuple[float, float, float]:
     with c3:
         st.number_input("Profundidade (m)", min_value=0.0, value=30.0, step=0.5, format="%.2f", key="lot_depth_m")
 
+    st.checkbox("Lote de esquina", key="lot_is_corner", help="Marque se o lote tiver duas frentes (esquina).")
+
     built_ground = st.number_input(
         "Área pretendida no térreo (m²) (se deixar 0, o relatório assume o máximo permitido)",
         min_value=0.0,
@@ -33,10 +35,17 @@ def render_lote_section() -> Tuple[float, float, float]:
         format="%.2f",
     )
 
-    # Permeável = lote - térreo (estimativa MVP)
-    permeable_area = max(0.0, float(lot_area) - float(built_ground))
+    # Permeável default = lote - térreo
+    default_perm = max(0.0, float(lot_area) - float(built_ground))
 
-    # Observação para o usuário (sem input)
-    st.caption("A área permeável é estimada automaticamente como (Área do lote − Área do térreo).")
+    # Mantive o campo para não quebrar layout antigo. Se quiser remover depois, eu removo.
+    permeable_area = st.number_input(
+        "Área permeável prevista (m²)",
+        min_value=0.0,
+        value=float(default_perm),
+        step=5.0,
+        format="%.2f",
+        help="Se não informar, usamos (Área do lote - Área do térreo).",
+    )
 
     return float(lot_area), float(built_ground), float(permeable_area)
