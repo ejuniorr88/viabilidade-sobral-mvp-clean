@@ -170,18 +170,14 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 
     # Opção 2 — Art.112 (texto aprovado por você)
     st.markdown("### ✅ Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)")
-    st.write(
-        "Por se tratar de **residência unifamiliar**, a legislação permite **zerar o recuo frontal e os recuos laterais**, "
-        "desde que sejam respeitados:
+    st.markdown("""
+Por se tratar de **residência unifamiliar**, a legislação permite **zerar o recuo frontal e os recuos laterais**, desde que sejam respeitados:
 
-"
-        "- **Taxa de Ocupação (TO) máxima**
-"
-        "- **Taxa de Permeabilidade (TP) mínima**
+- **Taxa de Ocupação (TO) máxima**
+- **Taxa de Permeabilidade (TP) mínima**
 
-"
-        "⚠ **O recuo de fundo permanece obrigatório.**"
-    )
+⚠ **O recuo de fundo permanece obrigatório.**
+""")
 
     # limite físico só pelo fundo
     if rfd is None:
@@ -253,13 +249,11 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     # 4) Estacionamento (texto fixo RES_UNI)
     st.markdown("## 🚗 4️⃣ Estacionamento")
     if str(uso).upper() == "RES_UNI":
-        st.write(
-            "De acordo com o Anexo IV da Lei Complementar nº 90/2023, "
-            "não há previsão de quantidade mínima obrigatória de vagas para residência unifamiliar.
+        st.markdown("""
+De acordo com o Anexo IV da Lei Complementar nº 90/2023, **não há previsão de quantidade mínima obrigatória de vagas para residência unifamiliar**.
 
-"
-            "A exigência de vagas aplica-se às residências multifamiliares e demais atividades listadas no Anexo IV."
-        )
+A exigência de vagas aplica-se às residências multifamiliares e demais atividades listadas no Anexo IV.
+""")
     else:
         st.info("Regras de estacionamento para este uso serão integradas via Anexo IV (em etapa futura do MVP).")
 
