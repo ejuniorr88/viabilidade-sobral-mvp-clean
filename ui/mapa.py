@@ -82,6 +82,28 @@ def render_mapa_section(
                 calc["err"] = None
                 # guarda o radius para manter consistência com o resto do app
                 calc["radius_m"] = int(radius_m)
+
+                # IMPORTANT: quando o clique muda, limpamos resultados dependentes do ponto,
+                # para evitar "zona travada" / regra antiga em novo ponto.
+                calc["zone"] = None
+                calc["zone_sigla"] = None
+                calc["via_nome"] = None
+                calc["via_tipo"] = None
+                calc["via_dist_m"] = None
+                calc["street_name"] = None
+                calc["street_type"] = None
+                calc["street_dist"] = None
+
+                # regra + cálculos
+                calc["rule"] = None
+                calc["basic"] = None
+                calc["ia_utilizado"] = None
+                calc["to_utilizada_pct"] = None
+                calc["tp_prevista_pct"] = None
+
+                # guarda o hash do clique para forçar recálculo no item 3
+                calc["_click_hash"] = new_hash
+
                 st.session_state[state_key_calc] = calc
 
             st.rerun()
