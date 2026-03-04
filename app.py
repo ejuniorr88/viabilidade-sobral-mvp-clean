@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import json
 import pathlib
@@ -7,7 +9,7 @@ from typing import Any, Dict
 import streamlit as st
 
 # =============================
-# Debug markers (remova depois)
+# Debug markers (garantir que o deploy está lendo o app.py correto)
 # =============================
 st.write("APP VERSION MARKER: 2026-03-03-XYZ")
 st.write("CWD:", os.getcwd())
@@ -25,15 +27,14 @@ ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 # =============================
 # Imports do projeto
 # =============================
+# Zonas (alguns branches renomearam o módulo)
 try:
     from core.zones_map import load_zones
 except Exception:
     from core.zones_mapa import load_zones  # type: ignore
 
 from core.streets import load_streets
-
-# SUPABASE (Opção B)
-from core.supabase_rules import fetch_rule, pick_rule, pick_value
+from core.supabase_rules import fetch_rule, pick_rule  # <-- IMPORT CERTO (busca + pick)
 
 # UI
 from ui.mapa import render_mapa_section
@@ -43,7 +44,6 @@ from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
 
-
 # =============================
 # Cache
 # =============================
@@ -52,17 +52,14 @@ def _zones_geojson() -> Dict[str, Any]:
     with open(ZONE_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-
 @st.cache_resource(show_spinner=False)
 def _zones_prepared():
     return load_zones(ZONE_FILE)
 
-
 @st.cache_resource(show_spinner=False)
 def _streets_index():
-    # core.streets.load_streets() pode usar data/ruas.json internamente
+    # core.streets.load_streets() já usa data/ruas.json internamente
     return load_streets()
-
 
 # =============================
 # Estado inicial
@@ -72,87 +69,69 @@ if "selected_lat" not in st.session_state:
 if "selected_lon" not in st.session_state:
     st.session_state.selected_lon = None
 
-# UI usa st.session_state.calc
-if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
+# A UI usa st.session_state.calc (dict)
+if "calc" not in st.session_state:
     st.session_state.calc = {}
 
+# default do tipo de uso
 st.session_state.calc.setdefault("use_type_code", "RES_UNI")
 
-
 # =============================
-# Carregar bases
+# Carregar bases (cache)
 # =============================
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
-_ = _streets_index()  # garante index/cache (se seu core.streets precisar)
-
+_ = _streets_index()  # só garante que ruas estão indexadas/cached
 
 # =============================
-# 1) Mapa
+# 1) Mapa (seleciona lat/lon e define raio)
 # =============================
 radius_m = render_mapa_section(zones_gj)
 
+# Botão (mantém o fluxo)
 calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
-
 
 # =============================
 # 2) Dados do lote
 # =============================
-lote = render_lote_section()  # <- seu ui/lote.py retorna dict
-
-# Normaliza campos esperados
-lot_area = float(lote.get("lot_area_m2") or 0.0)
-built_ground = float(lote.get("built_ground_m2") or 0.0)
-permeable_area = float(lote.get("permeable_area_m2") or 0.0)
-
+lot_area, built_ground, permeable_area = render_lote_section()
 
 # =============================
 # 3) Localização (zona + via)
 # =============================
-# Esperado: essa função preenche zone_sigla/via_nome etc dentro de st.session_state.calc
+# Isso deve preencher calc["zone"], calc["via_nome"], etc.
 _ = render_localizacao_section(calcular, zones_prepared, radius_m)
 
-
 # =============================
-# 4) Supabase (Opção B): buscar regra e salvar em calc
+# “Armar” calc.ok no clique do botão
 # =============================
 if calcular:
-    zone_sigla = st.session_state.calc.get("zone_sigla") or st.session_state.calc.get("zone")
-    use_type_code = st.session_state.calc.get("use_type_code", "RES_UNI")
-
-    st.session_state.calc["ok"] = False
+    # reset básico de erros para novo cálculo
     st.session_state.calc["err"] = None
-    st.session_state.calc["rule"] = None
-
-    if not zone_sigla:
+    # se a zona foi encontrada na seção 3, então ok = True
+    if st.session_state.calc.get("zone"):
+        st.session_state.calc["ok"] = True
+    else:
+        st.session_state.calc["ok"] = False
         st.session_state.calc["err"] = "Zona não definida (clique no mapa e calcule)."
-    else:
-        try:
-            rule = fetch_rule(str(zone_sigla), str(use_type_code))
-            st.session_state.calc["rule"] = rule
-            st.session_state.calc["zone"] = str(zone_sigla)
-            st.session_state.calc["ok"] = True
-            if rule is None:
-                st.session_state.calc["err"] = "Nenhuma regra encontrada no Supabase para (zona + uso)."
-        except Exception as e:
-            st.session_state.calc["err"] = f"Erro ao consultar Supabase: {e!s}"
-
+        st.session_state.calc["rule"] = None
 
 # =============================
-# 4) Índices Urbanísticos (render)
+# 4) Índices Urbanísticos (Supabase)
 # =============================
-def _card(title: str, value: Any, suffix: str = "") -> None:
-    if value is None or value == "":
-        st.metric(title, "—")
-    else:
-        st.metric(title, f"{value}{suffix}")
+# IMPORTANTE: passar get_rule_func para a Opção B funcionar
+# card_func: se você já tem um card helper em algum lugar, troque aqui.
+# Se não tiver, usamos um fallback simples.
+def _card(title: str, value: Any, suffix: str = ""):
+    v = "-" if value is None or value == "" else value
+    st.metric(title, f"{v}{suffix}")
 
 render_indices_section(
     calc=st.session_state.calc,
-    pick_func=pick_rule,
     card_func=_card,
+    pick_func=pick_rule,
+    get_rule_func=fetch_rule,
 )
-
 
 # =============================
 # 5) Análise Urbanística
@@ -162,9 +141,8 @@ render_analise_section(
     lot_area=lot_area,
     built_ground=built_ground,
     permeable_area=permeable_area,
-    pick_func=pick_value,   # pega campos dentro da rule
+    pick_func=pick_rule,
 )
-
 
 # =============================
 # 6) Relatório Urbanístico
