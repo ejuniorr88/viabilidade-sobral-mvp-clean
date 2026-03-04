@@ -114,7 +114,7 @@ calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
 # =============================
 # 2) Dados do lote (RETORNA 3 valores SEM erro)
 # =============================
-lot_area, built_ground, permeable_area = render_lote_section\(\)
+lot_area, built_ground, permeable_area = render_lote_section()
 # Guarda inputs do lote no calc (para relatório)
 calc = st.session_state.calc
 calc["lot_area_m2"] = float(lot_area)
