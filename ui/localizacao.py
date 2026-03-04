@@ -6,11 +6,16 @@ import streamlit as st
 
 try:
     from core.zones_map import zone_from_latlon
-from core.zeip_sectors import zeip_sector_from_latlon
 except Exception:
     from core.zones_mapa import zone_from_latlon  # type: ignore
 
 from core.streets import find_street
+
+try:
+    from core.zeip_sectors import zeip_sector_from_latlon
+except Exception:
+    zeip_sector_from_latlon = None  # type: ignore
+
 
 
 def _coerce_call(args, kwargs) -> Tuple[bool, Any, int]:
@@ -50,6 +55,15 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
             calc["zone"] = zone
             calc["zone_sigla"] = zone
+
+            # Se a zona for ZEIP, identificar o setor (1..9) pelo mapa de setores
+            subzone_code = "PADRAO"
+            if zone == "ZEIP" and callable(zeip_sector_from_latlon):
+                try:
+                    subzone_code = zeip_sector_from_latlon(lat, lon) or "PADRAO"
+                except Exception:
+                    subzone_code = "PADRAO"
+            calc["subzone_code"] = subzone_code
 
             if street_info:
                 calc["via_nome"] = street_info.get("name")
