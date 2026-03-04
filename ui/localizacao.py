@@ -1,126 +1,80 @@
 from __future__ import annotations
 
+from typing import Any, Dict, Optional, Tuple
+
 import streamlit as st
 
-# Compat: alguns branches renomearam módulos
 try:
     from core.zones_map import zone_from_latlon
-except Exception:  # pragma: no cover
+except Exception:
     from core.zones_mapa import zone_from_latlon  # type: ignore
 
 from core.streets import find_street
 
 
-def render_localizacao_section(*args, **kwargs):
-    """Renderiza o bloco 3) Localização (zona + via), sem alterar layout.
+def _coerce_call(args, kwargs) -> Tuple[bool, Any, int]:
+    if len(args) >= 3 and isinstance(args[0], (bool, int)):
+        return bool(args[0]), args[1], int(args[2])
+    return bool(kwargs.get("calcular", False)), kwargs.get("zones_prepared"), int(kwargs.get("radius_m", 150))
 
-    Compatibilidade:
-    - **Novo (clean):** render_localizacao_section(calcular=..., zones_prepared=..., radius_m=...)
-    - **Chamado pelo app.py atual:** render_localizacao_section(calcular, zones_prepared, radius_m)
-    - **Antigo (MVP):** render_localizacao_section((lat, lon), radius_m=...)
 
-    Regras importantes:
-    - Só roda a busca quando clicar em 'Calcular viabilidade'
-    - Atualiza st.session_state.calc com chaves "novas" e aliases "antigas" (para relatório)
-    - NÃO consulta regra do Supabase aqui (para não bloquear o fetch do app.py)
-    """
-
-    # ----------------------------
-    # Compat: chamada antiga com (lat, lon)
-    # ----------------------------
-    if args and len(args) >= 1 and isinstance(args[0], (tuple, list)) and len(args[0]) == 2:
-        lat = float(args[0][0])
-        lon = float(args[0][1])
-        radius_m = int(kwargs.get("radius_m", 150))
-
-        st.subheader("3) Localização (zona + via)")
-        street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
-
-        if street_info and "distance_m" in street_info:
-            st.caption(
-                f"Distância até o eixo da via: {float(street_info['distance_m']):.1f} m (raio {radius_m} m)."
-            )
-        if street_info:
-            st.success(f"Rua mais próxima: {street_info.get('name','')} ({street_info.get('type','')})")
-        else:
-            st.warning("Não foi possível identificar a rua mais próxima.")
-        return street_info
-
-    # ----------------------------
-    # Novo estilo (kwargs OU posicional)
-    # ----------------------------
-    # app.py atual chama assim:
-    #   render_localizacao_section(calcular, zones_prepared, radius_m)
-    if args and len(args) >= 1 and isinstance(args[0], (bool, int)):
-        calcular = bool(args[0])
-        zones_prepared = args[1] if len(args) >= 2 else kwargs.get("zones_prepared")
-        radius_m = int(args[2]) if len(args) >= 3 else int(kwargs.get("radius_m", 150))
-    else:
-        calcular = bool(kwargs.get("calcular", False))
-        zones_prepared = kwargs.get("zones_prepared")
-        radius_m = int(kwargs.get("radius_m", 150))
-
+def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     st.subheader("3) Localização (zona + via)")
 
-    # garante calc
-    if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
-        st.session_state.calc = {}
+    calcular, zones_prepared, radius_m = _coerce_call(args, kwargs)
 
     use_type_code = st.text_input(
         "use_type_code",
         value=st.session_state.calc.get("use_type_code") or "RES_UNI",
+        key="use_type_code_input",
     )
 
-    if calcular and st.session_state.get("last_click"):
-        lat = float(st.session_state.last_click["lat"])
-        lon = float(st.session_state.last_click["lon"])
-
-        st.session_state.calc["lat"] = lat
-        st.session_state.calc["lon"] = lon
-        st.session_state.calc["use_type_code"] = use_type_code
-        st.session_state.calc["radius_m"] = int(radius_m)
-
-        zone = zone_from_latlon(zones_prepared, lat, lon)
-        street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
-
-        # contrato principal
-        st.session_state.calc["zone"] = zone
-        st.session_state.calc["street_info"] = street_info
-
-        # aliases p/ relatório (compat)
-        st.session_state.calc["zone_sigla"] = zone
-
-        if street_info:
-            st.session_state.calc["street_name"] = street_info.get("name")
-            st.session_state.calc["street_type"] = street_info.get("type")
-            st.session_state.calc["street_dist"] = street_info.get("distance_m")
-
-            # chaves novas também
-            st.session_state.calc["via_nome"] = street_info.get("name")
-            st.session_state.calc["via_tipo"] = street_info.get("type")
-            st.session_state.calc["via_dist_m"] = street_info.get("distance_m")
-        else:
-            st.session_state.calc["street_name"] = None
-            st.session_state.calc["street_type"] = None
-            st.session_state.calc["street_dist"] = None
-            st.session_state.calc["via_nome"] = None
-            st.session_state.calc["via_tipo"] = None
-            st.session_state.calc["via_dist_m"] = None
-
-        # Não consulta regra aqui; deixa o app.py fazer fetch_rule()
-        st.session_state.calc.setdefault("rule", None)
-
-        # status
-        if zone:
-            st.session_state.calc["err"] = None
-            st.session_state.calc["ok"] = True
-        else:
-            st.session_state.calc["err"] = "Clique fora das zonas."
-            st.session_state.calc["ok"] = False
-
     calc = st.session_state.calc
-    zone = calc.get("zone")
-    street_info = calc.get("street_info")
+
+    if calcular:
+        if not getattr(st.session_state, "last_click", None):
+            calc["ok"] = False
+            calc["err"] = "Clique no mapa para definir o ponto."
+        else:
+            lat = st.session_state.last_click["lat"]
+            lon = st.session_state.last_click["lon"]
+
+            calc["lat"] = lat
+            calc["lon"] = lon
+            calc["use_type_code"] = use_type_code
+            calc["radius_m"] = int(radius_m)
+
+            zone = zone_from_latlon(zones_prepared, lat, lon) if zones_prepared else None
+            street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
+
+            calc["zone"] = zone
+            calc["zone_sigla"] = zone
+
+            if street_info:
+                calc["via_nome"] = street_info.get("name")
+                calc["via_tipo"] = street_info.get("type")
+                calc["via_dist_m"] = street_info.get("distance_m")
+                calc["street_name"] = street_info.get("name")
+                calc["street_type"] = street_info.get("type")
+                calc["street_dist"] = street_info.get("distance_m")
+            else:
+                calc["via_nome"] = None
+                calc["via_tipo"] = None
+                calc["via_dist_m"] = None
+                calc["street_name"] = None
+                calc["street_type"] = None
+                calc["street_dist"] = None
+
+            if not zone:
+                calc["ok"] = False
+                calc["err"] = "Clique dentro de uma zona."
+            else:
+                calc["ok"] = True
+                calc["err"] = None
+
+    zone = calc.get("zone") or calc.get("zone_sigla")
+    via_nome = calc.get("via_nome") or calc.get("street_name")
+    via_tipo = calc.get("via_tipo") or calc.get("street_type")
 
     colA, colB, colC = st.columns(3)
     with colA:
@@ -128,16 +82,19 @@ def render_localizacao_section(*args, **kwargs):
         st.write(zone or "—")
     with colB:
         st.write("Rua / Logradouro")
-        st.write(street_info.get("name") if isinstance(street_info, dict) else "—")
+        st.write(via_nome or "—")
     with colC:
         st.write("Tipo de via")
-        st.write(street_info.get("type") if isinstance(street_info, dict) else "—")
+        st.write(via_tipo or "—")
 
-    if isinstance(street_info, dict) and "distance_m" in street_info:
-        st.caption(
-            f"Distância até o eixo da via: {float(street_info['distance_m']):.1f} m "
-            f"(raio {float(calc.get('radius_m') or radius_m):.0f} m)."
-        )
+    dist = calc.get("via_dist_m") if calc.get("via_dist_m") is not None else calc.get("street_dist")
+    if dist is not None:
+        try:
+            st.caption(f"Distância até o eixo da via: {float(dist):.1f} m (raio {float(calc.get('radius_m') or radius_m):.0f} m).")
+        except Exception:
+            pass
 
     if calc.get("err"):
         st.warning(str(calc["err"]))
+
+    return {"zone": zone, "street": via_nome, "street_type": via_tipo, "distance_m": dist} if zone else None
