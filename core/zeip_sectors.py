@@ -85,4 +85,22 @@ def zeip_sector_from_latlon(lat: float, lon: float) -> Optional[str]:
         except Exception:
             continue
 
+    # Fallback: se não encontrou por "dentro", pega o setor mais próximo (evita buracos/linhas)
+    try:
+        nearest = min(geoms, key=lambda gg: gg.distance(pt))
+        d = float(nearest.distance(pt))
+        # limiar em graus (~0.0002 ≈ 20m em latitudes baixas). Ajustável.
+        if d <= 0.0002:
+            p = props_by_id.get(id(nearest), {}) or {}
+            code = p.get("subzone_code") or p.get("SUBZONE_CODE")
+            if code:
+                return str(code)
+            name = str(p.get("name", p.get("NAME", "")))
+            import re
+            m = re.search(r"ZEIP\s*([1-9])", name, re.IGNORECASE)
+            if m:
+                return f"ZEIP_{m.group(1)}"
+    except Exception:
+        pass
+
     return None
