@@ -11,23 +11,22 @@ def render_lote_section() -> Tuple[float, float, float]:
     IMPORTANTE: retorna SEMPRE 3 valores numéricos:
       (lot_area_m2, built_ground_m2, permeable_area_m2)
 
-    Regras:
-    - Por padrão (terreno regular), a área do lote é calculada como:
-        Área = Testada * Profundidade
-      e usada em todos os cálculos/relatório.
-    - Se marcar "Terreno irregular", aparece o campo "Área do lote (m²)" e
-      o valor informado passa a ser usado em todos os cálculos/relatório.
+    Regras (Backup 04+):
+    - Sempre exibe primeiro: Testada + Profundidade.
+    - Área do lote padrão = (Testada × Profundidade).
+    - Se marcar "Terreno irregular", aparece o campo "Área do lote (m²)" para informar a área TOTAL real.
+    - Não exibe mais o campo "Área permeável prevista (m²)" na tela.
+      A área permeável é assumida automaticamente como (Área do lote - Área do térreo).
 
-    Observação de layout:
-    - Mantém os mesmos campos do MVP (sem reintroduzir "Área permeável prevista (m²)" na tela).
-    - Checkbox "Lote de esquina" permanece logo abaixo de Testada/Profundidade (usado apenas no relatório por enquanto).
+    Campo novo (sem mexer no layout geral do app):
+    - Checkbox "Lote de esquina" (usado apenas no relatório por enquanto).
     """
     st.subheader("2) Dados do lote")
 
-    # 1) Entrada principal: Testada + Profundidade (sempre visíveis)
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        testada = st.number_input(
+    # 1) Sempre: Testada + Profundidade
+    c2, c3 = st.columns(2)
+    with c2:
+        testada_m = st.number_input(
             "Largura (testada) (m)",
             min_value=0.0,
             value=float(st.session_state.get("lot_front_m", 10.0)),
@@ -35,8 +34,8 @@ def render_lote_section() -> Tuple[float, float, float]:
             format="%.2f",
             key="lot_front_m",
         )
-    with c2:
-        profundidade = st.number_input(
+    with c3:
+        profundidade_m = st.number_input(
             "Profundidade (m)",
             min_value=0.0,
             value=float(st.session_state.get("lot_depth_m", 30.0)),
@@ -44,68 +43,51 @@ def render_lote_section() -> Tuple[float, float, float]:
             format="%.2f",
             key="lot_depth_m",
         )
-    with c3:
-        terreno_irregular = st.checkbox(
-            "Terreno irregular",
-            value=bool(st.session_state.get("terreno_irregular", False)),
-            help="Marque se a área real do lote NÃO for simplesmente testada × profundidade.",
-        )
-        st.session_state["terreno_irregular"] = bool(terreno_irregular)
 
-    # 2) Área do lote: calculada (regular) OU informada (irregular)
-    area_calc = float(testada) * float(profundidade)
+    area_calc = float(testada_m) * float(profundidade_m)
 
-    st.caption(
-        f"Área calculada (testada × profundidade): {area_calc:,.2f} m²".replace(",", "X").replace(".", ",").replace("X", ".")
+    # 2) Terreno irregular (se marcado, usuário informa a área TOTAL do lote)
+    terreno_irregular = st.checkbox(
+        "Terreno irregular",
+        value=bool(st.session_state.get("terreno_irregular", False)),
+        help="Marque se o lote não for retangular e a área total não for (testada × profundidade).",
     )
+    st.session_state["terreno_irregular"] = bool(terreno_irregular)
 
-    lot_area_informada = float(st.session_state.get("lot_area_m2", area_calc))
     if terreno_irregular:
-        st.info("Você marcou **Terreno irregular**. Aqui você informa a **área TOTAL do terreno** (m²).\n\nA área **pretendida no térreo** (quanto você quer construir no chão) é o campo logo abaixo.")
-        lot_area_informada = st.number_input(
-            "Área do lote (m²) — área TOTAL do terreno",
+        lot_area = st.number_input(
+            "Área do lote (m²) — área total do terreno (irregular)",
             min_value=0.0,
-            value=float(lot_area_informada),
+            value=float(st.session_state.get("lot_area_irregular_m2", area_calc)),
             step=10.0,
             format="%.2f",
-            key="lot_area_m2",
-            help="Informe a área real do lote (ex.: terreno irregular, formato não retangular, etc.).",
+            key="lot_area_irregular_m2",
+            help="Este campo é a área TOTAL do terreno. A área do térreo é informada abaixo.",
         )
-        lot_area = float(lot_area_informada)
+        st.caption(f"Área calculada (testada × profundidade): {area_calc:,.2f} m²".replace(",", "X").replace(".", ",").replace("X", "."))
     else:
-        # terreno regular: usa a área calculada
-        lot_area = float(area_calc)
-        # mantém um espelho no estado (útil para relatório/debug sem abrir campo)
-        st.session_state["lot_area_m2"] = float(lot_area)
+        lot_area = area_calc
+        st.caption(f"Área do lote calculada automaticamente: {area_calc:,.2f} m² (testada × profundidade)".replace(",", "X").replace(".", ",").replace("X", "."))
 
-    # texto discreto para o usuário entender qual área está sendo usada (não muda layout)
-    st.caption(f"Área do lote usada nos cálculos: {lot_area:,.2f} m²".replace(",", "X").replace(".", ",").replace("X", "."))
-
-    # novo: apenas para relatório (sem validação por enquanto)
+    # 3) Lote de esquina (apenas para relatório por enquanto)
     is_corner = st.checkbox("Lote de esquina", value=bool(st.session_state.get("lote_esquina", False)))
     st.session_state["lote_esquina"] = bool(is_corner)
-    # também salva no calc se existir (para o relatório não depender de outro estado)
     calc = st.session_state.get("calc")
     if isinstance(calc, dict):
         calc["lote_esquina"] = bool(is_corner)
 
-    # 3) Área pretendida no térreo (como já estava)
+    # 4) Área pretendida no térreo
     built_ground = st.number_input(
         "Área pretendida no térreo (m²) (se deixar 0, o relatório assume o máximo permitido)",
         min_value=0.0,
         value=0.0,
         step=5.0,
         format="%.2f",
-    
-    # Validação simples (evita confusão entre área do lote e área do térreo)
-    if float(built_ground) > 0 and float(lot_area) > 0 and float(built_ground) > float(lot_area):
-        st.warning(
-            "A **área pretendida no térreo** está maior que a **área total do lote**. "
-            "Confira os valores: *Área do lote* é o terreno inteiro; *Área pretendida no térreo* é o que você quer construir no chão."
-        )
-)
+    )
 
-    # Permeável default = lote - térreo (sem input na UI)
+    # Aviso simples para evitar confusão: térreo não pode ser maior que o lote
+    if float(built_ground) > float(lot_area) and float(lot_area) > 0:
+        st.warning("A área pretendida no térreo está maior que a área total do lote. Confira os valores.")
+
     permeable_area = max(0.0, float(lot_area) - float(built_ground))
-
     return float(lot_area), float(built_ground), float(permeable_area)
