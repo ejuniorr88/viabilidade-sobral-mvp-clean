@@ -11,23 +11,70 @@ def render_lote_section() -> Tuple[float, float, float]:
     IMPORTANTE: retorna SEMPRE 3 valores numéricos:
       (lot_area_m2, built_ground_m2, permeable_area_m2)
 
-    Observação de layout:
-    - Mantém os mesmos campos principais do MVP.
-    - NÃO exibe mais o campo "Área permeável prevista (m²)" na tela.
-      A área permeável é assumida automaticamente como (Área do lote - Área do térreo).
+    Regras:
+    - Por padrão (terreno regular), a área do lote é calculada como:
+        Área = Testada * Profundidade
+      e usada em todos os cálculos/relatório.
+    - Se marcar "Terreno irregular", aparece o campo "Área do lote (m²)" e
+      o valor informado passa a ser usado em todos os cálculos/relatório.
 
-    Campo novo (sem mexer no layout existente):
-    - Checkbox "Lote de esquina" logo abaixo de Testada/Profundidade (usado apenas no relatório por enquanto).
+    Observação de layout:
+    - Mantém os mesmos campos do MVP (sem reintroduzir "Área permeável prevista (m²)" na tela).
+    - Checkbox "Lote de esquina" permanece logo abaixo de Testada/Profundidade (usado apenas no relatório por enquanto).
     """
     st.subheader("2) Dados do lote")
 
+    # 1) Entrada principal: Testada + Profundidade (sempre visíveis)
     c1, c2, c3 = st.columns(3)
     with c1:
-        lot_area = st.number_input("Área do lote (m²)", min_value=0.0, value=300.0, step=10.0, format="%.2f")
+        testada = st.number_input(
+            "Largura (testada) (m)",
+            min_value=0.0,
+            value=float(st.session_state.get("lot_front_m", 10.0)),
+            step=0.5,
+            format="%.2f",
+            key="lot_front_m",
+        )
     with c2:
-        st.number_input("Largura (testada) (m)", min_value=0.0, value=10.0, step=0.5, format="%.2f", key="lot_front_m")
+        profundidade = st.number_input(
+            "Profundidade (m)",
+            min_value=0.0,
+            value=float(st.session_state.get("lot_depth_m", 30.0)),
+            step=0.5,
+            format="%.2f",
+            key="lot_depth_m",
+        )
     with c3:
-        st.number_input("Profundidade (m)", min_value=0.0, value=30.0, step=0.5, format="%.2f", key="lot_depth_m")
+        terreno_irregular = st.checkbox(
+            "Terreno irregular",
+            value=bool(st.session_state.get("terreno_irregular", False)),
+            help="Marque se a área real do lote NÃO for simplesmente testada × profundidade.",
+        )
+        st.session_state["terreno_irregular"] = bool(terreno_irregular)
+
+    # 2) Área do lote: calculada (regular) OU informada (irregular)
+    area_calc = float(testada) * float(profundidade)
+
+    lot_area_informada = float(st.session_state.get("lot_area_m2", area_calc))
+    if terreno_irregular:
+        lot_area_informada = st.number_input(
+            "Área do lote (m²)",
+            min_value=0.0,
+            value=float(lot_area_informada),
+            step=10.0,
+            format="%.2f",
+            key="lot_area_m2",
+            help="Informe a área real do lote (ex.: terreno irregular, formato não retangular, etc.).",
+        )
+        lot_area = float(lot_area_informada)
+    else:
+        # terreno regular: usa a área calculada
+        lot_area = float(area_calc)
+        # mantém um espelho no estado (útil para relatório/debug sem abrir campo)
+        st.session_state["lot_area_m2"] = float(lot_area)
+
+    # texto discreto para o usuário entender qual área está sendo usada (não muda layout)
+    st.caption(f"Área do lote usada nos cálculos: {lot_area:,.2f} m²".replace(",", "X").replace(".", ",").replace("X", "."))
 
     # novo: apenas para relatório (sem validação por enquanto)
     is_corner = st.checkbox("Lote de esquina", value=bool(st.session_state.get("lote_esquina", False)))
@@ -37,6 +84,7 @@ def render_lote_section() -> Tuple[float, float, float]:
     if isinstance(calc, dict):
         calc["lote_esquina"] = bool(is_corner)
 
+    # 3) Área pretendida no térreo (como já estava)
     built_ground = st.number_input(
         "Área pretendida no térreo (m²) (se deixar 0, o relatório assume o máximo permitido)",
         min_value=0.0,
