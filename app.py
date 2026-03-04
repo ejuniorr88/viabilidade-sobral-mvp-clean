@@ -115,14 +115,12 @@ calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
 # 2) Dados do lote (RETORNA 3 valores SEM erro)
 # =============================
 lot_area, built_ground, permeable_area = render_lote_section()
-# Guarda inputs do lote no calc (para relatório)
-calc = st.session_state.calc
-calc["lot_area_m2"] = float(lot_area)
-calc["built_ground_m2_input"] = float(built_ground)
-calc["permeable_area_m2_input"] = float(permeable_area)
-calc["testada_m"] = float(st.session_state.get("lot_front_m") or 0.0)
-calc["profundidade_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
 
+# guarda info do lote para o relatório
+st.session_state.calc["lot_area_m2"] = float(lot_area)
+st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or 0.0)
+st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
+st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 
 # =============================
 # 3) Localização (zona + via)
