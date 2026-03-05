@@ -109,54 +109,42 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     via_tipo = calc.get("via_tipo") or calc.get("street_type") or "—"
     uso = calc.get("use_type_code") or "RES_UNI"
 
-    lot_area = float(calc.get("lot_area_m2") or 0.0)
-    testada = float(st.session_state.get("lot_front_m") or 0.0)
-    profund = float(st.session_state.get("lot_depth_m") or 0.0)
+    A = float(calc.get("lot_area_m2") or 0.0)
+    W = float(st.session_state.get("lot_front_m") or 0.0)
+    D = float(st.session_state.get("lot_depth_m") or 0.0)
     is_corner = bool(st.session_state.get("lot_is_corner") or False)
     tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
     tp_min = _to_pct(rule, "tp_min_pct", "tp_min")
     ia_max = rule.get("ia_max")
-    rec_fr = rule.get("recuo_frontal_m") or 0.0
-    rec_lat = rule.get("recuo_lateral_m") or 0.0
-    rec_fun = rule.get("recuo_fundos_m") or 0.0
+    rec_fr = float(rule.get("recuo_frontal_m") or 0.0)
+    rec_lat = float(rule.get("recuo_lateral_m") or 0.0)
+    rec_fun = float(rule.get("recuo_fundos_m") or 0.0)
     gabarito_m = rule.get("gabarito_m")
 
-    A = lot_area
-    W = testada
-    D = profund
-
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
+    A_perm_min = A * (tp_min / 100.0) if (A and tp_min is not None) else None
+    A_total = A * float(ia_max) if (A and ia_max is not None) else None
 
-    # Opção 1 (recuos padrão) — apenas para lote NÃO irregular
-    W_util = W - 2 * float(rec_lat or 0.0)
-    D_util = D - float(rec_fr or 0.0) - float(rec_fun or 0.0)
+    W_util = W - 2 * rec_lat
+    D_util = D - rec_fr - rec_fun
     A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
-    A_op1_max = None
-    if A_to is not None and A_recuos is not None:
-        A_op1_max = min(A_to, A_recuos)
+    A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
 
-    # Opção 2 (Art.112: zera frontal e laterais, fundo obrigatório)
-    A_fundo = (W * (D - float(rec_fun or 0.0))) if (W > 0 and D > float(rec_fun or 0.0)) else None
-    A_op2_max = None
+    A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
     if A_to is not None and A_fundo is not None:
         A_op2_max = min(A_to, A_fundo)
     elif A_to is not None:
         A_op2_max = A_to
+    else:
+        A_op2_max = None
 
-    # ==== Área adotada para cálculos (pega do input do Item 2) ====
     user_ground = _safe_float(st.session_state.get("built_ground_m2"))
     A_adotada = None
     if user_ground is not None and user_ground > 0:
         teto = A_op2_max or A_op1_max or A_to
-        if teto is not None:
-            A_adotada = min(user_ground, float(teto))
-        else:
-            A_adotada = user_ground
-
-    # TP
-    A_perm_min = A * (tp_min / 100.0) if (A and tp_min is not None) else None
+        A_adotada = min(user_ground, float(teto)) if teto is not None else user_ground
 
     def _tp_scenario(A_terreo: float | None):
         if A_terreo is None or A_perm_min is None:
@@ -165,11 +153,9 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         A_imperm_max = A_rest - A_perm_min
         return A_rest, A_imperm_max
 
+    tp_user = _tp_scenario(A_adotada)
     tp1 = _tp_scenario(A_op1_max)
     tp2 = _tp_scenario(A_op2_max)
-    tp_user = _tp_scenario(A_adotada)
-
-    A_total = A * float(ia_max) if (A and ia_max is not None) else None
 
     st.markdown("## 🏡 RELATÓRIO URBANÍSTICO\nResidencial Unifamiliar")
     st.markdown(
@@ -224,14 +210,9 @@ Profundidade útil: **{_fmt_num(D)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun
                 st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
             if A_op1_max is not None:
                 st.markdown(
-                    f"👉 Mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, "
-                    f"o limite físico pelos recuos fica em **{_fmt_num(A_op1_max)} m²**."
+                    f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, "
+                    f"o limite físico pelos recuos é **{_fmt_num(A_op1_max)} m²**."
                 )
-                if A_adotada is not None and A_adotada > A_op1_max:
-                    st.warning(
-                        f"⚠️ A área do seu térreo (**{_fmt_num(A_adotada)} m²**) ultrapassa o limite dos recuos (**{_fmt_num(A_op1_max)} m²**). "
-                        "A implantação deve ser reduzida ou a opção do Art. 112 deve ser considerada (se aplicável)."
-                    )
         else:
             st.info(
                 "ℹ️ **Terreno irregular**: como o lote não é retangular, o relatório não calcula a implantação por **recuos**. "
@@ -281,7 +262,7 @@ Desses:
             )
 
         with st.expander("Ver cenários usando os máximos das opções"):
-            if (tp1 is not None) and (A_op1_max is not None):
+            if tp1 is not None and A_op1_max is not None:
                 A_rest, A_imperm = tp1
                 st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
                 st.markdown(
@@ -296,7 +277,7 @@ Desses:
 """
                 )
 
-            if (tp2 is not None) and (A_op2_max is not None):
+            if tp2 is not None and A_op2_max is not None:
                 A_rest, A_imperm = tp2
                 st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
                 st.markdown(
@@ -348,7 +329,51 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
         "A exigência de vagas aplica-se às residências multifamiliares e demais atividades listadas no Anexo IV."
     )
 
-    # Figuras (Anexo V)
+    st.markdown("---\n### 🧾 QUADRO TÉCNICO – PARÂMETROS DOS AMBIENTES\n(Lei Complementar nº 90/2023 – Anexo II)")
+    st.markdown(
+        """| AMBIENTE | CÍRCULO INSCRITO | ÁREA MÍNIMA | ILUMINAÇÃO | VENTILAÇÃO | PÉ-DIREITO | OBS. |
+|---|---:|---:|---:|---:|---:|---|
+| Sala de estar | 2,00 m | 8,00 m² | 1/8 | 1/12 | 2,50 m | 7 |
+| Sala de jantar | 2,00 m | 6,00 m² | 1/8 | 1/12 | 2,50 m | 7 |
+| Cozinha | 1,80 m | 5,00 m² | 1/8 | 1/12 | 2,50 m | 1-7 |
+| 1º e 2º quartos | 2,00 m | 8,00 m² | 1/8 | 1/12 | 2,50 m | – |
+| Demais quartos | 2,00 m | 5,00 m² | 1/8 | 1/12 | 2,50 m | – |
+| Banheiro | 1,00 m | 1,50 m² | 1/10 | 1/16 | 2,20 m | 1-2-3 |
+| Área de serviço | 1,20 m | 1,80 m² | 1/10 | 1/16 | 2,20 m | 1-2-7 |
+| Garagem | 2,20 m | 9,00 m² | 1/14 | 1/24 | 2,20 m | 7 |
+| Escada | 0,80 m | – | – | – | 2,10 m | 8-11-12-13 |
+"""
+    )
+    st.markdown(
+        """**Observações aplicáveis (Anexo II – LC 90/2023)**
+
+- Tolera-se iluminação e ventilação zenital.  
+- Admite-se ventilação mecânica ou indireta nos casos permitidos.  
+- Banheiro não pode comunicar-se diretamente com cozinha ou sala de jantar.  
+- Corredores com mais de 5,00m devem ter largura mínima de 1,00m.  
+- Corredores com mais de 10,00m exigem ventilação mínima proporcional.  
+- Área de porta com veneziana pode ser computada como ventilação.  
+- Escadas devem ser de material incombustível ou tratado.  
+- Patamar obrigatório quando houver mudança de direção ou altura superior a 2,90m.  
+- Largura mínima do degrau: 0,25m.  
+- Altura máxima do degrau: 0,19m.  
+"""
+    )
+
+    st.markdown("#### 💡 Dicas Valiosas:")
+    st.markdown(
+        "• **Passeios (calçadas):** Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. "
+        "Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via; "
+        "na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garantindo continuidade e alinhamento, "
+        "sendo a análise do licenciamento voltada a confirmar que a proposta não avança sobre a área pública."
+    )
+    st.markdown(
+        "• **Piscinas:** Se for construída uma piscina, ela não é computada como área construída e, por isso, não entra no cálculo da Taxa de Ocupação (TO). "
+        "Porém, para a Taxa de Permeabilidade (TP), a piscina é considerada área impermeável, reduzindo a área permeável do lote. "
+        "Além disso, conforme o Art. 144, piscinas, espelhos d’água, caixas d’água, cisternas e tanques devem manter afastamento mínimo de 0,50 m de todas as divisas "
+        "do terreno e sempre ser computados como área impermeável no cálculo da TP."
+    )
+
     figs = _extract_figures_from_rule(rule)
     if figs:
         st.markdown("---\n### 📎 Figuras anexas (Anexo V)")
