@@ -1,21 +1,23 @@
 from __future__ import annotations
 
-import streamlit as st
 import os
 import json
+from typing import Any, Dict
+
+import streamlit as st
 
 
 def _build_public_storage_url(bucket: str, path: str) -> str | None:
     """Monta a URL pública do Supabase Storage (bucket público)."""
-    base = os.getenv('SUPABASE_URL', '').rstrip('/')
+    base = os.getenv("SUPABASE_URL", "").rstrip("/")
     if not base:
         try:
-            base = (st.secrets.get('SUPABASE_URL') or '').rstrip('/')
+            base = (st.secrets.get("SUPABASE_URL") or "").rstrip("/")
         except Exception:
-            base = ''
+            base = ""
     if not base or not bucket or not path:
         return None
-    path = path.lstrip('/')
+    path = path.lstrip("/")
     return f"{base}/storage/v1/object/public/{bucket}/{path}"
 
 
@@ -23,7 +25,7 @@ def _extract_figures_from_rule(rule: Dict[str, Any]) -> list[Dict[str, Any]]:
     """Lê src.figures (ou src.figuras) da regra do Supabase."""
     if not isinstance(rule, dict):
         return []
-    src = rule.get('src') or {}
+    src = rule.get("src") or {}
     if isinstance(src, str):
         try:
             src = json.loads(src)
@@ -31,15 +33,14 @@ def _extract_figures_from_rule(rule: Dict[str, Any]) -> list[Dict[str, Any]]:
             src = {}
     if not isinstance(src, dict):
         return []
-    figs = src.get('figures') or src.get('figuras') or []
+    figs = src.get("figures") or src.get("figuras") or []
     if not isinstance(figs, list):
         return []
     out: list[Dict[str, Any]] = []
     for it in figs:
-        if isinstance(it, dict) and it.get('bucket') and it.get('path'):
+        if isinstance(it, dict) and it.get("bucket") and it.get("path"):
             out.append(it)
     return out
-from typing import Any, Dict
 
 
 def _safe_float(v: Any) -> float | None:
@@ -96,6 +97,7 @@ def _md_table(rows: list[tuple[str, str]]) -> str:
 
 
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
+    is_irregular = bool(st.session_state.get('lot_is_irregular', False))
     st.subheader("6) Relatório Urbanístico")
 
     if not isinstance(calc, dict) or not calc.get("ok"):
@@ -135,19 +137,15 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
 
-        if not is_irregular:
-        # Opção 1 (recuos padrão)
-            W_util = W - 2 * float(rec_lat or 0.0)
-            D_util = D - float(rec_fr or 0.0) - float(rec_fun or 0.0)
-            A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
-            A_op1 = None
-            if A_to is not None and A_recuos is not None:
-                A_op1 = min(A_to, A_recuos)
+    # Opção 1 (recuos padrão)
+    W_util = W - 2 * float(rec_lat or 0.0)
+    D_util = D - float(rec_fr or 0.0) - float(rec_fun or 0.0)
+    A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
+    A_op1 = None
+    if A_to is not None and A_recuos is not None:
+        A_op1 = min(A_to, A_recuos)
 
-
-    else:
-        W_util = D_util = A_recuos = A_op1 = None
-# Opção 2 (Art.112: zera frontal e laterais, fundo obrigatório)
+    # Opção 2 (Art.112: zera frontal e laterais, fundo obrigatório)
     A_fundo = (W * (D - float(rec_fun or 0.0))) if (W > 0 and D > float(rec_fun or 0.0)) else None
     A_op2 = None
     if A_to is not None and A_fundo is not None:
@@ -199,10 +197,10 @@ Agora veja duas situações possíveis:
 """
         )
 
-                if not is_irregular:
+        if not is_irregular:
             st.markdown("✅ **Opção 1 – Respeitando os recuos padrão**")
-                    st.markdown(
-                        f"""**Recuos exigidos:**
+            st.markdown(
+            f"""**Recuos exigidos:**
 
             - Frontal: **{_fmt_num(rec_fr)} m**
             - Laterais: **{_fmt_num(rec_lat)} m** cada
@@ -213,18 +211,19 @@ Agora veja duas situações possíveis:
             Largura útil: **{_fmt_num(W)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)} m**  
             Profundidade útil: **{_fmt_num(D)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun)} = {_fmt_num(D_util)} m**
             """
-                    )
-                    if A_recuos is not None:
-                        st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
-                    if A_op1 is not None:
-                        st.markdown(
-                            f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, o limite físico pelos recuos é **{_fmt_num(A_op1)} m²**."
-                        )
+            )
+            if A_recuos is not None:
+            st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
+            if A_op1 is not None:
+            st.markdown(
+            f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, o limite físico pelos recuos é **{_fmt_num(A_op1)} m²**."
+            )
 
 
         else:
             st.info("ℹ️ **Terreno irregular**: como o lote não é retangular, o relatório não calcula a implantação por **recuos**. "
                     "Aqui são apresentados apenas os limites legais por **TO/TP/IA**. A implantação pode ser reduzida por recuos, forma do lote, alinhamento, servidões e exigências do licenciamento.")
+
 st.markdown("\n✅ **Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)**")
         st.markdown(
             """Por se tratar de **residência unifamiliar**, a legislação permite **zerar o recuo frontal e os recuos laterais**, desde que:
