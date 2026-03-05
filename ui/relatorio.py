@@ -213,7 +213,8 @@ Profundidade útil: **{_fmt_num(D)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun
             st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
         if A_op1 is not None:
             st.markdown(
-                f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, o limite físico pelos recuos é **{_fmt_num(A_op1)} m²**."
+                if not is_irregular:
+                    f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, o limite físico pelos recuos é **{_fmt_num(A_op1)} m²**."
             )
 
         st.markdown("\n✅ **Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)**")
