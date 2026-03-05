@@ -16,7 +16,8 @@ def _build_public_storage_url(bucket: str, path: str) -> str | None:
             base = ""
     if not base or not bucket or not path:
         return None
-    return f"{base}/storage/v1/object/public/{bucket}/{path.lstrip('/')}"
+    path = path.lstrip("/")
+    return f"{base}/storage/v1/object/public/{bucket}/{path}"
 
 
 def _extract_figures_from_rule(rule: Dict[str, Any]) -> list[Dict[str, Any]]:
@@ -111,7 +112,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     lot_area = float(calc.get("lot_area_m2") or 0.0)
     testada = float(st.session_state.get("lot_front_m") or 0.0)
     profund = float(st.session_state.get("lot_depth_m") or 0.0)
-    is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lote_esquina") or False)
+    is_corner = bool(st.session_state.get("lot_is_corner") or False)
     tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
@@ -132,12 +133,29 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     W_util = W - 2 * float(rec_lat or 0.0)
     D_util = D - float(rec_fr or 0.0) - float(rec_fun or 0.0)
     A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
-    A_op1 = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
+    A_op1_max = None
+    if A_to is not None and A_recuos is not None:
+        A_op1_max = min(A_to, A_recuos)
 
-    # Opção 2 (Art.112)
+    # Opção 2 (Art.112: zera frontal e laterais, fundo obrigatório)
     A_fundo = (W * (D - float(rec_fun or 0.0))) if (W > 0 and D > float(rec_fun or 0.0)) else None
-    A_op2 = min(A_to, A_fundo) if (A_to is not None and A_fundo is not None) else A_to
+    A_op2_max = None
+    if A_to is not None and A_fundo is not None:
+        A_op2_max = min(A_to, A_fundo)
+    elif A_to is not None:
+        A_op2_max = A_to
 
+    # ==== Área adotada para cálculos (pega do input do Item 2) ====
+    user_ground = _safe_float(st.session_state.get("built_ground_m2"))
+    A_adotada = None
+    if user_ground is not None and user_ground > 0:
+        teto = A_op2_max or A_op1_max or A_to
+        if teto is not None:
+            A_adotada = min(user_ground, float(teto))
+        else:
+            A_adotada = user_ground
+
+    # TP
     A_perm_min = A * (tp_min / 100.0) if (A and tp_min is not None) else None
 
     def _tp_scenario(A_terreo: float | None):
@@ -147,20 +165,18 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         A_imperm_max = A_rest - A_perm_min
         return A_rest, A_imperm_max
 
-    tp1 = _tp_scenario(A_op1)
-    tp2 = _tp_scenario(A_op2)
+    tp1 = _tp_scenario(A_op1_max)
+    tp2 = _tp_scenario(A_op2_max)
+    tp_user = _tp_scenario(A_adotada)
 
     A_total = A * float(ia_max) if (A and ia_max is not None) else None
 
-    # =============================
-    # RELATÓRIO
-    # =============================
     st.markdown("## 🏡 RELATÓRIO URBANÍSTICO\nResidencial Unifamiliar")
     st.markdown(
-        f"""**Terreno:** {_fmt_num(A)} m²  
-**Dimensões:** {_fmt_num(W)} m × {_fmt_num(D)} m  
-**Zona:** {zone}  
-**Tipo:** {tipo_lote}  
+        f"""**Terreno:** {_fmt_num(A)} m²  \
+**Dimensões:** {_fmt_num(W)} m × {_fmt_num(D)} m  \
+**Zona:** {zone}  \
+**Tipo:** {tipo_lote}  \
 """
     )
     st.caption(f"Via: {via} | Tipo de via: {via_tipo} | Uso: {uso}")
@@ -175,10 +191,19 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 👉 **{_fmt_num(A)} m² × {_fmt_pct(to_max)} = {_fmt_num(A_to)} m²**
 
 Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**.
-
-Agora veja duas situações possíveis:
 """
         )
+
+        if A_adotada is not None:
+            if user_ground is not None and A_adotada < user_ground:
+                st.warning(
+                    f"⚠️ Você informou **{_fmt_num(user_ground)} m²** no térreo, mas o máximo permitido é **{_fmt_num(A_adotada)} m²**. "
+                    "Os cálculos abaixo usam o valor permitido."
+                )
+            else:
+                st.info(f"✅ Área considerada no seu projeto (térreo): **{_fmt_num(A_adotada)} m²**.")
+
+        st.markdown("\nAgora veja duas situações possíveis:")
 
         if not is_irregular:
             st.markdown("✅ **Opção 1 – Respeitando os recuos padrão**")
@@ -191,21 +216,27 @@ Agora veja duas situações possíveis:
 
 **Área interna disponível:**
 
-Largura útil: **{_fmt_num(W)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)} m**  
+Largura útil: **{_fmt_num(W)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)} m**  \
 Profundidade útil: **{_fmt_num(D)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun)} = {_fmt_num(D_util)} m**
 """
             )
             if A_recuos is not None:
                 st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
-            if A_op1 is not None:
+            if A_op1_max is not None:
                 st.markdown(
-                    f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, "
-                    f"o limite físico pelos recuos é **{_fmt_num(A_op1)} m²**."
+                    f"👉 Mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, "
+                    f"o limite físico pelos recuos fica em **{_fmt_num(A_op1_max)} m²**."
                 )
+                if A_adotada is not None and A_adotada > A_op1_max:
+                    st.warning(
+                        f"⚠️ A área do seu térreo (**{_fmt_num(A_adotada)} m²**) ultrapassa o limite dos recuos (**{_fmt_num(A_op1_max)} m²**). "
+                        "A implantação deve ser reduzida ou a opção do Art. 112 deve ser considerada (se aplicável)."
+                    )
         else:
             st.info(
                 "ℹ️ **Terreno irregular**: como o lote não é retangular, o relatório não calcula a implantação por **recuos**. "
-                "Aqui são apresentados apenas os limites legais por **TO/TP/IA**. A implantação pode ser reduzida por recuos, forma do lote, alinhamento, servidões e exigências do licenciamento."
+                "Aqui são apresentados apenas os limites legais por **TO/TP/IA**. A implantação pode ser reduzida por recuos, "
+                "forma do lote, alinhamento, servidões e exigências do licenciamento."
             )
 
         st.markdown("\n✅ **Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)**")
@@ -220,8 +251,8 @@ Nesse caso, você pode utilizar no térreo até o limite permitido pela TO.
 ⚠ **O recuo de fundo permanece obrigatório.**
 """
         )
-        if A_op2 is not None:
-            st.markdown(f"👉 **Térreo máximo nesta opção:** **{_fmt_num(A_op2)} m²**")
+        if A_op2_max is not None:
+            st.markdown(f"👉 **Térreo máximo nesta opção:** **{_fmt_num(A_op2_max)} m²**")
 
     st.markdown("---\n### 🌿 2️⃣ Quanto preciso deixar livre?")
     if tp_min is None or A_perm_min is None:
@@ -234,14 +265,29 @@ Nesse caso, você pode utilizar no térreo até o limite permitido pela TO.
 """
         )
 
+        if tp_user is not None and A_adotada is not None:
+            A_rest, A_imperm = tp_user
+            st.markdown("✅ **Cenário com a área adotada para o seu projeto**")
+            st.markdown(
+                f"""Se você utilizar **{_fmt_num(A_adotada)} m²** no térreo:
+
+Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_adotada)} m² = {_fmt_num(A_rest)} m²**
+
+Desses:
+
+- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo
+- **{_fmt_num(A_imperm)} m²** podem receber piso impermeável
+"""
+            )
+
         with st.expander("Ver cenários usando os máximos das opções"):
-            if (tp1 is not None) and (A_op1 is not None) and (not is_irregular):
+            if (tp1 is not None) and (A_op1_max is not None):
                 A_rest, A_imperm = tp1
                 st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
                 st.markdown(
-                    f"""Se você utilizar **{_fmt_num(A_op1)} m²** no térreo:
+                    f"""Se você utilizar **{_fmt_num(A_op1_max)} m²** no térreo:
 
-Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_op1)} m² = {_fmt_num(A_rest)} m²**
+Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_op1_max)} m² = {_fmt_num(A_rest)} m²**
 
 Desses:
 
@@ -250,13 +296,13 @@ Desses:
 """
                 )
 
-            if (tp2 is not None) and (A_op2 is not None):
+            if (tp2 is not None) and (A_op2_max is not None):
                 A_rest, A_imperm = tp2
                 st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
                 st.markdown(
-                    f"""Se você utilizar **{_fmt_num(A_op2)} m²** no térreo:
+                    f"""Se você utilizar **{_fmt_num(A_op2_max)} m²** no térreo:
 
-Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_op2)} m² = {_fmt_num(A_rest)} m²**
+Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_op2_max)} m² = {_fmt_num(A_rest)} m²**
 
 Desses:
 
@@ -277,6 +323,7 @@ Desses:
                 ]
             )
         )
+        st.markdown("\nIsso significa que nem todo piso “externo” conta 100% como permeável.")
 
     st.markdown("---\n### 🏢 3️⃣ Posso construir mais andares?")
     if ia_max is None or A_total is None:
@@ -288,6 +335,8 @@ Desses:
 **Índice de Aproveitamento (IA):** **{float(ia_max):.2f}**
 
 👉 **{_fmt_num(A)} m² × {float(ia_max):.2f} = {_fmt_num(A_total)} m²** no total
+
+Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somando todos os pavimentos.
 """
         )
     if gabarito_m is not None:
@@ -299,46 +348,7 @@ Desses:
         "A exigência de vagas aplica-se às residências multifamiliares e demais atividades listadas no Anexo IV."
     )
 
-    st.markdown("---\n### 🧾 QUADRO TÉCNICO – PARÂMETROS DOS AMBIENTES\n(Lei Complementar nº 90/2023 – Anexo II)")
-    st.markdown(
-        """| AMBIENTE | CÍRCULO INSCRITO | ÁREA MÍNIMA | ILUMINAÇÃO | VENTILAÇÃO | PÉ-DIREITO | OBS. |
-|---|---:|---:|---:|---:|---:|---|
-| Sala de estar | 2,00 m | 8,00 m² | 1/8 | 1/12 | 2,50 m | 7 |
-| Sala de jantar | 2,00 m | 6,00 m² | 1/8 | 1/12 | 2,50 m | 7 |
-| Cozinha | 1,80 m | 5,00 m² | 1/8 | 1/12 | 2,50 m | 1-7 |
-| 1º e 2º quartos | 2,00 m | 8,00 m² | 1/8 | 1/12 | 2,50 m | – |
-| Demais quartos | 2,00 m | 5,00 m² | 1/8 | 1/12 | 2,50 m | – |
-| Banheiro | 1,00 m | 1,50 m² | 1/10 | 1/16 | 2,20 m | 1-2-3 |
-| Área de serviço | 1,20 m | 1,80 m² | 1/10 | 1/16 | 2,20 m | 1-2-7 |
-| Garagem | 2,20 m | 9,00 m² | 1/14 | 1/24 | 2,20 m | 7 |
-| Escada | 0,80 m | – | – | – | 2,10 m | 8-11-12-13 |
-"""
-    )
-    st.markdown(
-        """**Observações aplicáveis (Anexo II – LC 90/2023)**
-
-- Tolera-se iluminação e ventilação zenital.  
-- Admite-se ventilação mecânica ou indireta nos casos permitidos.  
-- Banheiro não pode comunicar-se diretamente com cozinha ou sala de jantar.  
-- Corredores com mais de 5,00m devem ter largura mínima de 1,00m.  
-- Corredores com mais de 10,00m exigem ventilação mínima proporcional.  
-- Área de porta com veneziana pode ser computada como ventilação.  
-- Escadas devem ser de material incombustível ou tratado.  
-- Patamar obrigatório quando houver mudança de direção ou altura superior a 2,90m.  
-- Largura mínima do degrau: 0,25m.  
-- Altura máxima do degrau: 0,19m.  
-"""
-    )
-
-    st.markdown(
-        """### Dicas Valiosas:
-
-- Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via; na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garantindo continuidade e alinhamento, sendo a análise do licenciamento voltada a confirmar que a proposta não avança sobre a área pública.
-
-- Se for construída uma piscina, ela não é computada como área construída e, por isso, não entra no cálculo da Taxa de Ocupação (TO). Porém, para a Taxa de Permeabilidade (TP), a piscina é considerada área impermeável, reduzindo a área permeável do lote. Além disso, conforme o Art. 144, piscinas, espelhos d’água, caixas d’água, cisternas e tanques devem manter afastamento mínimo de 0,50 m de todas as divisas do terreno e sempre ser computados como área impermeável no cálculo da TP.
-"""
-    )
-
+    # Figuras (Anexo V)
     figs = _extract_figures_from_rule(rule)
     if figs:
         st.markdown("---\n### 📎 Figuras anexas (Anexo V)")
@@ -351,15 +361,16 @@ Desses:
                     caption = f.get("caption") or f.get("legenda")
                     bucket = f.get("bucket")
                     path = f.get("path")
-                    url = _build_public_storage_url(bucket, path) if bucket and path else None
+                    url = _build_public_storage_url(str(bucket), str(path)) if bucket and path else None
                     if title:
                         st.markdown(f"**{title}**")
                     if url:
                         st.image(url, caption=caption or title or "", use_container_width=True)
                         st.markdown(f"[🔎 Abrir em tamanho real]({url})")
                     else:
-                        st.caption("Imagem indisponível (bucket/path)")
-                    st.caption("Anexo V – LC 90/2023")
+                        st.markdown(f"Imagem: {bucket}/{path}")
+                    if caption and caption != title:
+                        st.caption(caption)
 
     with st.expander("Ver regra completa (JSON)"):
         st.json(rule)
