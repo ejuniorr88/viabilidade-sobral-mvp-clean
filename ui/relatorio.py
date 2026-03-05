@@ -1,44 +1,11 @@
 from __future__ import annotations
 
-import os
-import json
 from typing import Any, Dict
 
 import streamlit as st
 
+from .relatorio_blocks import render_quadro_tecnico, render_dicas_valiosas, render_figuras_anexo_v
 
-def _build_public_storage_url(bucket: str, path: str) -> str | None:
-    base = os.getenv("SUPABASE_URL", "").rstrip("/")
-    if not base:
-        try:
-            base = (st.secrets.get("SUPABASE_URL") or "").rstrip("/")
-        except Exception:
-            base = ""
-    if not base or not bucket or not path:
-        return None
-    path = path.lstrip("/")
-    return f"{base}/storage/v1/object/public/{bucket}/{path}"
-
-
-def _extract_figures_from_rule(rule: Dict[str, Any]) -> list[Dict[str, Any]]:
-    if not isinstance(rule, dict):
-        return []
-    src = rule.get("src") or {}
-    if isinstance(src, str):
-        try:
-            src = json.loads(src)
-        except Exception:
-            src = {}
-    if not isinstance(src, dict):
-        return []
-    figs = src.get("figures") or src.get("figuras") or []
-    if not isinstance(figs, list):
-        return []
-    out: list[Dict[str, Any]] = []
-    for it in figs:
-        if isinstance(it, dict) and it.get("bucket") and it.get("path"):
-            out.append(it)
-    return out
 
 
 def _safe_float(v: Any) -> float | None:
@@ -329,73 +296,10 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
         "A exigência de vagas aplica-se às residências multifamiliares e demais atividades listadas no Anexo IV."
     )
 
-    st.markdown("---\n### 🧾 QUADRO TÉCNICO – PARÂMETROS DOS AMBIENTES\n(Lei Complementar nº 90/2023 – Anexo II)")
-    st.markdown(
-        """| AMBIENTE | CÍRCULO INSCRITO | ÁREA MÍNIMA | ILUMINAÇÃO | VENTILAÇÃO | PÉ-DIREITO | OBS. |
-|---|---:|---:|---:|---:|---:|---|
-| Sala de estar | 2,00 m | 8,00 m² | 1/8 | 1/12 | 2,50 m | 7 |
-| Sala de jantar | 2,00 m | 6,00 m² | 1/8 | 1/12 | 2,50 m | 7 |
-| Cozinha | 1,80 m | 5,00 m² | 1/8 | 1/12 | 2,50 m | 1-7 |
-| 1º e 2º quartos | 2,00 m | 8,00 m² | 1/8 | 1/12 | 2,50 m | – |
-| Demais quartos | 2,00 m | 5,00 m² | 1/8 | 1/12 | 2,50 m | – |
-| Banheiro | 1,00 m | 1,50 m² | 1/10 | 1/16 | 2,20 m | 1-2-3 |
-| Área de serviço | 1,20 m | 1,80 m² | 1/10 | 1/16 | 2,20 m | 1-2-7 |
-| Garagem | 2,20 m | 9,00 m² | 1/14 | 1/24 | 2,20 m | 7 |
-| Escada | 0,80 m | – | – | – | 2,10 m | 8-11-12-13 |
-"""
-    )
-    st.markdown(
-        """**Observações aplicáveis (Anexo II – LC 90/2023)**
-
-- Tolera-se iluminação e ventilação zenital.  
-- Admite-se ventilação mecânica ou indireta nos casos permitidos.  
-- Banheiro não pode comunicar-se diretamente com cozinha ou sala de jantar.  
-- Corredores com mais de 5,00m devem ter largura mínima de 1,00m.  
-- Corredores com mais de 10,00m exigem ventilação mínima proporcional.  
-- Área de porta com veneziana pode ser computada como ventilação.  
-- Escadas devem ser de material incombustível ou tratado.  
-- Patamar obrigatório quando houver mudança de direção ou altura superior a 2,90m.  
-- Largura mínima do degrau: 0,25m.  
-- Altura máxima do degrau: 0,19m.  
-"""
-    )
-
-    st.markdown("#### 💡 Dicas Valiosas:")
-    st.markdown(
-        "• **Passeios (calçadas):** Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. "
-        "Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via; "
-        "na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garantindo continuidade e alinhamento, "
-        "sendo a análise do licenciamento voltada a confirmar que a proposta não avança sobre a área pública."
-    )
-    st.markdown(
-        "• **Piscinas:** Se for construída uma piscina, ela não é computada como área construída e, por isso, não entra no cálculo da Taxa de Ocupação (TO). "
-        "Porém, para a Taxa de Permeabilidade (TP), a piscina é considerada área impermeável, reduzindo a área permeável do lote. "
-        "Além disso, conforme o Art. 144, piscinas, espelhos d’água, caixas d’água, cisternas e tanques devem manter afastamento mínimo de 0,50 m de todas as divisas "
-        "do terreno e sempre ser computados como área impermeável no cálculo da TP."
-    )
-
-    figs = _extract_figures_from_rule(rule)
-    if figs:
-        st.markdown("---\n### 📎 Figuras anexas (Anexo V)")
-        for i in range(0, len(figs), 2):
-            cols = st.columns(2)
-            pair = figs[i : i + 2]
-            for col, f in zip(cols, pair):
-                with col:
-                    title = f.get("title") or f.get("titulo")
-                    caption = f.get("caption") or f.get("legenda")
-                    bucket = f.get("bucket")
-                    path = f.get("path")
-                    url = _build_public_storage_url(str(bucket), str(path)) if bucket and path else None
-                    if title:
-                        st.markdown(f"**{title}**")
-                    if url:
-                        st.image(url, caption=caption or title or "", use_container_width=True)
-                        st.markdown(f"[🔎 Abrir em tamanho real]({url})")
-                    else:
-                        st.markdown(f"Imagem: {bucket}/{path}")
-                    if caption and caption != title:
-                        st.caption(caption)
+    render_quadro_tecnico()
+    render_dicas_valiosas()
+    render_figuras_anexo_v(rule)
 
     with st.expander("Ver regra completa (JSON)"):
+
         st.json(rule)
