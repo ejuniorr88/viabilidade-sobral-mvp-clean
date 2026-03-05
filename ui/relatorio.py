@@ -97,7 +97,9 @@ def _md_table(rows: list[tuple[str, str]]) -> str:
 
 
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
-    is_irregular = bool(st.session_state.get('lot_is_irregular', False))
+    # Flag do lote irregular (não calcular recuos)
+    is_irregular = bool(st.session_state.get("lot_is_irregular", False))
+
     st.subheader("6) Relatório Urbanístico")
 
     if not isinstance(calc, dict) or not calc.get("ok"):
@@ -137,7 +139,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
 
-    # Opção 1 (recuos padrão)
+    # Opção 1 (recuos padrão) — apenas para lote NÃO irregular
     W_util = W - 2 * float(rec_lat or 0.0)
     D_util = D - float(rec_fr or 0.0) - float(rec_fun or 0.0)
     A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
@@ -200,31 +202,33 @@ Agora veja duas situações possíveis:
         if not is_irregular:
             st.markdown("✅ **Opção 1 – Respeitando os recuos padrão**")
             st.markdown(
-            f"""**Recuos exigidos:**
+                f"""**Recuos exigidos:**
 
-            - Frontal: **{_fmt_num(rec_fr)} m**
-            - Laterais: **{_fmt_num(rec_lat)} m** cada
-            - Fundo: **{_fmt_num(rec_fun)} m**
+- Frontal: **{_fmt_num(rec_fr)} m**
+- Laterais: **{_fmt_num(rec_lat)} m** cada
+- Fundo: **{_fmt_num(rec_fun)} m**
 
-            **Área interna disponível:**
+**Área interna disponível:**
 
-            Largura útil: **{_fmt_num(W)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)} m**  
-            Profundidade útil: **{_fmt_num(D)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun)} = {_fmt_num(D_util)} m**
-            """
+Largura útil: **{_fmt_num(W)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)} m**  
+Profundidade útil: **{_fmt_num(D)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun)} = {_fmt_num(D_util)} m**
+"""
             )
             if A_recuos is not None:
-            st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
+                st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
             if A_op1 is not None:
-            st.markdown(
-            f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, o limite físico pelos recuos é **{_fmt_num(A_op1)} m²**."
+                st.markdown(
+                    f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, "
+                    f"o limite físico pelos recuos é **{_fmt_num(A_op1)} m²**."
+                )
+        else:
+            st.info(
+                "ℹ️ **Terreno irregular**: como o lote não é retangular, o relatório não calcula a implantação por **recuos**. "
+                "Aqui são apresentados apenas os limites legais por **TO/TP/IA**. A implantação pode ser reduzida por recuos, "
+                "forma do lote, alinhamento, servidões e exigências do licenciamento."
             )
 
-
-        else:
-            st.info("ℹ️ **Terreno irregular**: como o lote não é retangular, o relatório não calcula a implantação por **recuos**. "
-                    "Aqui são apresentados apenas os limites legais por **TO/TP/IA**. A implantação pode ser reduzida por recuos, forma do lote, alinhamento, servidões e exigências do licenciamento.")
-
-st.markdown("\n✅ **Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)**")
+        st.markdown("\n✅ **Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)**")
         st.markdown(
             """Por se tratar de **residência unifamiliar**, a legislação permite **zerar o recuo frontal e os recuos laterais**, desde que:
 
@@ -261,14 +265,13 @@ Nesse caso, você pode utilizar no térreo até o limite permitido pela TO.
 """
         )
 
-        # ✅ Cenário usando a área pretendida (se informada) ou o máximo (padrão)
+        # Cenário usando a área pretendida (se informada) ou o máximo (padrão)
         A_user = _safe_float(calc.get("built_ground_input_m2"))
         A_adopt = _safe_float(calc.get("built_ground_adopted_m2"))
         A_used = None
         if A_user is not None and A_user > 0:
             A_used = A_adopt if (A_adopt is not None and A_adopt > 0) else A_user
         else:
-            # sem área informada: usar o máximo da Opção 2, se existir; senão, o da Opção 1
             if A_op2 is not None:
                 A_used = A_op2
             elif A_op1 is not None:
@@ -290,9 +293,8 @@ Desses:
 """
             )
 
-        # ✅ FIX: bloco indentado corretamente dentro do expander
         with st.expander("Ver cenários usando os máximos das opções"):
-            if tp1 is not None and A_op1 is not None:
+            if (tp1 is not None) and (A_op1 is not None):
                 A_rest, A_imperm = tp1
                 st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
                 st.markdown(
@@ -307,7 +309,7 @@ Desses:
 """
                 )
 
-            if tp2 is not None and A_op2 is not None:
+            if (tp2 is not None) and (A_op2 is not None):
                 A_rest, A_imperm = tp2
                 st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
                 st.markdown(
@@ -322,9 +324,7 @@ Desses:
 """
                 )
 
-        st.markdown(
-            "\n🧱 **Tipos de piso e quanto contam como permeáveis**\n(Lei Complementar nº 90/2023 – Art. 108)\n"
-        )
+        st.markdown("\n🧱 **Tipos de piso e quanto contam como permeáveis**\n(Lei Complementar nº 90/2023 – Art. 108)\n")
         st.markdown(
             _md_table(
                 [
@@ -357,11 +357,12 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
 
     st.markdown("---\n### 🚗 4️⃣ Estacionamento")
     st.markdown(
-        "De acordo com o Anexo IV da Lei Complementar nº 90/2023, **não há previsão de quantidade mínima obrigatória de vagas para residência unifamiliar**.\n\nA exigência de vagas aplica-se às residências multifamiliares e demais atividades listadas no Anexo IV."
+        "De acordo com o Anexo IV da Lei Complementar nº 90/2023, **não há previsão de quantidade mínima obrigatória de vagas para residência unifamiliar**.\n\n"
+        "A exigência de vagas aplica-se às residências multifamiliares e demais atividades listadas no Anexo IV."
     )
 
     # =============================
-    # QUADRO TÉCNICO (Anexo II) - placeholder simples (mantém sem quebrar)
+    # QUADRO TÉCNICO – PARÂMETROS DOS AMBIENTES (Anexo II)
     # =============================
     st.markdown("---\n### 🧾 QUADRO TÉCNICO – PARÂMETROS DOS AMBIENTES\n(Lei Complementar nº 90/2023 – Anexo II)")
     st.markdown(
@@ -394,30 +395,31 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
 """
     )
 
-
     # =============================
-    # FIGURAS ANEXAS (Supabase Storage) - Anexo V
+    # FIGURAS ANEXAS (Supabase Storage) — Anexo V
     # =============================
     figs = _extract_figures_from_rule(rule)
     if figs:
         st.markdown("---\n### 📎 Figuras anexas (Anexo V)")
-        # Exibir 2 imagens por linha (duas colunas)
         for i in range(0, len(figs), 2):
             cols = st.columns(2)
-            pair = figs[i:i+2]
+            pair = figs[i : i + 2]
             for col, f in zip(cols, pair):
                 with col:
-                    title = f.get('title') or f.get('titulo')
-                    caption = f.get('caption') or f.get('legenda')
-                    bucket = f.get('bucket')
-                    path = f.get('path')
-                    url = _build_public_storage_url(bucket, path) if isinstance(bucket, str) and isinstance(path, str) else None
+                    title = f.get("title") or f.get("titulo")
+                    caption = f.get("caption") or f.get("legenda")
+                    bucket = f.get("bucket")
+                    path = f.get("path")
+                    url = (
+                        _build_public_storage_url(bucket, path)
+                        if isinstance(bucket, str) and isinstance(path, str)
+                        else None
+                    )
                     if title:
                         st.markdown(f"**{title}**")
                     if url:
                         try:
-                            st.image(url, caption=caption or title or '', use_container_width=True)
-
+                            st.image(url, caption=caption or title or "", use_container_width=True)
                             st.markdown(f"[🔎 Abrir em tamanho real]({url})")
                         except Exception:
                             st.markdown(f"Imagem: {bucket}/{path}")
@@ -425,5 +427,6 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
                         st.markdown(f"Imagem: {bucket}/{path}")
                     if caption and caption != title:
                         st.caption(caption)
+
     with st.expander("Ver regra completa (JSON)"):
         st.json(rule)
