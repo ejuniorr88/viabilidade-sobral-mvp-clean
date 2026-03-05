@@ -135,15 +135,19 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
 
-    # Opção 1 (recuos padrão)
-    W_util = W - 2 * float(rec_lat or 0.0)
-    D_util = D - float(rec_fr or 0.0) - float(rec_fun or 0.0)
-    A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
-    A_op1 = None
-    if A_to is not None and A_recuos is not None:
-        A_op1 = min(A_to, A_recuos)
+        if not is_irregular:
+        # Opção 1 (recuos padrão)
+            W_util = W - 2 * float(rec_lat or 0.0)
+            D_util = D - float(rec_fr or 0.0) - float(rec_fun or 0.0)
+            A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
+            A_op1 = None
+            if A_to is not None and A_recuos is not None:
+                A_op1 = min(A_to, A_recuos)
 
-    # Opção 2 (Art.112: zera frontal e laterais, fundo obrigatório)
+
+    else:
+        W_util = D_util = A_recuos = A_op1 = None
+# Opção 2 (Art.112: zera frontal e laterais, fundo obrigatório)
     A_fundo = (W * (D - float(rec_fun or 0.0))) if (W > 0 and D > float(rec_fun or 0.0)) else None
     A_op2 = None
     if A_to is not None and A_fundo is not None:
@@ -195,29 +199,33 @@ Agora veja duas situações possíveis:
 """
         )
 
-        st.markdown("✅ **Opção 1 – Respeitando os recuos padrão**")
-        st.markdown(
-            f"""**Recuos exigidos:**
-
-- Frontal: **{_fmt_num(rec_fr)} m**
-- Laterais: **{_fmt_num(rec_lat)} m** cada
-- Fundo: **{_fmt_num(rec_fun)} m**
-
-**Área interna disponível:**
-
-Largura útil: **{_fmt_num(W)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)} m**  
-Profundidade útil: **{_fmt_num(D)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun)} = {_fmt_num(D_util)} m**
-"""
-        )
-        if A_recuos is not None:
-            st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
-        if A_op1 is not None:
-            st.markdown(
                 if not is_irregular:
-                    f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, o limite físico pelos recuos é **{_fmt_num(A_op1)} m²**."
-            )
+            st.markdown("✅ **Opção 1 – Respeitando os recuos padrão**")
+                    st.markdown(
+                        f"""**Recuos exigidos:**
 
-        st.markdown("\n✅ **Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)**")
+            - Frontal: **{_fmt_num(rec_fr)} m**
+            - Laterais: **{_fmt_num(rec_lat)} m** cada
+            - Fundo: **{_fmt_num(rec_fun)} m**
+
+            **Área interna disponível:**
+
+            Largura útil: **{_fmt_num(W)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)} m**  
+            Profundidade útil: **{_fmt_num(D)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun)} = {_fmt_num(D_util)} m**
+            """
+                    )
+                    if A_recuos is not None:
+                        st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
+                    if A_op1 is not None:
+                        st.markdown(
+                            f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, o limite físico pelos recuos é **{_fmt_num(A_op1)} m²**."
+                        )
+
+
+        else:
+            st.info("ℹ️ **Terreno irregular**: como o lote não é retangular, o relatório não calcula a implantação por **recuos**. "
+                    "Aqui são apresentados apenas os limites legais por **TO/TP/IA**. A implantação pode ser reduzida por recuos, forma do lote, alinhamento, servidões e exigências do licenciamento.")
+st.markdown("\n✅ **Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)**")
         st.markdown(
             """Por se tratar de **residência unifamiliar**, a legislação permite **zerar o recuo frontal e os recuos laterais**, desde que:
 
