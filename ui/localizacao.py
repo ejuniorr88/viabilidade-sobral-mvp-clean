@@ -30,13 +30,13 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
     calcular, zones_prepared, radius_m = _coerce_call(args, kwargs)
 
-    use_type_code = st.text_input(
-        "use_type_code",
-        value=st.session_state.calc.get("use_type_code") or "RES_UNI",
-        key="use_type_code_input",
-    )
-
+    # Estado
     calc = st.session_state.calc
+
+    # Exibir o uso selecionado (somente leitura).
+    # Importante: NÃO permitir que este campo sobrescreva o tipo escolhido no Item 2.
+    use_type_code = calc.get("use_type_code") or "RES_UNI"
+    st.text_input("use_type_code", value=use_type_code, disabled=True)
 
     if calcular:
         if not getattr(st.session_state, "last_click", None):
@@ -48,6 +48,7 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
             calc["lat"] = lat
             calc["lon"] = lon
+            # manter o valor já definido no Item 2 (ou default RES_UNI)
             calc["use_type_code"] = use_type_code
             calc["radius_m"] = int(radius_m)
 
