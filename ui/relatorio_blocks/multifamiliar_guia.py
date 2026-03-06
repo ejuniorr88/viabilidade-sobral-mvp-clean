@@ -174,13 +174,17 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Dict[str, Any], is_
     # D) Vagas (apenas regra)
     st.markdown("#### D) Vagas de estacionamento (como calcular)")
     st.markdown(
-        """Regra (LC 90/2023 — Anexo IV):  
-- **Unidade < 90 m²** → **1 vaga por unidade**  
-- **Unidade ≥ 90 m²** → **1,5 vaga por unidade** *(na prática, arredondar para cima)*  
+        """A quantidade de vagas depende do **tamanho do apartamento**:
 
-Para fechar o número de vagas, você vai precisar informar depois (Fase 2):  
-- **Quantidade de unidades (UH)**  
-- **Área média por unidade** (ou se é <90 / ≥90)
+- **Apartamento com menos de 90 m²** → **1 vaga por unidade**
+- **Apartamento com 90 m² ou mais** → **1,5 vaga por unidade**  
+  *(na prática, o total final deve ser **arredondado para cima**)*
+
+*(LC 90/2023 — Anexo IV)*
+
+**Exemplo rápido:**  
+- 10 apartamentos com **80 m²** → **10 vagas**  
+- 11 apartamentos com **100 m²** → 11 × 1,5 = 16,5 → **17 vagas** (arredonda pra cima)
 """
     )
 
