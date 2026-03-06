@@ -70,6 +70,55 @@ def render_lote_section() -> Tuple[float, float, float]:
 
     st.checkbox("Lote de esquina", value=bool(st.session_state.get("lot_is_corner") or False), key="lot_is_corner")
 
+
+    # -----------------------------
+    # Tipo de projeto (Fase 1 — Multifamiliar)
+    # -----------------------------
+    # Mantém o unifamiliar como padrão (não quebra nada do fluxo atual).
+    # Multifamiliar nesta etapa roda apenas o "Guia do Projetista" (Fase 1).
+    projeto_opts = [
+        "Residencial Unifamiliar (RES_UNI)",
+        "Multifamiliar R2.1 (RES_MULTI_R21)",
+        "Multifamiliar R2.2 (RES_MULTI_R22)",
+        "Multifamiliar R3 (RES_MULTI_R3)",
+    ]
+    projeto_sel = st.selectbox(
+        "Tipo de projeto",
+        options=projeto_opts,
+        index=max(0, min(int(st.session_state.get("project_kind_idx") or 0), len(projeto_opts)-1)),
+        key="project_kind_sel",
+    )
+    st.session_state["project_kind_idx"] = projeto_opts.index(projeto_sel)
+
+    # Modo (por enquanto, só Fase 1)
+    modo_sel = st.selectbox(
+        "Modo do multifamiliar",
+        options=["Fase 1 — Guia do Projetista"],
+        index=0,
+        key="project_mode_sel",
+    )
+
+    # Define use_type_code no contrato calc (o Supabase usa isso para buscar a regra)
+    calc = st.session_state.get("calc")
+    if isinstance(calc, dict):
+        if "RES_MULTI_R21" in projeto_sel:
+            calc["use_type_code"] = "RES_MULTI_R21"
+            calc["multi_tipo"] = "R2.1"
+            calc["project_mode"] = "GUIA_FASE_1"
+        elif "RES_MULTI_R22" in projeto_sel:
+            calc["use_type_code"] = "RES_MULTI_R22"
+            calc["multi_tipo"] = "R2.2"
+            calc["project_mode"] = "GUIA_FASE_1"
+        elif "RES_MULTI_R3" in projeto_sel:
+            calc["use_type_code"] = "RES_MULTI_R3"
+            calc["multi_tipo"] = "R3"
+            calc["project_mode"] = "GUIA_FASE_1"
+        else:
+            calc["use_type_code"] = "RES_UNI"
+            calc["multi_tipo"] = None
+            calc["project_mode"] = None
+
+
     area_terreo = st.number_input(
         "Área pretendida no térreo (m²) (se deixar 0, o relatório assume o máximo permitido)",
         min_value=0.0,
