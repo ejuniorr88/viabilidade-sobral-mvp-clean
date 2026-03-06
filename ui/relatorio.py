@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 import streamlit as st
 
-from .relatorio_blocks import render_quadro_tecnico, render_dicas_valiosas, render_figuras_anexo_v
+from .relatorio_blocks import render_quadro_tecnico, render_dicas_valiosas, render_figuras_anexo_v, render_multifamiliar_guia
 
 
 
@@ -75,6 +75,19 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     via = calc.get("via_nome") or calc.get("street_name") or "—"
     via_tipo = calc.get("via_tipo") or calc.get("street_type") or "—"
     uso = calc.get("use_type_code") or "RES_UNI"
+
+    # =============================
+    # Multifamiliar — Fase 1 (Guia)
+    # =============================
+    if str(uso).startswith("RES_MULTI_") and calc.get("project_mode") == "GUIA_FASE_1":
+        render_multifamiliar_guia(calc=calc, rule=rule, is_irregular=is_irregular)
+
+        # Mantém blocos fixos do relatório (blindagem)
+        render_dicas_valiosas()
+        render_quadro_tecnico()
+        render_figuras_anexo_v(rule)
+        return
+
 
     A = float(calc.get("lot_area_m2") or 0.0)
     W = float(st.session_state.get("lot_front_m") or 0.0)
