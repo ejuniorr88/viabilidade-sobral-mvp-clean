@@ -1,7 +1,4 @@
-"""Blocos reutilizáveis do relatório.
-
-Este pacote expõe funções de renderização usadas pelo ui/relatorio.py.
-"""
+"""Blocos reutilizáveis do relatório."""
 
 from .quadro_tecnico import render_quadro_tecnico
 from .dicas_valiosas import render_dicas_valiosas
