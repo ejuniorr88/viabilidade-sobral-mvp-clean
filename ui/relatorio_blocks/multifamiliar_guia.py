@@ -62,13 +62,13 @@ def _via_tipo_norm(v: Any) -> Optional[str]:
         return "ARTERIAL"
     if "coletora" in s:
         return "COLETORA"
-    return None  # via local / outras não entram no Quadro I
+    return None  # via local / outras não entram na tabela por tipo de via
 
 
 def _fetch_adequabilidade(
     *, zone_sigla: str, via_tipo_texto: Optional[str], use_type_code: str
 ) -> Tuple[Optional[str], Optional[str], Dict[str, Any]]:
-    """Busca adequabilidade por zona (Quadro 2A) e por via (Quadro I)."""
+    """Busca adequabilidade por zona (2A) e por tipo de via (arterial/coletora)."""
     sb = _get_supabase()
     debug: Dict[str, Any] = {
         "zone_sigla_in": zone_sigla,
@@ -89,7 +89,7 @@ def _fetch_adequabilidade(
     zone_class = None
     via_class = None
 
-    # Quadro 2A (SEDE) — por enquanto sempre, sem sede/distrito
+    # Zona (Quadro 2A - sede)
     try:
         cands = _zone_candidates(zona)
         debug["zone_candidates"] = cands
@@ -108,7 +108,7 @@ def _fetch_adequabilidade(
     except Exception as e:
         debug["zone_error"] = str(e)
 
-    # Quadro I (vias) — só para arterial/coletora
+    # Tipo de via (arterial/coletora) — quando aplicável
     if via_norm:
         try:
             res2 = (
@@ -150,8 +150,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     if not zone_class and not via_class:
         st.info(
             "Adequabilidade ainda não foi encontrada no banco para este uso/zona/via. "
-            "Se você acabou de rodar o SQL, confira se as tabelas `adequab_zonas_sede` e `adequab_vias` estão com dados. "
-            "(Quadro 2A e Quadro I)."
+            "Confira se as tabelas `adequab_zonas_sede` e `adequab_vias` estão com dados."
         )
         with st.expander("🔎 Diagnóstico (para conferência)"):
             st.json(dbg)
@@ -167,22 +166,21 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             "- Para **via local**, normalmente vale **apenas a regra da zona**."
         )
 
-                if zone_class:
-
-            st.success(f"✅ Por zona (Quadro 2A): **{zona} → {zone_class} ({_sigla_nome(zone_class)})**")
+        if zone_class:
+            st.success(f"✅ Por zona (2A): **{zona} → {zone_class} ({_sigla_nome(zone_class)})**")
         else:
-            st.warning("⚠️ Por zona (Quadro 2A): não encontrado para esta zona.")
+            st.warning("⚠️ Por zona (2A): não encontrado para esta zona.")
 
         via_norm = _via_tipo_norm(via_tipo_txt)
         if via_norm:
             if via_class:
-                st.success(f"✅ Por categoria viária (Quadro I): **{via_norm} → {via_class} ({_sigla_nome(via_class)})**")
+                st.success(f"✅ Por tipo de via: **{via_norm} → {via_class} ({_sigla_nome(via_class)})**")
             else:
-                st.warning(f"⚠️ Por categoria viária (Quadro I): não encontrado para **{via_norm}**.")
+                st.warning(f"⚠️ Por tipo de via: não encontrado para **{via_norm}**.")
         else:
-            st.info("ℹ️ Quadro I (categoria viária) se aplica a vias **arteriais/coletoras** (e paisagísticas). Para **via local**, este quadro pode não se aplicar.")
+            st.info("ℹ️ A tabela por tipo de via se aplica a vias **arteriais/coletoras** (e paisagísticas). Para **via local**, esta tabela pode não se aplicar.")
 
-        # Breve explicação leiga das categorias de via
+        # Explicação leiga das categorias de via
         st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
         st.markdown(
             "- **Via local:** rua de bairro, usada principalmente para acesso às casas/quadras (tráfego menor).\n"
@@ -191,7 +189,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             "- **Paisagística:** classificação usada pela lei quando a via tem tratamento urbano/paisagístico específico."
         )
 
-        # Dois quadros lado a lado
+        # Dois quadros lado a lado (siglas x porte)
         col1, col2 = st.columns(2)
 
         with col1:
@@ -254,7 +252,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
 
         st.caption("Demais recuos/gabarito/testadas seguem a regra carregada do Supabase para esta zona.")
 
-    # C) Checklist
+    # C) Checklist do tipo escolhido
     st.markdown("### C) Checklist do tipo escolhido (sem exigir projeto pronto)")
 
     if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
