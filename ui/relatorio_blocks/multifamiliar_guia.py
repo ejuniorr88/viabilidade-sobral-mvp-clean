@@ -24,16 +24,12 @@ def _zone_candidates(z: str) -> List[str]:
     if " " in z0:
         cands.append(z0.replace(" ", ""))
     else:
-        # tenta inserir espaço antes de dígitos (ZEPE1 -> ZEPE 1)
         import re
         z_sp = re.sub(r"(\D)(\d)", r"\1 \2", z0)
         if z_sp != z0:
             cands.append(z_sp)
-    # versões com hífen
     cands.append(z0.replace("-", " "))
-    cands.append(z0.replace(" ", " ").strip())
-    # únicos
-    out = []
+    out: List[str] = []
     for c in cands:
         c = c.strip().upper()
         if c and c not in out:
@@ -161,14 +157,29 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         else:
             st.info("ℹ️ Quadro I (categoria viária) se aplica a vias **arteriais/coletoras** (e paisagísticas). Para **via local**, este quadro pode não se aplicar.")
 
-        st.caption("Legenda: A=adequado; I=inadequado; AP/AM=depende do porte/condições; PE=projeto especial (conforme lei).")
+        # Quadro leigo da legenda
+        st.markdown("**O que significam as siglas (bem simples):**")
+        st.markdown(
+            """| Sigla | O que significa (em poucas palavras) | Como interpretar |
+|---|---|---|
+| **A** | Adequado / permitido | Pode seguir com o projeto (respeitando TO/TP/IA/recuos). |
+| **I** | Inadequado / não permitido | Em regra, **não pode** nesse local/condição. |
+| **AP** | Adequado (pequeno porte) | Pode, mas normalmente **limitado a porte pequeno**. |
+| **AM** | Adequado (médio porte) | Pode, mas normalmente **limitado a porte médio**. |
+| **AP/AM** | Depende do porte | Pode, mas depende se o seu caso é **pequeno ou médio**. |
+| **PE** | Projeto especial | Pode exigir análise específica/condições extras no licenciamento. |
+"""
+        )
 
     # B) Parâmetros urbanísticos
     st.markdown("### B) Parâmetros urbanísticos (para começar projeto)")
     if not rule:
         st.warning(
-            "Regra urbanística específica do multifamiliar ainda não foi cadastrada no Supabase para esta zona.\n\n"
-            "➡️ Você já pode iniciar o estudo, mas **confirme TO/TP/IA/recuos/gabarito** no licenciamento junto à **SEUMA** e nos **anexos da lei**."
+            "Ainda não temos uma **regra específica do multifamiliar** cadastrada no Supabase para esta zona.\n\n"
+            "**O que isso quer dizer na prática?**\n"
+            "- O sistema **não consegue confirmar automaticamente** TO/TP/IA/recuos/gabarito para o multifamiliar aqui.\n"
+            "- Você **pode começar o estudo**, mas antes de fechar o projeto, confirme esses limites no **licenciamento da SEUMA** e nos **anexos da lei**.\n\n"
+            "**Dica:** normalmente esses limites definem: (1) quanto cabe no térreo (TO), (2) quanto deve ficar livre/permeável (TP) e (3) o total máximo construído (IA)."
         )
     else:
         def _pct(v: Any) -> Optional[float]:
