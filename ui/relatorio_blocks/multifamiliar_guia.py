@@ -171,6 +171,20 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
 """
         )
 
+        # NOVO: Quadro leigo do porte (faixas do quadro de "Portes" do Anexo III)
+        st.markdown("**O que é “porte” (pequeno / médio / grande)?**")
+        st.caption("Porte é a “escala” do empreendimento, normalmente definida pela **área construída total (m²)**. As faixas abaixo seguem o quadro de Portes do Anexo III.")
+        st.markdown(
+            """| Porte | Faixa (área construída total) |
+|---|---|
+| **Pequeno** | até **250 m²** |
+| **Médio** | de **250,01 m²** até **1.000 m²** |
+| **Grande** | de **1.000,01 m²** até **5.000 m²** |
+| **Projeto especial** | acima de **5.000 m²** |
+"""
+        )
+        st.caption("Obs.: se a lei/SEUMA adotar critério diferente para algum uso específico, prevalece o licenciamento.")
+
     # B) Parâmetros urbanísticos
     st.markdown("### B) Parâmetros urbanísticos (para começar projeto)")
     if not rule:
