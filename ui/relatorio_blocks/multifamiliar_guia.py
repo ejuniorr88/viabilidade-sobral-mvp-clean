@@ -173,43 +173,38 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         # Breve explicação leiga das categorias de via
         st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
         st.markdown(
-            "- **Via local:** rua de bairro, usada principalmente para acesso às casas/quadras (tráfego menor).
-"
-            "- **Via coletora:** rua que **coleta** o tráfego das vias locais e leva para vias maiores.
-"
-            "- **Via arterial:** via principal, de maior fluxo, que liga áreas/ bairros e distribui o tráfego na cidade.
-"
-            "- **Arterial/Coletora paisagística:** mesma função, mas com tratamento urbano/paisagístico específico (quando a lei classifica assim)."
+            "- **Via local:** rua de bairro, usada principalmente para acesso às casas/quadras (tráfego menor).\n"
+            "- **Via coletora:** rua que **coleta** o tráfego das vias locais e leva para vias maiores.\n"
+            "- **Via arterial:** via principal, de maior fluxo, que liga áreas/bairros e distribui o tráfego na cidade.\n"
+            "- **Paisagística:** classificação usada pela lei quando a via tem tratamento urbano/paisagístico específico."
         )
 
-        # Dois quadros lado a lado (siglas x porte)
+        # Dois quadros lado a lado
         col1, col2 = st.columns(2)
 
         with col1:
             st.markdown("**O que significam as siglas (bem simples):**")
             st.markdown(
-                """| Sigla | O que significa | Como interpretar |
-|---|---|---|
-| **A** | Adequado / permitido | Pode seguir com o projeto (respeitando TO/TP/IA/recuos). |
-| **I** | Inadequado / não permitido | Em regra, **não pode** nesse local/condição. |
-| **AP** | Adequado (pequeno porte) | Pode, mas normalmente limitado a porte pequeno. |
-| **AM** | Adequado (médio porte) | Pode, mas normalmente limitado a porte médio. |
-| **AP/AM** | Depende do porte | Pode, mas depende se o seu caso é pequeno ou médio. |
-| **PE** | Projeto especial | Pode exigir análise específica/condições extras no licenciamento. |
-"""
+                "| Sigla | O que significa | Como interpretar |\n"
+                "|---|---|---|\n"
+                "| **A** | Adequado / permitido | Pode seguir com o projeto (respeitando TO/TP/IA/recuos). |\n"
+                "| **I** | Inadequado / não permitido | Em regra, **não pode** nesse local/condição. |\n"
+                "| **AP** | Adequado (pequeno porte) | Pode, mas normalmente limitado a porte pequeno. |\n"
+                "| **AM** | Adequado (médio porte) | Pode, mas normalmente limitado a porte médio. |\n"
+                "| **AP/AM** | Depende do porte | Pode, mas depende se o seu caso é pequeno ou médio. |\n"
+                "| **PE** | Projeto especial | Pode exigir análise específica/condições extras no licenciamento. |\n"
             )
 
         with col2:
             st.markdown("**O que é “porte” (pequeno / médio / grande)?**")
             st.caption("Porte é a escala do empreendimento, normalmente definida pela **área construída total (m²)**.")
             st.markdown(
-                """| Porte | Faixa (área construída total) |
-|---|---|
-| **Pequeno** | até **250 m²** |
-| **Médio** | de **250,01 m²** até **1.000 m²** |
-| **Grande** | de **1.000,01 m²** até **5.000 m²** |
-| **Projeto especial** | acima de **5.000 m²** |
-"""
+                "| Porte | Faixa (área construída total) |\n"
+                "|---|---|\n"
+                "| **Pequeno** | até **250 m²** |\n"
+                "| **Médio** | de **250,01 m²** até **1.000 m²** |\n"
+                "| **Grande** | de **1.000,01 m²** até **5.000 m²** |\n"
+                "| **Projeto especial** | acima de **5.000 m²** |\n"
             )
             st.caption("Obs.: se a lei/SEUMA adotar critério diferente para algum uso específico, prevalece o licenciamento.")
 
@@ -253,40 +248,28 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
         st.markdown("**R2.1 — 2 unidades no mesmo lote (justapostas ou sobrepostas)**")
         st.markdown(
-            "- ✅ **Altura/andares:** pode ter no máximo 2 pavimentos (ex.: térreo + 1º andar). *(LC 91/2023 — definição de R2.1)*
-"
-            "- ✅ **Justapostas (lado a lado):** testada mínima 8,00 m (exceto ZEIS). *(LC 91/2023 — requisito citado para R2.1)*
-"
+            "- ✅ **Altura/andares:** pode ter no máximo 2 pavimentos (ex.: térreo + 1º andar). *(LC 91/2023 — definição de R2.1)*\n"
+            "- ✅ **Justapostas (lado a lado):** testada mínima 8,00 m (exceto ZEIS). *(LC 91/2023 — requisito citado para R2.1)*\n"
             "- ✅ **Parâmetros urbanísticos:** quando a zona permitir, pode usar os parâmetros do unifamiliar, respeitando adequabilidade. *(LC 91/2023 — Art. 106)*"
         )
     elif multi_tipo in ("R22", "R2.2", "R2_2") or use_type_code.endswith("R22"):
         st.markdown("**R2.2 — Condomínio horizontal (via interna)**")
         st.markdown(
-            "- ✅ Acesso de veículos: abertura mínima 4,00 m (largura) e 4,50 m (altura livre).
-"
-            "- ✅ Via interna: largura mínima 6,00 m.
-"
-            "- ✅ Muro frontal: pelo menos 25% em gradil/visibilidade.
-"
-            "- ✅ Resíduos: local no alinhamento com abertura para o logradouro.
-"
-            "- ✅ Áreas comuns: acessibilidade + sanitários/copa funcionários + DML.
-"
+            "- ✅ Acesso de veículos: abertura mínima 4,00 m (largura) e 4,50 m (altura livre).\n"
+            "- ✅ Via interna: largura mínima 6,00 m.\n"
+            "- ✅ Muro frontal: pelo menos 25% em gradil/visibilidade.\n"
+            "- ✅ Resíduos: local no alinhamento com abertura para o logradouro.\n"
+            "- ✅ Áreas comuns: acessibilidade + sanitários/copa funcionários + DML.\n"
             "- ⚠️ Lazer: se passar de 10 unidades, prever lazer mínimo conforme lei. *(LC 90/2023 — Art. 168)*"
         )
     elif multi_tipo in ("R3", "R03") or use_type_code.endswith("R3"):
         st.markdown("**R3 — Condomínio vertical (edifício)**")
         st.markdown(
-            "- ✅ Muro frontal: pelo menos 50% em gradil/visibilidade.
-"
-            "- ✅ Resíduos: local no alinhamento com abertura para o logradouro.
-"
-            "- ✅ Áreas comuns: acessibilidade + sanitários/copa + DML.
-"
-            "- ⚠️ Lazer: prever lazer mínimo conforme lei.
-"
-            "- ⚠️ Entregas/recepção: se passar de 30 unidades, prever espaço mínimo.
-"
+            "- ✅ Muro frontal: pelo menos 50% em gradil/visibilidade.\n"
+            "- ✅ Resíduos: local no alinhamento com abertura para o logradouro.\n"
+            "- ✅ Áreas comuns: acessibilidade + sanitários/copa + DML.\n"
+            "- ⚠️ Lazer: prever lazer mínimo conforme lei.\n"
+            "- ⚠️ Entregas/recepção: se passar de 30 unidades, prever espaço mínimo.\n"
             "- ⚠️ EIV: se passar de 100 unidades, EIV pode ser exigido. *(LC 90/2023 — Art. 170; LC 91/2023 — Art. 88)*"
         )
     else:
@@ -295,24 +278,15 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     # D) Vagas
     st.markdown("### D) Vagas de estacionamento (como calcular)")
     st.markdown(
-        "A quantidade de vagas depende do tamanho do apartamento (área construída da unidade):
-
-"
-        "- 🚗 Apartamento com menos de 90 m² → 1 vaga por unidade
-"
-        "- 🚗 Apartamento com 90 m² ou mais → 1,5 vaga por unidade
-
-"
-        "📌 Quando aparece 1,5, o total final deve ser arredondado para cima (não existe “meia vaga”).
-
-"
+        "A quantidade de vagas depende do tamanho do apartamento (área construída da unidade):\n\n"
+        "- 🚗 Apartamento com menos de 90 m² → 1 vaga por unidade\n"
+        "- 🚗 Apartamento com 90 m² ou mais → 1,5 vaga por unidade\n\n"
+        "📌 Quando aparece 1,5, o total final deve ser arredondado para cima (não existe “meia vaga”).\n\n"
         "*(LC 90/2023 — Anexo IV)*"
     )
-
     st.markdown("**Exemplo rápido:**")
     st.markdown(
-        "- 10 apartamentos com 80 m² → 10 vagas
-"
+        "- 10 apartamentos com 80 m² → 10 vagas\n"
         "- 11 apartamentos com 100 m² → 11 × 1,5 = 16,5 → 17 vagas"
     )
 
