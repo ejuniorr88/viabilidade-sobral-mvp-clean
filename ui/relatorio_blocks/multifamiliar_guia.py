@@ -159,7 +159,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.markdown("**Como interpretar este resultado (bem simples):**")
         st.markdown(
             "- Para **residência multifamiliar**, a permissão pode depender de **duas coisas**:\n"
-            "  1) **Resultado por ZONA** (onde o lote está)\n"
+            "  1) **Resultado por ZONA** (onde o lote está localizado)\n"
             "  2) **Resultado por TIPO DE VIA** (arterial/coletora e paisagísticas), quando a via for desse tipo\n\n"
             "**Regra prática (para não errar):**\n"
             "- Se o **resultado da ZONA** for **I (Inadequado / não permitido)** e a via for **VIA LOCAL**, então **continua I** (não permitido).\n"
@@ -182,7 +182,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             else:
                 st.warning(f"⚠️ Por tipo de via: não encontrado para **{via_norm}**.")
         else:
-            st.info("ℹ️ A tabela por tipo de via se aplica a vias **arteriais/coletoras** (e paisagísticas). Para **via local**, esta tabela pode não se aplicar.")
+            st.success("✅ **Via identificada como VIA LOCAL.** Nessa situação, a tabela por tipo de via (arterial/coletora/paisagística) geralmente não se aplica — normalmente vale o resultado da **zona**.")
 
         # Explicação leiga das categorias de via
         st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
