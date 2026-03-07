@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 import streamlit as st
 
 
 def _get_supabase():
-    """Tenta obter cliente Supabase do projeto (sem quebrar o app se não existir)."""
     try:
         from core.supabase_client import get_supabase  # type: ignore
         return get_supabase()
@@ -14,21 +13,38 @@ def _get_supabase():
         return None
 
 
-def _norm_zone_sigla(z: Any) -> str:
-    return str(z or "").strip().upper()
+def _norm(s: Any) -> str:
+    return str(s or "").strip().upper()
 
 
-def _norm_use_type_code(u: Any) -> str:
-    return str(u or "").strip().upper()
+def _zone_candidates(z: str) -> List[str]:
+    """Gera variações para bater com possíveis formatos do banco (ex.: 'ZEPE 1' vs 'ZEPE1')."""
+    z0 = _norm(z)
+    cands = [z0]
+    if " " in z0:
+        cands.append(z0.replace(" ", ""))
+    else:
+        # tenta inserir espaço antes de dígitos (ZEPE1 -> ZEPE 1)
+        import re
+        z_sp = re.sub(r"(\D)(\d)", r"\1 \2", z0)
+        if z_sp != z0:
+            cands.append(z_sp)
+    # versões com hífen
+    cands.append(z0.replace("-", " "))
+    cands.append(z0.replace(" ", " ").strip())
+    # únicos
+    out = []
+    for c in cands:
+        c = c.strip().upper()
+        if c and c not in out:
+            out.append(c)
+    return out
 
 
-def _norm_via_tipo(v: Any) -> Optional[str]:
-    """Mapeia o texto do app para os tipos usados na tabela adequab_vias."""
+def _via_tipo_norm(v: Any) -> Optional[str]:
     s = str(v or "").strip().lower()
     if not s:
         return None
-
-    # exemplos comuns no app: "via local", "arterial", "coletora", etc.
     if "arterial" in s and "pais" in s:
         return "ARTERIAL_PAISAGISTICA"
     if "coletora" in s and "pais" in s:
@@ -37,83 +53,86 @@ def _norm_via_tipo(v: Any) -> Optional[str]:
         return "ARTERIAL"
     if "coletora" in s:
         return "COLETORA"
-
-    # via local / outras: não existe no Quadro I do Excel
-    return None
+    return None  # via local / outras não entram no Quadro I
 
 
 def _fetch_adequabilidade(
-    *,
-    zone_sigla: str,
-    via_tipo_texto: Optional[str],
-    use_type_code: str,
-) -> Tuple[Optional[str], Optional[str]]:
-    """Busca adequabilidade por zona (sede) e por categoria viária."""
+    *, zone_sigla: str, via_tipo_texto: Optional[str], use_type_code: str
+) -> Tuple[Optional[str], Optional[str], Dict[str, Any]]:
+    """Busca adequabilidade por zona (Quadro 2A) e por via (Quadro I)."""
     sb = _get_supabase()
+    debug: Dict[str, Any] = {
+        "zone_sigla_in": zone_sigla,
+        "zone_candidates": [],
+        "use_type_code": use_type_code,
+        "via_tipo_in": via_tipo_texto,
+        "via_tipo_norm": None,
+    }
     if sb is None:
-        return None, None
+        debug["error"] = "supabase_client_not_available"
+        return None, None, debug
 
-    zona = _norm_zone_sigla(zone_sigla)
-    use_code = _norm_use_type_code(use_type_code)
-    via_tipo = _norm_via_tipo(via_tipo_texto)
+    zona = _norm(zone_sigla)
+    use_code = _norm(use_type_code)
+    via_norm = _via_tipo_norm(via_tipo_texto)
+    debug["via_tipo_norm"] = via_norm
 
     zone_class = None
     via_class = None
 
+    # Quadro 2A (SEDE) — por enquanto sempre, sem sede/distrito
     try:
-        # Por enquanto: sempre usa a tabela de SEDE (Quadro 2A),
-        # porque você decidiu NÃO usar Sede/Distrito agora.
+        cands = _zone_candidates(zona)
+        debug["zone_candidates"] = cands
         res = (
             sb.table("adequab_zonas_sede")
-            .select("classificacao")
+            .select("zone_sigla,classificacao")
             .eq("use_type_code", use_code)
-            .eq("zone_sigla", zona)
+            .in_("zone_sigla", cands)
             .limit(1)
             .execute()
         )
         data = getattr(res, "data", None) or []
         if data:
             zone_class = (data[0].get("classificacao") or "").strip()
-    except Exception:
-        zone_class = None
+            debug["zone_hit"] = data[0].get("zone_sigla")
+    except Exception as e:
+        debug["zone_error"] = str(e)
 
-    if via_tipo:
+    # Quadro I (vias) — só para arterial/coletora
+    if via_norm:
         try:
             res2 = (
                 sb.table("adequab_vias")
                 .select("classificacao")
                 .eq("use_type_code", use_code)
-                .eq("via_tipo", via_tipo)
+                .eq("via_tipo", via_norm)
                 .limit(1)
                 .execute()
             )
             data2 = getattr(res2, "data", None) or []
             if data2:
                 via_class = (data2[0].get("classificacao") or "").strip()
-        except Exception:
-            via_class = None
+        except Exception as e:
+            debug["via_error"] = str(e)
 
-    return zone_class, via_class
+    return zone_class, via_class, debug
 
 
 def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, **_: Any) -> None:
-    """Multifamiliar — Fase 1 (Guia do Projetista)."""
-
-    multi_tipo = (calc.get("multi_tipo") or "").upper()
-    use_type_code = (calc.get("use_type_code") or "").upper()
+    multi_tipo = _norm(calc.get("multi_tipo"))
+    use_type_code = _norm(calc.get("use_type_code"))
 
     st.subheader("Multifamiliar — Fase 1 (Guia do Projetista)")
     st.caption("Guia rápido para iniciar o projeto — sem cálculo final de unidades/áreas. (LC 91/2023 e LC 90/2023)")
 
-    # -------------------------
     # A) Adequabilidade
-    # -------------------------
     st.markdown("### A) Pode / não pode (adequabilidade)")
 
-    zona = _norm_zone_sigla(calc.get("zone") or calc.get("zone_sigla"))
+    zona = _norm(calc.get("zone") or calc.get("zone_sigla"))
     via_tipo_txt = calc.get("via_tipo") or calc.get("via_type") or ""
 
-    zone_class, via_class = _fetch_adequabilidade(
+    zone_class, via_class, dbg = _fetch_adequabilidade(
         zone_sigla=zona,
         via_tipo_texto=via_tipo_txt,
         use_type_code=use_type_code,
@@ -122,33 +141,29 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     if not zone_class and not via_class:
         st.info(
             "Adequabilidade ainda não foi encontrada no banco para este uso/zona/via. "
-            "Confira se as tabelas `adequab_zonas_sede` e `adequab_vias` foram preenchidas. "
+            "Se você acabou de rodar o SQL, confira se as tabelas `adequab_zonas_sede` e `adequab_vias` estão com dados. "
             "(Quadro 2A e Quadro I)."
-
-            "\n\nAssim que estiver cadastrada, o sistema exibirá A / I / AP / AM / PE automaticamente."
         )
+        with st.expander("🔎 Diagnóstico (para conferência)"):
+            st.json(dbg)
     else:
-        # Mostra por zona (Quadro 2A)
         if zone_class:
             st.success(f"✅ Por zona (Quadro 2A): **{zona} → {zone_class}**")
         else:
             st.warning("⚠️ Por zona (Quadro 2A): não encontrado para esta zona.")
 
-        # Mostra por via (Quadro I), quando for arterial/coletora/paisagística
-        via_norm = _norm_via_tipo(via_tipo_txt)
+        via_norm = _via_tipo_norm(via_tipo_txt)
         if via_norm:
             if via_class:
                 st.success(f"✅ Por categoria viária (Quadro I): **{via_norm} → {via_class}**")
             else:
                 st.warning(f"⚠️ Por categoria viária (Quadro I): não encontrado para **{via_norm}**.")
         else:
-            st.info("ℹ️ Categoria viária do Quadro I se aplica a vias **arteriais/coletoras** (e paisagísticas). Para **via local**, este quadro pode não se aplicar.")
+            st.info("ℹ️ Quadro I (categoria viária) se aplica a vias **arteriais/coletoras** (e paisagísticas). Para **via local**, este quadro pode não se aplicar.")
 
         st.caption("Legenda: A=adequado; I=inadequado; AP/AM=depende do porte/condições; PE=projeto especial (conforme lei).")
 
-    # -------------------------
     # B) Parâmetros urbanísticos
-    # -------------------------
     st.markdown("### B) Parâmetros urbanísticos (para começar projeto)")
     if not rule:
         st.warning(
@@ -176,9 +191,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
 
         st.caption("Demais recuos/gabarito/testadas seguem a regra carregada do Supabase para esta zona.")
 
-    # -------------------------
     # C) Checklist
-    # -------------------------
     st.markdown("### C) Checklist do tipo escolhido (sem exigir projeto pronto)")
 
     if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
@@ -217,9 +230,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     else:
         st.info("Selecione o tipo de multifamiliar (R2.1 / R2.2 / R3) no Item 2 para exibir o checklist.")
 
-    # -------------------------
     # D) Vagas
-    # -------------------------
     st.markdown("### D) Vagas de estacionamento (como calcular)")
     st.markdown(
         "A quantidade de vagas depende do **tamanho do apartamento (área construída da unidade)**:\n\n"
@@ -235,7 +246,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         "- 11 apartamentos com **100 m²** → 11 × 1,5 = 16,5 → **17 vagas** (arredonda pra cima)"
     )
 
-    # Aviso informativo quadra máxima (apenas para R2.2 e R3)
+    # Aviso informativo quadra máxima
     if multi_tipo in ("R22", "R2.2", "R2_2", "R3", "R03") or use_type_code.endswith(("R22", "R3")):
         st.markdown("---")
         st.markdown(
