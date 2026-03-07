@@ -25,6 +25,18 @@ def _coerce_call(args, kwargs) -> Tuple[bool, Any, int]:
     return bool(kwargs.get("calcular", False)), kwargs.get("zones_prepared"), int(kwargs.get("radius_m", 150))
 
 
+
+def _extract_zeis_setor(zone_sigla: str) -> Optional[str]:
+    z = (zone_sigla or "").strip().upper()
+    for n in ("1", "2", "3"):
+        if f"ZEIS {n}" in z or f"ZEIS{n}" in z or f"ZEIS_{n}" in z:
+            return n
+    return None
+
+
+def _format_zeis(n: str) -> str:
+    return f"ZEIS {n}"
+
 def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     st.subheader("3) Localização (zona + via)")
 
@@ -56,19 +68,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
             calc["zone"] = zone
             calc["zone_sigla"] = zone
-
-            # ZEIS setores (ZEIS 1/2/3) — como o zoneamento_light.json marca apenas "ZEIS",
-            # usamos um seletor simples para escolher o setor quando necessário.
-            # Isso permite consultar regras/adequabilidade diferentes por ZEIS 1/2/3 no Supabase.
-            if zone == "ZEIS":
-                prev_zeis = calc.get("zeis_sigla") or calc.get("zone") or "ZEIS 1"
-                # normaliza valores possíveis
-                if str(prev_zeis).strip().upper() in ("ZEIS",):
-                    prev_zeis = "ZEIS 1"
-                calc["zeis_sigla"] = str(prev_zeis).strip().upper()
-                # já atualiza a zona usada nas consultas
-                calc["zone"] = calc["zeis_sigla"]
-                calc["zone_sigla"] = calc["zeis_sigla"]
 
             if street_info:
                 calc["via_nome"] = street_info.get("name")
@@ -111,6 +110,24 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                 calc["err"] = None
 
     zone = calc.get("zone") or calc.get("zone_sigla")
+    # ZEIS: permitir escolher o setor correto (ZEIS 1/2/3) para bater com o Supabase.
+    if (zone or "").strip().upper().startswith("ZEIS"):
+        _opt = ["ZEIS 1", "ZEIS 2", "ZEIS 3"]
+        _cur_n = _extract_zeis_setor(str(zone)) or "1"
+        try:
+            _idx = _opt.index(_format_zeis(_cur_n))
+        except Exception:
+            _idx = 0
+        sel_zeis = st.selectbox(
+            "Setor ZEIS",
+            _opt,
+            index=_idx,
+            help="Se a zona for ZEIS, escolha o setor correto (ZEIS 1/2/3).",
+        )
+        zone = sel_zeis
+        calc["zone"] = zone
+        calc["zone_sigla"] = zone
+
     via_nome = calc.get("via_nome") or calc.get("street_name")
     via_tipo = calc.get("via_tipo") or calc.get("street_type")
 
@@ -128,32 +145,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     # Mostrar setor ZEIP (sem alterar layout)
     if zone == "ZEIP":
         st.caption(f"Setor ZEIP: {calc.get('subzone_code','PADRAO')}")
-
-    # Mostrar/selecionar setor ZEIS (ZEIS 1/2/3) — sem alterar ordem das seções
-    if zone and str(zone).strip().upper() == "ZEIS":
-        # se ainda está "ZEIS" genérico, sugere ZEIS 1 por padrão
-        current = (calc.get("zeis_sigla") or "ZEIS 1").strip().upper()
-        if current == "ZEIS":
-            current = "ZEIS 1"
-        options = ["ZEIS 1", "ZEIS 2", "ZEIS 3"]
-        try:
-            idx = options.index(current)
-        except ValueError:
-            idx = 0
-        zeis_pick = st.selectbox("Setor ZEIS", options, index=idx, key="zeis_setor_select")
-        zeis_pick = str(zeis_pick).strip().upper()
-        prev = calc.get("zeis_sigla") or ""
-        calc["zeis_sigla"] = zeis_pick
-        calc["zone"] = zeis_pick
-        calc["zone_sigla"] = zeis_pick
-
-        # se mudou, limpar regra/cálculos para refetch correto
-        if prev and str(prev).strip().upper() != zeis_pick:
-            calc.pop("rule", None)
-            calc["basic"] = None
-            calc["ia_utilizado"] = None
-            calc["to_utilizada_pct"] = None
-            calc["tp_prevista_pct"] = None
 
     dist = calc.get("via_dist_m") if calc.get("via_dist_m") is not None else calc.get("street_dist")
     if dist is not None:
