@@ -26,16 +26,13 @@ def _coerce_call(args, kwargs) -> Tuple[bool, Any, int]:
 
 
 
-def _extract_zeis_setor(zone_sigla: str) -> Optional[str]:
-    z = (zone_sigla or "").strip().upper()
-    for n in ("1", "2", "3"):
-        if f"ZEIS {n}" in z or f"ZEIS{n}" in z or f"ZEIS_{n}" in z:
-            return n
-    return None
+import re
 
 
-def _format_zeis(n: str) -> str:
-    return f"ZEIS {n}"
+def _pick_zeis_num(s: str) -> Optional[str]:
+    s = (s or "").upper().strip()
+    m = re.search(r"ZEIS\D*([123])", s)
+    return m.group(1) if m else None
 
 def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     st.subheader("3) Localização (zona + via)")
@@ -110,20 +107,32 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                 calc["err"] = None
 
     zone = calc.get("zone") or calc.get("zone_sigla")
-    # ZEIS: permitir escolher o setor correto (ZEIS 1/2/3) para bater com o Supabase.
+    # ZEIS: permitir escolher setor (ZEIS 1/2/3) e PERSISTIR a escolha do usuário.
     if (zone or "").strip().upper().startswith("ZEIS"):
-        _opt = ["ZEIS 1", "ZEIS 2", "ZEIS 3"]
-        _cur_n = _extract_zeis_setor(str(zone)) or "1"
-        try:
-            _idx = _opt.index(_format_zeis(_cur_n))
-        except Exception:
-            _idx = 0
+        # prioridade do padrão:
+        # 1) escolha do usuário (persistida)
+        # 2) o que veio do mapa/zone (se vier ZEIS 2/3)
+        # 3) subzone_code (se existir)
+        # 4) padrão = 1
+        zeis_user = st.session_state.get("zeis_setor")
+        zeis_map = _pick_zeis_num(str(zone))
+        zeis_sub = _pick_zeis_num(str(calc.get("subzone_code", "")))
+        zeis_default = zeis_user or zeis_map or zeis_sub or "1"
+
+        opt_zeis = ["ZEIS 1", "ZEIS 2", "ZEIS 3"]
+        idx_map = {"1": 0, "2": 1, "3": 2}
+        idx = idx_map.get(str(zeis_default), 0)
+
         sel_zeis = st.selectbox(
             "Setor ZEIS",
-            _opt,
-            index=_idx,
-            help="Se a zona for ZEIS, escolha o setor correto (ZEIS 1/2/3).",
+            opt_zeis,
+            index=idx,
+            key="zeis_setor_select",
+            help="Se o mapa não diferenciar ZEIS 1/2/3, selecione manualmente o setor correto.",
         )
+
+        # salva escolha e aplica no calc
+        st.session_state["zeis_setor"] = sel_zeis.split()[-1]  # '1'/'2'/'3'
         zone = sel_zeis
         calc["zone"] = zone
         calc["zone_sigla"] = zone
