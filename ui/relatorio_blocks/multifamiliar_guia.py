@@ -17,6 +17,19 @@ def _norm(s: Any) -> str:
     return str(s or "").strip().upper()
 
 
+def _sigla_nome(sigla: str) -> str:
+    s = _norm(sigla)
+    mapa = {
+        "A": "Adequado",
+        "I": "Inadequado",
+        "AP": "Adequado (pequeno porte)",
+        "AM": "Adequado (médio porte)",
+        "AP/AM": "Depende do porte (pequeno/médio)",
+        "PE": "Projeto especial",
+    }
+    return mapa.get(s, "")
+
+
 def _zone_candidates(z: str) -> List[str]:
     """Gera variações para bater com possíveis formatos do banco (ex.: 'ZEPE 1' vs 'ZEPE1')."""
     z0 = _norm(z)
@@ -144,46 +157,61 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             st.json(dbg)
     else:
         if zone_class:
-            st.success(f"✅ Por zona (Quadro 2A): **{zona} → {zone_class}**")
+            st.success(f"✅ Por zona (Quadro 2A): **{zona} → {zone_class} ({_sigla_nome(zone_class)})**")
         else:
             st.warning("⚠️ Por zona (Quadro 2A): não encontrado para esta zona.")
 
         via_norm = _via_tipo_norm(via_tipo_txt)
         if via_norm:
             if via_class:
-                st.success(f"✅ Por categoria viária (Quadro I): **{via_norm} → {via_class}**")
+                st.success(f"✅ Por categoria viária (Quadro I): **{via_norm} → {via_class} ({_sigla_nome(via_class)})**")
             else:
                 st.warning(f"⚠️ Por categoria viária (Quadro I): não encontrado para **{via_norm}**.")
         else:
             st.info("ℹ️ Quadro I (categoria viária) se aplica a vias **arteriais/coletoras** (e paisagísticas). Para **via local**, este quadro pode não se aplicar.")
 
-        # Quadro leigo da legenda
-        st.markdown("**O que significam as siglas (bem simples):**")
+        # Breve explicação leiga das categorias de via
+        st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
         st.markdown(
-            """| Sigla | O que significa (em poucas palavras) | Como interpretar |
+            "- **Via local:** rua de bairro, usada principalmente para acesso às casas/quadras (tráfego menor).
+"
+            "- **Via coletora:** rua que **coleta** o tráfego das vias locais e leva para vias maiores.
+"
+            "- **Via arterial:** via principal, de maior fluxo, que liga áreas/ bairros e distribui o tráfego na cidade.
+"
+            "- **Arterial/Coletora paisagística:** mesma função, mas com tratamento urbano/paisagístico específico (quando a lei classifica assim)."
+        )
+
+        # Dois quadros lado a lado (siglas x porte)
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**O que significam as siglas (bem simples):**")
+            st.markdown(
+                """| Sigla | O que significa | Como interpretar |
 |---|---|---|
 | **A** | Adequado / permitido | Pode seguir com o projeto (respeitando TO/TP/IA/recuos). |
 | **I** | Inadequado / não permitido | Em regra, **não pode** nesse local/condição. |
-| **AP** | Adequado (pequeno porte) | Pode, mas normalmente **limitado a porte pequeno**. |
-| **AM** | Adequado (médio porte) | Pode, mas normalmente **limitado a porte médio**. |
-| **AP/AM** | Depende do porte | Pode, mas depende se o seu caso é **pequeno ou médio**. |
+| **AP** | Adequado (pequeno porte) | Pode, mas normalmente limitado a porte pequeno. |
+| **AM** | Adequado (médio porte) | Pode, mas normalmente limitado a porte médio. |
+| **AP/AM** | Depende do porte | Pode, mas depende se o seu caso é pequeno ou médio. |
 | **PE** | Projeto especial | Pode exigir análise específica/condições extras no licenciamento. |
 """
-        )
+            )
 
-        # NOVO: Quadro leigo do porte (faixas do quadro de "Portes" do Anexo III)
-        st.markdown("**O que é “porte” (pequeno / médio / grande)?**")
-        st.caption("Porte é a “escala” do empreendimento, normalmente definida pela **área construída total (m²)**. As faixas abaixo seguem o quadro de Portes do Anexo III.")
-        st.markdown(
-            """| Porte | Faixa (área construída total) |
+        with col2:
+            st.markdown("**O que é “porte” (pequeno / médio / grande)?**")
+            st.caption("Porte é a escala do empreendimento, normalmente definida pela **área construída total (m²)**.")
+            st.markdown(
+                """| Porte | Faixa (área construída total) |
 |---|---|
 | **Pequeno** | até **250 m²** |
 | **Médio** | de **250,01 m²** até **1.000 m²** |
 | **Grande** | de **1.000,01 m²** até **5.000 m²** |
 | **Projeto especial** | acima de **5.000 m²** |
 """
-        )
-        st.caption("Obs.: se a lei/SEUMA adotar critério diferente para algum uso específico, prevalece o licenciamento.")
+            )
+            st.caption("Obs.: se a lei/SEUMA adotar critério diferente para algum uso específico, prevalece o licenciamento.")
 
     # B) Parâmetros urbanísticos
     st.markdown("### B) Parâmetros urbanísticos (para começar projeto)")
@@ -191,9 +219,12 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.warning(
             "Ainda não temos uma **regra específica do multifamiliar** cadastrada no Supabase para esta zona.\n\n"
             "**O que isso quer dizer na prática?**\n"
-            "- O sistema **não consegue confirmar automaticamente** TO/TP/IA/recuos/gabarito para o multifamiliar aqui.\n"
-            "- Você **pode começar o estudo**, mas antes de fechar o projeto, confirme esses limites no **licenciamento da SEUMA** e nos **anexos da lei**.\n\n"
-            "**Dica:** normalmente esses limites definem: (1) quanto cabe no térreo (TO), (2) quanto deve ficar livre/permeável (TP) e (3) o total máximo construído (IA)."
+            "- O sistema não consegue confirmar automaticamente TO/TP/IA/recuos/gabarito para o multifamiliar aqui.\n"
+            "- Você pode começar o estudo, mas antes de fechar o projeto, confirme esses limites no licenciamento da **SEUMA** e nos anexos da lei.\n\n"
+            "**Dica rápida:**\n"
+            "- **TO** = quanto pode ocupar no térreo\n"
+            "- **TP** = quanto precisa deixar permeável\n"
+            "- **IA** = total máximo construído somando pavimentos"
         )
     else:
         def _pct(v: Any) -> Optional[float]:
@@ -222,35 +253,41 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
         st.markdown("**R2.1 — 2 unidades no mesmo lote (justapostas ou sobrepostas)**")
         st.markdown(
-            "- ✅ **Altura/andares:** pode ter **no máximo 2 pavimentos** (ex.: térreo + 1º andar).\n"
-            "  *(LC 91/2023 — definição de R2.1)*\n"
-            "- ✅ **Se for “lado a lado” (justapostas):** a **testada** (frente do lote) deve ter **pelo menos 8,00 m**.\n"
-            "  *(exceto ZEIS — LC 91/2023, requisito citado para R2.1)*\n"
-            "- ✅ **Regras urbanísticas (TO/TP/IA/recuos/gabarito):** quando a zona permitir, pode usar os **parâmetros do unifamiliar**,\n"
-            "  sempre respeitando a **adequabilidade** do uso na zona.\n"
-            "  *(LC 91/2023 — Art. 106)*"
+            "- ✅ **Altura/andares:** pode ter no máximo 2 pavimentos (ex.: térreo + 1º andar). *(LC 91/2023 — definição de R2.1)*
+"
+            "- ✅ **Justapostas (lado a lado):** testada mínima 8,00 m (exceto ZEIS). *(LC 91/2023 — requisito citado para R2.1)*
+"
+            "- ✅ **Parâmetros urbanísticos:** quando a zona permitir, pode usar os parâmetros do unifamiliar, respeitando adequabilidade. *(LC 91/2023 — Art. 106)*"
         )
     elif multi_tipo in ("R22", "R2.2", "R2_2") or use_type_code.endswith("R22"):
         st.markdown("**R2.2 — Condomínio horizontal (via interna)**")
         st.markdown(
-            "- ✅ **Acesso de veículos:** abertura mínima **4,00 m** de largura e **4,50 m** de altura livre.\n"
-            "- ✅ **Via interna:** largura mínima **6,00 m**.\n"
-            "- ✅ **Muro frontal:** pelo menos **25% em gradil/visibilidade**.\n"
-            "- ✅ **Resíduos:** local de resíduos no alinhamento com abertura para o logradouro.\n"
-            "- ✅ **Áreas comuns:** acessibilidade + sanitários/copa funcionários + DML.\n"
-            "- ⚠️ **Lazer:** se passar de 10 unidades, prever lazer mínimo conforme lei.\n"
-            "*(LC 90/2023 — Art. 168)*"
+            "- ✅ Acesso de veículos: abertura mínima 4,00 m (largura) e 4,50 m (altura livre).
+"
+            "- ✅ Via interna: largura mínima 6,00 m.
+"
+            "- ✅ Muro frontal: pelo menos 25% em gradil/visibilidade.
+"
+            "- ✅ Resíduos: local no alinhamento com abertura para o logradouro.
+"
+            "- ✅ Áreas comuns: acessibilidade + sanitários/copa funcionários + DML.
+"
+            "- ⚠️ Lazer: se passar de 10 unidades, prever lazer mínimo conforme lei. *(LC 90/2023 — Art. 168)*"
         )
     elif multi_tipo in ("R3", "R03") or use_type_code.endswith("R3"):
         st.markdown("**R3 — Condomínio vertical (edifício)**")
         st.markdown(
-            "- ✅ **Muro frontal:** pelo menos **50% em gradil/visibilidade**.\n"
-            "- ✅ **Resíduos:** local de resíduos no alinhamento com abertura para o logradouro.\n"
-            "- ✅ **Áreas comuns:** acessibilidade + sanitários/copa + DML.\n"
-            "- ⚠️ **Lazer:** prever lazer mínimo conforme lei.\n"
-            "- ⚠️ **Entregas/recepção:** se passar de 30 unidades, prever espaço mínimo.\n"
-            "- ⚠️ **EIV:** se passar de 100 unidades, EIV pode ser exigido.\n"
-            "*(LC 90/2023 — Art. 170; LC 91/2023 — Art. 88)*"
+            "- ✅ Muro frontal: pelo menos 50% em gradil/visibilidade.
+"
+            "- ✅ Resíduos: local no alinhamento com abertura para o logradouro.
+"
+            "- ✅ Áreas comuns: acessibilidade + sanitários/copa + DML.
+"
+            "- ⚠️ Lazer: prever lazer mínimo conforme lei.
+"
+            "- ⚠️ Entregas/recepção: se passar de 30 unidades, prever espaço mínimo.
+"
+            "- ⚠️ EIV: se passar de 100 unidades, EIV pode ser exigido. *(LC 90/2023 — Art. 170; LC 91/2023 — Art. 88)*"
         )
     else:
         st.info("Selecione o tipo de multifamiliar (R2.1 / R2.2 / R3) no Item 2 para exibir o checklist.")
@@ -258,17 +295,25 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     # D) Vagas
     st.markdown("### D) Vagas de estacionamento (como calcular)")
     st.markdown(
-        "A quantidade de vagas depende do **tamanho do apartamento (área construída da unidade)**:\n\n"
-        "- 🚗 **Apartamento com menos de 90 m²** → **1 vaga por unidade**\n"
-        "- 🚗 **Apartamento com 90 m² ou mais** → **1,5 vaga por unidade**\n\n"
-        "📌 Na prática, quando aparece **1,5**, o total final deve ser **arredondado para cima** "
-        "(porque não existe “meia vaga”).\n\n"
+        "A quantidade de vagas depende do tamanho do apartamento (área construída da unidade):
+
+"
+        "- 🚗 Apartamento com menos de 90 m² → 1 vaga por unidade
+"
+        "- 🚗 Apartamento com 90 m² ou mais → 1,5 vaga por unidade
+
+"
+        "📌 Quando aparece 1,5, o total final deve ser arredondado para cima (não existe “meia vaga”).
+
+"
         "*(LC 90/2023 — Anexo IV)*"
     )
-    st.markdown("**Exemplo rápido (só para entender a lógica):**")
+
+    st.markdown("**Exemplo rápido:**")
     st.markdown(
-        "- 10 apartamentos com **80 m²** → **10 vagas**\n"
-        "- 11 apartamentos com **100 m²** → 11 × 1,5 = 16,5 → **17 vagas** (arredonda pra cima)"
+        "- 10 apartamentos com 80 m² → 10 vagas
+"
+        "- 11 apartamentos com 100 m² → 11 × 1,5 = 16,5 → 17 vagas"
     )
 
     # Aviso informativo quadra máxima
