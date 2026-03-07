@@ -156,7 +156,19 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         with st.expander("🔎 Diagnóstico (para conferência)"):
             st.json(dbg)
     else:
-        if zone_class:
+        # Explicação leiga (antes do resultado)
+        st.markdown("**Como interpretar este resultado (bem simples):**")
+        st.markdown(
+            "- Para **residência multifamiliar**, a permissão pode depender de **duas coisas**:\n"
+            "  1) **A zona** onde o lote está\n"
+            "  2) A **tabela por tipo de via** (arterial/coletora e paisagísticas), quando a via for desse tipo\n"
+            "- Regra prática: **se a zona der I (Inadequado / não permitido), em via local continua I (Inadequado / não permitido)**.\n"
+            "- Se a zona permitir, mas a via (quando aplicável) indicar restrição, **a regra da via pode prevalecer** no licenciamento.\n"
+            "- Para **via local**, normalmente vale **apenas a regra da zona**."
+        )
+
+                if zone_class:
+
             st.success(f"✅ Por zona (Quadro 2A): **{zona} → {zone_class} ({_sigla_nome(zone_class)})**")
         else:
             st.warning("⚠️ Por zona (Quadro 2A): não encontrado para esta zona.")
