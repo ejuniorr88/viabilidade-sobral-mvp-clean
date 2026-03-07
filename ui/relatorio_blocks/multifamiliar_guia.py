@@ -159,11 +159,15 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.markdown("**Como interpretar este resultado (bem simples):**")
         st.markdown(
             "- Para **residência multifamiliar**, a permissão pode depender de **duas coisas**:\n"
-            "  1) **A zona** onde o lote está\n"
-            "  2) A **tabela por tipo de via** (arterial/coletora e paisagísticas), quando a via for desse tipo\n"
-            "- Regra prática: **se a zona der I (Inadequado / não permitido), em via local continua I (Inadequado / não permitido)**.\n"
-            "- Se a zona permitir, mas a via (quando aplicável) indicar restrição, **a regra da via pode prevalecer** no licenciamento.\n"
-            "- Para **via local**, normalmente vale **apenas a regra da zona**."
+            "  1) **Resultado por ZONA** (onde o lote está)\n"
+            "  2) **Resultado por TIPO DE VIA** (arterial/coletora e paisagísticas), quando a via for desse tipo\n\n"
+            "**Regra prática (para não errar):**\n"
+            "- Se o **resultado da ZONA** for **I (Inadequado / não permitido)** e a via for **VIA LOCAL**, então **continua I** (não permitido).\n"
+            "- Se a via for **ARTERIAL/COLETORA**, o licenciamento pode considerar também o **resultado por tipo de via**.\n"
+            "  Mesmo quando der permitido, ainda é obrigatório cumprir TO/TP/IA/recuos/altura e outras restrições (ex.: ZEIA/APP).\n\n"
+            "**Exemplos rápidos:**\n"
+            "- **ZONA: I (Inadequado)** + **VIA: local** → **NÃO PERMITE**\n"
+            "- **ZONA: I (Inadequado)** + **VIA: coletora/arterial** → pode mudar conforme o **resultado por tipo de via** (depende do licenciamento)"
         )
 
         if zone_class:
