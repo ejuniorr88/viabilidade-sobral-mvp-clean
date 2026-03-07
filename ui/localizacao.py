@@ -30,13 +30,13 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
     calcular, zones_prepared, radius_m = _coerce_call(args, kwargs)
 
-    # Estado
-    calc = st.session_state.calc
+    use_type_code = st.text_input(
+        "use_type_code",
+        value=st.session_state.calc.get("use_type_code") or "RES_UNI",
+        key="use_type_code_input",
+    )
 
-    # Exibir o uso selecionado (somente leitura).
-    # Importante: NÃO permitir que este campo sobrescreva o tipo escolhido no Item 2.
-    use_type_code = calc.get("use_type_code") or "RES_UNI"
-    st.text_input("use_type_code", value=use_type_code, disabled=True)
+    calc = st.session_state.calc
 
     if calcular:
         if not getattr(st.session_state, "last_click", None):
@@ -48,7 +48,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
             calc["lat"] = lat
             calc["lon"] = lon
-            # manter o valor já definido no Item 2 (ou default RES_UNI)
             calc["use_type_code"] = use_type_code
             calc["radius_m"] = int(radius_m)
 
@@ -57,6 +56,19 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
             calc["zone"] = zone
             calc["zone_sigla"] = zone
+
+            # ZEIS setores (ZEIS 1/2/3) — como o zoneamento_light.json marca apenas "ZEIS",
+            # usamos um seletor simples para escolher o setor quando necessário.
+            # Isso permite consultar regras/adequabilidade diferentes por ZEIS 1/2/3 no Supabase.
+            if zone == "ZEIS":
+                prev_zeis = calc.get("zeis_sigla") or calc.get("zone") or "ZEIS 1"
+                # normaliza valores possíveis
+                if str(prev_zeis).strip().upper() in ("ZEIS",):
+                    prev_zeis = "ZEIS 1"
+                calc["zeis_sigla"] = str(prev_zeis).strip().upper()
+                # já atualiza a zona usada nas consultas
+                calc["zone"] = calc["zeis_sigla"]
+                calc["zone_sigla"] = calc["zeis_sigla"]
 
             if street_info:
                 calc["via_nome"] = street_info.get("name")
@@ -116,6 +128,32 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     # Mostrar setor ZEIP (sem alterar layout)
     if zone == "ZEIP":
         st.caption(f"Setor ZEIP: {calc.get('subzone_code','PADRAO')}")
+
+    # Mostrar/selecionar setor ZEIS (ZEIS 1/2/3) — sem alterar ordem das seções
+    if zone and str(zone).strip().upper() == "ZEIS":
+        # se ainda está "ZEIS" genérico, sugere ZEIS 1 por padrão
+        current = (calc.get("zeis_sigla") or "ZEIS 1").strip().upper()
+        if current == "ZEIS":
+            current = "ZEIS 1"
+        options = ["ZEIS 1", "ZEIS 2", "ZEIS 3"]
+        try:
+            idx = options.index(current)
+        except ValueError:
+            idx = 0
+        zeis_pick = st.selectbox("Setor ZEIS", options, index=idx, key="zeis_setor_select")
+        zeis_pick = str(zeis_pick).strip().upper()
+        prev = calc.get("zeis_sigla") or ""
+        calc["zeis_sigla"] = zeis_pick
+        calc["zone"] = zeis_pick
+        calc["zone_sigla"] = zeis_pick
+
+        # se mudou, limpar regra/cálculos para refetch correto
+        if prev and str(prev).strip().upper() != zeis_pick:
+            calc.pop("rule", None)
+            calc["basic"] = None
+            calc["ia_utilizado"] = None
+            calc["to_utilizada_pct"] = None
+            calc["tp_prevista_pct"] = None
 
     dist = calc.get("via_dist_m") if calc.get("via_dist_m") is not None else calc.get("street_dist")
     if dist is not None:
