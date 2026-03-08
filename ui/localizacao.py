@@ -11,41 +11,34 @@ except Exception:
 
 from core.streets import find_street
 
-# ZEIP sectors (subzone_code)
+# ZEIP sectors
 try:
     from core.zeip_sectors import zeip_sector_from_latlon
 except Exception:
     zeip_sector_from_latlon = None  # type: ignore
 
+# ZEIS sectors (NOVO)
+try:
+    from core.zeis_sectors import zeis_sector_from_latlon
+except Exception:
+    zeis_sector_from_latlon = None  # type: ignore
+
 
 def _coerce_call(args, kwargs) -> Tuple[bool, Any, int]:
-    """Compatibilidade com app.py: render_localizacao_section(calcular, zones_prepared, radius_m)."""
     if len(args) >= 3 and isinstance(args[0], (bool, int)):
         return bool(args[0]), args[1], int(args[2])
     return bool(kwargs.get("calcular", False)), kwargs.get("zones_prepared"), int(kwargs.get("radius_m", 150))
 
-
-
-import re
-
-
-def _pick_zeis_num(s: str) -> Optional[str]:
-    s = (s or "").upper().strip()
-    m = re.search(r"ZEIS\D*([123])", s)
-    return m.group(1) if m else None
 
 def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     st.subheader("3) Localização (zona + via)")
 
     calcular, zones_prepared, radius_m = _coerce_call(args, kwargs)
 
-    use_type_code = st.text_input(
-        "use_type_code",
-        value=st.session_state.calc.get("use_type_code") or "RES_UNI",
-        key="use_type_code_input",
-    )
-
     calc = st.session_state.calc
+
+    # use_type_code vem do Item 2 (não editar aqui)
+    use_type_code = (calc.get("use_type_code") or "RES_UNI").strip().upper()
 
     if calcular:
         if not getattr(st.session_state, "last_click", None):
@@ -61,110 +54,38 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
             calc["radius_m"] = int(radius_m)
 
             zone = zone_from_latlon(zones_prepared, lat, lon) if zones_prepared else None
-            street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
 
+            # ZEIP: setor
+            subzone_code = calc.get("subzone_code") or "PADRAO"
+            if zone and str(zone).strip().upper() == "ZEIP" and zeip_sector_from_latlon:
+                sec = zeip_sector_from_latlon(lat, lon)
+                if sec:
+                    subzone_code = sec
+
+            # ZEIS: setor 1/2/3 (NOVO) — se o zoneamento vier como 'ZEIS'
+            if zone and str(zone).strip().upper() == "ZEIS" and zeis_sector_from_latlon:
+                secz = zeis_sector_from_latlon(lat, lon)
+                if secz:
+                    zone = secz  # vira 'ZEIS 1/2/3'
+
+            calc["subzone_code"] = subzone_code
             calc["zone"] = zone
-            calc["zone_sigla"] = zone
 
+            # via
+            street_info = find_street(lat=lat, lon=lon, radius_m=int(radius_m))
             if street_info:
                 calc["via_nome"] = street_info.get("name")
                 calc["via_tipo"] = street_info.get("type")
-                calc["via_dist_m"] = street_info.get("distance_m")
-                calc["street_name"] = street_info.get("name")
-                calc["street_type"] = street_info.get("type")
-                calc["street_dist"] = street_info.get("distance_m")
-            else:
-                calc["via_nome"] = None
-                calc["via_tipo"] = None
-                calc["via_dist_m"] = None
-                calc["street_name"] = None
-                calc["street_type"] = None
-                calc["street_dist"] = None
+                calc["via_dist_m"] = street_info.get("dist_m")
 
-            # Subzona / Setor ZEIP
-            prev_sub = calc.get("subzone_code") or "PADRAO"
-            subzone = "PADRAO"
-            if zone == "ZEIP" and zeip_sector_from_latlon:
-                try:
-                    subzone = zeip_sector_from_latlon(lat, lon) or "PADRAO"
-                except Exception:
-                    subzone = "PADRAO"
-            calc["subzone_code"] = subzone
+            calc["ok"] = True
 
-            # Se o setor mudou, forçar recarregar regra/cálculos (evita ficar preso em PADRAO)
-            if zone == "ZEIP" and subzone != prev_sub:
-                calc.pop("rule", None)
-                calc["basic"] = None
-                calc["ia_utilizado"] = None
-                calc["to_utilizada_pct"] = None
-                calc["tp_prevista_pct"] = None
+    # Exibição (sempre)
+    zone = calc.get("zone") or "-"
+    st.write(f"**Zona:** {zone}")
+    st.write(f"**use_type_code:** {use_type_code}")
 
-            if not zone:
-                calc["ok"] = False
-                calc["err"] = "Clique dentro de uma zona."
-            else:
-                calc["ok"] = True
-                calc["err"] = None
+    if str(zone).strip().upper().startswith("ZEIP"):
+        st.write(f"**Setor ZEIP:** {calc.get('subzone_code', 'PADRAO')}")
 
-    zone = calc.get("zone") or calc.get("zone_sigla")
-    # ZEIS: permitir escolher setor (ZEIS 1/2/3) e PERSISTIR a escolha do usuário.
-    if (zone or "").strip().upper().startswith("ZEIS"):
-        # prioridade do padrão:
-        # 1) escolha do usuário (persistida)
-        # 2) o que veio do mapa/zone (se vier ZEIS 2/3)
-        # 3) subzone_code (se existir)
-        # 4) padrão = 1
-        zeis_user = st.session_state.get("zeis_setor")
-        zeis_map = _pick_zeis_num(str(zone))
-        zeis_sub = _pick_zeis_num(str(calc.get("subzone_code", "")))
-        zeis_default = zeis_user or zeis_map or zeis_sub or "1"
-
-        opt_zeis = ["ZEIS 1", "ZEIS 2", "ZEIS 3"]
-        idx_map = {"1": 0, "2": 1, "3": 2}
-        idx = idx_map.get(str(zeis_default), 0)
-
-        sel_zeis = st.selectbox(
-            "Setor ZEIS",
-            opt_zeis,
-            index=idx,
-            key="zeis_setor_select",
-            help="Se o mapa não diferenciar ZEIS 1/2/3, selecione manualmente o setor correto.",
-        )
-
-        # salva escolha e aplica no calc
-        st.session_state["zeis_setor"] = sel_zeis.split()[-1]  # '1'/'2'/'3'
-        zone = sel_zeis
-        calc["zone"] = zone
-        calc["zone_sigla"] = zone
-
-    via_nome = calc.get("via_nome") or calc.get("street_name")
-    via_tipo = calc.get("via_tipo") or calc.get("street_type")
-
-    colA, colB, colC = st.columns(3)
-    with colA:
-        st.write("Zona")
-        st.write(zone or "—")
-    with colB:
-        st.write("Rua / Logradouro")
-        st.write(via_nome or "—")
-    with colC:
-        st.write("Tipo de via")
-        st.write(via_tipo or "—")
-
-    # Mostrar setor ZEIP (sem alterar layout)
-    if zone == "ZEIP":
-        st.caption(f"Setor ZEIP: {calc.get('subzone_code','PADRAO')}")
-
-    dist = calc.get("via_dist_m") if calc.get("via_dist_m") is not None else calc.get("street_dist")
-    if dist is not None:
-        try:
-            st.caption(
-                f"Distância até o eixo da via: {float(dist):.1f} m (raio {float(calc.get('radius_m') or radius_m):.0f} m)."
-            )
-        except Exception:
-            pass
-
-    if calc.get("err"):
-        st.warning(str(calc["err"]))
-
-    return {"zone": zone, "street": via_nome, "street_type": via_tipo, "distance_m": dist} if zone else None
+    return calc
