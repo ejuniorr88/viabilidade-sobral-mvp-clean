@@ -121,12 +121,141 @@ def _read_secret_or_env(key: str, default: str | None = None) -> str | None:
     return default
 
 
+def _clear_query_params() -> None:
+    try:
+        st.query_params.clear()
+    except Exception:
+        try:
+            st.experimental_set_query_params()
+        except Exception:
+            pass
+
+
+def _extract_response_attr(obj: Any, name: str):
+    if obj is None:
+        return None
+    if hasattr(obj, name):
+        return getattr(obj, name)
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return None
+
+
+def _exchange_oauth_code_if_present() -> None:
+    if get_supabase is None:
+        return
+
+    code = None
+    try:
+        code = st.query_params.get("code")
+    except Exception:
+        try:
+            code = st.experimental_get_query_params().get("code", [None])[0]
+        except Exception:
+            code = None
+
+    if not code or st.session_state.get("oauth_code_processed") == code:
+        return
+
+    try:
+        supabase = get_supabase()
+        supabase.auth.exchange_code_for_session({"auth_code": code})
+        st.session_state["oauth_code_processed"] = code
+        st.session_state.pop("google_auth_url", None)
+        _clear_query_params()
+        st.session_state["auth_feedback"] = "Login realizado com sucesso."
+        st.rerun()
+    except Exception as e:
+        st.error(f"Erro ao concluir login Google: {e}")
+
+
+def _current_user_info() -> tuple[Any, Any]:
+    if get_supabase is None:
+        return None, None
+
+    try:
+        supabase = get_supabase()
+        session_resp = supabase.auth.get_session()
+        session = _extract_response_attr(session_resp, "session")
+        if not session:
+            return None, None
+
+        user_resp = supabase.auth.get_user()
+        user = _extract_response_attr(user_resp, "user")
+        return session, user
+    except Exception:
+        return None, None
+
+
+def _user_email(user: Any) -> str | None:
+    if user is None:
+        return None
+    if hasattr(user, "email"):
+        return getattr(user, "email")
+    if isinstance(user, dict):
+        return user.get("email")
+    return None
+
+
+def _user_name(user: Any) -> str | None:
+    if user is None:
+        return None
+    for attr in ("name", "full_name"):
+        if hasattr(user, attr):
+            val = getattr(user, attr)
+            if val:
+                return val
+    if hasattr(user, "user_metadata"):
+        md = getattr(user, "user_metadata") or {}
+        if isinstance(md, dict):
+            return md.get("full_name") or md.get("name")
+    if isinstance(user, dict):
+        md = user.get("user_metadata") or {}
+        if isinstance(md, dict):
+            return md.get("full_name") or md.get("name")
+        return user.get("full_name") or user.get("name")
+    return None
+
+
 def render_google_login_top() -> None:
+    _exchange_oauth_code_if_present()
+
     st.markdown("### Conta")
-    st.caption("Entre com Google para acessar créditos, pagamentos e histórico.")
+    st.caption("Entre com Google para acessar créditos, pagamentos, histórico e carteira de créditos.")
 
     if get_supabase is None:
         st.warning("Cliente Supabase não disponível para iniciar o login Google.")
+        st.divider()
+        return
+
+    feedback = st.session_state.pop("auth_feedback", None)
+    if feedback:
+        st.success(feedback)
+
+    session, user = _current_user_info()
+    user_email = _user_email(user)
+    user_name = _user_name(user)
+
+    if user:
+        col1, col2, col3 = st.columns([2.2, 1.6, 1.0])
+        with col1:
+            st.success(f"Logado com Google: {user_name or user_email or 'usuário autenticado'}")
+            if user_email:
+                st.caption(user_email)
+        with col2:
+            st.caption("Sua sessão está ativa neste navegador.")
+        with col3:
+            if st.button("Sair", use_container_width=True, key="btn_google_logout"):
+                try:
+                    supabase = get_supabase()
+                    supabase.auth.sign_out()
+                except Exception as e:
+                    st.error(f"Erro ao sair da conta: {e}")
+                finally:
+                    for k in ["google_auth_url", "oauth_code_processed", "auth_feedback"]:
+                        st.session_state.pop(k, None)
+                    _clear_query_params()
+                    st.rerun()
         st.divider()
         return
 
@@ -161,7 +290,7 @@ def render_google_login_top() -> None:
         auth_url = st.session_state.get("google_auth_url")
         if auth_url:
             st.link_button("Continuar login no Google", auth_url, use_container_width=False)
-            st.info("Depois de concluir o login, você será redirecionado de volta para a URL configurada no APP_URL.")
+            st.info("Depois de concluir o login, você voltará para o app e o topo mostrará claramente que a conta está logada.")
         else:
             st.caption("Ao clicar, o sistema gera o link seguro de autenticação do Google via Supabase.")
 
