@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import uuid
-from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 import requests
@@ -58,15 +57,12 @@ def create_pix_payment(
     notification_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     access_token = _get_access_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
-
     payload: Dict[str, Any] = {
         "transaction_amount": round(float(amount_brl), 2),
         "description": description,
         "payment_method_id": "pix",
         "payer": _build_payer(payer_email, payer_name),
         "external_reference": external_reference,
-        "date_of_expiration": _mercadopago_datetime(expires_at),
     }
 
     if notification_url:
