@@ -10,7 +10,7 @@ from supabase import create_client
 # =============================
 # Debug markers (garante que o deploy está lendo o app.py correto)
 # =============================
-st.write("APP VERSION MARKER: 2026-03-09-GOOGLE-LOGIN-LOGOUT-V2")
+st.write("APP VERSION MARKER: 2026-03-09-GOOGLE-AUTH-GATE-V1")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -193,6 +193,109 @@ def _handle_oauth_callback() -> None:
         st.session_state["auth_message"] = f"Erro ao concluir o login Google: {e}"
 
 
+def render_auth_gate_page() -> None:
+    supabase = get_supabase_auth_client()
+    _sync_user_from_current_session()
+
+    st.markdown("""
+        <style>
+        .auth-wrap {
+            max-width: 760px;
+            margin: 3rem auto 0 auto;
+            padding: 2rem 2rem 1.5rem 2rem;
+            border: 1px solid #e9e9e9;
+            border-radius: 20px;
+            background: #ffffff;
+        }
+        .auth-title {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: .5rem;
+        }
+        .auth-subtitle {
+            color: #666;
+            margin-bottom: 1.25rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="auth-wrap">', unsafe_allow_html=True)
+    st.markdown('<div class="auth-title">Acesse a plataforma</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="auth-subtitle">Faça login com Google para entrar no sistema e acessar os recursos da plataforma.</div>',
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.get("auth_message"):
+        msg = st.session_state.get("auth_message")
+        if st.session_state.get("auth_logged_in"):
+            st.success(msg)
+        else:
+            st.warning(msg)
+
+    if st.session_state.get("auth_logged_in"):
+        name = st.session_state.get("auth_user_name")
+        email = st.session_state.get("auth_user_email")
+        if name and email:
+            st.success(f"Login concluído: {name} ({email})")
+        elif email:
+            st.success(f"Login concluído: {email}")
+        else:
+            st.success("Login concluído com sucesso.")
+
+        col_a, col_b = st.columns([1, 1])
+        with col_a:
+            if st.button("Entrar na plataforma", use_container_width=True, key="btn_enter_platform"):
+                st.session_state["auth_gate_open"] = True
+                st.rerun()
+        with col_b:
+            if st.button("Sair", use_container_width=True, key="btn_logout_on_gate"):
+                try:
+                    supabase.auth.sign_out()
+                except Exception:
+                    pass
+                for key in [
+                    "auth_logged_in",
+                    "auth_user_email",
+                    "auth_user_name",
+                    "auth_user_id",
+                    "auth_message",
+                    "last_oauth_code",
+                    "auth_gate_open",
+                ]:
+                    st.session_state.pop(key, None)
+                _clear_auth_query_params()
+                st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+
+    if st.button("Entrar com Google", use_container_width=True, key="btn_google_login_gate"):
+        response = supabase.auth.sign_in_with_oauth(
+            {
+                "provider": "google",
+                "options": {
+                    "redirect_to": _get_app_url(),
+                },
+            }
+        )
+
+        auth_url = None
+        if hasattr(response, "url"):
+            auth_url = response.url
+        elif isinstance(response, dict):
+            auth_url = response.get("url")
+
+        if auth_url:
+            st.link_button("Continuar login no Google", auth_url, use_container_width=True)
+            st.info("Clique no botão acima para abrir a autenticação do Google.")
+        else:
+            st.error("Não foi possível gerar o link de login com Google.")
+
+    st.caption("O acesso à página principal só é liberado após o login.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_google_login_top() -> None:
     supabase = get_supabase_auth_client()
     _sync_user_from_current_session()
@@ -281,9 +384,23 @@ if "selected_lon" not in st.session_state:
 if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
     st.session_state.calc = {}
 st.session_state.calc.setdefault("use_type_code", "RES_UNI")
+if "auth_gate_open" not in st.session_state:
+    st.session_state.auth_gate_open = False
 
 # Auth callback precisa rodar cedo, antes de renderizar a UI principal
 _handle_oauth_callback()
+_sync_user_from_current_session()
+
+if st.session_state.get("auth_logged_in"):
+    st.session_state.auth_gate_open = True
+
+# =============================
+# Tela de autenticação antes da página principal
+# =============================
+if not st.session_state.get("auth_gate_open"):
+    st.title("Viabilidade")
+    render_auth_gate_page()
+    st.stop()
 
 # =============================
 # Carregar bases
