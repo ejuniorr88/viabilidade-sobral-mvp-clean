@@ -212,11 +212,11 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         else:
             st.success("✅ Via identificada como **VIA LOCAL**. Nessa situação, a tabela por tipo de via (arterial/coletora/paisagística) geralmente **não se aplica** — normalmente vale o resultado da zona.")
 
-# 3) Linha verde — resumo final
-status_curto, explicacao = _summarize_adequabilidade(
-    zona=zona, zone_class=zone_class, via_norm=via_norm, via_class=via_class
-)
-st.success(f"✅ Resumo final: **{status_curto}**. {explicacao}")
+        # 3) Linha verde — resumo final
+        status_curto, explicacao = _summarize_adequabilidade(
+            zona=zona, zone_class=zone_class, via_norm=via_norm, via_class=via_class
+        )
+        st.success(f"✅ Resumo final: **{status_curto}**. {explicacao}")
 
         # Explicação leiga das categorias de via
         st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
