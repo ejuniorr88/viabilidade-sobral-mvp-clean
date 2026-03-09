@@ -9,7 +9,7 @@ import streamlit as st
 # =============================
 # Debug markers (garante que o deploy está lendo o app.py correto)
 # =============================
-st.write("APP VERSION MARKER: 2026-03-09-ACCOUNT-BALANCE-V1")
+st.write("APP VERSION MARKER: 2026-03-09-CREDITS-PANEL-V1")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -46,7 +46,8 @@ from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback
-from ui.auth_panel import render_account_area, render_google_login_top
+from ui.auth_panel import render_google_login_top
+from ui.credits_panel import render_credits_panel
 
 
 # =============================
@@ -104,7 +105,7 @@ zones_prepared = _zones_prepared()
 # =============================
 st.title("Viabilidade")
 render_google_login_top()
-render_account_area(_card)
+render_credits_panel(_card)
 st.divider()
 
 
