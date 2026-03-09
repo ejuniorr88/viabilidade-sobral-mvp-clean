@@ -194,7 +194,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             # via local -> vale a zona
             if not via_norm:
                 if zc in ("AP", "AM", "AP/AM"):
-                    return ("DEPENDE", "⚠️", "Depende do porte (pequeno/médio) indicado pela zona.")
+                    return ("DEPENDE", "⚠️", "Depende do porte (pequeno/médio) indicado pela zona. Veja a tabela de **porte** logo abaixo.")
                 if zc == "PE":
                     return ("DEPENDE", "⚠️", "Pode exigir análise específica no licenciamento (projeto especial).")
                 if zc == "I":
@@ -205,7 +205,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
 
             # vias arteriais/coletoras/paisagísticas -> pode ter 2 camadas
             if zc in ("AP", "AM", "AP/AM"):
-                return ("DEPENDE", "⚠️", "Depende do porte (pequeno/médio). Depois, confirme também os demais índices (TO/TP/IA/recuos/altura).")
+                return ("DEPENDE", "⚠️", "Depende do porte (pequeno/médio). Veja a tabela de **porte** logo abaixo e depois confirme TO/TP/IA/recuos/altura.")
             if zc == "PE":
                 return ("DEPENDE", "⚠️", "Pode exigir análise específica no licenciamento (projeto especial).")
             if zc == "A" and vc == "A":
@@ -225,6 +225,15 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             st.error(f"**{status_ico} Resumo final: {status_lbl}.** {status_msg}")
         else:
             st.warning(f"**{status_ico} Resumo final: {status_lbl}.** {status_msg}")
+
+
+# Se aparecer AP/AM (depende do porte), explicar como decidir
+if _norm(zone_class) in ("AP", "AM", "AP/AM") or _norm(via_class) in ("AP", "AM", "AP/AM"):
+    st.info(
+        "📌 **Como decidir o porte (bem simples):** o *porte* normalmente é definido pela **área construída total (m²)** do empreendimento. "
+        "Use a tabela **"O que é porte"** logo abaixo para enquadrar como **Pequeno / Médio / Grande**. "
+        "Depois, confirme também TO/TP/IA/recuos/altura no licenciamento."
+    )
 
 # Explicação leiga das categorias de via
         st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
