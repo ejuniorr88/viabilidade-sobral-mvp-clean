@@ -184,6 +184,57 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         else:
             st.success("✅ **Via identificada como VIA LOCAL.** Nessa situação, a tabela por tipo de via (arterial/coletora/paisagística) geralmente não se aplica — normalmente vale o resultado da **zona**.")
 
+        
+        # -------------------------
+        # 3) Resumo final (bem leigo)
+        # -------------------------
+        def _resumo_final(zone_class: Optional[str], via_norm: Optional[str], via_class: Optional[str]) -> Tuple[str, str, str]:
+            zc = _norm(zone_class)
+            vc = _norm(via_class)
+            # via local -> vale a zona
+            if not via_norm:
+                if zc in ("AP", "AM", "AP/AM"):
+                    return ("DEPENDE", "⚠️", "Depende do porte (pequeno/médio) indicado pela zona. Veja a tabela de **porte** logo abaixo.")
+                if zc == "PE":
+                    return ("DEPENDE", "⚠️", "Pode exigir análise específica no licenciamento (projeto especial).")
+                if zc == "I":
+                    return ("NÃO PERMITE", "❌", "A zona não permite este uso, e por ser via local, vale a regra da zona.")
+                if zc == "A":
+                    return ("PERMITE", "✅", "A zona permite este uso, e por ser via local, vale a regra da zona.")
+                return ("DEPENDE", "⚠️", "Faltam dados suficientes para concluir (verifique a zona/SEUMA).")
+
+            # vias arteriais/coletoras/paisagísticas -> pode ter 2 camadas
+            if zc in ("AP", "AM", "AP/AM"):
+                return ("DEPENDE", "⚠️", "Depende do porte (pequeno/médio). Veja a tabela de **porte** logo abaixo e depois confirme TO/TP/IA/recuos/altura.")
+            if zc == "PE":
+                return ("DEPENDE", "⚠️", "Pode exigir análise específica no licenciamento (projeto especial).")
+            if zc == "A" and vc == "A":
+                return ("PERMITE", "✅", "Zona e tipo de via permitem. Ainda é obrigatório cumprir TO/TP/IA/recuos/altura.")
+            if zc == "A" and vc == "I":
+                return ("NÃO PERMITE", "❌", "A zona permite, mas o tipo de via restringe — no licenciamento, pode não ser aceito.")
+            if zc == "I" and vc == "A":
+                return ("DEPENDE", "⚠️", "A zona restringe, mas o tipo de via permite — isso pode depender do licenciamento.")
+            if zc == "I" and (vc == "I" or not vc):
+                return ("NÃO PERMITE", "❌", "A zona não permite este uso (e a via não libera).")
+            return ("DEPENDE", "⚠️", "Faltam dados suficientes para concluir (verifique a zona/SEUMA).")
+
+        status_lbl, status_ico, status_msg = _resumo_final(zone_class, via_norm, via_class)
+        if status_lbl == "PERMITE":
+            st.success(f"**{status_ico} Resumo final: {status_lbl}.** {status_msg}")
+        elif status_lbl == "NÃO PERMITE":
+            st.error(f"**{status_ico} Resumo final: {status_lbl}.** {status_msg}")
+        else:
+            st.warning(f"**{status_ico} Resumo final: {status_lbl}.** {status_msg}")
+
+
+        # Se aparecer AP/AM (depende do porte), explicar como decidir
+        if _norm(zone_class) in ("AP", "AM", "AP/AM") or _norm(via_class) in ("AP", "AM", "AP/AM"):
+            st.info(
+                "📌 **Como decidir o porte (bem simples):** o *porte* normalmente é definido pela **área construída total (m²)** do empreendimento. "
+                'Use a tabela **"O que é porte"** logo abaixo para enquadrar como **Pequeno / Médio / Grande**. '
+                "Depois, confirme também TO/TP/IA/recuos/altura no licenciamento."
+            )
+
         # Explicação leiga das categorias de via
         st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
         st.markdown(
