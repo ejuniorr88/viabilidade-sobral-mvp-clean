@@ -65,6 +65,38 @@ def _via_tipo_norm(v: Any) -> Optional[str]:
     return None  # via local / outras não entram na tabela por tipo de via
 
 
+
+def _summarize_adequabilidade(*, zona: str, zone_class: str | None, via_norm: str | None, via_class: str | None) -> tuple[str, str]:
+    """Resumo final (bem leigo) para a adequabilidade."""
+    z = _norm(zone_class)
+    v = _norm(via_class)
+
+    # Via local / sem tabela por tipo de via
+    if not via_norm:
+        if z == "I":
+            return ("NÃO PERMITE", "A zona indicou I (Inadequado / não permitido). Em via local, normalmente vale a regra da zona.")
+        if z == "AP/AM":
+            return ("DEPENDE DO PORTE", "A zona indicou AP/AM (depende do porte). Em via local, normalmente vale a regra da zona.")
+        if z == "PE":
+            return ("PROJETO ESPECIAL", "A zona indicou PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
+        if z in ("A", "AP", "AM"):
+            return ("PERMITE", "A zona permite. Ainda é obrigatório cumprir TO/TP/IA/recuos/altura e demais exigências.")
+        return ("SEM DADO", "Não foi possível determinar o resultado por zona.")
+
+    # Via entra na tabela (arterial/coletora/paisagística)
+    if v == "I":
+        return ("NÃO PERMITE", "O tipo de via indicou I (não permitido), mesmo que a zona permita.")
+    if z == "I" and v in ("A", "AP", "AM"):
+        return ("POSSÍVEL PELA VIA", "A zona deu I, mas o tipo de via permite. O licenciamento pode considerar o resultado por tipo de via.")
+    if z == "I" and v == "AP/AM":
+        return ("DEPENDE DO PORTE", "A zona deu I, mas o tipo de via deu AP/AM (depende do porte). Pode depender do licenciamento.")
+    if z == "I" and v == "PE":
+        return ("PROJETO ESPECIAL", "A zona deu I, mas o tipo de via indica PE (Projeto especial). Pode exigir análise/condições extras.")
+    if z == "AP/AM" or v == "AP/AM":
+        return ("DEPENDE DO PORTE", "Existe indicação AP/AM (depende do porte). Confira se o empreendimento é pequeno ou médio.")
+    if z == "PE" or v == "PE":
+        return ("PROJETO ESPECIAL", "Existe indicação PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
+    return ("PERMITE", "Zona e/ou tipo de via permitem. Ainda é obrigatório cumprir TO/TP/IA/recuos/altura e demais exigências.")
 def _fetch_adequabilidade(
     *, zone_sigla: str, via_tipo_texto: Optional[str], use_type_code: str
 ) -> Tuple[Optional[str], Optional[str], Dict[str, Any]]:
@@ -178,7 +210,13 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             else:
                 st.warning(f"⚠️ Por tipo de via: não encontrado para **{via_norm}**.")
         else:
-            st.info("ℹ️ A tabela por tipo de via se aplica a vias **arteriais/coletoras** (e paisagísticas). Para **via local**, esta tabela pode não se aplicar.")
+            st.success("✅ Via identificada como **VIA LOCAL**. Nessa situação, a tabela por tipo de via (arterial/coletora/paisagística) geralmente **não se aplica** — normalmente vale o resultado da zona.")
+
+# 3) Linha verde — resumo final
+status_curto, explicacao = _summarize_adequabilidade(
+    zona=zona, zone_class=zone_class, via_norm=via_norm, via_class=via_class
+)
+st.success(f"✅ Resumo final: **{status_curto}**. {explicacao}")
 
         # Explicação leiga das categorias de via
         st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
