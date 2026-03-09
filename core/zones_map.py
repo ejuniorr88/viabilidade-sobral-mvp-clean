@@ -26,6 +26,12 @@ def load_zones(zone_file: Path) -> List[ZoneFeature]:
     for f in feats:
         props = f.get("properties") or {}
         sigla = props.get("sigla") or props.get("SIGLA") or props.get("zona")
+        # ZEIS: o GeoJSON traz 'sigla'='ZEIS' e 'subzona'='ZEIS 1/2/3'.
+        # Para permitir parâmetros diferentes por setor, usamos 'subzona' quando existir.
+        if str(sigla).strip().upper() == "ZEIS":
+            sub = props.get("subzona") or props.get("SUBZONA")
+            if sub:
+                sigla = sub
         if not sigla:
             continue
         geom = f.get("geometry")
