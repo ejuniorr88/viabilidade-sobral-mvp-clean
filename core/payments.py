@@ -1,85 +1,122 @@
 from __future__ import annotations
 
-from typing import Any, Dict
-from uuid import uuid4
+import uuid
+from typing import Any, Dict, Optional
 
 import streamlit as st
 from supabase import Client, create_client
 
-from core.auth import get_supabase_auth_client
+from core.pix_gateway import MercadoPagoPixError, create_pix_payment
 
 
 @st.cache_resource(show_spinner=False)
-def get_supabase_service_client() -> Client:
+def get_supabase_server_client() -> Client:
     url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+    key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not key:
+        raise RuntimeError(
+            "Falta configurar SUPABASE_SERVICE_ROLE_KEY nos Secrets do Streamlit."
+        )
     return create_client(url, key)
 
 
-def _extract_response_data(response: Any) -> Any:
+def _safe_data(response: Any) -> Any:
     data = getattr(response, "data", None)
     if data is None and isinstance(response, dict):
         data = response.get("data")
     return data
 
 
-def create_pending_payment(package_id: str, user_id: str) -> Dict[str, Any]:
-    """Cria uma intenção de compra pendente usando client server-side.
+def _generate_external_reference(user_id: str) -> str:
+    return f"pkg_{user_id.replace('-', '')}_{uuid.uuid4().hex}"
 
-    Usa a service role no servidor do Streamlit para não depender do contexto
-    auth.uid() na RPC. O user_id vem do usuário já autenticado no app.
-    """
-    if not user_id:
-        raise ValueError("Usuário não autenticado no app.")
 
-    service = get_supabase_service_client()
-
-    pkg_response = (
-        service.table("credit_packages")
-        .select("id,name,description,price_brl,credits,is_active")
-        .eq("id", package_id)
-        .eq("is_active", True)
-        .limit(1)
-        .execute()
-    )
-    pkg_data = _extract_response_data(pkg_response) or []
-    if not pkg_data:
-        raise ValueError("Pacote não encontrado ou inativo.")
-
-    package = pkg_data[0]
-    external_reference = f"pkg_{str(user_id).replace('-', '')}_{uuid4().hex}"
-
-    insert_payload = {
+def create_pending_payment_server_side(
+    *,
+    user_id: str,
+    package: Dict[str, Any],
+) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    payload = {
         "user_id": user_id,
-        "package_id": package_id,
-        "gateway": "pending_internal",
-        "external_reference": external_reference,
-        "amount_brl": package.get("price_brl"),
+        "package_id": package["id"],
+        "gateway": "mercadopago_pix_test",
+        "external_reference": _generate_external_reference(user_id),
+        "amount_brl": float(package.get("price_brl") or 0),
         "status": "pending",
     }
-
-    payment_response = service.table("payments").insert(insert_payload).execute()
-    payment_data = _extract_response_data(payment_response)
-
-    if isinstance(payment_data, list):
-        return payment_data[0] if payment_data else {}
-    return payment_data or {}
+    response = supabase.table("payments").insert(payload).execute()
+    data = _safe_data(response) or []
+    if not data:
+        raise RuntimeError("Não foi possível criar o pagamento pendente no banco.")
+    return data[0]
 
 
+def update_payment_with_pix_data(
+    *,
+    payment_id: str,
+    external_payment_id: str,
+    pix_qr_code: Optional[str],
+    pix_qr_code_base64: Optional[str],
+    ticket_url: Optional[str],
+    gateway_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    update_payload = {
+        "external_payment_id": external_payment_id,
+        "pix_copy_paste": pix_qr_code,
+        "pix_qr_code": pix_qr_code_base64,
+        "gateway_payload": {
+            **(gateway_payload or {}),
+            "ticket_url": ticket_url,
+        },
+        "updated_at": "now()",
+    }
+    response = (
+        supabase.table("payments")
+        .update(update_payload)
+        .eq("id", payment_id)
+        .execute()
+    )
+    data = _safe_data(response) or []
+    return data[0] if data else update_payload
 
-def get_payment_creation_error(exc: Exception) -> str:
-    msg = str(exc)
-    lowered = msg.lower()
 
-    if "supabase_service_role_key" in lowered:
-        return (
-            "Falta configurar SUPABASE_SERVICE_ROLE_KEY nos Secrets do Streamlit. "
-            "Sem essa chave o app não consegue criar a compra pendente com segurança."
+def create_pending_payment_and_pix(
+    *,
+    user_id: str,
+    user_email: str,
+    user_name: str,
+    package: Dict[str, Any],
+    notification_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    pending = create_pending_payment_server_side(user_id=user_id, package=package)
+
+    try:
+        pix = create_pix_payment(
+            amount_brl=float(package.get("price_brl") or 0),
+            description=f"{package.get('name') or 'Pacote de créditos'}",
+            payer_email=user_email,
+            payer_name=user_name or user_email,
+            external_reference=pending["external_reference"],
+            notification_url=notification_url,
         )
-    if "usuário não autenticado" in lowered or "user_id" in lowered:
-        return "Usuário não autenticado. Faça login novamente com Google e tente de novo."
-    if "duplicate key" in lowered or "external_reference" in lowered:
-        return "Houve um conflito ao gerar a referência da compra. Tente novamente."
-    if "row-level security" in lowered:
-        return "O banco bloqueou a operação. Verifique as permissões da tabela payments."
-    return msg
+    except MercadoPagoPixError:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"Erro inesperado ao gerar Pix no Mercado Pago: {e}") from e
+
+    updated = update_payment_with_pix_data(
+        payment_id=pending["id"],
+        external_payment_id=pix.get("external_payment_id") or "",
+        pix_qr_code=pix.get("qr_code"),
+        pix_qr_code_base64=pix.get("qr_code_base64"),
+        ticket_url=pix.get("ticket_url"),
+        gateway_payload=pix.get("gateway_payload") or {},
+    )
+
+    return {
+        "pending": pending,
+        "updated": updated,
+        "pix": pix,
+    }
