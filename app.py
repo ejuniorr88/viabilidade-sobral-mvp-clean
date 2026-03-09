@@ -44,6 +44,12 @@ except Exception:
     # fallback: caso o arquivo tenha outro nome
     from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
 
+# Supabase auth client
+try:
+    from core.supabase_client import get_supabase
+except Exception:
+    get_supabase = None  # type: ignore
+
 # UI
 from ui.mapa import render_mapa_section
 from ui.lote import render_lote_section
@@ -101,6 +107,67 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def _read_secret_or_env(key: str, default: str | None = None) -> str | None:
+    val = os.getenv(key)
+    if val:
+        return val
+    try:
+        if key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return default
+
+
+def render_google_login_top() -> None:
+    st.markdown("### Conta")
+    st.caption("Entre com Google para acessar créditos, pagamentos e histórico.")
+
+    if get_supabase is None:
+        st.warning("Cliente Supabase não disponível para iniciar o login Google.")
+        st.divider()
+        return
+
+    app_url = _read_secret_or_env("APP_URL", "http://localhost:8501")
+
+    col1, col2 = st.columns([1.2, 2.8])
+    with col1:
+        if st.button("Entrar com Google", use_container_width=True, key="btn_google_login"):
+            try:
+                supabase = get_supabase()
+                response = supabase.auth.sign_in_with_oauth(
+                    {
+                        "provider": "google",
+                        "options": {"redirect_to": app_url},
+                    }
+                )
+
+                auth_url = None
+                if hasattr(response, "url"):
+                    auth_url = response.url
+                elif isinstance(response, dict):
+                    auth_url = response.get("url")
+
+                if auth_url:
+                    st.session_state["google_auth_url"] = auth_url
+                else:
+                    st.error("Não foi possível gerar o link de login com Google.")
+            except Exception as e:
+                st.error(f"Erro ao iniciar login Google: {e}")
+
+    with col2:
+        auth_url = st.session_state.get("google_auth_url")
+        if auth_url:
+            st.link_button("Continuar login no Google", auth_url, use_container_width=False)
+            st.info("Depois de concluir o login, você será redirecionado de volta para a URL configurada no APP_URL.")
+        else:
+            st.caption("Ao clicar, o sistema gera o link seguro de autenticação do Google via Supabase.")
+
+    st.divider()
+
+render_google_login_top()
 
 
 # =============================
