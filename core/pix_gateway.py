@@ -41,12 +41,6 @@ def _get_access_token() -> str:
     return str(token)
 
 
-def _mercadopago_datetime(dt: datetime) -> str:
-    """Formata data no padrão aceito pelo Mercado Pago: YYYY-MM-DDTHH:MM:SSZ."""
-    dt_utc = dt.astimezone(timezone.utc).replace(microsecond=0)
-    return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def create_pix_payment(
     *,
     amount_brl: float,
@@ -57,6 +51,7 @@ def create_pix_payment(
     notification_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     access_token = _get_access_token()
+
     payload: Dict[str, Any] = {
         "transaction_amount": round(float(amount_brl), 2),
         "description": description,
