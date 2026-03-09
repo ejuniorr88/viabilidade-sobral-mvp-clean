@@ -227,51 +227,51 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             st.warning(f"**{status_ico} Resumo final: {status_lbl}.** {status_msg}")
 
 
-# Se aparecer AP/AM (depende do porte), explicar como decidir
-if _norm(zone_class) in ("AP", "AM", "AP/AM") or _norm(via_class) in ("AP", "AM", "AP/AM"):
-    st.info(
-        "📌 **Como decidir o porte (bem simples):** o *porte* normalmente é definido pela **área construída total (m²)** do empreendimento. "
-        'Use a tabela **"O que é porte"** logo abaixo para enquadrar como **Pequeno / Médio / Grande**. '
-        "Depois, confirme também TO/TP/IA/recuos/altura no licenciamento."
-    )
+        # Se aparecer AP/AM (depende do porte), explicar como decidir
+        if _norm(zone_class) in ("AP", "AM", "AP/AM") or _norm(via_class) in ("AP", "AM", "AP/AM"):
+            st.info(
+                "📌 **Como decidir o porte (bem simples):** o *porte* normalmente é definido pela **área construída total (m²)** do empreendimento. "
+                'Use a tabela **"O que é porte"** logo abaixo para enquadrar como **Pequeno / Médio / Grande**. '
+                "Depois, confirme também TO/TP/IA/recuos/altura no licenciamento."
+            )
 
-# Explicação leiga das categorias de via
-    st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
-    st.markdown(
-        "- **Via local:** rua de bairro, usada principalmente para acesso às casas/quadras (tráfego menor).\n"
-        "- **Via coletora:** rua que **coleta** o tráfego das vias locais e leva para vias maiores.\n"
-        "- **Via arterial:** via principal, de maior fluxo, que liga áreas/bairros e distribui o tráfego na cidade.\n"
-        "- **Paisagística:** classificação usada pela lei quando a via tem tratamento urbano/paisagístico específico."
-    )
-
-    # Dois quadros lado a lado (siglas x porte)
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("**O que significam as siglas (bem simples):**")
+        # Explicação leiga das categorias de via
+        st.markdown("**O que é via local, coletora, arterial, etc.? (bem simples)**")
         st.markdown(
-            "| Sigla | O que significa | Como interpretar |\n"
-            "|---|---|---|\n"
-            "| **A** | Adequado / permitido | Pode seguir com o projeto (respeitando TO/TP/IA/recuos). |\n"
-            "| **I** | Inadequado / não permitido | Em regra, **não pode** nesse local/condição. |\n"
-            "| **AP** | Adequado (pequeno porte) | Pode, mas normalmente limitado a porte pequeno. |\n"
-            "| **AM** | Adequado (médio porte) | Pode, mas normalmente limitado a porte médio. |\n"
-            "| **AP/AM** | Depende do porte | Pode, mas depende se o seu caso é pequeno ou médio. |\n"
-            "| **PE** | Projeto especial | Pode exigir análise específica/condições extras no licenciamento. |\n"
+            "- **Via local:** rua de bairro, usada principalmente para acesso às casas/quadras (tráfego menor).\n"
+            "- **Via coletora:** rua que **coleta** o tráfego das vias locais e leva para vias maiores.\n"
+            "- **Via arterial:** via principal, de maior fluxo, que liga áreas/bairros e distribui o tráfego na cidade.\n"
+            "- **Paisagística:** classificação usada pela lei quando a via tem tratamento urbano/paisagístico específico."
         )
 
-    with col2:
-        st.markdown("**O que é “porte” (pequeno / médio / grande)?**")
-        st.caption("Porte é a escala do empreendimento, normalmente definida pela **área construída total (m²)**.")
-        st.markdown(
-            "| Porte | Faixa (área construída total) |\n"
-            "|---|---|\n"
-            "| **Pequeno** | até **250 m²** |\n"
-            "| **Médio** | de **250,01 m²** até **1.000 m²** |\n"
-            "| **Grande** | de **1.000,01 m²** até **5.000 m²** |\n"
-            "| **Projeto especial** | acima de **5.000 m²** |\n"
-        )
-        st.caption("Obs.: se a lei/SEUMA adotar critério diferente para algum uso específico, prevalece o licenciamento.")
+        # Dois quadros lado a lado (siglas x porte)
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**O que significam as siglas (bem simples):**")
+            st.markdown(
+                "| Sigla | O que significa | Como interpretar |\n"
+                "|---|---|---|\n"
+                "| **A** | Adequado / permitido | Pode seguir com o projeto (respeitando TO/TP/IA/recuos). |\n"
+                "| **I** | Inadequado / não permitido | Em regra, **não pode** nesse local/condição. |\n"
+                "| **AP** | Adequado (pequeno porte) | Pode, mas normalmente limitado a porte pequeno. |\n"
+                "| **AM** | Adequado (médio porte) | Pode, mas normalmente limitado a porte médio. |\n"
+                "| **AP/AM** | Depende do porte | Pode, mas depende se o seu caso é pequeno ou médio. |\n"
+                "| **PE** | Projeto especial | Pode exigir análise específica/condições extras no licenciamento. |\n"
+            )
+
+        with col2:
+            st.markdown("**O que é “porte” (pequeno / médio / grande)?**")
+            st.caption("Porte é a escala do empreendimento, normalmente definida pela **área construída total (m²)**.")
+            st.markdown(
+                "| Porte | Faixa (área construída total) |\n"
+                "|---|---|\n"
+                "| **Pequeno** | até **250 m²** |\n"
+                "| **Médio** | de **250,01 m²** até **1.000 m²** |\n"
+                "| **Grande** | de **1.000,01 m²** até **5.000 m²** |\n"
+                "| **Projeto especial** | acima de **5.000 m²** |\n"
+            )
+            st.caption("Obs.: se a lei/SEUMA adotar critério diferente para algum uso específico, prevalece o licenciamento.")
 
     # B) Parâmetros urbanísticos
     st.markdown("### B) Parâmetros urbanísticos (para começar projeto)")
