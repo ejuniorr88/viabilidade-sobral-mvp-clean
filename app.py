@@ -295,16 +295,6 @@ zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
 
 # =============================
-# UI topo
-# =============================
-st.title("Viabilidade")
-render_google_login_top()
-render_credits_panel(_card)
-render_payments_panel()
-st.divider()
-
-
-# =============================
 # Pequena função de card (evita dependência externa)
 # =============================
 def _card(title: str, value: Any, suffix: str = "") -> None:
@@ -318,6 +308,17 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+# =============================
+# UI topo
+# =============================
+st.title("Viabilidade")
+render_google_login_top()
+render_credits_panel(_card)
+render_payments_panel()
+st.divider()
+
 
 
 # =============================
