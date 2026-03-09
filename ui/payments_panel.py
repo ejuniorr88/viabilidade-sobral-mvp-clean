@@ -20,7 +20,7 @@ def _notification_url() -> Optional[str]:
     app_url = st.secrets.get("APP_URL")
     if not app_url:
         return None
-    return f"{str(app_url).rstrip('/')}/mercadopago-webhook-placeholder"
+    return f"{str(app_url).rstrip('/')}functions/v1/mercadopago-webhook"
 
 
 def _store_pix_result(package_id: str, result: Dict[str, Any]) -> None:
@@ -45,7 +45,7 @@ def render_payments_panel() -> None:
 
     st.markdown("### Comprar créditos")
     st.caption(
-        "Nesta etapa o sistema cria a compra pendente e já gera o Pix de teste do Mercado Pago."
+        "Nesta etapa o sistema cria a compra pendente, gera o Pix de teste do Mercado Pago e aguarda a confirmação automática via webhook."
     )
 
     try:
