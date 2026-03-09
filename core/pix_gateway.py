@@ -42,6 +42,12 @@ def _get_access_token() -> str:
     return str(token)
 
 
+def _mercadopago_datetime(dt: datetime) -> str:
+    """Formata data no padrão aceito pelo Mercado Pago: YYYY-MM-DDTHH:MM:SSZ."""
+    dt_utc = dt.astimezone(timezone.utc).replace(microsecond=0)
+    return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def create_pix_payment(
     *,
     amount_brl: float,
@@ -60,7 +66,7 @@ def create_pix_payment(
         "payment_method_id": "pix",
         "payer": _build_payer(payer_email, payer_name),
         "external_reference": external_reference,
-        "date_of_expiration": expires_at.isoformat(),
+        "date_of_expiration": _mercadopago_datetime(expires_at),
     }
 
     if notification_url:
