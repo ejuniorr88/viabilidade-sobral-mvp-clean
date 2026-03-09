@@ -5,11 +5,12 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import streamlit as st
+from supabase import create_client
 
 # =============================
 # Debug markers (garante que o deploy está lendo o app.py correto)
 # =============================
-st.write("APP VERSION MARKER: 2026-03-09-CREDITS-PANEL-V1")
+st.write("APP VERSION MARKER: 2026-03-09-GOOGLE-LOGIN-LOGOUT-V2")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -45,9 +46,9 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback
 from ui.auth_panel import render_google_login_top
 from ui.credits_panel import render_credits_panel
+from ui.payments_panel import render_payments_panel
 
 
 # =============================
@@ -64,20 +65,213 @@ def _zones_prepared():
     return load_zones(ZONE_FILE)
 
 
+@st.cache_resource(show_spinner=False)
+def get_supabase_auth_client():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_ANON_KEY"]
+    return create_client(url, key)
+
+
 # =============================
-# Pequena função de card (evita dependência externa)
+# Auth helpers
 # =============================
-def _card(title: str, value: Any, suffix: str = "") -> None:
-    v = "—" if value is None or value == "" else f"{value}{suffix}"
-    st.markdown(
-        f"""
-        <div style="padding:12px;border:1px solid #e7e7e7;border-radius:12px;margin-bottom:10px;">
-            <div style="font-size:12px;opacity:.75">{title}</div>
-            <div style="font-size:20px;font-weight:700">{v}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def _get_app_url() -> str:
+    return st.secrets.get("APP_URL", "http://localhost:8501")
+
+
+def _safe_get_query_param(name: str) -> Optional[str]:
+    try:
+        value = st.query_params.get(name)
+        if isinstance(value, list):
+            return value[0] if value else None
+        return value
+    except Exception:
+        params = st.experimental_get_query_params()
+        values = params.get(name)
+        if not values:
+            return None
+        return values[0]
+
+
+def _clear_auth_query_params() -> None:
+    try:
+        st.query_params.clear()
+    except Exception:
+        try:
+            st.experimental_set_query_params()
+        except Exception:
+            pass
+
+
+def _extract_user_fields(user_obj: Any) -> Dict[str, Optional[str]]:
+    email = None
+    name = None
+    uid = None
+
+    if user_obj is None:
+        return {"email": None, "name": None, "id": None}
+
+    if isinstance(user_obj, dict):
+        email = user_obj.get("email")
+        uid = user_obj.get("id")
+        meta = user_obj.get("user_metadata") or {}
+        name = meta.get("full_name") or meta.get("name")
+        return {"email": email, "name": name, "id": uid}
+
+    email = getattr(user_obj, "email", None)
+    uid = getattr(user_obj, "id", None)
+    meta = getattr(user_obj, "user_metadata", None) or {}
+    if isinstance(meta, dict):
+        name = meta.get("full_name") or meta.get("name")
+    else:
+        name = getattr(meta, "full_name", None) or getattr(meta, "name", None)
+
+    return {"email": email, "name": name, "id": uid}
+
+
+def _store_user_in_state(user_obj: Any) -> None:
+    info = _extract_user_fields(user_obj)
+    st.session_state["auth_logged_in"] = bool(info.get("id") or info.get("email"))
+    st.session_state["auth_user_email"] = info.get("email")
+    st.session_state["auth_user_name"] = info.get("name")
+    st.session_state["auth_user_id"] = info.get("id")
+
+
+def _sync_user_from_current_session() -> None:
+    supabase = get_supabase_auth_client()
+
+    try:
+        user_response = supabase.auth.get_user()
+        user_obj = getattr(user_response, "user", None)
+        if user_obj is None and isinstance(user_response, dict):
+            user_obj = user_response.get("user")
+        if user_obj is not None:
+            _store_user_in_state(user_obj)
+            return
+    except Exception:
+        pass
+
+    if "auth_logged_in" not in st.session_state:
+        st.session_state["auth_logged_in"] = False
+        st.session_state["auth_user_email"] = None
+        st.session_state["auth_user_name"] = None
+        st.session_state["auth_user_id"] = None
+
+
+def _handle_oauth_callback() -> None:
+    code = _safe_get_query_param("code")
+    if not code:
+        return
+
+    if st.session_state.get("last_oauth_code") == code:
+        return
+
+    supabase = get_supabase_auth_client()
+
+    try:
+        response = supabase.auth.exchange_code_for_session({"auth_code": code})
+        user_obj = getattr(response, "user", None)
+        session_obj = getattr(response, "session", None)
+
+        if user_obj is None and isinstance(response, dict):
+            user_obj = response.get("user")
+            session_obj = response.get("session")
+
+        if user_obj is None and session_obj is not None:
+            user_obj = getattr(session_obj, "user", None)
+            if user_obj is None and isinstance(session_obj, dict):
+                user_obj = session_obj.get("user")
+
+        if user_obj is not None:
+            _store_user_in_state(user_obj)
+            st.session_state["auth_message"] = "Login efetuado com sucesso."
+            st.session_state["last_oauth_code"] = code
+            _clear_auth_query_params()
+            st.rerun()
+        else:
+            st.session_state["auth_logged_in"] = False
+            st.session_state["auth_message"] = "O Google retornou ao app, mas não foi possível identificar o usuário logado."
+    except Exception as e:
+        st.session_state["auth_logged_in"] = False
+        st.session_state["auth_message"] = f"Erro ao concluir o login Google: {e}"
+
+
+def render_google_login_top() -> None:
+    supabase = get_supabase_auth_client()
+    _sync_user_from_current_session()
+
+    st.subheader("Conta")
+
+    if st.session_state.get("auth_message"):
+        msg = st.session_state.get("auth_message")
+        if st.session_state.get("auth_logged_in"):
+            st.success(msg)
+        else:
+            st.warning(msg)
+
+    if st.session_state.get("auth_logged_in"):
+        name = st.session_state.get("auth_user_name")
+        email = st.session_state.get("auth_user_email")
+
+        if name and email:
+            st.success(f"Logado com Google: {name} ({email})")
+        elif email:
+            st.success(f"Logado com Google: {email}")
+        else:
+            st.success("Login Google ativo.")
+
+        col_a, col_b = st.columns([1, 3])
+        with col_a:
+            if st.button("Sair", use_container_width=True, key="btn_google_logout"):
+                try:
+                    supabase.auth.sign_out()
+                except Exception:
+                    pass
+
+                for key in [
+                    "auth_logged_in",
+                    "auth_user_email",
+                    "auth_user_name",
+                    "auth_user_id",
+                    "auth_message",
+                    "last_oauth_code",
+                ]:
+                    st.session_state.pop(key, None)
+
+                _clear_auth_query_params()
+                st.rerun()
+
+        with col_b:
+            st.caption("Sua sessão Google está ativa neste navegador.")
+        return
+
+    st.caption("Entre com Google para acessar créditos, pagamentos, histórico e carteira de créditos.")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if st.button("Entrar com Google", use_container_width=True, key="btn_google_login"):
+            response = supabase.auth.sign_in_with_oauth(
+                {
+                    "provider": "google",
+                    "options": {
+                        "redirect_to": _get_app_url(),
+                    },
+                }
+            )
+
+            auth_url = None
+            if hasattr(response, "url"):
+                auth_url = response.url
+            elif isinstance(response, dict):
+                auth_url = response.get("url")
+
+            if auth_url:
+                st.link_button("Continuar login no Google", auth_url, use_container_width=True)
+                st.info("Clique no botão acima para abrir o login do Google.")
+            else:
+                st.error("Não foi possível gerar o link de login com Google.")
+
+    with col2:
+        st.caption("Ao clicar, o sistema gera o link seguro de autenticação do Google via Supabase.")
 
 
 # =============================
@@ -92,7 +286,7 @@ if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict)
 st.session_state.calc.setdefault("use_type_code", "RES_UNI")
 
 # Auth callback precisa rodar cedo, antes de renderizar a UI principal
-handle_oauth_callback()
+_handle_oauth_callback()
 
 # =============================
 # Carregar bases
@@ -106,7 +300,24 @@ zones_prepared = _zones_prepared()
 st.title("Viabilidade")
 render_google_login_top()
 render_credits_panel(_card)
+render_payments_panel()
 st.divider()
+
+
+# =============================
+# Pequena função de card (evita dependência externa)
+# =============================
+def _card(title: str, value: Any, suffix: str = "") -> None:
+    v = "—" if value is None or value == "" else f"{value}{suffix}"
+    st.markdown(
+        f"""
+        <div style="padding:12px;border:1px solid #e7e7e7;border-radius:12px;margin-bottom:10px;">
+            <div style="font-size:12px;opacity:.75">{title}</div>
+            <div style="font-size:20px;font-weight:700">{v}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # =============================
