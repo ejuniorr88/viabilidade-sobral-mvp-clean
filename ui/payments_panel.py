@@ -6,6 +6,7 @@ from core.credits import list_credit_packages
 from core.payments import create_pending_payment, get_payment_creation_error
 
 
+
 def render_payments_panel() -> None:
     if not st.session_state.get("auth_logged_in"):
         return
@@ -31,6 +32,8 @@ def render_payments_panel() -> None:
         )
         st.caption("No próximo passo, essa compra pendente será ligada ao gateway Pix e ao webhook.")
 
+    user_id = st.session_state.get("auth_user_id")
+
     cols = st.columns(min(3, len(packages)))
     for idx, pkg in enumerate(packages):
         col = cols[idx % len(cols)]
@@ -48,7 +51,7 @@ def render_payments_panel() -> None:
             )
             if st.button("Comprar", key=f"buy_pkg_{pkg.get('id')}", use_container_width=True):
                 try:
-                    result = create_pending_payment(str(pkg.get("id")))
+                    result = create_pending_payment(str(pkg.get("id")), str(user_id or ""))
                     if result:
                         st.session_state["purchase_result"] = result
                         st.rerun()
