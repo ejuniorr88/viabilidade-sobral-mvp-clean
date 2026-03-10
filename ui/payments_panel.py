@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
+from core.auth import get_supabase_auth_client
+from core.payments import create_pending_payment_and_pix
+
 
 # =========================================================
 # Helpers
@@ -13,7 +16,7 @@ import streamlit as st
 def _safe_get(d: Any, key: str, default=None):
     if isinstance(d, dict):
         return d.get(key, default)
-    return default
+    return getattr(d, key, default) if d is not None else default
 
 
 def _to_float(v: Any, default: float = 0.0) -> float:
@@ -50,12 +53,13 @@ def _get_user_name(user_profile: Dict[str, Any]) -> str:
         _safe_get(user_profile, "full_name")
         or _safe_get(user_profile, "name")
         or _safe_get(user_profile, "display_name")
+        or _safe_get(user_profile, "auth_user_name")
         or "Usuário"
     )
 
 
 def _get_user_email(user_profile: Dict[str, Any]) -> str:
-    return _safe_get(user_profile, "email") or "-"
+    return _safe_get(user_profile, "email") or _safe_get(user_profile, "auth_user_email") or "-"
 
 
 # =========================================================
@@ -74,7 +78,10 @@ def _resolve_supabase(explicit_supabase=None):
         if key in st.session_state and st.session_state[key] is not None:
             return st.session_state[key]
 
-    return None
+    try:
+        return get_supabase_auth_client()
+    except Exception:
+        return None
 
 
 def _resolve_user_profile(explicit_user_profile=None) -> Dict[str, Any]:
@@ -91,6 +98,17 @@ def _resolve_user_profile(explicit_user_profile=None) -> Dict[str, Any]:
             val = st.session_state[key]
             if isinstance(val, dict):
                 return val
+
+    # Compatibilidade com o fluxo real do core.auth
+    if st.session_state.get("auth_logged_in"):
+        return {
+            "id": st.session_state.get("auth_user_id"),
+            "email": st.session_state.get("auth_user_email"),
+            "full_name": st.session_state.get("auth_user_name"),
+            "auth_user_id": st.session_state.get("auth_user_id"),
+            "auth_user_email": st.session_state.get("auth_user_email"),
+            "auth_user_name": st.session_state.get("auth_user_name"),
+        }
 
     return {}
 
@@ -116,6 +134,22 @@ def _fetch_credit_balance(supabase, user_id: str) -> float:
 
 
 def _fetch_credit_packages(supabase) -> List[Dict[str, Any]]:
+    # Primeiro tenta o padrão já usado no projeto: is_active
+    try:
+        resp = (
+            supabase.table("credit_packages")
+            .select("*")
+            .eq("is_active", True)
+            .order("price_brl", desc=False)
+            .execute()
+        )
+        rows = resp.data or []
+        if rows:
+            return rows
+    except Exception:
+        pass
+
+    # Fallback para versões antigas que usavam active
     try:
         resp = (
             supabase.table("credit_packages")
@@ -194,25 +228,32 @@ def _fetch_latest_pending_payment(supabase, user_id: str) -> Optional[Dict[str, 
 # =========================================================
 # Payment actions
 # =========================================================
-def _create_pix_payment(supabase, user_id: str, package_id: str) -> Optional[Dict[str, Any]]:
-    rpc_candidates = [
-        ("create_pix_payment", {"p_user_id": user_id, "p_package_id": package_id}),
-        ("create_payment_pix", {"p_user_id": user_id, "p_package_id": package_id}),
-    ]
+def _create_pix_payment(supabase, user_id: str, user_email: str, user_name: str, package: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    try:
+        notification_url = st.secrets.get(
+            "MERCADOPAGO_WEBHOOK_URL",
+            "https://dvaskwtqrohfyzndtjwv.supabase.co/functions/v1/mercadopago-webhook",
+        )
 
-    for fn_name, payload in rpc_candidates:
-        try:
-            resp = supabase.rpc(fn_name, payload).execute()
-            data = resp.data
-            if isinstance(data, list) and data:
-                return data[0]
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            continue
+        result = create_pending_payment_and_pix(
+            user_id=user_id,
+            user_email=user_email,
+            user_name=user_name or user_email,
+            package=package,
+            notification_url=notification_url,
+        )
 
-    st.error("Não foi possível criar o pagamento Pix. Verifique o nome da RPC no backend.")
-    return None
+        updated = result.get("updated") or {}
+        pending = result.get("pending") or {}
+
+        # Retorna a linha já com os dados do Pix, priorizando updated
+        return {
+            **pending,
+            **updated,
+        }
+    except Exception as e:
+        st.error(f"Não foi possível criar o pagamento Pix: {e}")
+        return None
 
 
 # =========================================================
@@ -371,7 +412,7 @@ def _render_pending_payment_status(supabase, payment_id: str) -> None:
         st.caption(f"Status atual: {status}")
 
 
-def _render_buy_section(supabase, user_id: str, packages: List[Dict[str, Any]]) -> None:
+def _render_buy_section(supabase, user_id: str, user_email: str, user_name: str, packages: List[Dict[str, Any]]) -> None:
     st.markdown("## Comprar créditos")
     st.caption("Escolha um pacote para gerar o Pix.")
 
@@ -397,7 +438,9 @@ def _render_buy_section(supabase, user_id: str, packages: List[Dict[str, Any]]) 
                 payment = _create_pix_payment(
                     supabase=supabase,
                     user_id=user_id,
-                    package_id=str(_safe_get(package, "id")),
+                    user_email=user_email,
+                    user_name=user_name,
+                    package=package,
                 )
                 if payment:
                     st.session_state["current_payment_id"] = _safe_get(payment, "id")
@@ -437,6 +480,8 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
     profile = _resolve_user_profile(user_profile)
 
     user_id = _get_user_id(profile) if profile else None
+    user_email = _get_user_email(profile) if profile else "-"
+    user_name = _get_user_name(profile) if profile else "Usuário"
 
     if not user_id:
         st.info("Entre com Google para acessar carteira e pagamentos.")
@@ -455,5 +500,5 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
     _render_packages_table(packages)
     _render_recent_ledger(ledger_rows)
     _render_recent_payments(payments_rows)
-    _render_buy_section(supabase_client, user_id, packages)
+    _render_buy_section(supabase_client, user_id, user_email, user_name, packages)
     _render_current_payment_area(supabase_client, user_id)
