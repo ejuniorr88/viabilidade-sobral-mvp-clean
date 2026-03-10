@@ -59,6 +59,42 @@ def _get_user_email(user_profile: Dict[str, Any]) -> str:
 
 
 # =========================================================
+# Context discovery
+# =========================================================
+def _resolve_supabase(explicit_supabase=None):
+    if explicit_supabase is not None:
+        return explicit_supabase
+
+    for key in [
+        "supabase",
+        "sb",
+        "supabase_client",
+    ]:
+        if key in st.session_state and st.session_state[key] is not None:
+            return st.session_state[key]
+
+    return None
+
+
+def _resolve_user_profile(explicit_user_profile=None) -> Dict[str, Any]:
+    if explicit_user_profile is not None:
+        return explicit_user_profile
+
+    for key in [
+        "user_profile",
+        "profile",
+        "google_user",
+        "user",
+    ]:
+        if key in st.session_state and st.session_state[key]:
+            val = st.session_state[key]
+            if isinstance(val, dict):
+                return val
+
+    return {}
+
+
+# =========================================================
 # Supabase reads
 # =========================================================
 def _fetch_credit_balance(supabase, user_id: str) -> float:
@@ -158,11 +194,6 @@ def _fetch_latest_pending_payment(supabase, user_id: str) -> Optional[Dict[str, 
 # Payment actions
 # =========================================================
 def _create_pix_payment(supabase, user_id: str, package_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Espera que exista uma RPC chamada create_pix_payment(p_user_id, p_package_id)
-    OU create_payment_pix(p_user_id, p_package_id).
-    Ajuste aqui se o nome da sua RPC for outro.
-    """
     rpc_candidates = [
         ("create_pix_payment", {"p_user_id": user_id, "p_package_id": package_id}),
         ("create_payment_pix", {"p_user_id": user_id, "p_package_id": package_id}),
@@ -179,9 +210,7 @@ def _create_pix_payment(supabase, user_id: str, package_id: str) -> Optional[Dic
         except Exception:
             continue
 
-    st.error(
-        "Não foi possível criar o pagamento Pix. Verifique o nome da RPC no backend."
-    )
+    st.error("Não foi possível criar o pagamento Pix. Verifique o nome da RPC no backend.")
     return None
 
 
@@ -322,16 +351,13 @@ def _render_pending_payment_status(supabase, payment_id: str) -> None:
         st.success("Pagamento confirmado com sucesso.")
         time.sleep(1)
         st.rerun()
-
     elif status == "pending":
         st.warning("Pagamento ainda pendente.")
         if auto_refresh:
             time.sleep(5)
             st.rerun()
-
     elif status in ("failed", "cancelled", "refunded"):
         st.error(f"Pagamento com status: {status}")
-
     else:
         st.caption(f"Status atual: {status}")
 
@@ -395,13 +421,19 @@ def _render_current_payment_area(supabase, user_id: str) -> None:
 
 
 # =========================================================
-# Public entrypoint
+# Entry point
 # =========================================================
-def render_payments_panel(supabase, user_profile: Dict[str, Any]) -> None:
-    user_id = _get_user_id(user_profile)
+def render_payments_panel(supabase=None, user_profile=None) -> None:
+    supabase = _resolve_supabase(supabase)
+    user_profile = _resolve_user_profile(user_profile)
 
+    if supabase is None:
+        st.error("Cliente Supabase não encontrado.")
+        return
+
+    user_id = _get_user_id(user_profile)
     if not user_id:
-        st.error("Não foi possível identificar o usuário logado.")
+        st.info("Entre com Google para acessar carteira e pagamentos.")
         return
 
     balance = _fetch_credit_balance(supabase, user_id)
