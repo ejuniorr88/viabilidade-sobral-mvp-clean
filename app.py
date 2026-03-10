@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any, Dict
 
 import streamlit as st
+import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-10-LOGIN-PAYMENT-REPORT-V4")
+st.write("APP VERSION MARKER: 2026-03-10-LOGIN-SAME-TAB-V5")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -67,19 +68,32 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
-def _show_login_redirect_panel(auth_url: str, reason: str) -> None:
-    st.warning(reason)
-    st.info("Clique abaixo para continuar com o login do Google.")
+def _redirect_same_tab(url: str, fallback_message: str) -> None:
+    """
+    Tenta redirecionar automaticamente na mesma aba.
+    Se o navegador bloquear ou demorar, ainda deixa link de fallback.
+    """
+    st.info(fallback_message)
 
-    st.link_button(
-        "Continuar com Google",
-        auth_url,
-        use_container_width=True,
+    components.html(
+        f"""
+        <script>
+            try {{
+                window.top.location.replace({json.dumps(url)});
+            }} catch (e) {{
+                try {{
+                    window.parent.location.replace({json.dumps(url)});
+                }} catch (e2) {{
+                    window.location.replace({json.dumps(url)});
+                }}
+            }}
+        </script>
+        """,
+        height=0,
     )
 
-    st.markdown(
-        f"[Se o botão não abrir, clique aqui para entrar]({auth_url})"
-    )
+    st.markdown(f"[Se não redirecionar automaticamente, clique aqui para continuar]({url})")
+    st.stop()
 
 
 def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
@@ -173,12 +187,6 @@ if "pending_report_after_payment" not in st.session_state:
 if "payments_focus_mode" not in st.session_state:
     st.session_state.payments_focus_mode = False
 
-if "pending_login_url" not in st.session_state:
-    st.session_state.pending_login_url = None
-
-if "pending_login_reason" not in st.session_state:
-    st.session_state.pending_login_reason = None
-
 
 handle_oauth_callback()
 
@@ -236,18 +244,18 @@ if user_logged_in and user_id:
     _try_unlock_report_after_payment(user_id)
 
 # =========================================================
-# Retorno automático após login
+# Retorno automático após login para calcular
 # =========================================================
 if user_logged_in and st.session_state.get("post_login_action") == "calculate_viability":
     st.session_state.post_login_action = None
-    st.session_state.pending_login_url = None
-    st.session_state.pending_login_reason = None
     _run_free_calc(calc, zones_prepared, radius_m)
 
+# =========================================================
+# Retorno automático após login para gerar relatório
+# =========================================================
 elif user_logged_in and st.session_state.get("post_login_action") == "generate_report":
     st.session_state.post_login_action = None
-    st.session_state.pending_login_url = None
-    st.session_state.pending_login_reason = None
+    # segue o fluxo normal mais abaixo
 
 # =========================================================
 # Clique em calcular
@@ -257,9 +265,10 @@ if clicked_calcular:
         auth_url = start_google_login()
         if auth_url:
             st.session_state.post_login_action = "calculate_viability"
-            st.session_state.pending_login_url = auth_url
-            st.session_state.pending_login_reason = "Faça login com Google para calcular a viabilidade."
-            st.rerun()
+            _redirect_same_tab(
+                auth_url,
+                "Redirecionando para o login do Google...",
+            )
         else:
             st.error("Não foi possível iniciar o login com Google.")
             st.stop()
@@ -267,15 +276,6 @@ if clicked_calcular:
         _run_free_calc(calc, zones_prepared, radius_m)
 else:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
-
-# =========================================================
-# Painel de login pendente
-# =========================================================
-if (not user_logged_in) and st.session_state.get("pending_login_url"):
-    _show_login_redirect_panel(
-        st.session_state["pending_login_url"],
-        st.session_state.get("pending_login_reason") or "Faça login com Google para continuar.",
-    )
 
 # =========================================================
 # Parte gratuita: mostrar apenas até o item 4
@@ -335,9 +335,10 @@ if can_offer_report:
             auth_url = start_google_login()
             if auth_url:
                 st.session_state.post_login_action = "generate_report"
-                st.session_state.pending_login_url = auth_url
-                st.session_state.pending_login_reason = "Faça login com Google para gerar o relatório completo."
-                st.rerun()
+                _redirect_same_tab(
+                    auth_url,
+                    "Redirecionando para o login do Google...",
+                )
             else:
                 st.error("Não foi possível iniciar o login com Google.")
         else:
@@ -381,8 +382,7 @@ if can_offer_report:
 # Se voltou logado tentando gerar relatório, continua o fluxo
 # =========================================================
 if user_logged_in and can_offer_report and not st.session_state.get("report_unlocked"):
-    if st.session_state.get("pending_login_url") is None and st.session_state.get("pending_report_after_payment") is False:
-        # nada pendente
+    if st.session_state.get("post_login_action") is None:
         pass
 
 # =========================================================
