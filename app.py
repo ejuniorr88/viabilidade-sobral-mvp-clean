@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 import streamlit as st
 
-st.write("APP VERSION MARKER: 2026-03-10-FREE-CALC-PAID-REPORT-V1")
+st.write("APP VERSION MARKER: 2026-03-10-FREE-CALC-PAID-REPORT-V2")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -81,6 +81,9 @@ st.session_state.calc.setdefault("use_type_code", "RES_UNI")
 if "report_unlocked" not in st.session_state:
     st.session_state.report_unlocked = False
 
+if "free_calc_done" not in st.session_state:
+    st.session_state.free_calc_done = False
+
 if "last_calc_signature" not in st.session_state:
     st.session_state.last_calc_signature = None
 
@@ -109,7 +112,6 @@ st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m")
 st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 
-# assinatura simples para invalidar relatório pago quando os dados mudarem
 current_signature = json.dumps(
     {
         "lat": st.session_state.get("selected_lat"),
@@ -124,31 +126,39 @@ current_signature = json.dumps(
     default=str,
 )
 
-# se mudou a entrada após relatório já liberado, trava novamente até gerar novo relatório
+# Se mudou algum dado do estudo, invalida cálculo gratuito e relatório pago
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
     st.session_state.report_unlocked = False
-
-_ = render_localizacao_section(calcular, zones_prepared, radius_m)
+    st.session_state.free_calc_done = False
 
 calc = st.session_state.calc
 
 # =========================================================
-# Cálculo gratuito
+# Cálculo gratuito (somente logado)
 # =========================================================
 if calcular:
-    # novo cálculo invalida o relatório anterior até gerar novamente
+    user_logged_in = bool(st.session_state.get("auth_logged_in"))
+    user_id = st.session_state.get("auth_user_id")
+
+    if not user_logged_in or not user_id:
+        st.error("Faça login com Google para calcular a viabilidade.")
+        st.stop()
+
     st.session_state.report_unlocked = False
+    st.session_state.free_calc_done = False
     st.session_state.last_calc_signature = current_signature
 
-    # limpa eventuais erros antigos, mas preserva escolhas
     calc.pop("err", None)
     calc.pop("rule", None)
+
+    _ = render_localizacao_section(True, zones_prepared, radius_m)
 
     if calc.get("zone") and not calc.get("rule"):
         try:
             rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
             if rule:
                 calc["rule"] = rule
+                st.session_state.free_calc_done = True
             else:
                 calc["err"] = (
                     f"Nenhuma regra no Supabase para zona={calc['zone']} "
@@ -156,29 +166,24 @@ if calcular:
                 )
         except Exception as e:
             calc["err"] = f"Erro ao consultar Supabase: {e}"
+else:
+    _ = render_localizacao_section(False, zones_prepared, radius_m)
 
 # =========================================================
-# Parte gratuita
+# Parte gratuita: mostrar apenas até o item 4
 # =========================================================
-render_indices_section(
-    calc=calc,
-    card_func=_card,
-    pick_func=pick_rule,
-    get_rule_func=fetch_rule,
-)
-
-render_analise_section(
-    calc,
-    lot_area=lot_area,
-    built_ground=built_ground,
-    permeable_area=permeable_area,
-    pick_func=pick_rule,
-)
+if st.session_state.get("free_calc_done"):
+    render_indices_section(
+        calc=calc,
+        card_func=_card,
+        pick_func=pick_rule,
+        get_rule_func=fetch_rule,
+    )
 
 # =========================================================
-# Parte paga - gerar relatório
+# Botão para gerar relatório (parte paga)
 # =========================================================
-can_offer_report = bool(calc.get("zone")) and not bool(calc.get("err"))
+can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
 if can_offer_report:
     st.markdown("---")
@@ -201,7 +206,11 @@ if can_offer_report:
     c1, c2 = st.columns([1, 2])
 
     with c1:
-        gerar_relatorio = st.button("📄 Gerar relatório", key="btn_generate_report", use_container_width=True)
+        gerar_relatorio = st.button(
+            "📄 Gerar relatório",
+            key="btn_generate_report",
+            use_container_width=True,
+        )
 
     with c2:
         if not user_logged_in:
@@ -231,17 +240,24 @@ if can_offer_report:
                 else:
                     st.session_state.report_unlocked = True
                     novo_saldo = debit_result.get("new_balance")
-                    st.success(
-                        f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}"
-                    )
+                    st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                     st.rerun()
 
             except Exception as e:
                 st.error(f"Não foi possível descontar o crédito: {e}")
 
 # =========================================================
-# Relatório completo liberado somente após crédito
+# Parte paga: item 5 + relatório final
 # =========================================================
 if st.session_state.get("report_unlocked") and can_offer_report:
     st.markdown("---")
+
+    render_analise_section(
+        calc,
+        lot_area=lot_area,
+        built_ground=built_ground,
+        permeable_area=permeable_area,
+        pick_func=pick_rule,
+    )
+
     render_relatorio_section(calc)
