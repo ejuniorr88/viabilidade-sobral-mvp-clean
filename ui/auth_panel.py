@@ -23,11 +23,23 @@ def _user_email() -> str:
     return st.session_state.get("auth_user_email") or "-"
 
 
-def _render_google_link(label: str, *, full_width: bool = False) -> None:
+def render_google_login_cta(
+    label: str = "Entrar com Google",
+    *,
+    full_width: bool = False,
+    message: Optional[str] = None,
+) -> None:
+    """
+    CTA único de login Google.
+    O topo e o bloco inferior usam exatamente esta mesma função.
+    """
     auth_url = start_google_login()
     if not auth_url:
         st.error("Não foi possível iniciar o login com Google.")
         return
+
+    if message:
+        st.info(message)
 
     width_style = "width:100%;" if full_width else ""
 
@@ -51,10 +63,6 @@ def _render_google_link(label: str, *, full_width: bool = False) -> None:
 
 
 def render_google_login_top() -> None:
-    """
-    Cabeçalho simples de login.
-    Usa a mesma rotina de login que será reutilizada no bloco inferior.
-    """
     col1, col2 = st.columns([2, 1])
 
     with col1:
@@ -64,7 +72,7 @@ def render_google_login_top() -> None:
         if _is_logged_in():
             st.success(f"{_user_name()} • {_user_email()}")
         else:
-            _render_google_link("Entrar com Google", full_width=True)
+            render_google_login_cta("Entrar com Google", full_width=True)
 
 
 def render_google_login_box(
@@ -72,17 +80,15 @@ def render_google_login_box(
     title: str = "Faça login para continuar",
     message: Optional[str] = None,
 ) -> None:
-    """
-    Bloco reutilizável para login no corpo da página.
-    """
     st.markdown("---")
     st.subheader(title)
-
-    if message:
-        st.info(message)
 
     if _is_logged_in():
         st.success(f"Você já está logado como {_user_name()}.")
         return
 
-    _render_google_link("Continuar com Google", full_width=True)
+    render_google_login_cta(
+        "Entrar com Google",
+        full_width=True,
+        message=message,
+    )
