@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 import streamlit as st
 
-st.write("APP VERSION MARKER: 2026-03-10-LOGIN-FRESH-URL-V7")
+st.write("APP VERSION MARKER: 2026-03-10-AUTH-REUSE-V9")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -30,17 +30,17 @@ try:
 except Exception:
     from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
 
+from core.auth import handle_oauth_callback
+from core.credits import consume_viability_credit, get_credit_balance
+from ui.auth_panel import render_google_login_top, render_google_login_box
+from ui.credits_panel import render_credits_panel
+from ui.payments_panel import render_payments_panel
 from ui.mapa import render_mapa_section
 from ui.lote import render_lote_section
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback, start_google_login
-from ui.auth_panel import render_google_login_top
-from ui.credits_panel import render_credits_panel
-from ui.payments_panel import render_payments_panel
-from core.credits import consume_viability_credit, get_credit_balance
 
 
 @st.cache_data(show_spinner=False)
@@ -67,30 +67,12 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
-def _show_google_continue_panel(message: str) -> None:
-    auth_url = start_google_login()
-    if not auth_url:
-        st.error("Não foi possível iniciar o login com Google.")
-        return
+def _is_logged_in() -> bool:
+    return bool(st.session_state.get("auth_logged_in")) and bool(st.session_state.get("auth_user_id"))
 
-    st.warning(message)
-    st.info("Clique abaixo para continuar com o login do Google na mesma aba.")
 
-    st.markdown(
-        f"""
-        <a href="{auth_url}" target="_self" style="
-            display:inline-block;
-            padding:10px 16px;
-            border-radius:10px;
-            text-decoration:none;
-            border:1px solid #d9d9d9;
-            font-weight:600;
-        ">
-            Continuar com Google
-        </a>
-        """,
-        unsafe_allow_html=True,
-    )
+def _current_user_id() -> str | None:
+    return st.session_state.get("auth_user_id")
 
 
 def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
@@ -233,9 +215,8 @@ if st.session_state.last_calc_signature and st.session_state.last_calc_signature
     st.session_state.pending_report_after_payment = False
 
 calc = st.session_state.calc
-
-user_logged_in = bool(st.session_state.get("auth_logged_in"))
-user_id = st.session_state.get("auth_user_id")
+user_logged_in = _is_logged_in()
+user_id = _current_user_id()
 
 # =========================================================
 # Se voltou do pagamento com saldo, libera relatório automaticamente
@@ -244,20 +225,17 @@ if user_logged_in and user_id:
     _try_unlock_report_after_payment(user_id)
 
 # =========================================================
-# Retorno automático após login para calcular
+# Retorno automático após login
 # =========================================================
 if user_logged_in and st.session_state.get("post_login_action") == "calculate_viability":
     st.session_state.post_login_action = None
     st.session_state.pending_login_reason = None
     _run_free_calc(calc, zones_prepared, radius_m)
 
-# =========================================================
-# Retorno automático após login para gerar relatório
-# =========================================================
 elif user_logged_in and st.session_state.get("post_login_action") == "generate_report":
     st.session_state.post_login_action = None
     st.session_state.pending_login_reason = None
-    # segue o fluxo normal mais abaixo
+    # segue fluxo normal mais abaixo
 
 # =========================================================
 # Clique em calcular
@@ -265,7 +243,7 @@ elif user_logged_in and st.session_state.get("post_login_action") == "generate_r
 if clicked_calcular:
     if not user_logged_in or not user_id:
         st.session_state.post_login_action = "calculate_viability"
-        st.session_state.pending_login_reason = "Faça login com Google para calcular a viabilidade."
+        st.session_state.pending_login_reason = "Faça login para calcular a viabilidade."
         st.rerun()
     else:
         _run_free_calc(calc, zones_prepared, radius_m)
@@ -273,11 +251,12 @@ else:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
 
 # =========================================================
-# Painel de login pendente
+# Login inferior reutilizando a mesma lógica do topo
 # =========================================================
 if (not user_logged_in) and st.session_state.get("post_login_action") in ("calculate_viability", "generate_report"):
-    _show_google_continue_panel(
-        st.session_state.get("pending_login_reason") or "Faça login com Google para continuar."
+    render_google_login_box(
+        title="Faça login para continuar",
+        message=st.session_state.get("pending_login_reason") or "Faça login com Google para continuar.",
     )
 
 # =========================================================
@@ -336,7 +315,7 @@ if can_offer_report:
     if gerar_relatorio:
         if not user_logged_in or not user_id:
             st.session_state.post_login_action = "generate_report"
-            st.session_state.pending_login_reason = "Faça login com Google para gerar o relatório completo."
+            st.session_state.pending_login_reason = "Faça login para gerar o relatório completo."
             st.rerun()
         else:
             try:
