@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any, Dict
 
 import streamlit as st
+import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-10-FREE-CALC-PAID-REPORT-V2")
+st.write("APP VERSION MARKER: 2026-03-10-LOGIN-PAYMENT-REPORT-V3")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -36,7 +37,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback
+from core.auth import handle_oauth_callback, start_google_login
 from ui.auth_panel import render_google_login_top
 from ui.credits_panel import render_credits_panel
 from ui.payments_panel import render_payments_panel
@@ -67,6 +68,84 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
+def _redirect_to_url(url: str) -> None:
+    components.html(
+        f"""
+        <script>
+            window.top.location.href = {json.dumps(url)};
+        </script>
+        """,
+        height=0,
+    )
+
+
+def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
+    st.session_state.report_unlocked = False
+    st.session_state.free_calc_done = False
+    st.session_state.last_calc_signature = st.session_state.get("current_signature")
+
+    calc.pop("err", None)
+    calc.pop("rule", None)
+
+    _ = render_localizacao_section(True, zones_prepared, radius_m)
+
+    if calc.get("zone") and not calc.get("rule"):
+        try:
+            rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
+            if rule:
+                calc["rule"] = rule
+                st.session_state.free_calc_done = True
+            else:
+                calc["err"] = (
+                    f"Nenhuma regra no Supabase para zona={calc['zone']} "
+                    f"e uso={calc.get('use_type_code')}"
+                )
+        except Exception as e:
+            calc["err"] = f"Erro ao consultar Supabase: {e}"
+
+
+def _try_unlock_report_after_payment(user_id: str) -> None:
+    """
+    Se o usuário estava tentando gerar relatório, ficou sem saldo,
+    comprou créditos e voltou com saldo disponível, consome 1 crédito
+    automaticamente e libera o relatório.
+    """
+    if not st.session_state.get("pending_report_after_payment"):
+        return
+
+    if st.session_state.get("report_unlocked"):
+        st.session_state["pending_report_after_payment"] = False
+        st.session_state["payments_focus_mode"] = False
+        return
+
+    try:
+        saldo = get_credit_balance(user_id)
+    except Exception:
+        return
+
+    if saldo < 1:
+        return
+
+    try:
+        debit_result = consume_viability_credit(
+            user_id=user_id,
+            amount=1,
+            description="Geração de relatório de viabilidade",
+        )
+
+        if debit_result.get("ok"):
+            st.session_state.report_unlocked = True
+            st.session_state.pending_report_after_payment = False
+            st.session_state.payments_focus_mode = False
+            st.session_state.auth_message = (
+                f"Pagamento confirmado e relatório liberado. "
+                f"Saldo atual: {debit_result.get('new_balance')}"
+            )
+            st.rerun()
+    except Exception as e:
+        st.error(f"Não foi possível finalizar a liberação do relatório após o pagamento: {e}")
+
+
 # =========================================================
 # Session state base
 # =========================================================
@@ -87,6 +166,15 @@ if "free_calc_done" not in st.session_state:
 if "last_calc_signature" not in st.session_state:
     st.session_state.last_calc_signature = None
 
+if "post_login_action" not in st.session_state:
+    st.session_state.post_login_action = None
+
+if "pending_report_after_payment" not in st.session_state:
+    st.session_state.pending_report_after_payment = False
+
+if "payments_focus_mode" not in st.session_state:
+    st.session_state.payments_focus_mode = False
+
 
 handle_oauth_callback()
 
@@ -103,7 +191,7 @@ st.divider()
 # Entrada principal
 # =========================================================
 radius_m = render_mapa_section(zones_gj)
-calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
+clicked_calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
 
 lot_area, built_ground, permeable_area = render_lote_section()
 
@@ -125,47 +213,48 @@ current_signature = json.dumps(
     sort_keys=True,
     default=str,
 )
+st.session_state.current_signature = current_signature
 
-# Se mudou algum dado do estudo, invalida cálculo gratuito e relatório pago
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
     st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
+    st.session_state.pending_report_after_payment = False
 
 calc = st.session_state.calc
 
-# =========================================================
-# Cálculo gratuito (somente logado)
-# =========================================================
-if calcular:
-    user_logged_in = bool(st.session_state.get("auth_logged_in"))
-    user_id = st.session_state.get("auth_user_id")
+user_logged_in = bool(st.session_state.get("auth_logged_in"))
+user_id = st.session_state.get("auth_user_id")
 
+# =========================================================
+# Se voltou do pagamento com saldo, libera relatório automaticamente
+# =========================================================
+if user_logged_in and user_id:
+    _try_unlock_report_after_payment(user_id)
+
+# =========================================================
+# Clique em calcular
+# =========================================================
+if clicked_calcular:
     if not user_logged_in or not user_id:
-        st.error("Faça login com Google para calcular a viabilidade.")
-        st.stop()
+        st.session_state.post_login_action = "calculate_viability"
+        auth_url = start_google_login()
+        if auth_url:
+            st.info("Redirecionando para o login do Google...")
+            _redirect_to_url(auth_url)
+            st.stop()
+        else:
+            st.error("Não foi possível iniciar o login com Google.")
+            st.stop()
+    else:
+        _run_free_calc(calc, zones_prepared, radius_m)
 
-    st.session_state.report_unlocked = False
-    st.session_state.free_calc_done = False
-    st.session_state.last_calc_signature = current_signature
+# =========================================================
+# Retorno automático após login para calcular
+# =========================================================
+elif user_logged_in and st.session_state.get("post_login_action") == "calculate_viability":
+    st.session_state.post_login_action = None
+    _run_free_calc(calc, zones_prepared, radius_m)
 
-    calc.pop("err", None)
-    calc.pop("rule", None)
-
-    _ = render_localizacao_section(True, zones_prepared, radius_m)
-
-    if calc.get("zone") and not calc.get("rule"):
-        try:
-            rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
-            if rule:
-                calc["rule"] = rule
-                st.session_state.free_calc_done = True
-            else:
-                calc["err"] = (
-                    f"Nenhuma regra no Supabase para zona={calc['zone']} "
-                    f"e uso={calc.get('use_type_code')}"
-                )
-        except Exception as e:
-            calc["err"] = f"Erro ao consultar Supabase: {e}"
 else:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
 
@@ -183,7 +272,11 @@ if st.session_state.get("free_calc_done"):
 # =========================================================
 # Botão para gerar relatório (parte paga)
 # =========================================================
-can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err"))
+can_offer_report = (
+    bool(st.session_state.get("free_calc_done"))
+    and bool(calc.get("zone"))
+    and not bool(calc.get("err"))
+)
 
 if can_offer_report:
     st.markdown("---")
@@ -192,9 +285,6 @@ if can_offer_report:
         "A análise inicial acima é gratuita. Para liberar o relatório completo, "
         "gere o relatório com 1 crédito."
     )
-
-    user_logged_in = bool(st.session_state.get("auth_logged_in"))
-    user_id = st.session_state.get("auth_user_id")
 
     saldo_atual = None
     if user_logged_in and user_id:
@@ -223,9 +313,24 @@ if can_offer_report:
 
     if gerar_relatorio:
         if not user_logged_in or not user_id:
-            st.error("Faça login com Google para gerar o relatório completo.")
+            st.session_state.post_login_action = "generate_report"
+            auth_url = start_google_login()
+            if auth_url:
+                st.info("Redirecionando para o login do Google...")
+                _redirect_to_url(auth_url)
+                st.stop()
+            else:
+                st.error("Não foi possível iniciar o login com Google.")
         else:
             try:
+                saldo_atual = get_credit_balance(user_id)
+
+                if saldo_atual < 1:
+                    st.session_state.pending_report_after_payment = True
+                    st.session_state.payments_focus_mode = True
+                    st.warning("Saldo insuficiente. Escolha um plano abaixo para continuar.")
+                    st.rerun()
+
                 debit_result = consume_viability_credit(
                     user_id=user_id,
                     amount=1,
@@ -233,18 +338,67 @@ if can_offer_report:
                 )
 
                 if not debit_result.get("ok"):
-                    st.error(
-                        debit_result.get("message")
-                        or "Saldo insuficiente para gerar o relatório."
-                    )
+                    msg = debit_result.get("message") or "Saldo insuficiente para gerar o relatório."
+
+                    if "insuficiente" in msg.lower():
+                        st.session_state.pending_report_after_payment = True
+                        st.session_state.payments_focus_mode = True
+                        st.warning("Saldo insuficiente. Escolha um plano abaixo para continuar.")
+                        st.rerun()
+                    else:
+                        st.error(msg)
                 else:
                     st.session_state.report_unlocked = True
+                    st.session_state.pending_report_after_payment = False
+                    st.session_state.payments_focus_mode = False
                     novo_saldo = debit_result.get("new_balance")
                     st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                     st.rerun()
 
             except Exception as e:
                 st.error(f"Não foi possível descontar o crédito: {e}")
+
+# =========================================================
+# Retorno automático após login para gerar relatório
+# =========================================================
+if user_logged_in and st.session_state.get("post_login_action") == "generate_report" and can_offer_report:
+    st.session_state.post_login_action = None
+
+    try:
+        saldo_atual = get_credit_balance(user_id)
+
+        if saldo_atual < 1:
+            st.session_state.pending_report_after_payment = True
+            st.session_state.payments_focus_mode = True
+            st.warning("Saldo insuficiente. Escolha um plano abaixo para continuar.")
+            st.rerun()
+
+        debit_result = consume_viability_credit(
+            user_id=user_id,
+            amount=1,
+            description="Geração de relatório de viabilidade",
+        )
+
+        if not debit_result.get("ok"):
+            msg = debit_result.get("message") or "Saldo insuficiente para gerar o relatório."
+
+            if "insuficiente" in msg.lower():
+                st.session_state.pending_report_after_payment = True
+                st.session_state.payments_focus_mode = True
+                st.warning("Saldo insuficiente. Escolha um plano abaixo para continuar.")
+                st.rerun()
+            else:
+                st.error(msg)
+        else:
+            st.session_state.report_unlocked = True
+            st.session_state.pending_report_after_payment = False
+            st.session_state.payments_focus_mode = False
+            novo_saldo = debit_result.get("new_balance")
+            st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+            st.rerun()
+
+    except Exception as e:
+        st.error(f"Não foi possível descontar o crédito: {e}")
 
 # =========================================================
 # Parte paga: item 5 + relatório final
