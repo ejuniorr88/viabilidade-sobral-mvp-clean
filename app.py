@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 import streamlit as st
 
-st.write("APP VERSION MARKER: 2026-03-10-LOGIN-LINK-SAME-PAGE-V6")
+st.write("APP VERSION MARKER: 2026-03-10-LOGIN-FRESH-URL-V7")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -67,7 +67,12 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
-def _show_google_continue_panel(auth_url: str, message: str) -> None:
+def _show_google_continue_panel(message: str) -> None:
+    auth_url = start_google_login()
+    if not auth_url:
+        st.error("Não foi possível iniciar o login com Google.")
+        return
+
     st.warning(message)
     st.info("Clique abaixo para continuar com o login do Google na mesma aba.")
 
@@ -179,9 +184,6 @@ if "pending_report_after_payment" not in st.session_state:
 if "payments_focus_mode" not in st.session_state:
     st.session_state.payments_focus_mode = False
 
-if "pending_login_url" not in st.session_state:
-    st.session_state.pending_login_url = None
-
 if "pending_login_reason" not in st.session_state:
     st.session_state.pending_login_reason = None
 
@@ -246,7 +248,6 @@ if user_logged_in and user_id:
 # =========================================================
 if user_logged_in and st.session_state.get("post_login_action") == "calculate_viability":
     st.session_state.post_login_action = None
-    st.session_state.pending_login_url = None
     st.session_state.pending_login_reason = None
     _run_free_calc(calc, zones_prepared, radius_m)
 
@@ -255,7 +256,6 @@ if user_logged_in and st.session_state.get("post_login_action") == "calculate_vi
 # =========================================================
 elif user_logged_in and st.session_state.get("post_login_action") == "generate_report":
     st.session_state.post_login_action = None
-    st.session_state.pending_login_url = None
     st.session_state.pending_login_reason = None
     # segue o fluxo normal mais abaixo
 
@@ -264,15 +264,9 @@ elif user_logged_in and st.session_state.get("post_login_action") == "generate_r
 # =========================================================
 if clicked_calcular:
     if not user_logged_in or not user_id:
-        auth_url = start_google_login()
-        if auth_url:
-            st.session_state.post_login_action = "calculate_viability"
-            st.session_state.pending_login_url = auth_url
-            st.session_state.pending_login_reason = "Faça login com Google para calcular a viabilidade."
-            st.rerun()
-        else:
-            st.error("Não foi possível iniciar o login com Google.")
-            st.stop()
+        st.session_state.post_login_action = "calculate_viability"
+        st.session_state.pending_login_reason = "Faça login com Google para calcular a viabilidade."
+        st.rerun()
     else:
         _run_free_calc(calc, zones_prepared, radius_m)
 else:
@@ -281,10 +275,9 @@ else:
 # =========================================================
 # Painel de login pendente
 # =========================================================
-if (not user_logged_in) and st.session_state.get("pending_login_url"):
+if (not user_logged_in) and st.session_state.get("post_login_action") in ("calculate_viability", "generate_report"):
     _show_google_continue_panel(
-        st.session_state["pending_login_url"],
-        st.session_state.get("pending_login_reason") or "Faça login com Google para continuar.",
+        st.session_state.get("pending_login_reason") or "Faça login com Google para continuar."
     )
 
 # =========================================================
@@ -342,14 +335,9 @@ if can_offer_report:
 
     if gerar_relatorio:
         if not user_logged_in or not user_id:
-            auth_url = start_google_login()
-            if auth_url:
-                st.session_state.post_login_action = "generate_report"
-                st.session_state.pending_login_url = auth_url
-                st.session_state.pending_login_reason = "Faça login com Google para gerar o relatório completo."
-                st.rerun()
-            else:
-                st.error("Não foi possível iniciar o login com Google.")
+            st.session_state.post_login_action = "generate_report"
+            st.session_state.pending_login_reason = "Faça login com Google para gerar o relatório completo."
+            st.rerun()
         else:
             try:
                 saldo_atual = get_credit_balance(user_id)
