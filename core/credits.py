@@ -69,3 +69,32 @@ def list_user_payments(user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         desc=True,
         limit=limit,
     )
+
+
+def consume_viability_credit(
+    user_id: str,
+    amount: int = 1,
+    description: str = "Cálculo de viabilidade",
+) -> Dict[str, Any]:
+    supabase = get_supabase_auth_client()
+
+    response = supabase.rpc(
+        "consume_viability_credit",
+        {
+            "p_user_id": user_id,
+            "p_amount": amount,
+            "p_description": description,
+        },
+    ).execute()
+
+    data = getattr(response, "data", None)
+    if data is None and isinstance(response, dict):
+        data = response.get("data")
+
+    if isinstance(data, dict):
+        return data
+
+    return {
+        "ok": False,
+        "message": "Não foi possível consumir o crédito.",
+    }
