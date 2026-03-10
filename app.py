@@ -2,11 +2,11 @@ import os
 import json
 import pathlib
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import streamlit as st
 
-st.write("APP VERSION MARKER: 2026-03-09-MP-PIX-TEST-V1")
+st.write("APP VERSION MARKER: 2026-03-10-FREE-CALC-PAID-REPORT-V1")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -40,7 +40,7 @@ from core.auth import handle_oauth_callback
 from ui.auth_panel import render_google_login_top
 from ui.credits_panel import render_credits_panel
 from ui.payments_panel import render_payments_panel
-from core.credits import consume_viability_credit
+from core.credits import consume_viability_credit, get_credit_balance
 
 
 @st.cache_data(show_spinner=False)
@@ -67,6 +67,9 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
+# =========================================================
+# Session state base
+# =========================================================
 if "selected_lat" not in st.session_state:
     st.session_state.selected_lat = None
 if "selected_lon" not in st.session_state:
@@ -74,6 +77,13 @@ if "selected_lon" not in st.session_state:
 if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
     st.session_state.calc = {}
 st.session_state.calc.setdefault("use_type_code", "RES_UNI")
+
+if "report_unlocked" not in st.session_state:
+    st.session_state.report_unlocked = False
+
+if "last_calc_signature" not in st.session_state:
+    st.session_state.last_calc_signature = None
+
 
 handle_oauth_callback()
 
@@ -86,32 +96,11 @@ render_credits_panel(_card)
 render_payments_panel()
 st.divider()
 
+# =========================================================
+# Entrada principal
+# =========================================================
 radius_m = render_mapa_section(zones_gj)
 calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
-
-if calcular:
-    user_id = st.session_state.get("auth_user_id")
-
-    if not st.session_state.get("auth_logged_in") or not user_id:
-        st.error("Faça login com Google para calcular a viabilidade.")
-        calcular = False
-    else:
-        try:
-            debit_result = consume_viability_credit(
-                user_id=user_id,
-                amount=1,
-                description="Cálculo de viabilidade",
-            )
-
-            if not debit_result.get("ok"):
-                st.error(debit_result.get("message") or "Saldo insuficiente para calcular a viabilidade.")
-                calcular = False
-            else:
-                novo_saldo = debit_result.get("new_balance")
-                st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-        except Exception as e:
-            st.error(f"Não foi possível descontar o crédito: {e}")
-            calcular = False
 
 lot_area, built_ground, permeable_area = render_lote_section()
 
@@ -120,20 +109,64 @@ st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m")
 st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 
+# assinatura simples para invalidar relatório pago quando os dados mudarem
+current_signature = json.dumps(
+    {
+        "lat": st.session_state.get("selected_lat"),
+        "lon": st.session_state.get("selected_lon"),
+        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+        "lot_front_m": st.session_state.calc.get("lot_front_m"),
+        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+        "use_type_code": st.session_state.calc.get("use_type_code"),
+    },
+    sort_keys=True,
+    default=str,
+)
+
+# se mudou a entrada após relatório já liberado, trava novamente até gerar novo relatório
+if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
+    st.session_state.report_unlocked = False
+
 _ = render_localizacao_section(calcular, zones_prepared, radius_m)
 
 calc = st.session_state.calc
-if calcular and calc.get("zone") and not calc.get("rule") and not calc.get("err"):
-    try:
-        rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
-        if rule:
-            calc["rule"] = rule
-        else:
-            calc["err"] = f"Nenhuma regra no Supabase para zona={calc['zone']} e uso={calc.get('use_type_code')}"
-    except Exception as e:
-        calc["err"] = f"Erro ao consultar Supabase: {e}"
 
-render_indices_section(calc=calc, card_func=_card, pick_func=pick_rule, get_rule_func=fetch_rule)
+# =========================================================
+# Cálculo gratuito
+# =========================================================
+if calcular:
+    # novo cálculo invalida o relatório anterior até gerar novamente
+    st.session_state.report_unlocked = False
+    st.session_state.last_calc_signature = current_signature
+
+    # limpa eventuais erros antigos, mas preserva escolhas
+    calc.pop("err", None)
+    calc.pop("rule", None)
+
+    if calc.get("zone") and not calc.get("rule"):
+        try:
+            rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
+            if rule:
+                calc["rule"] = rule
+            else:
+                calc["err"] = (
+                    f"Nenhuma regra no Supabase para zona={calc['zone']} "
+                    f"e uso={calc.get('use_type_code')}"
+                )
+        except Exception as e:
+            calc["err"] = f"Erro ao consultar Supabase: {e}"
+
+# =========================================================
+# Parte gratuita
+# =========================================================
+render_indices_section(
+    calc=calc,
+    card_func=_card,
+    pick_func=pick_rule,
+    get_rule_func=fetch_rule,
+)
+
 render_analise_section(
     calc,
     lot_area=lot_area,
@@ -141,4 +174,74 @@ render_analise_section(
     permeable_area=permeable_area,
     pick_func=pick_rule,
 )
-render_relatorio_section(calc)
+
+# =========================================================
+# Parte paga - gerar relatório
+# =========================================================
+can_offer_report = bool(calc.get("zone")) and not bool(calc.get("err"))
+
+if can_offer_report:
+    st.markdown("---")
+    st.subheader("Relatório completo")
+    st.caption(
+        "A análise inicial acima é gratuita. Para liberar o relatório completo, "
+        "gere o relatório com 1 crédito."
+    )
+
+    user_logged_in = bool(st.session_state.get("auth_logged_in"))
+    user_id = st.session_state.get("auth_user_id")
+
+    saldo_atual = None
+    if user_logged_in and user_id:
+        try:
+            saldo_atual = get_credit_balance(user_id)
+        except Exception:
+            saldo_atual = None
+
+    c1, c2 = st.columns([1, 2])
+
+    with c1:
+        gerar_relatorio = st.button("📄 Gerar relatório", key="btn_generate_report", use_container_width=True)
+
+    with c2:
+        if not user_logged_in:
+            st.info("Faça login com Google para gerar o relatório completo.")
+        else:
+            if saldo_atual is not None:
+                st.info(f"Saldo atual: {saldo_atual} crédito(s).")
+            else:
+                st.info("Não foi possível consultar o saldo neste momento.")
+
+    if gerar_relatorio:
+        if not user_logged_in or not user_id:
+            st.error("Faça login com Google para gerar o relatório completo.")
+        else:
+            try:
+                debit_result = consume_viability_credit(
+                    user_id=user_id,
+                    amount=1,
+                    description="Geração de relatório de viabilidade",
+                )
+
+                if not debit_result.get("ok"):
+                    st.error(
+                        debit_result.get("message")
+                        or "Saldo insuficiente para gerar o relatório."
+                    )
+                else:
+                    st.session_state.report_unlocked = True
+                    novo_saldo = debit_result.get("new_balance")
+                    st.success(
+                        f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}"
+                    )
+                    st.rerun()
+
+            except Exception as e:
+                st.error(f"Não foi possível descontar o crédito: {e}")
+
+# =========================================================
+# Relatório completo liberado somente após crédito
+# =========================================================
+if st.session_state.get("report_unlocked") and can_offer_report:
+    st.markdown("---")
+    render_relatorio_section(calc)
