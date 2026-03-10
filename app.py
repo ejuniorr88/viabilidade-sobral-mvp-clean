@@ -5,9 +5,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 import streamlit as st
-import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-10-LOGIN-PAYMENT-REPORT-V3")
+st.write("APP VERSION MARKER: 2026-03-10-LOGIN-PAYMENT-REPORT-V4")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -68,14 +67,18 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
-def _redirect_to_url(url: str) -> None:
-    components.html(
-        f"""
-        <script>
-            window.top.location.href = {json.dumps(url)};
-        </script>
-        """,
-        height=0,
+def _show_login_redirect_panel(auth_url: str, reason: str) -> None:
+    st.warning(reason)
+    st.info("Clique abaixo para continuar com o login do Google.")
+
+    st.link_button(
+        "Continuar com Google",
+        auth_url,
+        use_container_width=True,
+    )
+
+    st.markdown(
+        f"[Se o botão não abrir, clique aqui para entrar]({auth_url})"
     )
 
 
@@ -105,11 +108,6 @@ def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
 
 
 def _try_unlock_report_after_payment(user_id: str) -> None:
-    """
-    Se o usuário estava tentando gerar relatório, ficou sem saldo,
-    comprou créditos e voltou com saldo disponível, consome 1 crédito
-    automaticamente e libera o relatório.
-    """
     if not st.session_state.get("pending_report_after_payment"):
         return
 
@@ -137,7 +135,7 @@ def _try_unlock_report_after_payment(user_id: str) -> None:
             st.session_state.report_unlocked = True
             st.session_state.pending_report_after_payment = False
             st.session_state.payments_focus_mode = False
-            st.session_state.auth_message = (
+            st.success(
                 f"Pagamento confirmado e relatório liberado. "
                 f"Saldo atual: {debit_result.get('new_balance')}"
             )
@@ -174,6 +172,12 @@ if "pending_report_after_payment" not in st.session_state:
 
 if "payments_focus_mode" not in st.session_state:
     st.session_state.payments_focus_mode = False
+
+if "pending_login_url" not in st.session_state:
+    st.session_state.pending_login_url = None
+
+if "pending_login_reason" not in st.session_state:
+    st.session_state.pending_login_reason = None
 
 
 handle_oauth_callback()
@@ -232,31 +236,46 @@ if user_logged_in and user_id:
     _try_unlock_report_after_payment(user_id)
 
 # =========================================================
+# Retorno automático após login
+# =========================================================
+if user_logged_in and st.session_state.get("post_login_action") == "calculate_viability":
+    st.session_state.post_login_action = None
+    st.session_state.pending_login_url = None
+    st.session_state.pending_login_reason = None
+    _run_free_calc(calc, zones_prepared, radius_m)
+
+elif user_logged_in and st.session_state.get("post_login_action") == "generate_report":
+    st.session_state.post_login_action = None
+    st.session_state.pending_login_url = None
+    st.session_state.pending_login_reason = None
+
+# =========================================================
 # Clique em calcular
 # =========================================================
 if clicked_calcular:
     if not user_logged_in or not user_id:
-        st.session_state.post_login_action = "calculate_viability"
         auth_url = start_google_login()
         if auth_url:
-            st.info("Redirecionando para o login do Google...")
-            _redirect_to_url(auth_url)
-            st.stop()
+            st.session_state.post_login_action = "calculate_viability"
+            st.session_state.pending_login_url = auth_url
+            st.session_state.pending_login_reason = "Faça login com Google para calcular a viabilidade."
+            st.rerun()
         else:
             st.error("Não foi possível iniciar o login com Google.")
             st.stop()
     else:
         _run_free_calc(calc, zones_prepared, radius_m)
-
-# =========================================================
-# Retorno automático após login para calcular
-# =========================================================
-elif user_logged_in and st.session_state.get("post_login_action") == "calculate_viability":
-    st.session_state.post_login_action = None
-    _run_free_calc(calc, zones_prepared, radius_m)
-
 else:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
+
+# =========================================================
+# Painel de login pendente
+# =========================================================
+if (not user_logged_in) and st.session_state.get("pending_login_url"):
+    _show_login_redirect_panel(
+        st.session_state["pending_login_url"],
+        st.session_state.get("pending_login_reason") or "Faça login com Google para continuar.",
+    )
 
 # =========================================================
 # Parte gratuita: mostrar apenas até o item 4
@@ -313,12 +332,12 @@ if can_offer_report:
 
     if gerar_relatorio:
         if not user_logged_in or not user_id:
-            st.session_state.post_login_action = "generate_report"
             auth_url = start_google_login()
             if auth_url:
-                st.info("Redirecionando para o login do Google...")
-                _redirect_to_url(auth_url)
-                st.stop()
+                st.session_state.post_login_action = "generate_report"
+                st.session_state.pending_login_url = auth_url
+                st.session_state.pending_login_reason = "Faça login com Google para gerar o relatório completo."
+                st.rerun()
             else:
                 st.error("Não foi possível iniciar o login com Google.")
         else:
@@ -359,46 +378,12 @@ if can_offer_report:
                 st.error(f"Não foi possível descontar o crédito: {e}")
 
 # =========================================================
-# Retorno automático após login para gerar relatório
+# Se voltou logado tentando gerar relatório, continua o fluxo
 # =========================================================
-if user_logged_in and st.session_state.get("post_login_action") == "generate_report" and can_offer_report:
-    st.session_state.post_login_action = None
-
-    try:
-        saldo_atual = get_credit_balance(user_id)
-
-        if saldo_atual < 1:
-            st.session_state.pending_report_after_payment = True
-            st.session_state.payments_focus_mode = True
-            st.warning("Saldo insuficiente. Escolha um plano abaixo para continuar.")
-            st.rerun()
-
-        debit_result = consume_viability_credit(
-            user_id=user_id,
-            amount=1,
-            description="Geração de relatório de viabilidade",
-        )
-
-        if not debit_result.get("ok"):
-            msg = debit_result.get("message") or "Saldo insuficiente para gerar o relatório."
-
-            if "insuficiente" in msg.lower():
-                st.session_state.pending_report_after_payment = True
-                st.session_state.payments_focus_mode = True
-                st.warning("Saldo insuficiente. Escolha um plano abaixo para continuar.")
-                st.rerun()
-            else:
-                st.error(msg)
-        else:
-            st.session_state.report_unlocked = True
-            st.session_state.pending_report_after_payment = False
-            st.session_state.payments_focus_mode = False
-            novo_saldo = debit_result.get("new_balance")
-            st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-            st.rerun()
-
-    except Exception as e:
-        st.error(f"Não foi possível descontar o crédito: {e}")
+if user_logged_in and can_offer_report and not st.session_state.get("report_unlocked"):
+    if st.session_state.get("pending_login_url") is None and st.session_state.get("pending_report_after_payment") is False:
+        # nada pendente
+        pass
 
 # =========================================================
 # Parte paga: item 5 + relatório final
