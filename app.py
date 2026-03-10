@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 import streamlit as st
 
-st.write("APP VERSION MARKER: 2026-03-10-REUSE-EXACT-TOP-LOGIN-V10")
+st.write("APP VERSION MARKER: 2026-03-10-AUTH-REUSE-V9")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -251,7 +251,7 @@ else:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
 
 # =========================================================
-# Login inferior usando exatamente o mesmo CTA do topo
+# Login inferior reutilizando a mesma lógica do topo
 # =========================================================
 if (not user_logged_in) and st.session_state.get("post_login_action") in ("calculate_viability", "generate_report"):
     render_google_login_box(
