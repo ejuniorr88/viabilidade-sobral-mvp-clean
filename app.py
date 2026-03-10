@@ -40,6 +40,7 @@ from core.auth import handle_oauth_callback
 from ui.auth_panel import render_google_login_top
 from ui.credits_panel import render_credits_panel
 from ui.payments_panel import render_payments_panel
+from core.credits import consume_viability_credit
 
 
 @st.cache_data(show_spinner=False)
@@ -87,6 +88,30 @@ st.divider()
 
 radius_m = render_mapa_section(zones_gj)
 calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
+
+if calcular:
+    user_id = st.session_state.get("auth_user_id")
+
+    if not st.session_state.get("auth_logged_in") or not user_id:
+        st.error("Faça login com Google para calcular a viabilidade.")
+        calcular = False
+    else:
+        try:
+            debit_result = consume_viability_credit(
+                user_id=user_id,
+                amount=1,
+                description="Cálculo de viabilidade",
+            )
+
+            if not debit_result.get("ok"):
+                st.error(debit_result.get("message") or "Saldo insuficiente para calcular a viabilidade.")
+                calcular = False
+            else:
+                novo_saldo = debit_result.get("new_balance")
+                st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+        except Exception as e:
+            st.error(f"Não foi possível descontar o crédito: {e}")
+            calcular = False
 
 lot_area, built_ground, permeable_area = render_lote_section()
 
