@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import streamlit as st
 
@@ -17,10 +17,15 @@ def _fmt_money(value: Any) -> str:
 
 
 def _notification_url() -> Optional[str]:
-    app_url = st.secrets.get("APP_URL")
-    if not app_url:
+    explicit = st.secrets.get("MERCADOPAGO_WEBHOOK_URL")
+    if explicit:
+        return str(explicit).strip()
+
+    supabase_url = st.secrets.get("SUPABASE_URL")
+    if not supabase_url:
         return None
-    return f"{str(app_url).rstrip('/')}functions/v1/mercadopago-webhook"
+
+    return f"{str(supabase_url).rstrip('/')}/functions/v1/mercadopago-webhook"
 
 
 def _store_pix_result(package_id: str, result: Dict[str, Any]) -> None:
@@ -45,7 +50,7 @@ def render_payments_panel() -> None:
 
     st.markdown("### Comprar créditos")
     st.caption(
-        "Nesta etapa o sistema cria a compra pendente, gera o Pix de teste do Mercado Pago e aguarda a confirmação automática via webhook."
+        "Nesta etapa o sistema cria a compra pendente e já gera o Pix do Mercado Pago."
     )
 
     try:
@@ -66,6 +71,7 @@ def render_payments_panel() -> None:
             st.caption(package.get("description") or "—")
             st.write(f"**Créditos:** {package.get('credits') or 0}")
             st.write(f"## {_fmt_money(package.get('price_brl'))}")
+
             if st.button("Comprar", key=f"buy_pkg_{package['id']}", use_container_width=True):
                 try:
                     result = create_pending_payment_and_pix(
@@ -88,9 +94,12 @@ def render_payments_panel() -> None:
                 pix = pix_result.get("pix") or {}
                 updated = pix_result.get("updated") or {}
                 data_uri = qr_code_image_data_uri(pix.get("qr_code_base64"))
+
                 st.info(f"Status: {pix.get('status') or updated.get('status') or 'pending'}")
+
                 if data_uri:
                     st.image(data_uri, caption="QR Code Pix", use_container_width=True)
+
                 qr_copy_paste = pix.get("qr_code") or updated.get("pix_copy_paste")
                 if qr_copy_paste:
                     st.text_area(
@@ -99,6 +108,7 @@ def render_payments_panel() -> None:
                         height=120,
                         key=f"pix_copy_{package['id']}",
                     )
+
                 ticket_url = (pix_result.get("updated") or {}).get("gateway_payload", {}).get("ticket_url")
                 if ticket_url:
                     st.link_button("Abrir link do Pix", ticket_url, use_container_width=True)
