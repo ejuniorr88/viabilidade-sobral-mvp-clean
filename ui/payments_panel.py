@@ -1,402 +1,483 @@
-import os
-import json
-import pathlib
-from pathlib import Path
-from typing import Any, Dict
+from __future__ import annotations
+
+import base64
+import time
+from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
-st.write("APP VERSION MARKER: 2026-03-10-LOGIN-PAYMENT-REPORT-V4")
-st.write("CWD:", os.getcwd())
-st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
-
-st.set_page_config(layout="wide", page_title="Viabilidade")
-
-DATA_DIR = Path("data")
-ZONE_FILE = DATA_DIR / "zoneamento_light.json"
-
-try:
-    from core.zones_map import load_zones
-except Exception:
-    from core.zones_mapa import load_zones  # type: ignore
-
-try:
-    from core.streets import load_streets  # noqa
-except Exception:
-    load_streets = None  # type: ignore
-
-try:
-    from core.supabase_rules import fetch_rule, pick_rule  # type: ignore
-except Exception:
-    from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
-
-from ui.mapa import render_mapa_section
-from ui.lote import render_lote_section
-from ui.localizacao import render_localizacao_section
-from ui.indices import render_indices_section
-from ui.analise import render_analise_section
-from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback, start_google_login
-from ui.auth_panel import render_google_login_top
-from ui.credits_panel import render_credits_panel
-from ui.payments_panel import render_payments_panel
-from core.credits import consume_viability_credit, get_credit_balance
+from core.auth import get_supabase_auth_client
+from core.payments import create_pending_payment_and_pix
 
 
-@st.cache_data(show_spinner=False)
-def _zones_geojson() -> Dict[str, Any]:
-    with open(ZONE_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+# =========================================================
+# Helpers
+# =========================================================
+def _safe_get(d: Any, key: str, default=None):
+    if isinstance(d, dict):
+        return d.get(key, default)
+    return getattr(d, key, default) if d is not None else default
 
 
-@st.cache_resource(show_spinner=False)
-def _zones_prepared():
-    return load_zones(ZONE_FILE)
-
-
-def _card(title: str, value: Any, suffix: str = "") -> None:
-    v = "—" if value is None or value == "" else f"{value}{suffix}"
-    st.markdown(
-        f"""
-        <div style="padding:12px;border:1px solid #e7e7e7;border-radius:12px;margin-bottom:10px;">
-            <div style="font-size:12px;opacity:.75">{title}</div>
-            <div style="font-size:20px;font-weight:700">{v}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _show_login_redirect_panel(auth_url: str, reason: str) -> None:
-    st.warning(reason)
-    st.info("Clique abaixo para continuar com o login do Google.")
-
-    st.link_button(
-        "Continuar com Google",
-        auth_url,
-        use_container_width=True,
-    )
-
-    st.markdown(
-        f"[Se o botão não abrir, clique aqui para entrar]({auth_url})"
-    )
-
-
-def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
-    st.session_state.report_unlocked = False
-    st.session_state.free_calc_done = False
-    st.session_state.last_calc_signature = st.session_state.get("current_signature")
-
-    calc.pop("err", None)
-    calc.pop("rule", None)
-
-    _ = render_localizacao_section(True, zones_prepared, radius_m)
-
-    if calc.get("zone") and not calc.get("rule"):
-        try:
-            rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
-            if rule:
-                calc["rule"] = rule
-                st.session_state.free_calc_done = True
-            else:
-                calc["err"] = (
-                    f"Nenhuma regra no Supabase para zona={calc['zone']} "
-                    f"e uso={calc.get('use_type_code')}"
-                )
-        except Exception as e:
-            calc["err"] = f"Erro ao consultar Supabase: {e}"
-
-
-def _try_unlock_report_after_payment(user_id: str) -> None:
-    if not st.session_state.get("pending_report_after_payment"):
-        return
-
-    if st.session_state.get("report_unlocked"):
-        st.session_state["pending_report_after_payment"] = False
-        st.session_state["payments_focus_mode"] = False
-        return
-
+def _to_float(v: Any, default: float = 0.0) -> float:
     try:
-        saldo = get_credit_balance(user_id)
+        if v is None or v == "":
+            return default
+        return float(v)
     except Exception:
-        return
+        return default
 
-    if saldo < 1:
-        return
+
+def _fmt_brl(v: Any) -> str:
+    val = _to_float(v, 0.0)
+    return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _fmt_dt(v: Any) -> str:
+    if not v:
+        return "-"
+    s = str(v)
+    return s.replace("T", " ")[:19]
+
+
+def _get_user_id(user_profile: Dict[str, Any]) -> Optional[str]:
+    return (
+        _safe_get(user_profile, "id")
+        or _safe_get(user_profile, "user_id")
+        or _safe_get(user_profile, "sub")
+        or _safe_get(user_profile, "auth_user_id")
+    )
+
+
+def _get_user_name(user_profile: Dict[str, Any]) -> str:
+    return (
+        _safe_get(user_profile, "full_name")
+        or _safe_get(user_profile, "name")
+        or _safe_get(user_profile, "display_name")
+        or _safe_get(user_profile, "auth_user_name")
+        or "Usuário"
+    )
+
+
+def _get_user_email(user_profile: Dict[str, Any]) -> str:
+    return _safe_get(user_profile, "email") or _safe_get(user_profile, "auth_user_email") or "-"
+
+
+# =========================================================
+# Context discovery
+# =========================================================
+def _resolve_supabase(explicit_supabase=None):
+    if explicit_supabase is not None:
+        return explicit_supabase
+
+    for key in ["supabase", "sb", "supabase_client", "client"]:
+        if key in st.session_state and st.session_state[key] is not None:
+            return st.session_state[key]
 
     try:
-        debit_result = consume_viability_credit(
-            user_id=user_id,
-            amount=1,
-            description="Geração de relatório de viabilidade",
+        return get_supabase_auth_client()
+    except Exception:
+        return None
+
+
+def _resolve_user_profile(explicit_user_profile=None) -> Dict[str, Any]:
+    if explicit_user_profile is not None:
+        return explicit_user_profile
+
+    for key in ["user_profile", "profile", "google_user", "user"]:
+        if key in st.session_state and st.session_state[key]:
+            val = st.session_state[key]
+            if isinstance(val, dict):
+                return val
+
+    if st.session_state.get("auth_logged_in"):
+        return {
+            "id": st.session_state.get("auth_user_id"),
+            "email": st.session_state.get("auth_user_email"),
+            "full_name": st.session_state.get("auth_user_name"),
+            "auth_user_id": st.session_state.get("auth_user_id"),
+            "auth_user_email": st.session_state.get("auth_user_email"),
+            "auth_user_name": st.session_state.get("auth_user_name"),
+        }
+
+    return {}
+
+
+# =========================================================
+# Supabase reads
+# =========================================================
+def _fetch_credit_balance(supabase, user_id: str) -> float:
+    try:
+        resp = (
+            supabase.table("credit_balance")
+            .select("balance")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
         )
-
-        if debit_result.get("ok"):
-            st.session_state.report_unlocked = True
-            st.session_state.pending_report_after_payment = False
-            st.session_state.payments_focus_mode = False
-            st.success(
-                f"Pagamento confirmado e relatório liberado. "
-                f"Saldo atual: {debit_result.get('new_balance')}"
-            )
-            st.rerun()
-    except Exception as e:
-        st.error(f"Não foi possível finalizar a liberação do relatório após o pagamento: {e}")
+        rows = resp.data or []
+        if rows:
+            return _to_float(rows[0].get("balance"), 0.0)
+    except Exception:
+        pass
+    return 0.0
 
 
-# =========================================================
-# Session state base
-# =========================================================
-if "selected_lat" not in st.session_state:
-    st.session_state.selected_lat = None
-if "selected_lon" not in st.session_state:
-    st.session_state.selected_lon = None
-if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
-    st.session_state.calc = {}
-st.session_state.calc.setdefault("use_type_code", "RES_UNI")
-
-if "report_unlocked" not in st.session_state:
-    st.session_state.report_unlocked = False
-
-if "free_calc_done" not in st.session_state:
-    st.session_state.free_calc_done = False
-
-if "last_calc_signature" not in st.session_state:
-    st.session_state.last_calc_signature = None
-
-if "post_login_action" not in st.session_state:
-    st.session_state.post_login_action = None
-
-if "pending_report_after_payment" not in st.session_state:
-    st.session_state.pending_report_after_payment = False
-
-if "payments_focus_mode" not in st.session_state:
-    st.session_state.payments_focus_mode = False
-
-if "pending_login_url" not in st.session_state:
-    st.session_state.pending_login_url = None
-
-if "pending_login_reason" not in st.session_state:
-    st.session_state.pending_login_reason = None
-
-
-handle_oauth_callback()
-
-zones_gj = _zones_geojson()
-zones_prepared = _zones_prepared()
-
-st.title("Viabilidade")
-render_google_login_top()
-render_credits_panel(_card)
-render_payments_panel()
-st.divider()
-
-# =========================================================
-# Entrada principal
-# =========================================================
-radius_m = render_mapa_section(zones_gj)
-clicked_calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
-
-lot_area, built_ground, permeable_area = render_lote_section()
-
-st.session_state.calc["lot_area_m2"] = float(lot_area)
-st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or 0.0)
-st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
-st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
-
-current_signature = json.dumps(
-    {
-        "lat": st.session_state.get("selected_lat"),
-        "lon": st.session_state.get("selected_lon"),
-        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-        "lot_front_m": st.session_state.calc.get("lot_front_m"),
-        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-        "use_type_code": st.session_state.calc.get("use_type_code"),
-    },
-    sort_keys=True,
-    default=str,
-)
-st.session_state.current_signature = current_signature
-
-if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
-    st.session_state.report_unlocked = False
-    st.session_state.free_calc_done = False
-    st.session_state.pending_report_after_payment = False
-
-calc = st.session_state.calc
-
-user_logged_in = bool(st.session_state.get("auth_logged_in"))
-user_id = st.session_state.get("auth_user_id")
-
-# =========================================================
-# Se voltou do pagamento com saldo, libera relatório automaticamente
-# =========================================================
-if user_logged_in and user_id:
-    _try_unlock_report_after_payment(user_id)
-
-# =========================================================
-# Retorno automático após login
-# =========================================================
-if user_logged_in and st.session_state.get("post_login_action") == "calculate_viability":
-    st.session_state.post_login_action = None
-    st.session_state.pending_login_url = None
-    st.session_state.pending_login_reason = None
-    _run_free_calc(calc, zones_prepared, radius_m)
-
-elif user_logged_in and st.session_state.get("post_login_action") == "generate_report":
-    st.session_state.post_login_action = None
-    st.session_state.pending_login_url = None
-    st.session_state.pending_login_reason = None
-
-# =========================================================
-# Clique em calcular
-# =========================================================
-if clicked_calcular:
-    if not user_logged_in or not user_id:
-        auth_url = start_google_login()
-        if auth_url:
-            st.session_state.post_login_action = "calculate_viability"
-            st.session_state.pending_login_url = auth_url
-            st.session_state.pending_login_reason = "Faça login com Google para calcular a viabilidade."
-            st.rerun()
-        else:
-            st.error("Não foi possível iniciar o login com Google.")
-            st.stop()
-    else:
-        _run_free_calc(calc, zones_prepared, radius_m)
-else:
-    _ = render_localizacao_section(False, zones_prepared, radius_m)
-
-# =========================================================
-# Painel de login pendente
-# =========================================================
-if (not user_logged_in) and st.session_state.get("pending_login_url"):
-    _show_login_redirect_panel(
-        st.session_state["pending_login_url"],
-        st.session_state.get("pending_login_reason") or "Faça login com Google para continuar.",
-    )
-
-# =========================================================
-# Parte gratuita: mostrar apenas até o item 4
-# =========================================================
-if st.session_state.get("free_calc_done"):
-    render_indices_section(
-        calc=calc,
-        card_func=_card,
-        pick_func=pick_rule,
-        get_rule_func=fetch_rule,
-    )
-
-# =========================================================
-# Botão para gerar relatório (parte paga)
-# =========================================================
-can_offer_report = (
-    bool(st.session_state.get("free_calc_done"))
-    and bool(calc.get("zone"))
-    and not bool(calc.get("err"))
-)
-
-if can_offer_report:
-    st.markdown("---")
-    st.subheader("Relatório completo")
-    st.caption(
-        "A análise inicial acima é gratuita. Para liberar o relatório completo, "
-        "gere o relatório com 1 crédito."
-    )
-
-    saldo_atual = None
-    if user_logged_in and user_id:
-        try:
-            saldo_atual = get_credit_balance(user_id)
-        except Exception:
-            saldo_atual = None
-
-    c1, c2 = st.columns([1, 2])
-
-    with c1:
-        gerar_relatorio = st.button(
-            "📄 Gerar relatório",
-            key="btn_generate_report",
-            use_container_width=True,
+def _fetch_credit_packages(supabase) -> List[Dict[str, Any]]:
+    try:
+        resp = (
+            supabase.table("credit_packages")
+            .select("*")
+            .eq("is_active", True)
+            .order("price_brl", desc=False)
+            .execute()
         )
-
-    with c2:
-        if not user_logged_in:
-            st.info("Faça login com Google para gerar o relatório completo.")
-        else:
-            if saldo_atual is not None:
-                st.info(f"Saldo atual: {saldo_atual} crédito(s).")
-            else:
-                st.info("Não foi possível consultar o saldo neste momento.")
-
-    if gerar_relatorio:
-        if not user_logged_in or not user_id:
-            auth_url = start_google_login()
-            if auth_url:
-                st.session_state.post_login_action = "generate_report"
-                st.session_state.pending_login_url = auth_url
-                st.session_state.pending_login_reason = "Faça login com Google para gerar o relatório completo."
-                st.rerun()
-            else:
-                st.error("Não foi possível iniciar o login com Google.")
-        else:
-            try:
-                saldo_atual = get_credit_balance(user_id)
-
-                if saldo_atual < 1:
-                    st.session_state.pending_report_after_payment = True
-                    st.session_state.payments_focus_mode = True
-                    st.warning("Saldo insuficiente. Escolha um plano abaixo para continuar.")
-                    st.rerun()
-
-                debit_result = consume_viability_credit(
-                    user_id=user_id,
-                    amount=1,
-                    description="Geração de relatório de viabilidade",
-                )
-
-                if not debit_result.get("ok"):
-                    msg = debit_result.get("message") or "Saldo insuficiente para gerar o relatório."
-
-                    if "insuficiente" in msg.lower():
-                        st.session_state.pending_report_after_payment = True
-                        st.session_state.payments_focus_mode = True
-                        st.warning("Saldo insuficiente. Escolha um plano abaixo para continuar.")
-                        st.rerun()
-                    else:
-                        st.error(msg)
-                else:
-                    st.session_state.report_unlocked = True
-                    st.session_state.pending_report_after_payment = False
-                    st.session_state.payments_focus_mode = False
-                    novo_saldo = debit_result.get("new_balance")
-                    st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-                    st.rerun()
-
-            except Exception as e:
-                st.error(f"Não foi possível descontar o crédito: {e}")
-
-# =========================================================
-# Se voltou logado tentando gerar relatório, continua o fluxo
-# =========================================================
-if user_logged_in and can_offer_report and not st.session_state.get("report_unlocked"):
-    if st.session_state.get("pending_login_url") is None and st.session_state.get("pending_report_after_payment") is False:
-        # nada pendente
+        rows = resp.data or []
+        if rows:
+            return rows
+    except Exception:
         pass
 
+    try:
+        resp = (
+            supabase.table("credit_packages")
+            .select("*")
+            .eq("active", True)
+            .order("price_brl", desc=False)
+            .execute()
+        )
+        return resp.data or []
+    except Exception:
+        return []
+
+
+def _fetch_recent_ledger(supabase, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+    try:
+        resp = (
+            supabase.table("credit_ledger")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return resp.data or []
+    except Exception:
+        return []
+
+
+def _fetch_recent_payments(supabase, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+    try:
+        resp = (
+            supabase.table("payments")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return resp.data or []
+    except Exception:
+        return []
+
+
+def _fetch_payment_by_id(supabase, payment_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        resp = (
+            supabase.table("payments")
+            .select("*")
+            .eq("id", payment_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        return rows[0] if rows else None
+    except Exception:
+        return None
+
+
 # =========================================================
-# Parte paga: item 5 + relatório final
+# Payment actions
 # =========================================================
-if st.session_state.get("report_unlocked") and can_offer_report:
+def _create_pix_payment(
+    user_id: str,
+    user_email: str,
+    user_name: str,
+    package: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    try:
+        notification_url = st.secrets.get(
+            "MERCADOPAGO_WEBHOOK_URL",
+            "https://dvaskwtqrohfyzndtjwv.supabase.co/functions/v1/mercadopago-webhook",
+        )
+
+        result = create_pending_payment_and_pix(
+            user_id=user_id,
+            user_email=user_email,
+            user_name=user_name or user_email,
+            package=package,
+            notification_url=notification_url,
+        )
+
+        updated = result.get("updated") or {}
+        pending = result.get("pending") or {}
+
+        return {**pending, **updated}
+    except Exception as e:
+        st.error(f"Não foi possível criar o pagamento Pix: {e}")
+        return None
+
+
+# =========================================================
+# UI blocks
+# =========================================================
+def _render_wallet_header(user_profile: Dict[str, Any], balance: float) -> None:
+    st.subheader("Minha carteira")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.text_input("Usuário", value=_get_user_name(user_profile), disabled=True)
+    with c2:
+        st.text_input("E-mail", value=_get_user_email(user_profile), disabled=True)
+    with c3:
+        st.text_input("Saldo de créditos", value=str(int(balance)), disabled=True)
+
+
+def _render_packages_table(packages: List[Dict[str, Any]], expanded: bool) -> None:
+    with st.expander("Pacotes de créditos", expanded=expanded):
+        if not packages:
+            st.warning("Nenhum pacote ativo encontrado.")
+            return
+
+        rows = []
+        for p in packages:
+            rows.append(
+                {
+                    "Pacote": _safe_get(p, "name", "-"),
+                    "Descrição": _safe_get(p, "description", "-"),
+                    "Preço": _fmt_brl(_safe_get(p, "price_brl", 0)),
+                    "Créditos": int(_to_float(_safe_get(p, "credits", 0))),
+                }
+            )
+
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _render_recent_ledger(ledger_rows: List[Dict[str, Any]]) -> None:
+    with st.expander("Extrato recente de créditos", expanded=False):
+        if not ledger_rows:
+            st.info("Ainda não há movimentações de créditos.")
+            return
+
+        rows = []
+        for r in ledger_rows:
+            rows.append(
+                {
+                    "Data": _fmt_dt(_safe_get(r, "created_at")),
+                    "Tipo": _safe_get(r, "entry_type", "-"),
+                    "Créditos": int(_to_float(_safe_get(r, "amount", 0))),
+                    "Origem": _safe_get(r, "source", "-"),
+                    "Descrição": _safe_get(r, "description", "-"),
+                }
+            )
+
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _render_recent_payments(payments_rows: List[Dict[str, Any]]) -> None:
+    with st.expander("Pagamentos recentes", expanded=False):
+        if not payments_rows:
+            st.info("Ainda não há pagamentos.")
+            return
+
+        rows = []
+        for r in payments_rows:
+            rows.append(
+                {
+                    "Data": _fmt_dt(_safe_get(r, "created_at")),
+                    "Status": _safe_get(r, "status", "-"),
+                    "Valor": _fmt_brl(_safe_get(r, "amount_brl", 0)),
+                    "Pagamento externo": _safe_get(r, "external_payment_id", "-"),
+                    "Referência": _safe_get(r, "external_reference", "-"),
+                }
+            )
+
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _render_pix_block(payment_row: Dict[str, Any]) -> None:
+    st.markdown("### Pix gerado")
+
+    amount_brl = _fmt_brl(_safe_get(payment_row, "amount_brl", 0))
+    status = _safe_get(payment_row, "status", "-")
+    payment_id = _safe_get(payment_row, "id", "-")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.text_input("ID interno do pagamento", value=str(payment_id), disabled=True)
+    with c2:
+        st.text_input("Valor", value=amount_brl, disabled=True)
+    with c3:
+        st.text_input("Status", value=str(status), disabled=True)
+
+    pix_qr_code = _safe_get(payment_row, "pix_qr_code")
+    pix_copy_paste = _safe_get(payment_row, "pix_copy_paste")
+
+    if pix_qr_code:
+        try:
+            qr_bytes = base64.b64decode(pix_qr_code)
+            st.image(qr_bytes, caption="QR Code Pix", width=220)
+        except Exception:
+            st.warning("Não foi possível renderizar o QR Code em imagem.")
+
+    if pix_copy_paste:
+        st.text_area(
+            "Código Pix copia e cola",
+            value=pix_copy_paste,
+            height=100,
+            key=f"pix_copy_paste_{payment_id}",
+        )
+
+
+def _render_pending_payment_status(supabase, payment_id: str) -> None:
+    st.info("Aguardando confirmação do pagamento...")
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+
+    with col1:
+        if st.button("Verificar pagamento agora", key=f"check_payment_{payment_id}"):
+            st.rerun()
+
+    with col2:
+        auto_refresh = st.checkbox(
+            "Atualizar automaticamente",
+            value=False,
+            key=f"auto_refresh_{payment_id}",
+        )
+
+    with col3:
+        refresh_seconds = st.selectbox(
+            "Intervalo",
+            options=[3, 5, 10, 15],
+            index=1,
+            key=f"refresh_seconds_{payment_id}",
+        )
+
+    payment = _fetch_payment_by_id(supabase, payment_id)
+    status = (payment or {}).get("status")
+
+    if status == "paid":
+        st.success("Pagamento confirmado com sucesso.")
+    elif status == "pending":
+        st.warning("Pagamento ainda pendente.")
+        if auto_refresh:
+            time.sleep(int(refresh_seconds))
+            st.rerun()
+    elif status in ("failed", "cancelled", "refunded"):
+        st.error(f"Pagamento com status: {status}")
+    else:
+        st.caption(f"Status atual: {status}")
+
+
+def _render_buy_section(
+    user_id: str,
+    user_email: str,
+    user_name: str,
+    packages: List[Dict[str, Any]],
+) -> None:
+    st.markdown("## Comprar créditos")
+    st.caption("Escolha um plano para gerar o Pix.")
+
+    if not packages:
+        st.warning("Nenhum pacote disponível para compra.")
+        return
+
+    cols = st.columns(len(packages)) if len(packages) <= 3 else st.columns(3)
+
+    for idx, package in enumerate(packages):
+        col = cols[idx % len(cols)]
+        with col:
+            st.markdown(f"**{_safe_get(package, 'name', 'Pacote')}**")
+            st.caption(_safe_get(package, "description", "-"))
+            st.write(f"Preço: {_fmt_brl(_safe_get(package, 'price_brl', 0))}")
+            st.write(f"Créditos: {int(_to_float(_safe_get(package, 'credits', 0)))}")
+
+            if st.button(
+                f"Gerar Pix — {_safe_get(package, 'name', 'Pacote')}",
+                key=f"buy_pkg_{_safe_get(package, 'id', idx)}",
+                use_container_width=True,
+            ):
+                payment = _create_pix_payment(
+                    user_id=user_id,
+                    user_email=user_email,
+                    user_name=user_name,
+                    package=package,
+                )
+                if payment:
+                    st.session_state["current_payment_id"] = _safe_get(payment, "id")
+                    st.success("Pix gerado com sucesso.")
+                    st.rerun()
+
+
+def _render_current_payment_area(supabase) -> None:
+    payment_id = st.session_state.get("current_payment_id")
+    if not payment_id:
+        return
+
+    current_payment = _fetch_payment_by_id(supabase, payment_id)
+    if not current_payment:
+        st.session_state.pop("current_payment_id", None)
+        return
+
     st.markdown("---")
+    st.markdown("## Pagamento atual")
+    _render_pix_block(current_payment)
 
-    render_analise_section(
-        calc,
-        lot_area=lot_area,
-        built_ground=built_ground,
-        permeable_area=permeable_area,
-        pick_func=pick_rule,
-    )
+    status = _safe_get(current_payment, "status")
 
-    render_relatorio_section(calc)
+    if status == "pending":
+        _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")))
+    elif status == "paid":
+        st.success("Este pagamento já foi confirmado.")
+    else:
+        if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
+            st.session_state.pop("current_payment_id", None)
+            st.rerun()
+
+
+# =========================================================
+# Entry point
+# =========================================================
+def render_payments_panel(supabase=None, user_profile=None) -> None:
+    supabase_client = _resolve_supabase(supabase)
+    profile = _resolve_user_profile(user_profile)
+
+    user_id = _get_user_id(profile) if profile else None
+    user_email = _get_user_email(profile) if profile else "-"
+    user_name = _get_user_name(profile) if profile else "Usuário"
+
+    if not user_id:
+        st.info("Entre com Google para acessar carteira e pagamentos.")
+        return
+
+    if supabase_client is None:
+        st.warning("Cliente Supabase ainda não disponível nesta execução. Atualize a página uma vez.")
+        return
+
+    focus_mode = bool(st.session_state.get("payments_focus_mode"))
+
+    balance = _fetch_credit_balance(supabase_client, user_id)
+    packages = _fetch_credit_packages(supabase_client)
+    ledger_rows = _fetch_recent_ledger(supabase_client, user_id)
+    payments_rows = _fetch_recent_payments(supabase_client, user_id)
+
+    if focus_mode:
+        st.warning("Saldo insuficiente para gerar o relatório. Escolha um plano e conclua o pagamento.")
+    _render_wallet_header(profile, balance)
+    _render_packages_table(packages, expanded=focus_mode)
+    _render_buy_section(user_id, user_email, user_name, packages)
+    _render_current_payment_area(supabase_client)
+
+    if not focus_mode:
+        _render_recent_ledger(ledger_rows)
+        _render_recent_payments(payments_rows)
