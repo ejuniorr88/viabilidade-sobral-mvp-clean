@@ -69,6 +69,7 @@ def _resolve_supabase(explicit_supabase=None):
         "supabase",
         "sb",
         "supabase_client",
+        "client",
     ]:
         if key in st.session_state and st.session_state[key] is not None:
             return st.session_state[key]
@@ -331,7 +332,7 @@ def _render_pix_block(payment_row: Dict[str, Any]) -> None:
 def _render_pending_payment_status(supabase, payment_id: str) -> None:
     st.info("Aguardando confirmação do pagamento...")
 
-    col1, col2 = st.columns([1, 1])
+    col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
         if st.button("Verificar pagamento agora", key=f"check_payment_{payment_id}"):
@@ -344,6 +345,14 @@ def _render_pending_payment_status(supabase, payment_id: str) -> None:
             key=f"auto_refresh_{payment_id}",
         )
 
+    with col3:
+        refresh_seconds = st.selectbox(
+            "Intervalo",
+            options=[3, 5, 10, 15],
+            index=1,
+            key=f"refresh_seconds_{payment_id}",
+        )
+
     payment = _fetch_payment_by_id(supabase, payment_id)
     status = (payment or {}).get("status")
 
@@ -354,7 +363,7 @@ def _render_pending_payment_status(supabase, payment_id: str) -> None:
     elif status == "pending":
         st.warning("Pagamento ainda pendente.")
         if auto_refresh:
-            time.sleep(5)
+            time.sleep(int(refresh_seconds))
             st.rerun()
     elif status in ("failed", "cancelled", "refunded"):
         st.error(f"Pagamento com status: {status}")
@@ -424,26 +433,27 @@ def _render_current_payment_area(supabase, user_id: str) -> None:
 # Entry point
 # =========================================================
 def render_payments_panel(supabase=None, user_profile=None) -> None:
-    supabase = _resolve_supabase(supabase)
-    user_profile = _resolve_user_profile(user_profile)
+    supabase_client = _resolve_supabase(supabase)
+    profile = _resolve_user_profile(user_profile)
 
-    if supabase is None:
-        st.error("Cliente Supabase não encontrado.")
-        return
+    user_id = _get_user_id(profile) if profile else None
 
-    user_id = _get_user_id(user_profile)
     if not user_id:
         st.info("Entre com Google para acessar carteira e pagamentos.")
         return
 
-    balance = _fetch_credit_balance(supabase, user_id)
-    packages = _fetch_credit_packages(supabase)
-    ledger_rows = _fetch_recent_ledger(supabase, user_id)
-    payments_rows = _fetch_recent_payments(supabase, user_id)
+    if supabase_client is None:
+        st.warning("Cliente Supabase ainda não disponível nesta execução. Atualize a página uma vez.")
+        return
 
-    _render_wallet_header(user_profile, balance)
+    balance = _fetch_credit_balance(supabase_client, user_id)
+    packages = _fetch_credit_packages(supabase_client)
+    ledger_rows = _fetch_recent_ledger(supabase_client, user_id)
+    payments_rows = _fetch_recent_payments(supabase_client, user_id)
+
+    _render_wallet_header(profile, balance)
     _render_packages_table(packages)
     _render_recent_ledger(ledger_rows)
     _render_recent_payments(payments_rows)
-    _render_buy_section(supabase, user_id, packages)
-    _render_current_payment_area(supabase, user_id)
+    _render_buy_section(supabase_client, user_id, packages)
+    _render_current_payment_area(supabase_client, user_id)
