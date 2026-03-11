@@ -26,7 +26,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback
+from core.auth import handle_oauth_callback, is_auth_callback_mode, get_app_url
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
@@ -226,6 +226,36 @@ def _inject_global_styles() -> None:
             margin: 16px 0 18px 0;
         }
 
+        .vf-callback-shell {
+            min-height: 80vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .vf-callback-card {
+            width: min(560px, 92vw);
+            background: #ffffff;
+            border: 1px solid #e8e8e8;
+            border-radius: 18px;
+            padding: 28px 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+            text-align: center;
+        }
+
+        .vf-callback-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: #17305f;
+            margin-bottom: 8px;
+        }
+
+        .vf-callback-text {
+            font-size: 15px;
+            color: #6b7280;
+            line-height: 1.5;
+        }
+
         @media (max-width: 1100px) {
             .vf-topbar-inner {
                 flex-direction: column;
@@ -313,10 +343,38 @@ def _render_wallet_summary() -> None:
 
 
 def _render_login_gate_block() -> None:
-    st.markdown("### Faça login para continuar")
     render_google_login_box(
         title="Faça login para continuar",
         message="Para liberar a pesquisa de viabilidade, entre com sua conta Google.",
+    )
+
+
+def _render_auth_callback_screen() -> None:
+    st.markdown(
+        """
+        <div class="vf-callback-shell">
+            <div class="vf-callback-card">
+                <div class="vf-callback-title">Concluindo seu login…</div>
+                <div class="vf-callback-text">
+                    Aguarde alguns segundos enquanto finalizamos sua autenticação
+                    e voltamos para a página principal.
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    destination = get_app_url()
+    components.html(
+        f"""
+        <script>
+            setTimeout(function() {{
+                window.top.location.href = "{destination}";
+            }}, 1200);
+        </script>
+        """,
+        height=0,
     )
 
 
@@ -352,13 +410,19 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
-# Importante: callback do OAuth deve ser tratado logo no começo.
+_inject_global_styles()
+
+# 1) Sempre trata o callback primeiro
 handle_oauth_callback()
+
+# 2) Se estivermos no modo de callback, NÃO carregamos mapa, sidebar e resto do app
+if is_auth_callback_mode():
+    _render_auth_callback_screen()
+    st.stop()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
 
-_inject_global_styles()
 _render_top_nav()
 
 user_logged_in = bool(st.session_state.get("auth_logged_in"))

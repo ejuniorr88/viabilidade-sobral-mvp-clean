@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 
 import streamlit as st
 from supabase import Client, create_client
@@ -39,9 +39,28 @@ def get_app_url() -> str:
         _push_auth_debug("get_app_url_invalid", {"raw": raw})
         return "http://localhost:8501"
 
-    normalized = raw.rstrip("/")
-    _push_auth_debug("get_app_url_ok", {"raw": raw, "normalized": normalized})
-    return normalized
+    return raw.rstrip("/")
+
+
+def build_auth_callback_url() -> str:
+    """
+    Retorna a mesma APP_URL, mas com um marcador leve para o app
+    entrar primeiro no modo de callback, sem carregar mapa e resto da tela.
+    """
+    base_url = get_app_url()
+    parsed = urlparse(base_url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query["auth_flow"] = "callback"
+    return urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            urlencode(query),
+            parsed.fragment,
+        )
+    )
 
 
 def safe_get_query_param(name: str) -> Optional[str]:
@@ -59,7 +78,14 @@ def safe_get_query_param(name: str) -> Optional[str]:
 
 
 def clear_auth_query_params() -> None:
-    keys = ["code", "state", "error", "error_code", "error_description"]
+    keys = [
+        "code",
+        "state",
+        "error",
+        "error_code",
+        "error_description",
+        "auth_flow",
+    ]
 
     try:
         for key in keys:
@@ -93,6 +119,7 @@ def extract_user_fields(user_obj: Any) -> Dict[str, Optional[str]]:
     meta = getattr(user_obj, "user_metadata", None) or {}
     if not isinstance(meta, dict):
         meta = {}
+
     return {
         "id": getattr(user_obj, "id", None),
         "email": getattr(user_obj, "email", None),
@@ -106,6 +133,7 @@ def store_user_in_state(user_obj: Any) -> None:
     st.session_state["auth_user_id"] = info["id"]
     st.session_state["auth_user_email"] = info["email"]
     st.session_state["auth_user_name"] = info["name"]
+    st.session_state["auth_sync_done"] = True
     _push_auth_debug("store_user_in_state", info)
 
 
@@ -118,6 +146,12 @@ def clear_user_in_state() -> None:
 
 
 def sync_user_from_current_session() -> None:
+    """
+    Evita bater no Auth remoto em todo rerun do Streamlit.
+    """
+    if st.session_state.get("auth_sync_done"):
+        return
+
     supabase = get_supabase_auth_client()
 
     try:
@@ -129,21 +163,32 @@ def sync_user_from_current_session() -> None:
         if user_obj is not None:
             store_user_in_state(user_obj)
             _push_auth_debug("sync_user_found", extract_user_fields(user_obj))
-            return
-
-        _push_auth_debug("sync_user_empty", {})
+        else:
+            clear_user_in_state()
+            st.session_state["auth_sync_done"] = True
+            _push_auth_debug("sync_user_empty", {})
     except Exception as e:
+        clear_user_in_state()
+        st.session_state["auth_sync_done"] = True
         _push_auth_debug("sync_user_error", {"error": str(e)})
 
-    clear_user_in_state()
+
+def is_auth_callback_mode() -> bool:
+    if safe_get_query_param("auth_flow") == "callback":
+        return True
+    if safe_get_query_param("code"):
+        return True
+    if safe_get_query_param("error"):
+        return True
+    return False
 
 
 def handle_oauth_callback() -> None:
     """
-    Fluxo mínimo e estável:
-    - se houver error => mostra erro e limpa query
-    - se houver code => troca UMA vez por sessão
-    - se não houver code => sincroniza a sessão atual
+    Fluxo enxuto:
+    - se voltou com erro => mostra erro e limpa query
+    - se voltou com code => troca UMA vez por sessão
+    - se não voltou com code => só sincroniza a sessão atual se necessário
     """
     error = safe_get_query_param("error")
     error_description = safe_get_query_param("error_description")
@@ -188,23 +233,21 @@ def handle_oauth_callback() -> None:
                 if user_obj is None and isinstance(session_obj, dict):
                     user_obj = session_obj.get("user")
 
-            if user_obj is None:
-                sync_user_from_current_session()
-            else:
+            if user_obj is not None:
                 store_user_in_state(user_obj)
+            else:
+                sync_user_from_current_session()
 
             if st.session_state.get("auth_logged_in"):
                 st.session_state["last_oauth_code"] = code
                 st.session_state["auth_message"] = "Login efetuado com sucesso."
                 clear_auth_query_params()
-                _push_auth_debug("exchange_code_for_session_success", {})
                 st.rerun()
                 return
 
             clear_user_in_state()
             st.session_state["auth_message"] = "Não foi possível concluir o login Google."
             clear_auth_query_params()
-            _push_auth_debug("exchange_code_for_session_no_user", {})
             return
 
         except Exception as e:
@@ -214,13 +257,15 @@ def handle_oauth_callback() -> None:
             _push_auth_debug("exchange_code_for_session_exception", {"error": str(e)})
             return
 
-    # Sem code: apenas sincroniza a sessão já existente
+    if st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
+        return
+
     sync_user_from_current_session()
 
 
 def start_google_login() -> Optional[str]:
     supabase = get_supabase_auth_client()
-    redirect_to = get_app_url()
+    redirect_to = build_auth_callback_url()
 
     try:
         response = supabase.auth.sign_in_with_oauth(
@@ -239,7 +284,10 @@ def start_google_login() -> Optional[str]:
         else:
             url = None
 
-        _push_auth_debug("start_google_login", {"redirect_to": redirect_to, "has_url": bool(url)})
+        _push_auth_debug(
+            "start_google_login",
+            {"redirect_to": redirect_to, "has_url": bool(url)},
+        )
         return url
 
     except Exception as e:
@@ -265,6 +313,7 @@ def sign_out_current_user() -> None:
         "auth_message",
         "last_oauth_code",
         "post_login_action",
+        "auth_sync_done",
     ]:
         st.session_state.pop(key, None)
 

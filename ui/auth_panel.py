@@ -38,11 +38,7 @@ def render_google_login_cta(
         st.error("Não foi possível iniciar o login com Google.")
         return
 
-    if full_width:
-        st.link_button(label, auth_url, use_container_width=True)
-    else:
-        st.link_button(label, auth_url)
-
+    st.link_button(label, auth_url, use_container_width=full_width)
     st.caption("O login abrirá em nova aba. Depois volte para esta página.")
 
 
