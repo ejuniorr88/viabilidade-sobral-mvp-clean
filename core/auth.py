@@ -14,20 +14,42 @@ def get_supabase_auth_client() -> Client:
     return create_client(url, key)
 
 
+def _push_auth_debug(step: str, data: Optional[Dict[str, Any]] = None) -> None:
+    logs = st.session_state.get("_auth_debug_logs", [])
+    logs.append(
+        {
+            "step": step,
+            "data": data or {},
+        }
+    )
+    st.session_state["_auth_debug_logs"] = logs[-20:]
+
+
+def get_auth_debug_logs() -> list[dict]:
+    return st.session_state.get("_auth_debug_logs", [])
+
+
+def clear_auth_debug_logs() -> None:
+    st.session_state["_auth_debug_logs"] = []
+
+
 def get_app_url() -> str:
+    """
+    Usa APP_URL das secrets e normaliza para evitar diferenças bobas
+    de barra final / caminho vazio.
+    """
     raw = st.secrets.get("APP_URL", "http://localhost:8501").strip()
     if not raw:
         raw = "http://localhost:8501"
 
     parsed = urlparse(raw)
     if not parsed.scheme or not parsed.netloc:
+        _push_auth_debug("get_app_url_invalid", {"raw": raw})
         return "http://localhost:8501"
 
-    return f"{parsed.scheme}://{parsed.netloc}"
-
-
-def get_google_web_client_id() -> str:
-    return st.secrets["GOOGLE_WEB_CLIENT_ID"]
+    normalized = f"{parsed.scheme}://{parsed.netloc}"
+    _push_auth_debug("get_app_url", {"raw": raw, "normalized": normalized})
+    return normalized
 
 
 def safe_get_query_param(name: str) -> Optional[str]:
@@ -44,6 +66,16 @@ def safe_get_query_param(name: str) -> Optional[str]:
         return values[0]
 
 
+def get_all_auth_query_params() -> Dict[str, Any]:
+    keys = ["code", "error", "error_code", "error_description", "state"]
+    result: Dict[str, Any] = {}
+    for key in keys:
+        value = safe_get_query_param(key)
+        if value is not None:
+            result[key] = value
+    return result
+
+
 def clear_auth_query_params() -> None:
     keys_to_remove = [
         "code",
@@ -51,7 +83,6 @@ def clear_auth_query_params() -> None:
         "error_code",
         "error_description",
         "state",
-        "google_id_token",
     ]
 
     try:
@@ -67,6 +98,8 @@ def clear_auth_query_params() -> None:
             st.experimental_set_query_params(**cleaned)
         except Exception:
             pass
+
+    _push_auth_debug("clear_auth_query_params", {})
 
 
 def extract_user_fields(user_obj: Any) -> Dict[str, Optional[str]]:
@@ -101,6 +134,7 @@ def store_user_in_state(user_obj: Any) -> None:
     st.session_state["auth_user_email"] = info.get("email")
     st.session_state["auth_user_name"] = info.get("name")
     st.session_state["auth_user_id"] = info.get("id")
+    _push_auth_debug("store_user_in_state", info)
 
 
 def clear_user_in_state() -> None:
@@ -108,6 +142,7 @@ def clear_user_in_state() -> None:
     st.session_state["auth_user_email"] = None
     st.session_state["auth_user_name"] = None
     st.session_state["auth_user_id"] = None
+    _push_auth_debug("clear_user_in_state", {})
 
 
 def sync_user_from_current_session() -> None:
@@ -120,52 +155,27 @@ def sync_user_from_current_session() -> None:
             user_obj = user_response.get("user")
 
         if user_obj is not None:
+            _push_auth_debug("sync_user_from_current_session_found", extract_user_fields(user_obj))
             store_user_in_state(user_obj)
             return
-    except Exception:
-        pass
+
+        _push_auth_debug("sync_user_from_current_session_empty", {})
+    except Exception as e:
+        _push_auth_debug("sync_user_from_current_session_error", {"error": str(e)})
 
     clear_user_in_state()
 
 
-def _complete_sign_in_with_google_id_token(id_token: str) -> bool:
-    supabase = get_supabase_auth_client()
-
-    response = supabase.auth.sign_in_with_id_token(
-        {
-            "provider": "google",
-            "token": id_token,
-        }
-    )
-
-    user_obj = getattr(response, "user", None)
-    session_obj = getattr(response, "session", None)
-
-    if user_obj is None and isinstance(response, dict):
-        user_obj = response.get("user")
-        session_obj = response.get("session")
-
-    if user_obj is None and session_obj is not None:
-        user_obj = getattr(session_obj, "user", None)
-        if user_obj is None and isinstance(session_obj, dict):
-            user_obj = session_obj.get("user")
-
-    if user_obj is None:
-        sync_user_from_current_session()
-        return bool(st.session_state.get("auth_logged_in"))
-
-    store_user_in_state(user_obj)
-    return True
-
-
 def handle_oauth_callback() -> None:
     """
-    Agora prioriza login via google_id_token retornado pelo botão oficial do Google.
-    Mantém fallback para o fluxo antigo com code.
+    Processa callback do Google vindo do Supabase.
+    Também trata cenários de erro retornados na query string.
     """
+    params = get_all_auth_query_params()
+    _push_auth_debug("handle_oauth_callback_enter", params)
+
     error = safe_get_query_param("error")
     error_description = safe_get_query_param("error_description")
-    google_id_token = safe_get_query_param("google_id_token")
     code = safe_get_query_param("code")
 
     if error:
@@ -174,40 +184,30 @@ def handle_oauth_callback() -> None:
             f"Erro no retorno do login Google: {error}"
             + (f" — {error_description}" if error_description else "")
         )
+        _push_auth_debug(
+            "handle_oauth_callback_error_param",
+            {
+                "error": error,
+                "error_description": error_description,
+            },
+        )
         clear_auth_query_params()
         return
 
-    if google_id_token:
-        if st.session_state.get("last_google_id_token") == google_id_token:
-            return
-
-        try:
-            ok = _complete_sign_in_with_google_id_token(google_id_token)
-            if ok:
-                st.session_state["auth_message"] = "Login efetuado com sucesso."
-                st.session_state["last_google_id_token"] = google_id_token
-            else:
-                clear_user_in_state()
-                st.session_state["auth_message"] = "Não foi possível concluir o login com Google."
-        except Exception as e:
-            clear_user_in_state()
-            st.session_state["auth_message"] = f"Erro ao concluir o login Google: {e}"
-
-        clear_auth_query_params()
-        st.rerun()
-        return
-
-    # Fallback legado, caso você ainda use alguma rota antiga
     if not code:
+        _push_auth_debug("handle_oauth_callback_no_code", {})
         return
 
     if st.session_state.get("last_oauth_code") == code:
+        _push_auth_debug("handle_oauth_callback_duplicate_code", {"code": code[:12] + "..."})
         return
 
     supabase = get_supabase_auth_client()
 
     try:
+        _push_auth_debug("exchange_code_for_session_start", {"code": code[:12] + "..."})
         response = supabase.auth.exchange_code_for_session({"auth_code": code})
+        _push_auth_debug("exchange_code_for_session_ok", {"response_type": str(type(response))})
 
         user_obj = getattr(response, "user", None)
         session_obj = getattr(response, "session", None)
@@ -222,10 +222,12 @@ def handle_oauth_callback() -> None:
                 user_obj = session_obj.get("user")
 
         if user_obj is None:
+            _push_auth_debug("exchange_code_for_session_no_user_direct", {})
             sync_user_from_current_session()
             if st.session_state.get("auth_logged_in"):
                 st.session_state["auth_message"] = "Login efetuado com sucesso."
                 st.session_state["last_oauth_code"] = code
+                _push_auth_debug("oauth_callback_login_success_via_sync", {})
                 clear_auth_query_params()
                 st.rerun()
                 return
@@ -234,6 +236,7 @@ def handle_oauth_callback() -> None:
             store_user_in_state(user_obj)
             st.session_state["auth_message"] = "Login efetuado com sucesso."
             st.session_state["last_oauth_code"] = code
+            _push_auth_debug("oauth_callback_login_success_direct", {})
             clear_auth_query_params()
             st.rerun()
         else:
@@ -241,19 +244,52 @@ def handle_oauth_callback() -> None:
             st.session_state["auth_message"] = (
                 "O Google retornou ao app, mas não foi possível identificar o usuário logado."
             )
+            _push_auth_debug("oauth_callback_no_user_after_exchange", {})
             clear_auth_query_params()
 
     except Exception as e:
         clear_user_in_state()
         st.session_state["auth_message"] = f"Erro ao concluir o login Google: {e}"
+        _push_auth_debug("exchange_code_for_session_exception", {"error": str(e)})
         clear_auth_query_params()
 
 
 def start_google_login() -> Optional[str]:
     """
-    Mantido só por compatibilidade. O fluxo novo usa botão GIS, não redirect OAuth.
+    Inicia o login Google via Supabase.
     """
-    return get_app_url()
+    supabase = get_supabase_auth_client()
+    redirect_to = get_app_url()
+
+    _push_auth_debug("start_google_login_before", {"redirect_to": redirect_to})
+
+    try:
+        response = supabase.auth.sign_in_with_oauth(
+            {
+                "provider": "google",
+                "options": {
+                    "redirect_to": redirect_to,
+                },
+            }
+        )
+
+        if hasattr(response, "url"):
+            url = response.url
+            _push_auth_debug("start_google_login_response_attr", {"url": url})
+            return url
+
+        if isinstance(response, dict):
+            url = response.get("url")
+            _push_auth_debug("start_google_login_response_dict", {"url": url})
+            return url
+
+        _push_auth_debug("start_google_login_response_unknown", {"response_type": str(type(response))})
+        return None
+
+    except Exception as e:
+        _push_auth_debug("start_google_login_exception", {"error": str(e)})
+        st.session_state["auth_message"] = f"Erro ao iniciar login Google: {e}"
+        return None
 
 
 def sign_out_current_user() -> None:
@@ -261,8 +297,9 @@ def sign_out_current_user() -> None:
 
     try:
         supabase.auth.sign_out()
-    except Exception:
-        pass
+        _push_auth_debug("sign_out_current_user_ok", {})
+    except Exception as e:
+        _push_auth_debug("sign_out_current_user_error", {"error": str(e)})
 
     for key in [
         "auth_logged_in",
@@ -271,7 +308,6 @@ def sign_out_current_user() -> None:
         "auth_user_id",
         "auth_message",
         "last_oauth_code",
-        "last_google_id_token",
         "post_login_action",
         "pending_login_reason",
     ]:
