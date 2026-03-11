@@ -9,7 +9,7 @@ from typing import Any, Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-11-SCROLL-TO-ITEM-3-V2")
+st.write("APP VERSION MARKER: 2026-03-11-SCROLL-FIX-LOGIN-AND-ITEM3-V1")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -83,6 +83,7 @@ def _current_user_id() -> str | None:
 
 
 def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
+    # limpa estado do relatório pago e marca que vamos mostrar a parte gratuita
     st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
     st.session_state.last_calc_signature = st.session_state.get("current_signature")
@@ -90,15 +91,19 @@ def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
     calc.pop("err", None)
     calc.pop("rule", None)
 
-    st.markdown('<div id="item-3-anchor"></div>', unsafe_allow_html=True)
-    _ = render_localizacao_section(True, zones_prepared, radius_m)
+    # calcula e atualiza o item 3 no estado
+    localizacao_calc = render_localizacao_section(True, zones_prepared, radius_m)
+    if isinstance(localizacao_calc, dict):
+        calc.update(localizacao_calc)
 
+    # busca a regra do item 4
     if calc.get("zone") and not calc.get("rule"):
         try:
             rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
             if rule:
                 calc["rule"] = rule
                 st.session_state.free_calc_done = True
+                # ativa scroll automático para o item 3 após o cálculo
                 st.session_state.scroll_to_item3 = True
             else:
                 calc["err"] = (
@@ -147,19 +152,21 @@ def _try_unlock_report_after_payment(user_id: str) -> None:
 
 
 def _scroll_to_login_box() -> None:
+    # mantém o comportamento já consolidado:
+    # quando clicar em calcular/gerar relatório sem login, desce até o bloco de login
     components.html(
         """
         <script>
             const scrollToLogin = () => {
-                const el = window.parent.document.getElementById("login-required-box");
-                if (el) {
-                    const y = el.getBoundingClientRect().top + window.parent.pageYOffset - 80;
-                    window.parent.scrollTo({ top: y, behavior: "smooth" });
-                }
+                const rootDoc = window.parent.document;
+                const el = rootDoc.getElementById("login-required-box");
+                if (!el) return;
+                const y = el.getBoundingClientRect().top + window.parent.pageYOffset - 80;
+                window.parent.scrollTo({ top: y, behavior: "smooth" });
             };
-            setTimeout(scrollToLogin, 150);
-            setTimeout(scrollToLogin, 500);
-            setTimeout(scrollToLogin, 1000);
+            setTimeout(scrollToLogin, 200);
+            setTimeout(scrollToLogin, 700);
+            setTimeout(scrollToLogin, 1400);
         </script>
         """,
         height=0,
@@ -167,19 +174,21 @@ def _scroll_to_login_box() -> None:
 
 
 def _scroll_to_item3_box() -> None:
+    # novo comportamento:
+    # depois do cálculo com usuário já logado, desce até o começo do item 3
     components.html(
         """
         <script>
             const scrollToItem3 = () => {
-                const el = window.parent.document.getElementById("item-3-anchor");
-                if (el) {
-                    const y = el.getBoundingClientRect().top + window.parent.pageYOffset - 120;
-                    window.parent.scrollTo({ top: y, behavior: "smooth" });
-                }
+                const rootDoc = window.parent.document;
+                const el = rootDoc.getElementById("item-3-anchor");
+                if (!el) return;
+                const y = el.getBoundingClientRect().top + window.parent.pageYOffset - 100;
+                window.parent.scrollTo({ top: y, behavior: "smooth" });
             };
-            setTimeout(scrollToItem3, 150);
-            setTimeout(scrollToItem3, 500);
-            setTimeout(scrollToItem3, 1000);
+            setTimeout(scrollToItem3, 250);
+            setTimeout(scrollToItem3, 800);
+            setTimeout(scrollToItem3, 1600);
         </script>
         """,
         height=0,
@@ -238,6 +247,8 @@ if st.session_state.get("auth_message"):
 
 render_credits_panel(_card)
 
+# mostra o painel no topo normalmente;
+# quando estiver em modo de pagamento inline, evita duplicar widgets
 if not st.session_state.get("payments_focus_mode"):
     render_payments_panel()
 
@@ -249,6 +260,8 @@ with st.expander("DEBUG AUTH"):
         st.write("Auth user email:", st.session_state.get("auth_user_email"))
         st.write("Auth user id:", st.session_state.get("auth_user_id"))
         st.write("Post login action:", st.session_state.get("post_login_action"))
+        st.write("Force scroll to login:", st.session_state.get("force_scroll_to_login"))
+        st.write("Scroll to item3:", st.session_state.get("scroll_to_item3"))
     with c2:
         if st.button("Limpar logs auth", key="btn_clear_auth_debug"):
             clear_auth_debug_logs()
@@ -320,6 +333,8 @@ elif user_logged_in and st.session_state.get("post_login_action") == "generate_r
 # =========================================================
 if clicked_calcular:
     if not user_logged_in or not user_id:
+        # mantém comportamento consolidado:
+        # sem login -> mostra bloco de login e desce até ele
         st.session_state.post_login_action = "calculate_viability"
         st.session_state.pending_login_reason = (
             "Para calcular a viabilidade, primeiro faça login com Google."
@@ -327,10 +342,13 @@ if clicked_calcular:
         st.session_state.force_scroll_to_login = True
         st.rerun()
     else:
+        # com login -> calcula e prepara scroll para o item 3
         _run_free_calc(calc, zones_prepared, radius_m)
 else:
-    st.markdown('<div id="item-3-anchor"></div>', unsafe_allow_html=True)
-    _ = render_localizacao_section(False, zones_prepared, radius_m)
+    # renderização padrão sem cálculo explícito
+    localizacao_calc = render_localizacao_section(False, zones_prepared, radius_m)
+    if isinstance(localizacao_calc, dict):
+        calc.update(localizacao_calc)
 
 # =========================================================
 # Login inferior
@@ -346,9 +364,17 @@ if (not user_logged_in) and st.session_state.get("post_login_action") in ("calcu
         st.session_state.force_scroll_to_login = False
 
 # =========================================================
-# Parte gratuita: mostrar apenas até o item 4
+# Item 3 + parte gratuita
 # =========================================================
+# âncora fixa do item 3, para o scroll funcionar de forma estável
+st.markdown('<div id="item-3-anchor"></div>', unsafe_allow_html=True)
+
+# quando já houve cálculo gratuito, renderiza a versão ativa do item 3
 if st.session_state.get("free_calc_done"):
+    localizacao_calc = render_localizacao_section(True, zones_prepared, radius_m)
+    if isinstance(localizacao_calc, dict):
+        calc.update(localizacao_calc)
+
     if st.session_state.get("scroll_to_item3"):
         _scroll_to_item3_box()
         st.session_state.scroll_to_item3 = False
