@@ -9,7 +9,7 @@ from typing import Any, Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-11-SCROLL-FIX-LOGIN-AND-ITEM3-V1")
+st.write("APP VERSION MARKER: 2026-03-11-SCROLL-FIX-MINIMAL-V1")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -83,7 +83,7 @@ def _current_user_id() -> str | None:
 
 
 def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
-    # limpa estado do relatório pago e marca que vamos mostrar a parte gratuita
+    # limpa estado do relatório pago e prepara a parte gratuita
     st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
     st.session_state.last_calc_signature = st.session_state.get("current_signature")
@@ -91,19 +91,23 @@ def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
     calc.pop("err", None)
     calc.pop("rule", None)
 
-    # calcula e atualiza o item 3 no estado
-    localizacao_calc = render_localizacao_section(True, zones_prepared, radius_m)
-    if isinstance(localizacao_calc, dict):
-        calc.update(localizacao_calc)
+    # -----------------------------------------------------
+    # ÂNCORA DO ITEM 3
+    # fica exatamente antes da renderização da localização.
+    # assim, quando o usuário já estiver logado e clicar em calcular,
+    # o scroll cai no começo do item 3.
+    # -----------------------------------------------------
+    st.markdown('<div id="item-3-anchor"></div>', unsafe_allow_html=True)
 
-    # busca a regra do item 4
+    _ = render_localizacao_section(True, zones_prepared, radius_m)
+
     if calc.get("zone") and not calc.get("rule"):
         try:
             rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
             if rule:
                 calc["rule"] = rule
                 st.session_state.free_calc_done = True
-                # ativa scroll automático para o item 3 após o cálculo
+                # ativa o scroll automático para o item 3
                 st.session_state.scroll_to_item3 = True
             else:
                 calc["err"] = (
@@ -152,8 +156,11 @@ def _try_unlock_report_after_payment(user_id: str) -> None:
 
 
 def _scroll_to_login_box() -> None:
-    # mantém o comportamento já consolidado:
-    # quando clicar em calcular/gerar relatório sem login, desce até o bloco de login
+    # -----------------------------------------------------
+    # BLOCO JÁ CONSOLIDADO:
+    # quando o usuário clicar em calcular/gerar relatório sem login,
+    # a página desce até o bloco de login.
+    # -----------------------------------------------------
     components.html(
         """
         <script>
@@ -174,8 +181,11 @@ def _scroll_to_login_box() -> None:
 
 
 def _scroll_to_item3_box() -> None:
-    # novo comportamento:
-    # depois do cálculo com usuário já logado, desce até o começo do item 3
+    # -----------------------------------------------------
+    # NOVO BLOCO:
+    # depois do cálculo com usuário logado,
+    # a página desce até o começo do item 3.
+    # -----------------------------------------------------
     components.html(
         """
         <script>
@@ -247,8 +257,7 @@ if st.session_state.get("auth_message"):
 
 render_credits_panel(_card)
 
-# mostra o painel no topo normalmente;
-# quando estiver em modo de pagamento inline, evita duplicar widgets
+# evita duplicar widgets quando o painel inline estiver ativo
 if not st.session_state.get("payments_focus_mode"):
     render_payments_panel()
 
@@ -333,7 +342,7 @@ elif user_logged_in and st.session_state.get("post_login_action") == "generate_r
 # =========================================================
 if clicked_calcular:
     if not user_logged_in or not user_id:
-        # mantém comportamento consolidado:
+        # fluxo já consolidado:
         # sem login -> mostra bloco de login e desce até ele
         st.session_state.post_login_action = "calculate_viability"
         st.session_state.pending_login_reason = (
@@ -345,10 +354,7 @@ if clicked_calcular:
         # com login -> calcula e prepara scroll para o item 3
         _run_free_calc(calc, zones_prepared, radius_m)
 else:
-    # renderização padrão sem cálculo explícito
-    localizacao_calc = render_localizacao_section(False, zones_prepared, radius_m)
-    if isinstance(localizacao_calc, dict):
-        calc.update(localizacao_calc)
+    _ = render_localizacao_section(False, zones_prepared, radius_m)
 
 # =========================================================
 # Login inferior
@@ -364,17 +370,10 @@ if (not user_logged_in) and st.session_state.get("post_login_action") in ("calcu
         st.session_state.force_scroll_to_login = False
 
 # =========================================================
-# Item 3 + parte gratuita
+# Parte gratuita: mostrar apenas até o item 4
 # =========================================================
-# âncora fixa do item 3, para o scroll funcionar de forma estável
-st.markdown('<div id="item-3-anchor"></div>', unsafe_allow_html=True)
-
-# quando já houve cálculo gratuito, renderiza a versão ativa do item 3
 if st.session_state.get("free_calc_done"):
-    localizacao_calc = render_localizacao_section(True, zones_prepared, radius_m)
-    if isinstance(localizacao_calc, dict):
-        calc.update(localizacao_calc)
-
+    # scroll para o item 3 depois que ele já foi renderizado no cálculo
     if st.session_state.get("scroll_to_item3"):
         _scroll_to_item3_box()
         st.session_state.scroll_to_item3 = False
