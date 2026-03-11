@@ -44,20 +44,23 @@ def render_google_login_cta(
         <a href="{auth_url}" target="_blank" rel="noopener noreferrer" style="
             display:inline-block;
             {width_style}
-            padding:10px 16px;
-            border-radius:10px;
+            padding:12px 16px;
+            border-radius:12px;
             text-decoration:none;
             border:1px solid #d9d9d9;
-            font-weight:600;
+            font-weight:700;
             text-align:center;
-            background:white;
-            color:inherit;
+            background:#ffffff;
+            color:#222222;
+            box-shadow:0 1px 4px rgba(0,0,0,0.06);
         ">
-            {label}
+            🔐 {label}
         </a>
         """,
         unsafe_allow_html=True,
     )
+
+    st.caption("O login abrirá em uma nova aba. Depois de concluir, volte para esta página.")
 
 
 def render_google_login_top() -> None:
@@ -81,6 +84,7 @@ def render_google_login_box(
     title: str = "Faça login para continuar",
     message: Optional[str] = None,
 ) -> None:
+    st.markdown('<div id="login-required-box"></div>', unsafe_allow_html=True)
     st.markdown("---")
     st.subheader(title)
 
@@ -92,7 +96,7 @@ def render_google_login_box(
         return
 
     render_google_login_cta(
-        "Entrar com Google",
+        "Entrar com Google para continuar",
         full_width=True,
         message=message,
     )
