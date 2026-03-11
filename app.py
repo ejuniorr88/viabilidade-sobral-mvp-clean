@@ -9,7 +9,7 @@ from typing import Any, Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-11-SCROLL-TO-ITEM-3-V1")
+st.write("APP VERSION MARKER: 2026-03-11-SCROLL-TO-ITEM-3-V2")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -153,7 +153,8 @@ def _scroll_to_login_box() -> None:
             const scrollToLogin = () => {
                 const el = window.parent.document.getElementById("login-required-box");
                 if (el) {
-                    el.scrollIntoView({behavior: "smooth", block: "start"});
+                    const y = el.getBoundingClientRect().top + window.parent.pageYOffset - 80;
+                    window.parent.scrollTo({ top: y, behavior: "smooth" });
                 }
             };
             setTimeout(scrollToLogin, 150);
@@ -172,7 +173,8 @@ def _scroll_to_item3_box() -> None:
             const scrollToItem3 = () => {
                 const el = window.parent.document.getElementById("item-3-anchor");
                 if (el) {
-                    el.scrollIntoView({behavior: "smooth", block: "start"});
+                    const y = el.getBoundingClientRect().top + window.parent.pageYOffset - 120;
+                    window.parent.scrollTo({ top: y, behavior: "smooth" });
                 }
             };
             setTimeout(scrollToItem3, 150);
