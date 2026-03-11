@@ -37,7 +37,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback
+from core.auth import handle_oauth_callback, start_google_login
 from ui.auth_panel import render_google_login_top
 from ui.credits_panel import render_credits_panel
 from ui.payments_panel import render_payments_panel
@@ -67,6 +67,33 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
+def _render_login_gate_block() -> None:
+    """
+    Bloco inferior de login.
+    Comentário importante:
+    este bloco só aparece quando o usuário tenta calcular sem estar logado.
+    """
+    st.markdown("### Faça login para continuar")
+    st.info("Para liberar a pesquisa de viabilidade, entre com sua conta Google.")
+
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        if st.button("Entrar com Google", use_container_width=True, key="btn_google_login_bottom"):
+            auth_url = start_google_login()
+            if auth_url:
+                st.link_button("Continuar login no Google", auth_url, use_container_width=True)
+                st.info("O login será aberto em nova aba.")
+            else:
+                st.error("Não foi possível gerar o link de login com Google.")
+
+    with col2:
+        st.caption(
+            "Depois de concluir o login, volte para esta aba. "
+            "A pesquisa será liberada sem perder a localização já escolhida."
+        )
+
+
 # =============================
 # Estado mínimo preservado
 # =============================
@@ -78,12 +105,15 @@ if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict)
     st.session_state.calc = {}
 st.session_state.calc.setdefault("use_type_code", "RES_UNI")
 
-# Flag exclusiva para o scroll do Item 3.
-# Comentário importante:
-# ela é separada do restante para evitar misturar com futuros scrolls
-# de login ou de planos inline.
+# Flags separadas para não misturar comportamentos.
+if "show_login_gate" not in st.session_state:
+    st.session_state.show_login_gate = False
+if "scroll_to_login_gate" not in st.session_state:
+    st.session_state.scroll_to_login_gate = False
 if "scroll_to_item3" not in st.session_state:
     st.session_state.scroll_to_item3 = False
+if "post_login_action" not in st.session_state:
+    st.session_state.post_login_action = None
 
 handle_oauth_callback()
 
@@ -97,7 +127,7 @@ render_payments_panel()
 st.divider()
 
 radius_m = render_mapa_section(zones_gj)
-calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
+clicked_calcular = st.button("🔎 Calcular viabilidade", key="btn_calc")
 
 lot_area, built_ground, permeable_area = render_lote_section()
 
@@ -106,14 +136,56 @@ st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m")
 st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 
-# Âncora explícita no começo do Item 3.
-# O scroll deve vir para cá, e não para o Item 4.
+auth_logged_in = bool(st.session_state.get("auth_logged_in"))
+
+# ==========================================================
+# PATCH MÍNIMO:
+# Se clicou em calcular sem login, NÃO libera a pesquisa.
+# Apenas mostra o bloco inferior e desce para ele.
+# ==========================================================
+run_calculation_now = False
+
+if clicked_calcular:
+    if not auth_logged_in:
+        st.session_state.show_login_gate = True
+        st.session_state.scroll_to_login_gate = True
+        st.session_state.post_login_action = "calculate_viability"
+    else:
+        st.session_state.show_login_gate = False
+        run_calculation_now = True
+        st.session_state.scroll_to_item3 = True
+
+# ==========================================================
+# Continuação automática após login:
+# se o usuário tentou calcular antes de logar, ao voltar autenticado
+# o sistema libera a pesquisa e já segue o fluxo.
+# ==========================================================
+if auth_logged_in and st.session_state.get("post_login_action") == "calculate_viability":
+    run_calculation_now = True
+    st.session_state.post_login_action = None
+    st.session_state.show_login_gate = False
+    st.session_state.scroll_to_item3 = True
+
+# ==========================================================
+# Bloco inferior de login com âncora própria
+# ==========================================================
+st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
+
+if st.session_state.get("show_login_gate") and not auth_logged_in:
+    _render_login_gate_block()
+    st.divider()
+
+# Âncora fixa do começo do item 3.
 st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
 
-_ = render_localizacao_section(calcular, zones_prepared, radius_m)
+# Comentário importante:
+# só passamos True para o render_localizacao_section quando a pesquisa
+# está realmente liberada. Assim evita pesquisar antes do login.
+_ = render_localizacao_section(run_calculation_now, zones_prepared, radius_m)
 
 calc = st.session_state.calc
-if calcular and calc.get("zone") and not calc.get("rule") and not calc.get("err"):
+
+if run_calculation_now and calc.get("zone") and not calc.get("rule") and not calc.get("err"):
     try:
         rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
         if rule:
@@ -122,12 +194,6 @@ if calcular and calc.get("zone") and not calc.get("rule") and not calc.get("err"
             calc["err"] = f"Nenhuma regra no Supabase para zona={calc['zone']} e uso={calc.get('use_type_code')}"
     except Exception as e:
         calc["err"] = f"Erro ao consultar Supabase: {e}"
-
-# Disparo isolado do scroll do Item 3.
-# Só arma a flag quando o botão foi clicado e não houve erro básico.
-# A limpeza acontece logo após a injeção do JS para não repetir em reruns.
-if calcular and not calc.get("err"):
-    st.session_state.scroll_to_item3 = True
 
 render_indices_section(calc=calc, card_func=_card, pick_func=pick_rule, get_rule_func=fetch_rule)
 render_analise_section(
@@ -139,8 +205,27 @@ render_analise_section(
 )
 render_relatorio_section(calc)
 
-# Scroll suave e isolado para o começo do Item 3.
-# Uso de querySelector por id explícito para evitar depender de texto visível.
+# ==========================================================
+# Scroll isolado para o bloco inferior de login
+# ==========================================================
+if st.session_state.get("scroll_to_login_gate"):
+    components.html(
+        """
+        <script>
+            const rootDoc = window.parent.document;
+            const el = rootDoc.getElementById("login-gate-start");
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        </script>
+        """,
+        height=0,
+    )
+    st.session_state.scroll_to_login_gate = False
+
+# ==========================================================
+# Scroll isolado para o começo do item 3
+# ==========================================================
 if st.session_state.get("scroll_to_item3"):
     components.html(
         """
