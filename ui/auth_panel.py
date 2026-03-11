@@ -30,53 +30,30 @@ def render_google_login_cta(
     message: Optional[str] = None,
 ) -> None:
     auth_url = start_google_login()
-    if not auth_url:
-        st.error("Não foi possível iniciar o login com Google.")
-        return
 
     if message:
         st.info(message)
 
-    width_style = "width:100%;" if full_width else ""
+    if not auth_url:
+        st.error("Não foi possível iniciar o login com Google.")
+        return
 
-    st.markdown(
-        f"""
-        <a href="{auth_url}" target="_blank" rel="noopener noreferrer" style="
-            display:inline-block;
-            {width_style}
-            padding:12px 16px;
-            border-radius:12px;
-            text-decoration:none;
-            border:1px solid #d9d9d9;
-            font-weight:700;
-            text-align:center;
-            background:#ffffff;
-            color:#222222;
-            box-shadow:0 1px 4px rgba(0,0,0,0.06);
-        ">
-            🔐 {label}
-        </a>
-        """,
-        unsafe_allow_html=True,
-    )
+    if full_width:
+        st.link_button(label, auth_url, use_container_width=True)
+    else:
+        st.link_button(label, auth_url)
 
-    st.caption("O login abrirá em uma nova aba. Depois de concluir, volte para esta página.")
+    st.caption("O login abrirá em nova aba. Depois volte para esta página.")
 
 
 def render_google_login_top() -> None:
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        st.caption("Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.")
-
-    with col2:
-        if _is_logged_in():
-            st.success(f"{_user_name()} • {_user_email()}")
-            if st.button("Sair", key="btn_logout_top", use_container_width=True):
-                sign_out_current_user()
-                st.rerun()
-        else:
-            render_google_login_cta("Entrar com Google", full_width=True)
+    if _is_logged_in():
+        st.success(f"{_user_name()} • {_user_email()}")
+        if st.button("Sair", key="btn_logout_top", use_container_width=True):
+            sign_out_current_user()
+            st.rerun()
+    else:
+        render_google_login_cta("Entrar com Google", full_width=True)
 
 
 def render_google_login_box(
@@ -84,8 +61,6 @@ def render_google_login_box(
     title: str = "Faça login para continuar",
     message: Optional[str] = None,
 ) -> None:
-    st.markdown('<div id="login-required-box"></div>', unsafe_allow_html=True)
-    st.markdown("---")
     st.subheader(title)
 
     if _is_logged_in():
