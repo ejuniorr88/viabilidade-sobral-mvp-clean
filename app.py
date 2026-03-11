@@ -9,7 +9,7 @@ from typing import Any, Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-11-INLINE-PLANS-BELOW-REPORT-V2")
+st.write("APP VERSION MARKER: 2026-03-11-SCROLL-TO-ITEMS-3-4-V1")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -98,6 +98,7 @@ def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
             if rule:
                 calc["rule"] = rule
                 st.session_state.free_calc_done = True
+                st.session_state.scroll_to_indices = True
             else:
                 calc["err"] = (
                     f"Nenhuma regra no Supabase para zona={calc['zone']} "
@@ -163,6 +164,25 @@ def _scroll_to_login_box() -> None:
     )
 
 
+def _scroll_to_indices_box() -> None:
+    components.html(
+        """
+        <script>
+            const scrollToIndices = () => {
+                const el = window.parent.document.getElementById("indices-section-anchor");
+                if (el) {
+                    el.scrollIntoView({behavior: "smooth", block: "start"});
+                }
+            };
+            setTimeout(scrollToIndices, 150);
+            setTimeout(scrollToIndices, 500);
+            setTimeout(scrollToIndices, 1000);
+        </script>
+        """,
+        height=0,
+    )
+
+
 # =========================================================
 # Session state base
 # =========================================================
@@ -197,6 +217,9 @@ if "pending_login_reason" not in st.session_state:
 
 if "force_scroll_to_login" not in st.session_state:
     st.session_state.force_scroll_to_login = False
+
+if "scroll_to_indices" not in st.session_state:
+    st.session_state.scroll_to_indices = False
 
 
 handle_oauth_callback()
@@ -266,6 +289,7 @@ if st.session_state.last_calc_signature and st.session_state.last_calc_signature
     st.session_state.free_calc_done = False
     st.session_state.pending_report_after_payment = False
     st.session_state.payments_focus_mode = False
+    st.session_state.scroll_to_indices = False
 
 calc = st.session_state.calc
 user_logged_in = _is_logged_in()
@@ -322,12 +346,18 @@ if (not user_logged_in) and st.session_state.get("post_login_action") in ("calcu
 # Parte gratuita: mostrar apenas até o item 4
 # =========================================================
 if st.session_state.get("free_calc_done"):
+    st.markdown('<div id="indices-section-anchor"></div>', unsafe_allow_html=True)
+
     render_indices_section(
         calc=calc,
         card_func=_card,
         pick_func=pick_rule,
         get_rule_func=fetch_rule,
     )
+
+    if st.session_state.get("scroll_to_indices"):
+        _scroll_to_indices_box()
+        st.session_state.scroll_to_indices = False
 
 # =========================================================
 # Botão para gerar relatório (parte paga)
