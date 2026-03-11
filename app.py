@@ -27,11 +27,7 @@ from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback
-from ui.auth_panel import (
-    render_google_login_top,
-    get_or_create_google_login_url,
-    clear_google_login_url,
-)
+from ui.auth_panel import render_google_login_top
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
 
@@ -317,35 +313,12 @@ def _render_wallet_summary() -> None:
 
 
 def _render_login_gate_block() -> None:
+    # Importante:
+    # aqui usamos o MESMO componente principal de login.
+    # Nada de segunda mecânica paralela de OAuth no app.py.
     st.markdown("### Faça login para continuar")
     st.info("Para liberar a pesquisa de viabilidade, entre com sua conta Google.")
-
-    auth_url = get_or_create_google_login_url()
-
-    if auth_url:
-        st.markdown(
-            f"""
-            <a href="{auth_url}" target="_blank" rel="noopener noreferrer" style="
-                display:inline-block;
-                width:100%;
-                padding:12px 16px;
-                border-radius:12px;
-                text-decoration:none;
-                border:1px solid #d9d9d9;
-                font-weight:700;
-                text-align:center;
-                background:#ffffff;
-                color:#222222;
-                box-shadow:0 1px 4px rgba(0,0,0,0.06);
-            ">
-                🔐 Entrar com Google
-            </a>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.caption("O login será aberto em nova aba. Depois volte para esta aba.")
-    else:
-        st.error("Não foi possível gerar o link de login com Google.")
+    render_google_login_top()
 
 
 if "selected_lat" not in st.session_state:
@@ -380,10 +353,8 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
+# Mantido como no fluxo antigo que funcionava:
 handle_oauth_callback()
-
-if st.session_state.get("auth_logged_in"):
-    clear_google_login_url()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
@@ -413,6 +384,7 @@ with right_col_left:
 with right_col_right:
     if user_logged_in and user_id:
         _render_wallet_summary()
+        render_google_login_top()
     else:
         render_google_login_top()
 
