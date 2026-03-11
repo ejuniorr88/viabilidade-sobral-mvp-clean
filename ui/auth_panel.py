@@ -23,16 +23,33 @@ def _user_email() -> str:
     return st.session_state.get("auth_user_email") or "-"
 
 
+def get_or_create_google_login_url() -> Optional[str]:
+    """
+    Regra importante:
+    NÃO gerar uma nova URL OAuth a cada rerender do Streamlit.
+    A URL é criada uma vez e reutilizada até o login concluir.
+    """
+    cached = st.session_state.get("google_login_url")
+    if cached:
+        return cached
+
+    auth_url = start_google_login()
+    if auth_url:
+        st.session_state["google_login_url"] = auth_url
+    return auth_url
+
+
+def clear_google_login_url() -> None:
+    st.session_state.pop("google_login_url", None)
+
+
 def render_google_login_cta(
     label: str = "Entrar com Google",
     *,
     full_width: bool = False,
     message: Optional[str] = None,
 ) -> None:
-    # Mantido o mesmo fluxo estável:
-    # gera a URL via core.auth.start_google_login()
-    # e abre em nova aba via target="_blank"
-    auth_url = start_google_login()
+    auth_url = get_or_create_google_login_url()
     if not auth_url:
         st.error("Não foi possível iniciar o login com Google.")
         return
@@ -67,13 +84,14 @@ def render_google_login_cta(
 
 
 def render_google_login_top() -> None:
-    # Regra do patch:
-    # este bloco deve cuidar SOMENTE de login/logout.
-    # A frase institucional deve ficar fora daqui para não duplicar.
+    # Este bloco agora cuida somente de login/logout.
+    # A frase institucional deve ficar apenas no app.py.
     if _is_logged_in():
+        clear_google_login_url()
         st.success(f"{_user_name()} • {_user_email()}")
         if st.button("Sair", key="btn_logout_top", use_container_width=True):
             sign_out_current_user()
+            clear_google_login_url()
             st.rerun()
     else:
         render_google_login_cta("Entrar com Google", full_width=True)
@@ -89,9 +107,11 @@ def render_google_login_box(
     st.subheader(title)
 
     if _is_logged_in():
+        clear_google_login_url()
         st.success(f"Você já está logado como {_user_name()}.")
         if st.button("Sair", key="btn_logout_box", use_container_width=True):
             sign_out_current_user()
+            clear_google_login_url()
             st.rerun()
         return
 
