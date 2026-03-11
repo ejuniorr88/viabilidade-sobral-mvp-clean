@@ -29,6 +29,9 @@ def render_google_login_cta(
     full_width: bool = False,
     message: Optional[str] = None,
 ) -> None:
+    # Mantido o mesmo fluxo estável:
+    # gera a URL via core.auth.start_google_login()
+    # e abre em nova aba via target="_blank"
     auth_url = start_google_login()
     if not auth_url:
         st.error("Não foi possível iniciar o login com Google.")
@@ -64,9 +67,9 @@ def render_google_login_cta(
 
 
 def render_google_login_top() -> None:
-    # Ajuste importante:
-    # este bloco agora cuida SOMENTE de login/logout.
-    # a frase institucional fica apenas no app.py para evitar duplicação.
+    # Regra do patch:
+    # este bloco deve cuidar SOMENTE de login/logout.
+    # A frase institucional deve ficar fora daqui para não duplicar.
     if _is_logged_in():
         st.success(f"{_user_name()} • {_user_email()}")
         if st.button("Sair", key="btn_logout_top", use_container_width=True):
