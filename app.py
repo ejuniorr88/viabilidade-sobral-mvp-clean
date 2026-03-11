@@ -66,7 +66,6 @@ def _inject_global_styles() -> None:
             max-width: 100% !important;
         }
 
-        /* Topo estável, sem forçar largura maior que a tela */
         .vf-topbar {
             position: sticky;
             top: 0;
@@ -76,16 +75,23 @@ def _inject_global_styles() -> None:
             border-radius: 16px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.03);
             margin-bottom: 1.5rem;
-            overflow: visible;
         }
 
         .vf-topbar-inner {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: space-between;
             gap: 18px;
             flex-wrap: wrap;
             padding: 18px 22px;
+        }
+
+        .vf-topbar-left {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+            min-width: 280px;
         }
 
         .vf-brand {
@@ -94,8 +100,6 @@ def _inject_global_styles() -> None:
             color: #1f2a44;
             letter-spacing: -0.02em;
             line-height: 1.1;
-            position: relative;
-            z-index: 2;
         }
 
         .vf-links {
@@ -103,9 +107,6 @@ def _inject_global_styles() -> None:
             gap: 24px;
             flex-wrap: wrap;
             align-items: center;
-            justify-content: flex-end;
-            position: relative;
-            z-index: 2;
         }
 
         .vf-link {
@@ -122,7 +123,7 @@ def _inject_global_styles() -> None:
             font-weight: 800;
             color: #1f2a44;
             margin-top: 1.8rem;
-            margin-bottom: 1.4rem;
+            margin-bottom: 1.2rem;
             width: 100%;
         }
 
@@ -179,7 +180,6 @@ def _inject_global_styles() -> None:
             margin-bottom: 12px;
         }
 
-        /* Sidebar */
         section[data-testid="stSidebar"] {
             background: #eef0f3;
             border-right: 1px solid #d9dee5;
@@ -213,7 +213,6 @@ def _inject_global_styles() -> None:
             margin: 16px 0 18px 0;
         }
 
-        /* Evita barra horizontal */
         html, body, [data-testid="stAppViewContainer"], .main {
             overflow-x: hidden !important;
         }
@@ -222,10 +221,6 @@ def _inject_global_styles() -> None:
             .vf-topbar-inner {
                 flex-direction: column;
                 align-items: flex-start;
-            }
-
-            .vf-links {
-                justify-content: flex-start;
             }
 
             .vf-wallet-grid {
@@ -247,12 +242,14 @@ def _render_top_nav() -> None:
         """
         <div class="vf-topbar">
           <div class="vf-topbar-inner">
-            <div class="vf-brand">Viabilidade Fácil</div>
-            <div class="vf-links">
-              <span class="vf-link">Como funciona</span>
-              <span class="vf-link">Área do cliente</span>
-              <span class="vf-link">Planos</span>
-              <span class="vf-link">Dúvidas/Suporte</span>
+            <div class="vf-topbar-left">
+              <div class="vf-brand">Viabilidade Fácil</div>
+              <div class="vf-links">
+                <span class="vf-link">Como funciona</span>
+                <span class="vf-link">Área do cliente</span>
+                <span class="vf-link">Planos</span>
+                <span class="vf-link">Dúvidas/Suporte</span>
+              </div>
             </div>
           </div>
         </div>
@@ -318,9 +315,6 @@ def _render_login_gate_block() -> None:
         st.error("Não foi possível gerar o link de login com Google.")
 
 
-# =========================================================
-# Session state base
-# =========================================================
 if "selected_lat" not in st.session_state:
     st.session_state.selected_lat = None
 if "selected_lon" not in st.session_state:
@@ -364,27 +358,23 @@ _render_top_nav()
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
 
-# Título centralizado em linha própria
 st.markdown('<div class="vf-main-title">Viabilidade Urbana</div>', unsafe_allow_html=True)
 
-# Linha de apoio / login / carteira sem duplicação
-info_col, action_col = st.columns([2.2, 1.2], gap="large")
-with info_col:
+# Frase única, sem duplicação
+right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
+with right_col_left:
     if not (user_logged_in and user_id):
         st.markdown(
             '<div class="vf-login-note">Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.</div>',
             unsafe_allow_html=True,
         )
 
-with action_col:
+with right_col_right:
     if user_logged_in and user_id:
         _render_wallet_summary()
     else:
         render_google_login_top()
 
-# =========================================================
-# Sidebar fixa com scroll nativo
-# =========================================================
 with st.sidebar:
     st.markdown("### 📋 1. Escolha o Uso")
 
@@ -446,9 +436,6 @@ with st.sidebar:
 
     lot_area, built_ground, permeable_area = render_lote_section()
 
-# =========================================================
-# Área principal
-# =========================================================
 st.markdown(
     '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
     unsafe_allow_html=True,
