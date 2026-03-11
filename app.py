@@ -61,21 +61,22 @@ def _inject_global_styles() -> None:
         """
         <style>
         .block-container {
-            padding-top: 0.8rem !important;
+            padding-top: 1rem !important;
             padding-bottom: 2rem !important;
+            max-width: 100% !important;
         }
 
-        /* Barra superior ponta a ponta */
-        .vf-topbar-bleed {
+        /* Topo estável, sem forçar largura maior que a tela */
+        .vf-topbar {
             position: sticky;
             top: 0;
             z-index: 999;
-            width: calc(100vw - 1.5rem);
-            margin-left: calc(50% - 50vw + 0.75rem);
-            margin-right: calc(50% - 50vw + 0.75rem);
             background: rgba(255,255,255,0.98);
-            border-bottom: 1px solid #e8e8e8;
+            border: 1px solid #e8e8e8;
+            border-radius: 16px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+            margin-bottom: 1.5rem;
+            overflow: visible;
         }
 
         .vf-topbar-inner {
@@ -84,7 +85,7 @@ def _inject_global_styles() -> None:
             justify-content: space-between;
             gap: 18px;
             flex-wrap: wrap;
-            padding: 18px 24px;
+            padding: 18px 22px;
         }
 
         .vf-brand {
@@ -92,13 +93,19 @@ def _inject_global_styles() -> None:
             font-weight: 800;
             color: #1f2a44;
             letter-spacing: -0.02em;
+            line-height: 1.1;
+            position: relative;
+            z-index: 2;
         }
 
         .vf-links {
             display: flex;
-            gap: 28px;
+            gap: 24px;
             flex-wrap: wrap;
             align-items: center;
+            justify-content: flex-end;
+            position: relative;
+            z-index: 2;
         }
 
         .vf-link {
@@ -106,16 +113,17 @@ def _inject_global_styles() -> None:
             text-decoration: underline;
             font-weight: 600;
             font-size: 15px;
+            white-space: nowrap;
         }
 
-        /* Título principal mais abaixo e centralizado */
         .vf-main-title {
             text-align: center;
             font-size: 42px;
             font-weight: 800;
             color: #1f2a44;
-            margin-top: 2.8rem;
-            margin-bottom: 1.6rem;
+            margin-top: 1.8rem;
+            margin-bottom: 1.4rem;
+            width: 100%;
         }
 
         .vf-section-title {
@@ -171,14 +179,14 @@ def _inject_global_styles() -> None:
             margin-bottom: 12px;
         }
 
-        /* Sidebar fixa e visual abaixo da barra superior */
+        /* Sidebar */
         section[data-testid="stSidebar"] {
             background: #eef0f3;
             border-right: 1px solid #d9dee5;
         }
 
         section[data-testid="stSidebar"] .block-container {
-            padding-top: 5.4rem !important;
+            padding-top: 4.8rem !important;
             padding-bottom: 1.5rem !important;
         }
 
@@ -205,10 +213,19 @@ def _inject_global_styles() -> None:
             margin: 16px 0 18px 0;
         }
 
+        /* Evita barra horizontal */
+        html, body, [data-testid="stAppViewContainer"], .main {
+            overflow-x: hidden !important;
+        }
+
         @media (max-width: 1100px) {
             .vf-topbar-inner {
                 flex-direction: column;
                 align-items: flex-start;
+            }
+
+            .vf-links {
+                justify-content: flex-start;
             }
 
             .vf-wallet-grid {
@@ -216,7 +233,7 @@ def _inject_global_styles() -> None:
             }
 
             .vf-main-title {
-                margin-top: 2rem;
+                margin-top: 1.4rem;
             }
         }
         </style>
@@ -228,7 +245,7 @@ def _inject_global_styles() -> None:
 def _render_top_nav() -> None:
     st.markdown(
         """
-        <div class="vf-topbar-bleed">
+        <div class="vf-topbar">
           <div class="vf-topbar-inner">
             <div class="vf-brand">Viabilidade Fácil</div>
             <div class="vf-links">
@@ -347,18 +364,22 @@ _render_top_nav()
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
 
-title_col, right_col = st.columns([2.3, 2.0], gap="large")
-with title_col:
-    st.markdown('<div class="vf-main-title">Viabilidade Urbana</div>', unsafe_allow_html=True)
+# Título centralizado em linha própria
+st.markdown('<div class="vf-main-title">Viabilidade Urbana</div>', unsafe_allow_html=True)
 
-with right_col:
-    if user_logged_in and user_id:
-        _render_wallet_summary()
-    else:
+# Linha de apoio / login / carteira sem duplicação
+info_col, action_col = st.columns([2.2, 1.2], gap="large")
+with info_col:
+    if not (user_logged_in and user_id):
         st.markdown(
             '<div class="vf-login-note">Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.</div>',
             unsafe_allow_html=True,
         )
+
+with action_col:
+    if user_logged_in and user_id:
+        _render_wallet_summary()
+    else:
         render_google_login_top()
 
 # =========================================================
