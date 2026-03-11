@@ -41,7 +41,7 @@ def render_google_login_cta(
 
     st.markdown(
         f"""
-        <a href="{auth_url}" target="_self" style="
+        <a href="{auth_url}" target="_blank" rel="noopener noreferrer" style="
             display:inline-block;
             {width_style}
             padding:10px 16px;
@@ -50,6 +50,8 @@ def render_google_login_cta(
             border:1px solid #d9d9d9;
             font-weight:600;
             text-align:center;
+            background:white;
+            color:inherit;
         ">
             {label}
         </a>
