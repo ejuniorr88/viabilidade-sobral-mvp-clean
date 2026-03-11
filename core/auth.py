@@ -15,10 +15,6 @@ def get_supabase_auth_client() -> Client:
 
 
 def get_app_url() -> str:
-    """
-    Usa APP_URL das secrets e normaliza para evitar diferenças bobas
-    de barra final / caminho vazio.
-    """
     raw = st.secrets.get("APP_URL", "http://localhost:8501").strip()
     if not raw:
         raw = "http://localhost:8501"
@@ -28,6 +24,10 @@ def get_app_url() -> str:
         return "http://localhost:8501"
 
     return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def get_google_web_client_id() -> str:
+    return st.secrets["GOOGLE_WEB_CLIENT_ID"]
 
 
 def safe_get_query_param(name: str) -> Optional[str]:
@@ -45,15 +45,13 @@ def safe_get_query_param(name: str) -> Optional[str]:
 
 
 def clear_auth_query_params() -> None:
-    """
-    Limpa os params comuns do fluxo OAuth.
-    """
     keys_to_remove = [
         "code",
         "error",
         "error_code",
         "error_description",
         "state",
+        "google_id_token",
     ]
 
     try:
@@ -130,13 +128,44 @@ def sync_user_from_current_session() -> None:
     clear_user_in_state()
 
 
+def _complete_sign_in_with_google_id_token(id_token: str) -> bool:
+    supabase = get_supabase_auth_client()
+
+    response = supabase.auth.sign_in_with_id_token(
+        {
+            "provider": "google",
+            "token": id_token,
+        }
+    )
+
+    user_obj = getattr(response, "user", None)
+    session_obj = getattr(response, "session", None)
+
+    if user_obj is None and isinstance(response, dict):
+        user_obj = response.get("user")
+        session_obj = response.get("session")
+
+    if user_obj is None and session_obj is not None:
+        user_obj = getattr(session_obj, "user", None)
+        if user_obj is None and isinstance(session_obj, dict):
+            user_obj = session_obj.get("user")
+
+    if user_obj is None:
+        sync_user_from_current_session()
+        return bool(st.session_state.get("auth_logged_in"))
+
+    store_user_in_state(user_obj)
+    return True
+
+
 def handle_oauth_callback() -> None:
     """
-    Processa callback do Google vindo do Supabase.
-    Também trata cenários de erro retornados na query string.
+    Agora prioriza login via google_id_token retornado pelo botão oficial do Google.
+    Mantém fallback para o fluxo antigo com code.
     """
     error = safe_get_query_param("error")
     error_description = safe_get_query_param("error_description")
+    google_id_token = safe_get_query_param("google_id_token")
     code = safe_get_query_param("code")
 
     if error:
@@ -148,10 +177,30 @@ def handle_oauth_callback() -> None:
         clear_auth_query_params()
         return
 
+    if google_id_token:
+        if st.session_state.get("last_google_id_token") == google_id_token:
+            return
+
+        try:
+            ok = _complete_sign_in_with_google_id_token(google_id_token)
+            if ok:
+                st.session_state["auth_message"] = "Login efetuado com sucesso."
+                st.session_state["last_google_id_token"] = google_id_token
+            else:
+                clear_user_in_state()
+                st.session_state["auth_message"] = "Não foi possível concluir o login com Google."
+        except Exception as e:
+            clear_user_in_state()
+            st.session_state["auth_message"] = f"Erro ao concluir o login Google: {e}"
+
+        clear_auth_query_params()
+        st.rerun()
+        return
+
+    # Fallback legado, caso você ainda use alguma rota antiga
     if not code:
         return
 
-    # evita repetir o mesmo code várias vezes na mesma sessão
     if st.session_state.get("last_oauth_code") == code:
         return
 
@@ -172,7 +221,6 @@ def handle_oauth_callback() -> None:
             if user_obj is None and isinstance(session_obj, dict):
                 user_obj = session_obj.get("user")
 
-        # fallback: tenta sincronizar da sessão atual do supabase
         if user_obj is None:
             sync_user_from_current_session()
             if st.session_state.get("auth_logged_in"):
@@ -203,25 +251,9 @@ def handle_oauth_callback() -> None:
 
 def start_google_login() -> Optional[str]:
     """
-    Inicia o login Google via Supabase.
+    Mantido só por compatibilidade. O fluxo novo usa botão GIS, não redirect OAuth.
     """
-    supabase = get_supabase_auth_client()
-    redirect_to = get_app_url()
-
-    response = supabase.auth.sign_in_with_oauth(
-        {
-            "provider": "google",
-            "options": {
-                "redirect_to": redirect_to,
-            },
-        }
-    )
-
-    if hasattr(response, "url"):
-        return response.url
-    if isinstance(response, dict):
-        return response.get("url")
-    return None
+    return get_app_url()
 
 
 def sign_out_current_user() -> None:
@@ -239,6 +271,7 @@ def sign_out_current_user() -> None:
         "auth_user_id",
         "auth_message",
         "last_oauth_code",
+        "last_google_id_token",
         "post_login_action",
         "pending_login_reason",
     ]:
