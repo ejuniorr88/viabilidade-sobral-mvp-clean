@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
-st.write("APP VERSION MARKER: 2026-03-11-LAYOUT-REORGANIZED-V1")
+st.write("APP VERSION MARKER: 2026-03-11-LAYOUT-REORGANIZED-V2")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -39,7 +39,6 @@ from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback, start_google_login
 from ui.auth_panel import render_google_login_top
-from ui.credits_panel import render_credits_panel
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
 
@@ -93,22 +92,45 @@ def _render_login_gate_block() -> None:
         st.error("Não foi possível gerar o link de login com Google.")
 
 
-def _render_top_nav() -> None:
+def _inject_global_styles() -> None:
     """
-    Menu superior visual.
-    Mantido separado da lógica de autenticação para não quebrar o fluxo já consolidado.
+    CSS global do layout.
+    Comentário importante:
+    aqui entram apenas ajustes visuais, sem mexer na lógica consolidada.
     """
     st.markdown(
         """
         <style>
+        .block-container {
+            padding-top: 7.5rem !important;
+            padding-bottom: 2rem !important;
+        }
+
+        .vf-fixed-topbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 999;
+            background: rgba(255,255,255,0.98);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid #ececec;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+        }
+
+        .vf-topbar-inner {
+            max-width: 1700px;
+            margin: 0 auto;
+            padding: 8px 16px;
+        }
+
         .vf-nav-wrap {
             background: #ffffff;
             border: 1px solid #ececec;
-            border-radius: 14px;
-            padding: 14px 22px;
-            margin-bottom: 18px;
-            box-shadow: 0 1px 6px rgba(0,0,0,0.03);
+            border-radius: 16px;
+            padding: 18px 22px;
         }
+
         .vf-nav {
             display: flex;
             align-items: center;
@@ -116,90 +138,247 @@ def _render_top_nav() -> None:
             gap: 16px;
             flex-wrap: wrap;
         }
+
         .vf-brand {
-            font-size: 30px;
+            font-size: 28px;
             font-weight: 800;
             color: #1f2a44;
             letter-spacing: -0.02em;
         }
+
         .vf-links {
             display: flex;
-            gap: 26px;
+            gap: 30px;
             flex-wrap: wrap;
             align-items: center;
         }
+
         .vf-link {
-            color: #24324a;
-            text-decoration: none;
+            color: #1d4ed8;
+            text-decoration: underline;
             font-weight: 600;
             font-size: 15px;
         }
-        .vf-link:hover {
-            color: #d94b4b;
-        }
+
         .vf-main-title {
             text-align: center;
             font-size: 42px;
             font-weight: 800;
             color: #1f2a44;
             margin-top: 6px;
-            margin-bottom: 16px;
+            margin-bottom: 10px;
         }
-        .vf-section-card {
-            background: #f8f9fb;
-            border: 1px solid #eceef3;
-            border-radius: 14px;
-            padding: 16px;
-            margin-bottom: 14px;
-        }
+
         .vf-section-title {
             font-size: 26px;
             font-weight: 800;
             color: #24324a;
             margin-bottom: 12px;
         }
-        .vf-subtitle {
-            font-size: 15px;
-            color: #5f6b7a;
-            margin-top: -6px;
-            margin-bottom: 12px;
+
+        .vf-wallet-wrap {
+            margin-top: 8px;
+            margin-bottom: 14px;
         }
-        .vf-label {
-            font-size: 15px;
-            font-weight: 700;
+
+        .vf-wallet-title {
+            font-size: 18px;
+            font-weight: 800;
             color: #24324a;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
-        .vf-divider {
-            border-top: 1px solid #e9e9e9;
-            margin: 18px 0;
+
+        .vf-wallet-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
         }
-        .vf-badge-soon {
-            display: inline-block;
+
+        .vf-wallet-card {
+            background: #ffffff;
+            border: 1px solid #e8e8e8;
+            border-radius: 14px;
+            padding: 12px 14px;
+            min-height: 84px;
+        }
+
+        .vf-wallet-label {
             font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 6px;
+        }
+
+        .vf-wallet-value {
+            font-size: 17px;
+            font-weight: 700;
+            color: #1f2a44;
+            word-break: break-word;
+            line-height: 1.25;
+        }
+
+        .vf-soon {
+            display: inline-block;
+            margin-left: 6px;
+            font-size: 11px;
             font-weight: 700;
             color: #b85b00;
             background: #fff4e8;
             border: 1px solid #ffd3a8;
             border-radius: 999px;
-            padding: 3px 9px;
-            margin-left: 8px;
+            padding: 2px 8px;
+            vertical-align: middle;
+        }
+
+        /* Ajustes visuais da coluna esquerda */
+        [data-testid="column"] .stSelectbox,
+        [data-testid="column"] .stTextInput {
+            margin-bottom: 2px;
+        }
+
+        [data-testid="column"] .stSelectbox > div,
+        [data-testid="column"] .stTextInput > div {
+            width: 100%;
+        }
+
+        /* Ajuda a deixar os controles do lote mais alinhados visualmente */
+        [data-testid="column"] [data-testid="stNumberInput"] {
+            margin-bottom: 8px;
+        }
+
+        @media (max-width: 1100px) {
+            .vf-wallet-grid {
+                grid-template-columns: 1fr;
+            }
+            .vf-nav {
+                flex-direction: column;
+                align-items: flex-start;
+            }
         }
         </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        <div class="vf-nav-wrap">
-          <div class="vf-nav">
-            <div class="vf-brand">Viabilidade Fácil</div>
-            <div class="vf-links">
-              <a class="vf-link" href="#">Como funciona</a>
-              <a class="vf-link" href="#">Área do cliente</a>
-              <a class="vf-link" href="#">Planos</a>
-              <a class="vf-link" href="#">Dúvidas/Suporte</a>
+
+def _render_top_nav() -> None:
+    """
+    Topo fixo.
+    """
+    st.markdown(
+        """
+        <div class="vf-fixed-topbar">
+          <div class="vf-topbar-inner">
+            <div class="vf-nav-wrap">
+              <div class="vf-nav">
+                <div class="vf-brand">Viabilidade Fácil</div>
+                <div class="vf-links">
+                  <a class="vf-link" href="#">Como funciona</a>
+                  <a class="vf-link" href="#">Área do cliente</a>
+                  <a class="vf-link" href="#">Planos</a>
+                  <a class="vf-link" href="#">Dúvidas/Suporte</a>
+                </div>
+              </div>
             </div>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
+    )
+
+
+def _render_wallet_summary() -> None:
+    """
+    Minha carteira discreta.
+    Mostra só usuário, e-mail e saldo.
+    """
+    user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
+    user_email = st.session_state.get("auth_user_email") or st.session_state.get("auth_email") or "—"
+    user_id = st.session_state.get("auth_user_id")
+    user_logged_in = bool(st.session_state.get("auth_logged_in"))
+
+    saldo = "—"
+    if user_logged_in and user_id:
+        try:
+            saldo = str(get_credit_balance(user_id))
+        except Exception:
+            saldo = "—"
+
+    st.markdown(
+        f"""
+        <div class="vf-wallet-wrap">
+          <div class="vf-wallet-title">Minha carteira</div>
+          <div class="vf-wallet-grid">
+            <div class="vf-wallet-card">
+              <div class="vf-wallet-label">Usuário</div>
+              <div class="vf-wallet-value">{user_name}</div>
+            </div>
+            <div class="vf-wallet-card">
+              <div class="vf-wallet-label">E-mail</div>
+              <div class="vf-wallet-value">{user_email}</div>
+            </div>
+            <div class="vf-wallet-card">
+              <div class="vf-wallet-label">Saldo de créditos</div>
+              <div class="vf-wallet-value">{saldo}</div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _hide_duplicate_project_field_js() -> None:
+    """
+    Oculta visualmente o campo 'Tipo de projeto' que aparece no bloco inferior
+    do lote, já que a escolha agora fica em 'Opções na Categoria'.
+
+    Comentário importante:
+    isso é apenas ocultação visual, sem alterar a lógica consolidada.
+    """
+    components.html(
+        """
+        <script>
+        const rootDoc = window.parent.document;
+
+        function hideByText() {
+          const all = rootDoc.querySelectorAll('label, div, p');
+          all.forEach((el) => {
+            const txt = (el.innerText || '').trim();
+            if (txt === 'Tipo de projeto') {
+              let container = el;
+              for (let i = 0; i < 6; i++) {
+                if (!container) break;
+                container = container.parentElement;
+              }
+              if (container) {
+                container.style.display = 'none';
+              }
+            }
+          });
+
+          const selects = rootDoc.querySelectorAll('[data-baseweb="select"]');
+          selects.forEach((sel) => {
+            const parentText = (sel.parentElement?.innerText || '');
+            if (
+              parentText.includes('Residencial Unifamiliar (RES_UNI)') ||
+              parentText.includes('Multifamiliar R2.1') ||
+              parentText.includes('Multifamiliar R2.2') ||
+              parentText.includes('Multifamiliar R3')
+            ) {
+              const wrap = sel.closest('[data-testid="stVerticalBlock"]') || sel.parentElement;
+              if (wrap && parentText.includes('Tipo de projeto')) {
+                wrap.style.display = 'none';
+              }
+            }
+          });
+        }
+
+        hideByText();
+        setTimeout(hideByText, 300);
+        setTimeout(hideByText, 1000);
+        </script>
+        """,
+        height=0,
     )
 
 
@@ -245,19 +424,20 @@ zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
 
 # =========================================================
-# Topo
+# Topo + estilos
 # =========================================================
+_inject_global_styles()
 _render_top_nav()
 
-top_left, top_right = st.columns([2, 1])
-with top_left:
+title_col, wallet_col = st.columns([2.3, 2.0], gap="large")
+with title_col:
     st.markdown('<div class="vf-main-title">Viabilidade Urbana</div>', unsafe_allow_html=True)
-with top_right:
+with wallet_col:
     render_google_login_top()
-    render_credits_panel(_card)
+    _render_wallet_summary()
 
 # =========================================================
-# Layout principal: sidebar visual + conteúdo
+# Layout principal
 # =========================================================
 sidebar_col, main_col = st.columns([1.05, 3.25], gap="large")
 
@@ -308,13 +488,9 @@ with sidebar_col:
     st.markdown("---")
 
     st.markdown("### 3. Dados do Lote")
-    st.caption(
-        "Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular."
-    )
+    st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
 
-    # Comentário importante:
-    # render_lote_section continua sendo usado para preservar a lógica consolidada
-    # de dados do lote, inclusive terreno irregular.
+    # Mantém o bloco funcional consolidado
     lot_area, built_ground, permeable_area = render_lote_section()
 
 with main_col:
@@ -340,8 +516,6 @@ with main_col:
         )
 
         if limpar_tudo:
-            # Comentário importante:
-            # limpeza controlada do estado, preservando a estrutura base.
             st.session_state.selected_lat = None
             st.session_state.selected_lon = None
             st.session_state.calc = {"use_type_code": st.session_state.calc.get("use_type_code", "RES_UNI")}
@@ -354,6 +528,11 @@ with main_col:
             st.session_state.post_login_action = None
             st.session_state.show_inline_payments = False
             st.rerun()
+
+# =========================================================
+# Oculta visualmente o campo duplicado do tipo de projeto
+# =========================================================
+_hide_duplicate_project_field_js()
 
 # =========================================================
 # Dados base do lote
@@ -378,7 +557,6 @@ current_signature = json.dumps(
     default=str,
 )
 
-# Se mudou algum dado do estudo, invalida cálculo gratuito e relatório pago
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
     st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
@@ -411,7 +589,6 @@ if clicked_calcular:
             run_free_calc_now = True
             st.session_state.scroll_to_item3 = True
 
-# Continuação automática após login
 if (
     st.session_state.get("post_login_action") == "calculate_viability"
     and user_logged_in
@@ -423,21 +600,19 @@ if (
     st.session_state.show_login_gate = False
     st.session_state.scroll_to_item3 = True
 
-# Bloco inferior de login
 if st.session_state.get("show_login_gate") and not (user_logged_in and user_id):
     _render_login_gate_block()
     st.divider()
 
 # =========================================================
 # Âncora do item 3
-# O item 3 só aparece depois do cálculo
 # =========================================================
 st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
 
 show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
 
 # =========================================================
-# Cálculo gratuito (somente logado)
+# Cálculo gratuito
 # =========================================================
 if run_free_calc_now:
     st.session_state.report_unlocked = False
@@ -468,7 +643,7 @@ elif show_item3:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
 
 # =========================================================
-# Parte gratuita: mostrar apenas depois do cálculo
+# Parte gratuita
 # =========================================================
 if st.session_state.get("free_calc_done"):
     render_indices_section(
@@ -479,7 +654,7 @@ if st.session_state.get("free_calc_done"):
     )
 
 # =========================================================
-# Botão para gerar relatório (parte paga)
+# Relatório pago
 # =========================================================
 can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
@@ -547,13 +722,12 @@ if can_offer_report:
                 st.session_state.show_inline_payments = True
                 st.error(f"Não foi possível descontar o crédito: {e}")
 
-    # Planos inline logo abaixo do botão de relatório
     if st.session_state.get("show_inline_payments"):
         st.markdown("### Comprar créditos")
         render_payments_panel()
 
 # =========================================================
-# Parte paga: item 5 + relatório final
+# Parte paga final
 # =========================================================
 if st.session_state.get("report_unlocked") and can_offer_report:
     st.markdown("---")
@@ -569,7 +743,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
     render_relatorio_section(calc)
 
 # =========================================================
-# Scroll isolado para o login inferior
+# Scrolls
 # =========================================================
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
@@ -586,9 +760,6 @@ if st.session_state.get("scroll_to_login_gate"):
     )
     st.session_state.scroll_to_login_gate = False
 
-# =========================================================
-# Scroll isolado para o começo do item 3
-# =========================================================
 if st.session_state.get("scroll_to_item3"):
     components.html(
         """
