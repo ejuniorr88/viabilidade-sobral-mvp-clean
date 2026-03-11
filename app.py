@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 import streamlit as st
 
-st.write("APP VERSION MARKER: 2026-03-10-AUTH-REUSE-V9")
+st.write("APP VERSION MARKER: 2026-03-10-AUTH-DEBUG-V1")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -30,7 +30,11 @@ try:
 except Exception:
     from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
 
-from core.auth import handle_oauth_callback
+from core.auth import (
+    handle_oauth_callback,
+    get_auth_debug_logs,
+    clear_auth_debug_logs,
+)
 from core.credits import consume_viability_credit, get_credit_balance
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.credits_panel import render_credits_panel
@@ -177,8 +181,28 @@ zones_prepared = _zones_prepared()
 
 st.title("Viabilidade")
 render_google_login_top()
+
+if st.session_state.get("auth_message"):
+    st.info(st.session_state["auth_message"])
+
 render_credits_panel(_card)
 render_payments_panel()
+
+with st.expander("DEBUG AUTH"):
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.write("APP_URL secret:", st.secrets.get("APP_URL"))
+        st.write("Auth logged in:", st.session_state.get("auth_logged_in"))
+        st.write("Auth user email:", st.session_state.get("auth_user_email"))
+        st.write("Auth user id:", st.session_state.get("auth_user_id"))
+        st.write("Post login action:", st.session_state.get("post_login_action"))
+    with c2:
+        if st.button("Limpar logs auth", key="btn_clear_auth_debug"):
+            clear_auth_debug_logs()
+            st.rerun()
+
+    st.json(get_auth_debug_logs())
+
 st.divider()
 
 # =========================================================
@@ -251,7 +275,7 @@ else:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
 
 # =========================================================
-# Login inferior reutilizando a mesma lógica do topo
+# Login inferior
 # =========================================================
 if (not user_logged_in) and st.session_state.get("post_login_action") in ("calculate_viability", "generate_report"):
     render_google_login_box(
