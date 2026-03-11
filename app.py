@@ -9,10 +9,6 @@ import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
-st.write("APP VERSION MARKER: 2026-03-11-LAYOUT-REORGANIZED-V2")
-st.write("CWD:", os.getcwd())
-st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
-
 DATA_DIR = Path("data")
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
 
@@ -95,8 +91,7 @@ def _render_login_gate_block() -> None:
 def _inject_global_styles() -> None:
     """
     CSS global do layout.
-    Comentário importante:
-    aqui entram apenas ajustes visuais, sem mexer na lógica consolidada.
+    Apenas ajustes visuais.
     """
     st.markdown(
         """
@@ -216,20 +211,6 @@ def _inject_global_styles() -> None:
             line-height: 1.25;
         }
 
-        .vf-soon {
-            display: inline-block;
-            margin-left: 6px;
-            font-size: 11px;
-            font-weight: 700;
-            color: #b85b00;
-            background: #fff4e8;
-            border: 1px solid #ffd3a8;
-            border-radius: 999px;
-            padding: 2px 8px;
-            vertical-align: middle;
-        }
-
-        /* Ajustes visuais da coluna esquerda */
         [data-testid="column"] .stSelectbox,
         [data-testid="column"] .stTextInput {
             margin-bottom: 2px;
@@ -240,7 +221,6 @@ def _inject_global_styles() -> None:
             width: 100%;
         }
 
-        /* Ajuda a deixar os controles do lote mais alinhados visualmente */
         [data-testid="column"] [data-testid="stNumberInput"] {
             margin-bottom: 8px;
         }
@@ -261,9 +241,6 @@ def _inject_global_styles() -> None:
 
 
 def _render_top_nav() -> None:
-    """
-    Topo fixo.
-    """
     st.markdown(
         """
         <div class="vf-fixed-topbar">
@@ -324,61 +301,6 @@ def _render_wallet_summary() -> None:
         </div>
         """,
         unsafe_allow_html=True,
-    )
-
-
-def _hide_duplicate_project_field_js() -> None:
-    """
-    Oculta visualmente o campo 'Tipo de projeto' que aparece no bloco inferior
-    do lote, já que a escolha agora fica em 'Opções na Categoria'.
-
-    Comentário importante:
-    isso é apenas ocultação visual, sem alterar a lógica consolidada.
-    """
-    components.html(
-        """
-        <script>
-        const rootDoc = window.parent.document;
-
-        function hideByText() {
-          const all = rootDoc.querySelectorAll('label, div, p');
-          all.forEach((el) => {
-            const txt = (el.innerText || '').trim();
-            if (txt === 'Tipo de projeto') {
-              let container = el;
-              for (let i = 0; i < 6; i++) {
-                if (!container) break;
-                container = container.parentElement;
-              }
-              if (container) {
-                container.style.display = 'none';
-              }
-            }
-          });
-
-          const selects = rootDoc.querySelectorAll('[data-baseweb="select"]');
-          selects.forEach((sel) => {
-            const parentText = (sel.parentElement?.innerText || '');
-            if (
-              parentText.includes('Residencial Unifamiliar (RES_UNI)') ||
-              parentText.includes('Multifamiliar R2.1') ||
-              parentText.includes('Multifamiliar R2.2') ||
-              parentText.includes('Multifamiliar R3')
-            ) {
-              const wrap = sel.closest('[data-testid="stVerticalBlock"]') || sel.parentElement;
-              if (wrap && parentText.includes('Tipo de projeto')) {
-                wrap.style.display = 'none';
-              }
-            }
-          });
-        }
-
-        hideByText();
-        setTimeout(hideByText, 300);
-        setTimeout(hideByText, 1000);
-        </script>
-        """,
-        height=0,
     )
 
 
@@ -528,11 +450,6 @@ with main_col:
             st.session_state.post_login_action = None
             st.session_state.show_inline_payments = False
             st.rerun()
-
-# =========================================================
-# Oculta visualmente o campo duplicado do tipo de projeto
-# =========================================================
-_hide_duplicate_project_field_js()
 
 # =========================================================
 # Dados base do lote
