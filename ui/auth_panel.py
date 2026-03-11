@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-import json
 import streamlit as st
-import streamlit.components.v1 as components
 
-from core.auth import get_app_url, get_google_web_client_id, sign_out_current_user
+from core.auth import start_google_login, sign_out_current_user
 
 
 def _is_logged_in() -> bool:
@@ -25,80 +23,39 @@ def _user_email() -> str:
     return st.session_state.get("auth_user_email") or "-"
 
 
-def _render_google_gis_button(
+def render_google_login_cta(
+    label: str = "Entrar com Google",
     *,
-    block_id: str,
-    button_text: str,
-    message: Optional[str] = None,
     full_width: bool = False,
+    message: Optional[str] = None,
 ) -> None:
+    auth_url = start_google_login()
+    if not auth_url:
+        st.error("Não foi possível iniciar o login com Google.")
+        return
+
     if message:
         st.info(message)
 
-    client_id = get_google_web_client_id()
-    app_url = get_app_url()
+    width_style = "width:100%;" if full_width else ""
 
-    width_style = "width:100%;" if full_width else "width:auto;"
-
-    html = f"""
-    <div id="google-login-wrap-{block_id}">
-      <div id="g_id_onload_{block_id}"
-           data-client_id="{client_id}"
-           data-auto_prompt="false"></div>
-
-      <button id="google-btn-{block_id}" style="
-          {width_style}
-          padding:10px 16px;
-          border-radius:10px;
-          border:1px solid #d9d9d9;
-          background:white;
-          cursor:pointer;
-          font-weight:600;
-      ">{button_text}</button>
-    </div>
-
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script>
-      (function() {{
-        const appUrl = {json.dumps(app_url)};
-        const clientId = {json.dumps(client_id)};
-        const btn = document.getElementById("google-btn-{block_id}");
-
-        function handleCredentialResponse(response) {{
-          if (!response || !response.credential) {{
-            return;
-          }}
-          const token = encodeURIComponent(response.credential);
-          const target = appUrl + "?google_id_token=" + token;
-          window.top.location.href = target;
-        }}
-
-        function initGoogle() {{
-          if (!window.google || !window.google.accounts || !window.google.accounts.id) {{
-            setTimeout(initGoogle, 300);
-            return;
-          }}
-
-          window.google.accounts.id.initialize({{
-            client_id: clientId,
-            callback: handleCredentialResponse,
-            auto_select: false,
-            cancel_on_tap_outside: true
-          }});
-
-          if (btn) {{
-            btn.onclick = function() {{
-              window.google.accounts.id.prompt();
-            }};
-          }}
-        }}
-
-        initGoogle();
-      }})();
-    </script>
-    """
-
-    components.html(html, height=90 if not message else 130)
+    st.markdown(
+        f"""
+        <a href="{auth_url}" target="_self" style="
+            display:inline-block;
+            {width_style}
+            padding:10px 16px;
+            border-radius:10px;
+            text-decoration:none;
+            border:1px solid #d9d9d9;
+            font-weight:600;
+            text-align:center;
+        ">
+            {label}
+        </a>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_google_login_top() -> None:
@@ -114,11 +71,7 @@ def render_google_login_top() -> None:
                 sign_out_current_user()
                 st.rerun()
         else:
-            _render_google_gis_button(
-                block_id="top",
-                button_text="Entrar com Google",
-                full_width=True,
-            )
+            render_google_login_cta("Entrar com Google", full_width=True)
 
 
 def render_google_login_box(
@@ -136,9 +89,8 @@ def render_google_login_box(
             st.rerun()
         return
 
-    _render_google_gis_button(
-        block_id="box",
-        button_text="Entrar com Google",
-        message=message,
+    render_google_login_cta(
+        "Entrar com Google",
         full_width=True,
+        message=message,
     )
