@@ -28,8 +28,9 @@ def render_google_login_cta(
     *,
     full_width: bool = False,
     message: Optional[str] = None,
+    force_select_account: bool = False,
 ) -> None:
-    auth_url = start_google_login()
+    auth_url = start_google_login(force_select_account=force_select_account)
 
     if message:
         st.info(message)
@@ -42,14 +43,43 @@ def render_google_login_cta(
     st.caption("O login abrirá em nova aba. Depois volte para esta página.")
 
 
-def render_google_login_top() -> None:
-    if _is_logged_in():
-        st.success(f"{_user_name()} • {_user_email()}")
-        if st.button("Sair", key="btn_logout_top", use_container_width=True):
+def _render_logged_in_box(prefix: str) -> None:
+    st.success(f"{_user_name()} • {_user_email()}")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Sair", key=f"btn_logout_{prefix}", use_container_width=True):
             sign_out_current_user()
             st.rerun()
+
+    with col2:
+        auth_url = start_google_login(force_select_account=True)
+        if auth_url:
+            st.link_button("Trocar conta", auth_url, use_container_width=True)
+
+
+def _render_logged_out_box(prefix: str) -> None:
+    render_google_login_cta(
+        "Entrar com Google",
+        full_width=True,
+        force_select_account=False,
+    )
+
+    auth_url = start_google_login(force_select_account=True)
+    if auth_url:
+        st.link_button(
+            "Entrar com outra conta",
+            auth_url,
+            use_container_width=True,
+        )
+
+
+def render_google_login_top() -> None:
+    if _is_logged_in():
+        _render_logged_in_box("top")
     else:
-        render_google_login_cta("Entrar com Google", full_width=True)
+        _render_logged_out_box("top")
 
 
 def render_google_login_box(
@@ -59,15 +89,11 @@ def render_google_login_box(
 ) -> None:
     st.subheader(title)
 
+    if message:
+        st.info(message)
+
     if _is_logged_in():
-        st.success(f"Você já está logado como {_user_name()}.")
-        if st.button("Sair", key="btn_logout_box", use_container_width=True):
-            sign_out_current_user()
-            st.rerun()
+        _render_logged_in_box("box")
         return
 
-    render_google_login_cta(
-        "Entrar com Google para continuar",
-        full_width=True,
-        message=message,
-    )
+    _render_logged_out_box("box")
