@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import streamlit as st
 from supabase import Client, create_client
@@ -14,7 +15,19 @@ def get_supabase_auth_client() -> Client:
 
 
 def get_app_url() -> str:
-    return st.secrets.get("APP_URL", "http://localhost:8501")
+    """
+    Usa APP_URL das secrets e normaliza para evitar diferenças bobas
+    de barra final / caminho vazio.
+    """
+    raw = st.secrets.get("APP_URL", "http://localhost:8501").strip()
+    if not raw:
+        raw = "http://localhost:8501"
+
+    parsed = urlparse(raw)
+    if not parsed.scheme or not parsed.netloc:
+        return "http://localhost:8501"
+
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def safe_get_query_param(name: str) -> Optional[str]:
@@ -32,11 +45,28 @@ def safe_get_query_param(name: str) -> Optional[str]:
 
 
 def clear_auth_query_params() -> None:
+    """
+    Limpa os params comuns do fluxo OAuth.
+    """
+    keys_to_remove = [
+        "code",
+        "error",
+        "error_code",
+        "error_description",
+        "state",
+    ]
+
     try:
-        st.query_params.clear()
+        for k in keys_to_remove:
+            try:
+                del st.query_params[k]
+            except Exception:
+                pass
     except Exception:
         try:
-            st.experimental_set_query_params()
+            current = st.experimental_get_query_params()
+            cleaned = {k: v for k, v in current.items() if k not in keys_to_remove}
+            st.experimental_set_query_params(**cleaned)
         except Exception:
             pass
 
@@ -75,6 +105,13 @@ def store_user_in_state(user_obj: Any) -> None:
     st.session_state["auth_user_id"] = info.get("id")
 
 
+def clear_user_in_state() -> None:
+    st.session_state["auth_logged_in"] = False
+    st.session_state["auth_user_email"] = None
+    st.session_state["auth_user_name"] = None
+    st.session_state["auth_user_id"] = None
+
+
 def sync_user_from_current_session() -> None:
     supabase = get_supabase_auth_client()
 
@@ -83,24 +120,38 @@ def sync_user_from_current_session() -> None:
         user_obj = getattr(user_response, "user", None)
         if user_obj is None and isinstance(user_response, dict):
             user_obj = user_response.get("user")
+
         if user_obj is not None:
             store_user_in_state(user_obj)
             return
     except Exception:
         pass
 
-    if "auth_logged_in" not in st.session_state:
-        st.session_state["auth_logged_in"] = False
-        st.session_state["auth_user_email"] = None
-        st.session_state["auth_user_name"] = None
-        st.session_state["auth_user_id"] = None
+    clear_user_in_state()
 
 
 def handle_oauth_callback() -> None:
+    """
+    Processa callback do Google vindo do Supabase.
+    Também trata cenários de erro retornados na query string.
+    """
+    error = safe_get_query_param("error")
+    error_description = safe_get_query_param("error_description")
     code = safe_get_query_param("code")
+
+    if error:
+        clear_user_in_state()
+        st.session_state["auth_message"] = (
+            f"Erro no retorno do login Google: {error}"
+            + (f" — {error_description}" if error_description else "")
+        )
+        clear_auth_query_params()
+        return
+
     if not code:
         return
 
+    # evita repetir o mesmo code várias vezes na mesma sessão
     if st.session_state.get("last_oauth_code") == code:
         return
 
@@ -108,6 +159,7 @@ def handle_oauth_callback() -> None:
 
     try:
         response = supabase.auth.exchange_code_for_session({"auth_code": code})
+
         user_obj = getattr(response, "user", None)
         session_obj = getattr(response, "session", None)
 
@@ -120,6 +172,16 @@ def handle_oauth_callback() -> None:
             if user_obj is None and isinstance(session_obj, dict):
                 user_obj = session_obj.get("user")
 
+        # fallback: tenta sincronizar da sessão atual do supabase
+        if user_obj is None:
+            sync_user_from_current_session()
+            if st.session_state.get("auth_logged_in"):
+                st.session_state["auth_message"] = "Login efetuado com sucesso."
+                st.session_state["last_oauth_code"] = code
+                clear_auth_query_params()
+                st.rerun()
+                return
+
         if user_obj is not None:
             store_user_in_state(user_obj)
             st.session_state["auth_message"] = "Login efetuado com sucesso."
@@ -127,22 +189,30 @@ def handle_oauth_callback() -> None:
             clear_auth_query_params()
             st.rerun()
         else:
-            st.session_state["auth_logged_in"] = False
+            clear_user_in_state()
             st.session_state["auth_message"] = (
                 "O Google retornou ao app, mas não foi possível identificar o usuário logado."
             )
+            clear_auth_query_params()
+
     except Exception as e:
-        st.session_state["auth_logged_in"] = False
+        clear_user_in_state()
         st.session_state["auth_message"] = f"Erro ao concluir o login Google: {e}"
+        clear_auth_query_params()
 
 
 def start_google_login() -> Optional[str]:
+    """
+    Inicia o login Google via Supabase.
+    """
     supabase = get_supabase_auth_client()
+    redirect_to = get_app_url()
+
     response = supabase.auth.sign_in_with_oauth(
         {
             "provider": "google",
             "options": {
-                "redirect_to": get_app_url(),
+                "redirect_to": redirect_to,
             },
         }
     )
@@ -156,6 +226,7 @@ def start_google_login() -> Optional[str]:
 
 def sign_out_current_user() -> None:
     supabase = get_supabase_auth_client()
+
     try:
         supabase.auth.sign_out()
     except Exception:
@@ -168,7 +239,10 @@ def sign_out_current_user() -> None:
         "auth_user_id",
         "auth_message",
         "last_oauth_code",
+        "post_login_action",
+        "pending_login_reason",
     ]:
         st.session_state.pop(key, None)
 
     clear_auth_query_params()
+    clear_user_in_state()
