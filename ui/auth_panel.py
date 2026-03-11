@@ -64,19 +64,16 @@ def render_google_login_cta(
 
 
 def render_google_login_top() -> None:
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        st.caption("Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.")
-
-    with col2:
-        if _is_logged_in():
-            st.success(f"{_user_name()} • {_user_email()}")
-            if st.button("Sair", key="btn_logout_top", use_container_width=True):
-                sign_out_current_user()
-                st.rerun()
-        else:
-            render_google_login_cta("Entrar com Google", full_width=True)
+    # Ajuste importante:
+    # este bloco agora cuida SOMENTE de login/logout.
+    # a frase institucional fica apenas no app.py para evitar duplicação.
+    if _is_logged_in():
+        st.success(f"{_user_name()} • {_user_email()}")
+        if st.button("Sair", key="btn_logout_top", use_container_width=True):
+            sign_out_current_user()
+            st.rerun()
+    else:
+        render_google_login_cta("Entrar com Google", full_width=True)
 
 
 def render_google_login_box(
