@@ -7,9 +7,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 import streamlit as st
-import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-11-LOGIN-SCROLL-V1")
+st.write("APP VERSION MARKER: 2026-03-11-INLINE-PLANS-BELOW-REPORT-V1")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -144,25 +143,6 @@ def _try_unlock_report_after_payment(user_id: str) -> None:
         st.error(f"Não foi possível finalizar a liberação do relatório após o pagamento: {e}")
 
 
-def _scroll_to_login_box() -> None:
-    components.html(
-        """
-        <script>
-            const scrollToLogin = () => {
-                const el = window.parent.document.getElementById("login-required-box");
-                if (el) {
-                    el.scrollIntoView({behavior: "smooth", block: "start"});
-                }
-            };
-            setTimeout(scrollToLogin, 150);
-            setTimeout(scrollToLogin, 500);
-            setTimeout(scrollToLogin, 1000);
-        </script>
-        """,
-        height=0,
-    )
-
-
 # =========================================================
 # Session state base
 # =========================================================
@@ -195,9 +175,6 @@ if "payments_focus_mode" not in st.session_state:
 if "pending_login_reason" not in st.session_state:
     st.session_state.pending_login_reason = None
 
-if "force_scroll_to_login" not in st.session_state:
-    st.session_state.force_scroll_to_login = False
-
 
 handle_oauth_callback()
 
@@ -210,6 +187,7 @@ render_google_login_top()
 if st.session_state.get("auth_message"):
     st.info(st.session_state["auth_message"])
 
+# carteira/pagamentos padrão do topo
 render_credits_panel(_card)
 render_payments_panel()
 
@@ -262,6 +240,7 @@ if st.session_state.last_calc_signature and st.session_state.last_calc_signature
     st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
     st.session_state.pending_report_after_payment = False
+    st.session_state.payments_focus_mode = False
 
 calc = st.session_state.calc
 user_logged_in = _is_logged_in()
@@ -294,7 +273,6 @@ if clicked_calcular:
         st.session_state.pending_login_reason = (
             "Para calcular a viabilidade, primeiro faça login com Google."
         )
-        st.session_state.force_scroll_to_login = True
         st.rerun()
     else:
         _run_free_calc(calc, zones_prepared, radius_m)
@@ -309,10 +287,6 @@ if (not user_logged_in) and st.session_state.get("post_login_action") in ("calcu
         title="Faça login para continuar",
         message=st.session_state.get("pending_login_reason") or "Faça login com Google para continuar.",
     )
-
-    if st.session_state.get("force_scroll_to_login"):
-        _scroll_to_login_box()
-        st.session_state.force_scroll_to_login = False
 
 # =========================================================
 # Parte gratuita: mostrar apenas até o item 4
@@ -371,7 +345,6 @@ if can_offer_report:
         if not user_logged_in or not user_id:
             st.session_state.post_login_action = "generate_report"
             st.session_state.pending_login_reason = "Faça login para gerar o relatório completo."
-            st.session_state.force_scroll_to_login = True
             st.rerun()
         else:
             try:
@@ -409,6 +382,15 @@ if can_offer_report:
 
             except Exception as e:
                 st.error(f"Não foi possível descontar o crédito: {e}")
+
+    # =====================================================
+    # Planos inline abaixo do botão quando faltar saldo
+    # =====================================================
+    if st.session_state.get("payments_focus_mode"):
+        st.markdown("---")
+        st.subheader("Escolha um plano para continuar")
+        st.caption("Após a confirmação do pagamento, o relatório será liberado automaticamente.")
+        render_payments_panel()
 
 # =========================================================
 # Parte paga: item 5 + relatório final
