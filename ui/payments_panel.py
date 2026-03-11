@@ -45,6 +45,7 @@ def _get_user_id(user_profile: Dict[str, Any]) -> Optional[str]:
         _safe_get(user_profile, "id")
         or _safe_get(user_profile, "user_id")
         or _safe_get(user_profile, "sub")
+        or _safe_get(user_profile, "auth_user_id")
     )
 
 
@@ -69,12 +70,7 @@ def _resolve_supabase(explicit_supabase=None):
     if explicit_supabase is not None:
         return explicit_supabase
 
-    for key in [
-        "supabase",
-        "sb",
-        "supabase_client",
-        "client",
-    ]:
+    for key in ["supabase", "sb", "supabase_client", "client"]:
         if key in st.session_state and st.session_state[key] is not None:
             return st.session_state[key]
 
@@ -88,18 +84,12 @@ def _resolve_user_profile(explicit_user_profile=None) -> Dict[str, Any]:
     if explicit_user_profile is not None:
         return explicit_user_profile
 
-    for key in [
-        "user_profile",
-        "profile",
-        "google_user",
-        "user",
-    ]:
+    for key in ["user_profile", "profile", "google_user", "user"]:
         if key in st.session_state and st.session_state[key]:
             val = st.session_state[key]
             if isinstance(val, dict):
                 return val
 
-    # Compatibilidade com o fluxo real do core.auth
     if st.session_state.get("auth_logged_in"):
         return {
             "id": st.session_state.get("auth_user_id"),
@@ -134,7 +124,6 @@ def _fetch_credit_balance(supabase, user_id: str) -> float:
 
 
 def _fetch_credit_packages(supabase) -> List[Dict[str, Any]]:
-    # Primeiro tenta o padrão já usado no projeto: is_active
     try:
         resp = (
             supabase.table("credit_packages")
@@ -149,7 +138,6 @@ def _fetch_credit_packages(supabase) -> List[Dict[str, Any]]:
     except Exception:
         pass
 
-    # Fallback para versões antigas que usavam active
     try:
         resp = (
             supabase.table("credit_packages")
@@ -208,27 +196,15 @@ def _fetch_payment_by_id(supabase, payment_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _fetch_latest_pending_payment(supabase, user_id: str) -> Optional[Dict[str, Any]]:
-    try:
-        resp = (
-            supabase.table("payments")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("status", "pending")
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        rows = resp.data or []
-        return rows[0] if rows else None
-    except Exception:
-        return None
-
-
 # =========================================================
 # Payment actions
 # =========================================================
-def _create_pix_payment(supabase, user_id: str, user_email: str, user_name: str, package: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _create_pix_payment(
+    user_id: str,
+    user_email: str,
+    user_name: str,
+    package: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
     try:
         notification_url = st.secrets.get(
             "MERCADOPAGO_WEBHOOK_URL",
@@ -246,11 +222,7 @@ def _create_pix_payment(supabase, user_id: str, user_email: str, user_name: str,
         updated = result.get("updated") or {}
         pending = result.get("pending") or {}
 
-        # Retorna a linha já com os dados do Pix, priorizando updated
-        return {
-            **pending,
-            **updated,
-        }
+        return {**pending, **updated}
     except Exception as e:
         st.error(f"Não foi possível criar o pagamento Pix: {e}")
         return None
@@ -271,8 +243,8 @@ def _render_wallet_header(user_profile: Dict[str, Any], balance: float) -> None:
         st.text_input("Saldo de créditos", value=str(int(balance)), disabled=True)
 
 
-def _render_packages_table(packages: List[Dict[str, Any]]) -> None:
-    with st.expander("Pacotes de créditos", expanded=True):
+def _render_packages_table(packages: List[Dict[str, Any]], expanded: bool) -> None:
+    with st.expander("Pacotes de créditos", expanded=expanded):
         if not packages:
             st.warning("Nenhum pacote ativo encontrado.")
             return
@@ -289,7 +261,6 @@ def _render_packages_table(packages: List[Dict[str, Any]]) -> None:
             )
 
         st.dataframe(rows, use_container_width=True, hide_index=True)
-        st.caption("Nesta etapa o sistema cria a compra pendente e já gera o Pix do Mercado Pago.")
 
 
 def _render_recent_ledger(ledger_rows: List[Dict[str, Any]]) -> None:
@@ -349,13 +320,13 @@ def _render_pix_block(payment_row: Dict[str, Any]) -> None:
     with c3:
         st.text_input("Status", value=str(status), disabled=True)
 
-    pix_copy_paste = _safe_get(payment_row, "pix_copy_paste")
     pix_qr_code = _safe_get(payment_row, "pix_qr_code")
+    pix_copy_paste = _safe_get(payment_row, "pix_copy_paste")
 
     if pix_qr_code:
         try:
             qr_bytes = base64.b64decode(pix_qr_code)
-            st.image(qr_bytes, caption="QR Code Pix", width=280)
+            st.image(qr_bytes, caption="QR Code Pix", width=220)
         except Exception:
             st.warning("Não foi possível renderizar o QR Code em imagem.")
 
@@ -363,11 +334,9 @@ def _render_pix_block(payment_row: Dict[str, Any]) -> None:
         st.text_area(
             "Código Pix copia e cola",
             value=pix_copy_paste,
-            height=120,
+            height=100,
             key=f"pix_copy_paste_{payment_id}",
         )
-    else:
-        st.warning("Este pagamento ainda não possui código Pix disponível.")
 
 
 def _render_pending_payment_status(supabase, payment_id: str) -> None:
@@ -382,7 +351,7 @@ def _render_pending_payment_status(supabase, payment_id: str) -> None:
     with col2:
         auto_refresh = st.checkbox(
             "Atualizar automaticamente",
-            value=True,
+            value=False,
             key=f"auto_refresh_{payment_id}",
         )
 
@@ -399,8 +368,6 @@ def _render_pending_payment_status(supabase, payment_id: str) -> None:
 
     if status == "paid":
         st.success("Pagamento confirmado com sucesso.")
-        time.sleep(1)
-        st.rerun()
     elif status == "pending":
         st.warning("Pagamento ainda pendente.")
         if auto_refresh:
@@ -412,9 +379,14 @@ def _render_pending_payment_status(supabase, payment_id: str) -> None:
         st.caption(f"Status atual: {status}")
 
 
-def _render_buy_section(supabase, user_id: str, user_email: str, user_name: str, packages: List[Dict[str, Any]]) -> None:
+def _render_buy_section(
+    user_id: str,
+    user_email: str,
+    user_name: str,
+    packages: List[Dict[str, Any]],
+) -> None:
     st.markdown("## Comprar créditos")
-    st.caption("Escolha um pacote para gerar o Pix.")
+    st.caption("Escolha um plano para gerar o Pix.")
 
     if not packages:
         st.warning("Nenhum pacote disponível para compra.")
@@ -436,7 +408,6 @@ def _render_buy_section(supabase, user_id: str, user_email: str, user_name: str,
                 use_container_width=True,
             ):
                 payment = _create_pix_payment(
-                    supabase=supabase,
                     user_id=user_id,
                     user_email=user_email,
                     user_name=user_name,
@@ -448,28 +419,30 @@ def _render_buy_section(supabase, user_id: str, user_email: str, user_name: str,
                     st.rerun()
 
 
-def _render_current_payment_area(supabase, user_id: str) -> None:
-    st.markdown("---")
-
+def _render_current_payment_area(supabase) -> None:
     payment_id = st.session_state.get("current_payment_id")
-    current_payment = None
-
-    if payment_id:
-        current_payment = _fetch_payment_by_id(supabase, payment_id)
-
-    if not current_payment:
-        current_payment = _fetch_latest_pending_payment(supabase, user_id)
-
-    if not current_payment:
+    if not payment_id:
         return
 
+    current_payment = _fetch_payment_by_id(supabase, payment_id)
+    if not current_payment:
+        st.session_state.pop("current_payment_id", None)
+        return
+
+    st.markdown("---")
     st.markdown("## Pagamento atual")
     _render_pix_block(current_payment)
 
-    if _safe_get(current_payment, "status") == "pending":
+    status = _safe_get(current_payment, "status")
+
+    if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")))
-    elif _safe_get(current_payment, "status") == "paid":
+    elif status == "paid":
         st.success("Este pagamento já foi confirmado.")
+    else:
+        if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
+            st.session_state.pop("current_payment_id", None)
+            st.rerun()
 
 
 # =========================================================
@@ -491,14 +464,20 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
         st.warning("Cliente Supabase ainda não disponível nesta execução. Atualize a página uma vez.")
         return
 
+    focus_mode = bool(st.session_state.get("payments_focus_mode"))
+
     balance = _fetch_credit_balance(supabase_client, user_id)
     packages = _fetch_credit_packages(supabase_client)
     ledger_rows = _fetch_recent_ledger(supabase_client, user_id)
     payments_rows = _fetch_recent_payments(supabase_client, user_id)
 
+    if focus_mode:
+        st.warning("Saldo insuficiente para gerar o relatório. Escolha um plano e conclua o pagamento.")
     _render_wallet_header(profile, balance)
-    _render_packages_table(packages)
-    _render_recent_ledger(ledger_rows)
-    _render_recent_payments(payments_rows)
-    _render_buy_section(supabase_client, user_id, user_email, user_name, packages)
-    _render_current_payment_area(supabase_client, user_id)
+    _render_packages_table(packages, expanded=focus_mode)
+    _render_buy_section(user_id, user_email, user_name, packages)
+    _render_current_payment_area(supabase_client)
+
+    if not focus_mode:
+        _render_recent_ledger(ledger_rows)
+        _render_recent_payments(payments_rows)
