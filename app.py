@@ -7,7 +7,7 @@ from typing import Any, Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-10-FREE-CALC-PAID-REPORT-V3")
+st.write("APP VERSION MARKER: 2026-03-10-FREE-CALC-PAID-REPORT-V4")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -71,8 +71,7 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
 def _render_login_gate_block() -> None:
     """
     Bloco inferior de login.
-    Comentário importante:
-    este bloco só aparece quando o usuário tenta calcular sem estar logado.
+    Só aparece quando o usuário tenta calcular sem estar logado.
     """
     st.markdown("### Faça login para continuar")
     st.info("Para liberar a pesquisa de viabilidade, entre com sua conta Google.")
@@ -114,14 +113,6 @@ if "free_calc_done" not in st.session_state:
 if "last_calc_signature" not in st.session_state:
     st.session_state.last_calc_signature = None
 
-# =========================================================
-# Flags novas e isoladas
-# Comentário importante:
-# separadas para não quebrar:
-# - fluxo de crédito
-# - fluxo do relatório
-# - fluxo de login do topo
-# =========================================================
 if "show_login_gate" not in st.session_state:
     st.session_state.show_login_gate = False
 
@@ -134,6 +125,10 @@ if "scroll_to_item3" not in st.session_state:
 if "post_login_action" not in st.session_state:
     st.session_state.post_login_action = None
 
+# Flag para abrir os planos inline abaixo de "Gerar relatório"
+if "show_inline_payments" not in st.session_state:
+    st.session_state.show_inline_payments = False
+
 
 handle_oauth_callback()
 
@@ -143,7 +138,9 @@ zones_prepared = _zones_prepared()
 st.title("Viabilidade")
 render_google_login_top()
 render_credits_panel(_card)
-render_payments_panel()
+# Comentário importante:
+# removido render_payments_panel() do topo para não duplicar
+# nem competir com os planos inline abaixo de "Gerar relatório".
 st.divider()
 
 # =========================================================
@@ -177,24 +174,18 @@ current_signature = json.dumps(
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
     st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
+    st.session_state.show_inline_payments = False
     st.session_state.calc.pop("err", None)
     st.session_state.calc.pop("rule", None)
 
 calc = st.session_state.calc
-
-# =========================================================
-# Âncora do bloco inferior de login
-# =========================================================
-st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
-
-# =========================================================
-# Controle do botão calcular
-# Comentário importante:
-# sem login -> não calcula, mostra login inferior e desce até ele
-# com login -> calcula e desce até o item 3
-# =========================================================
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
+
+# =========================================================
+# Âncora do login inferior
+# =========================================================
+st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
 
 run_free_calc_now = False
 
@@ -205,14 +196,11 @@ if clicked_calcular:
         st.session_state.post_login_action = "calculate_viability"
     else:
         st.session_state.show_login_gate = False
+        st.session_state.show_inline_payments = False
         run_free_calc_now = True
         st.session_state.scroll_to_item3 = True
 
-# =========================================================
 # Continuação automática após login
-# Se o usuário clicou em calcular antes de logar,
-# quando voltar autenticado o cálculo é liberado.
-# =========================================================
 if (
     st.session_state.get("post_login_action") == "calculate_viability"
     and user_logged_in
@@ -223,24 +211,29 @@ if (
     st.session_state.show_login_gate = False
     st.session_state.scroll_to_item3 = True
 
-# Render normal do bloco inferior de login
+# Bloco inferior de login
 if st.session_state.get("show_login_gate") and not (user_logged_in and user_id):
     _render_login_gate_block()
     st.divider()
 
 # =========================================================
-# Âncora fixa do começo do item 3
+# Âncora do item 3
+# Comentário importante:
+# o item 3 só aparece depois que o cálculo gratuito foi iniciado
+# com login, ou depois que já existe free_calc_done.
 # =========================================================
 st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
 
+show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
+
 # =========================================================
 # Cálculo gratuito (somente logado)
-# Mantida a lógica original de desbloqueio da parte gratuita
 # =========================================================
 if run_free_calc_now:
     st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
     st.session_state.last_calc_signature = current_signature
+    st.session_state.show_inline_payments = False
 
     calc.pop("err", None)
     calc.pop("rule", None)
@@ -260,11 +253,15 @@ if run_free_calc_now:
                 )
         except Exception as e:
             calc["err"] = f"Erro ao consultar Supabase: {e}"
-else:
+
+elif show_item3:
+    # Mostra o item 3 já preenchido em reruns posteriores,
+    # mas sem recalcular novamente.
     _ = render_localizacao_section(False, zones_prepared, radius_m)
 
 # =========================================================
 # Parte gratuita: mostrar apenas até o item 4
+# Também só aparece depois do cálculo.
 # =========================================================
 if st.session_state.get("free_calc_done"):
     render_indices_section(
@@ -276,7 +273,6 @@ if st.session_state.get("free_calc_done"):
 
 # =========================================================
 # Botão para gerar relatório (parte paga)
-# Mantida a lógica original de saldo + débito
 # =========================================================
 can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
@@ -328,18 +324,26 @@ if can_offer_report:
                 )
 
                 if not debit_result.get("ok"):
+                    st.session_state.show_inline_payments = True
                     st.error(
                         debit_result.get("message")
                         or "Saldo insuficiente para gerar o relatório."
                     )
                 else:
+                    st.session_state.show_inline_payments = False
                     st.session_state.report_unlocked = True
                     novo_saldo = debit_result.get("new_balance")
                     st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                     st.rerun()
 
             except Exception as e:
+                st.session_state.show_inline_payments = True
                 st.error(f"Não foi possível descontar o crédito: {e}")
+
+    # Planos inline logo abaixo do botão de relatório
+    if st.session_state.get("show_inline_payments"):
+        st.markdown("### Comprar créditos")
+        render_payments_panel()
 
 # =========================================================
 # Parte paga: item 5 + relatório final
@@ -358,7 +362,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
     render_relatorio_section(calc)
 
 # =========================================================
-# Scroll isolado para o bloco inferior de login
+# Scroll isolado para o login inferior
 # =========================================================
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
