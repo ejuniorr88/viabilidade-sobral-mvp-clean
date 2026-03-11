@@ -34,44 +34,34 @@ def render_lote_section() -> Tuple[float, float, float]:
 
     calc = _ensure_calc()
 
-    # --------------------------------------------------
-    # Linha principal do lote
-    # Comentário:
-    # ajustada para ficar mais alinhada visualmente.
-    # --------------------------------------------------
-    c1, c2, c3 = st.columns([1, 1, 1.25], gap="medium")
+    # ======================================================
+    # Campos empilhados para evitar desalinhamento na sidebar
+    # ======================================================
+    testada = st.number_input(
+        "Testada / Frente (m):",
+        min_value=0.0,
+        value=float(calc.get("lot_testada_m", 10.0) or 10.0),
+        step=0.1,
+        format="%.2f",
+        key="lot_testada_m_input",
+    )
 
-    with c1:
-        testada = st.number_input(
-            "Largura (testada) (m)",
-            min_value=0.0,
-            value=float(calc.get("lot_testada_m", 10.0) or 10.0),
-            step=0.1,
-            format="%.2f",
-            key="lot_testada_m_input",
-        )
+    profundidade = st.number_input(
+        "Profundidade / Lateral (m):",
+        min_value=0.0,
+        value=float(calc.get("lot_profundidade_m", 30.0) or 30.0),
+        step=0.1,
+        format="%.2f",
+        key="lot_profundidade_m_input",
+    )
 
-    with c2:
-        profundidade = st.number_input(
-            "Profundidade (m)",
-            min_value=0.0,
-            value=float(calc.get("lot_profundidade_m", 30.0) or 30.0),
-            step=0.1,
-            format="%.2f",
-            key="lot_profundidade_m_input",
-        )
+    area_calc = float(testada) * float(profundidade)
+    st.caption(f"Área calculada: {_fmt_ptbr(area_calc)} m²")
 
-    with c3:
-        area_calc = float(testada) * float(profundidade)
-        st.metric(
-            "Área calculada (testada × profundidade)",
-            f"{_fmt_ptbr(area_calc)} m²",
-        )
-
-    # --------------------------------------------------
-    # Flags
-    # --------------------------------------------------
-    f1, f2 = st.columns(2, gap="medium")
+    # ======================================================
+    # Checkboxes alinhados em uma linha
+    # ======================================================
+    f1, f2 = st.columns(2, gap="small")
 
     with f1:
         terreno_irregular = st.checkbox(
@@ -87,12 +77,12 @@ def render_lote_section() -> Tuple[float, float, float]:
             key="lot_corner_checkbox",
         )
 
-    # --------------------------------------------------
+    # ======================================================
     # Área do lote quando irregular
-    # --------------------------------------------------
+    # ======================================================
     if terreno_irregular:
         area_lote = st.number_input(
-            "Área do lote (m²)",
+            "Área do lote (m²):",
             min_value=0.0,
             value=float(calc.get("lot_area_m2", area_calc) or area_calc),
             step=1.0,
@@ -102,14 +92,11 @@ def render_lote_section() -> Tuple[float, float, float]:
     else:
         area_lote = area_calc
 
-    # --------------------------------------------------
-    # Área pretendida no térreo
-    # Comentário:
-    # Tipo de projeto foi removido daqui porque agora
-    # essa escolha já acontece em "Opções na Categoria".
-    # --------------------------------------------------
+    # ======================================================
+    # Campo final alinhado
+    # ======================================================
     area_terreo_pretendida = st.number_input(
-        "Área pretendida no térreo (m²) (se deixar 0, o relatório assume o máximo permitido)",
+        "Área Construída Pretendida (m²):",
         min_value=0.0,
         value=float(calc.get("built_ground_m2", 0.0) or 0.0),
         step=1.0,
