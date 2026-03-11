@@ -26,8 +26,12 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback, start_google_login
-from ui.auth_panel import render_google_login_top
+from core.auth import handle_oauth_callback
+from ui.auth_panel import (
+    render_google_login_top,
+    get_or_create_google_login_url,
+    clear_google_login_url,
+)
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
 
@@ -60,9 +64,6 @@ def _inject_global_styles() -> None:
     st.markdown(
         """
         <style>
-        /* =========================
-           BASE GERAL
-        ========================== */
         .block-container {
             padding-top: 0 !important;
             padding-bottom: 2rem !important;
@@ -79,15 +80,6 @@ def _inject_global_styles() -> None:
             background: transparent !important;
         }
 
-        /* Remove excesso acima do conteúdo principal */
-        div[data-testid="stVerticalBlock"] > div:has(.vf-topbar-outer) {
-            margin-top: 0 !important;
-            padding-top: 0 !important;
-        }
-
-        /* =========================
-           TOPO
-        ========================== */
         .vf-topbar-outer {
             margin-left: -1rem;
             margin-right: -1rem;
@@ -135,9 +127,6 @@ def _inject_global_styles() -> None:
             white-space: nowrap;
         }
 
-        /* =========================
-           BLOCO CENTRAL
-        ========================== */
         .vf-hero-wrap {
             width: 100%;
             text-align: center;
@@ -161,9 +150,6 @@ def _inject_global_styles() -> None:
             line-height: 1.45;
         }
 
-        /* =========================
-           CARTEIRA / LOGIN
-        ========================== */
         .vf-wallet-wrap {
             margin-top: 0.5rem;
             margin-bottom: 1rem;
@@ -211,9 +197,6 @@ def _inject_global_styles() -> None:
             margin-bottom: 12px;
         }
 
-        /* =========================
-           SIDEBAR
-        ========================== */
         section[data-testid="stSidebar"] {
             background: #eef0f3;
             border-right: 1px solid #d9dee5;
@@ -247,9 +230,6 @@ def _inject_global_styles() -> None:
             margin: 16px 0 18px 0;
         }
 
-        /* =========================
-           RESPONSIVO
-        ========================== */
         @media (max-width: 1100px) {
             .vf-topbar-inner {
                 flex-direction: column;
@@ -280,10 +260,6 @@ def _inject_global_styles() -> None:
 
 
 def _render_top_nav() -> None:
-    # Topo único do sistema:
-    # - nome à esquerda
-    # - links à direita
-    # - sem frase aqui
     st.markdown(
         """
         <div class="vf-topbar-outer">
@@ -344,17 +320,28 @@ def _render_login_gate_block() -> None:
     st.markdown("### Faça login para continuar")
     st.info("Para liberar a pesquisa de viabilidade, entre com sua conta Google.")
 
-    auth_url = None
-    try:
-        auth_url = start_google_login()
-    except Exception:
-        auth_url = None
+    auth_url = get_or_create_google_login_url()
 
     if auth_url:
-        st.link_button(
-            "Entrar com Google",
-            auth_url,
-            use_container_width=True,
+        st.markdown(
+            f"""
+            <a href="{auth_url}" target="_blank" rel="noopener noreferrer" style="
+                display:inline-block;
+                width:100%;
+                padding:12px 16px;
+                border-radius:12px;
+                text-decoration:none;
+                border:1px solid #d9d9d9;
+                font-weight:700;
+                text-align:center;
+                background:#ffffff;
+                color:#222222;
+                box-shadow:0 1px 4px rgba(0,0,0,0.06);
+            ">
+                🔐 Entrar com Google
+            </a>
+            """,
+            unsafe_allow_html=True,
         )
         st.caption("O login será aberto em nova aba. Depois volte para esta aba.")
     else:
@@ -395,6 +382,9 @@ if "show_inline_payments" not in st.session_state:
 
 handle_oauth_callback()
 
+if st.session_state.get("auth_logged_in"):
+    clear_google_login_url()
+
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
 
@@ -416,10 +406,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Área da direita:
-# - se logado, mostra carteira
-# - se não logado, mostra só o login
-# - sem repetir frase institucional
 right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
 with right_col_left:
     st.write("")
