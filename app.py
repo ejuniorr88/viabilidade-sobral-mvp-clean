@@ -61,19 +61,20 @@ def _inject_global_styles() -> None:
         """
         <style>
         .block-container {
-            padding-top: 1.2rem !important;
+            padding-top: 0.8rem !important;
             padding-bottom: 2rem !important;
         }
 
-        .vf-topbar {
+        /* Barra superior ponta a ponta */
+        .vf-topbar-bleed {
             position: sticky;
             top: 0;
             z-index: 999;
+            width: calc(100vw - 1.5rem);
+            margin-left: calc(50% - 50vw + 0.75rem);
+            margin-right: calc(50% - 50vw + 0.75rem);
             background: rgba(255,255,255,0.98);
-            border: 1px solid #ececec;
-            border-radius: 16px;
-            padding: 18px 22px;
-            margin-bottom: 18px;
+            border-bottom: 1px solid #e8e8e8;
             box-shadow: 0 2px 10px rgba(0,0,0,0.03);
         }
 
@@ -83,6 +84,7 @@ def _inject_global_styles() -> None:
             justify-content: space-between;
             gap: 18px;
             flex-wrap: wrap;
+            padding: 18px 24px;
         }
 
         .vf-brand {
@@ -106,13 +108,14 @@ def _inject_global_styles() -> None:
             font-size: 15px;
         }
 
+        /* Título principal mais abaixo e centralizado */
         .vf-main-title {
             text-align: center;
             font-size: 42px;
             font-weight: 800;
             color: #1f2a44;
-            margin-top: 8px;
-            margin-bottom: 10px;
+            margin-top: 2.8rem;
+            margin-bottom: 1.6rem;
         }
 
         .vf-section-title {
@@ -168,14 +171,14 @@ def _inject_global_styles() -> None:
             margin-bottom: 12px;
         }
 
-        /* Sidebar visual */
+        /* Sidebar fixa e visual abaixo da barra superior */
         section[data-testid="stSidebar"] {
             background: #eef0f3;
             border-right: 1px solid #d9dee5;
         }
 
         section[data-testid="stSidebar"] .block-container {
-            padding-top: 1.2rem !important;
+            padding-top: 5.4rem !important;
             padding-bottom: 1.5rem !important;
         }
 
@@ -211,6 +214,10 @@ def _inject_global_styles() -> None:
             .vf-wallet-grid {
                 grid-template-columns: 1fr;
             }
+
+            .vf-main-title {
+                margin-top: 2rem;
+            }
         }
         </style>
         """,
@@ -221,7 +228,7 @@ def _inject_global_styles() -> None:
 def _render_top_nav() -> None:
     st.markdown(
         """
-        <div class="vf-topbar">
+        <div class="vf-topbar-bleed">
           <div class="vf-topbar-inner">
             <div class="vf-brand">Viabilidade Fácil</div>
             <div class="vf-links">
