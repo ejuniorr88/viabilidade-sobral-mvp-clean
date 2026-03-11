@@ -2,7 +2,7 @@ import os
 import json
 import pathlib
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -70,32 +70,32 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
 def _render_login_gate_block() -> None:
     """
     Bloco inferior de login.
-    Comentário importante:
-    este bloco só aparece quando o usuário tenta calcular sem estar logado.
+    Patch mínimo:
+    - aparece só quando o usuário tenta calcular sem estar logado
+    - não mexe no fluxo do topo
     """
     st.markdown("### Faça login para continuar")
     st.info("Para liberar a pesquisa de viabilidade, entre com sua conta Google.")
 
-    col1, col2 = st.columns([1, 2])
+    auth_url = None
+    try:
+        auth_url = start_google_login()
+    except Exception:
+        auth_url = None
 
-    with col1:
-        if st.button("Entrar com Google", use_container_width=True, key="btn_google_login_bottom"):
-            auth_url = start_google_login()
-            if auth_url:
-                st.link_button("Continuar login no Google", auth_url, use_container_width=True)
-                st.info("O login será aberto em nova aba.")
-            else:
-                st.error("Não foi possível gerar o link de login com Google.")
-
-    with col2:
-        st.caption(
-            "Depois de concluir o login, volte para esta aba. "
-            "A pesquisa será liberada sem perder a localização já escolhida."
+    if auth_url:
+        st.link_button(
+            "Entrar com Google",
+            auth_url,
+            use_container_width=True,
         )
+        st.caption("O login será aberto em nova aba. Depois volte para esta aba.")
+    else:
+        st.error("Não foi possível gerar o link de login com Google.")
 
 
 # =============================
-# Estado mínimo preservado
+# Estado base do app
 # =============================
 if "selected_lat" not in st.session_state:
     st.session_state.selected_lat = None
@@ -105,7 +105,10 @@ if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict)
     st.session_state.calc = {}
 st.session_state.calc.setdefault("use_type_code", "RES_UNI")
 
-# Flags separadas para não misturar comportamentos.
+# =============================
+# Flags do patch mínimo
+# Separadas para não quebrar o que já existe
+# =============================
 if "show_login_gate" not in st.session_state:
     st.session_state.show_login_gate = False
 if "scroll_to_login_gate" not in st.session_state:
@@ -139,35 +142,36 @@ st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corne
 auth_logged_in = bool(st.session_state.get("auth_logged_in"))
 
 # ==========================================================
-# PATCH MÍNIMO:
-# Se clicou em calcular sem login, NÃO libera a pesquisa.
-# Apenas mostra o bloco inferior e desce para ele.
+# Patch mínimo:
+# controla só a liberação do cálculo, sem mexer no resto do app
 # ==========================================================
-run_calculation_now = False
+calcular = False
 
 if clicked_calcular:
     if not auth_logged_in:
+        # Sem login: não libera a pesquisa.
+        # Só mostra o bloco inferior e desce para ele.
         st.session_state.show_login_gate = True
         st.session_state.scroll_to_login_gate = True
         st.session_state.post_login_action = "calculate_viability"
     else:
+        # Com login: segue o fluxo normal do app.
         st.session_state.show_login_gate = False
-        run_calculation_now = True
+        calcular = True
         st.session_state.scroll_to_item3 = True
 
 # ==========================================================
-# Continuação automática após login:
-# se o usuário tentou calcular antes de logar, ao voltar autenticado
-# o sistema libera a pesquisa e já segue o fluxo.
+# Continuação automática após login
+# Mantém a intenção do usuário sem reescrever o fluxo de cálculo
 # ==========================================================
 if auth_logged_in and st.session_state.get("post_login_action") == "calculate_viability":
-    run_calculation_now = True
+    calcular = True
     st.session_state.post_login_action = None
     st.session_state.show_login_gate = False
     st.session_state.scroll_to_item3 = True
 
 # ==========================================================
-# Bloco inferior de login com âncora própria
+# Âncora + bloco inferior de login
 # ==========================================================
 st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
 
@@ -175,17 +179,21 @@ if st.session_state.get("show_login_gate") and not auth_logged_in:
     _render_login_gate_block()
     st.divider()
 
-# Âncora fixa do começo do item 3.
+# ==========================================================
+# Âncora do começo do Item 3
+# ==========================================================
 st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
 
 # Comentário importante:
-# só passamos True para o render_localizacao_section quando a pesquisa
-# está realmente liberada. Assim evita pesquisar antes do login.
-_ = render_localizacao_section(run_calculation_now, zones_prepared, radius_m)
+# aqui preservamos a chamada original do sistema.
+# A única diferença é que "calcular" agora só vira True quando o login permite.
+_ = render_localizacao_section(calcular, zones_prepared, radius_m)
 
 calc = st.session_state.calc
 
-if run_calculation_now and calc.get("zone") and not calc.get("rule") and not calc.get("err"):
+# Mantido igual à lógica original:
+# só busca regra quando o cálculo realmente foi liberado
+if calcular and calc.get("zone") and not calc.get("rule") and not calc.get("err"):
     try:
         rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
         if rule:
@@ -206,7 +214,7 @@ render_analise_section(
 render_relatorio_section(calc)
 
 # ==========================================================
-# Scroll isolado para o bloco inferior de login
+# Scroll isolado para o login inferior
 # ==========================================================
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
