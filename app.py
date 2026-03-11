@@ -27,7 +27,7 @@ from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback
-from ui.auth_panel import render_google_login_top
+from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
 
@@ -313,12 +313,11 @@ def _render_wallet_summary() -> None:
 
 
 def _render_login_gate_block() -> None:
-    # Importante:
-    # aqui usamos o MESMO componente principal de login.
-    # Nada de segunda mecânica paralela de OAuth no app.py.
     st.markdown("### Faça login para continuar")
-    st.info("Para liberar a pesquisa de viabilidade, entre com sua conta Google.")
-    render_google_login_top()
+    render_google_login_box(
+        title="Faça login para continuar",
+        message="Para liberar a pesquisa de viabilidade, entre com sua conta Google.",
+    )
 
 
 if "selected_lat" not in st.session_state:
@@ -353,7 +352,7 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
-# Mantido como no fluxo antigo que funcionava:
+# Importante: callback do OAuth deve ser tratado logo no começo.
 handle_oauth_callback()
 
 zones_gj = _zones_geojson()
