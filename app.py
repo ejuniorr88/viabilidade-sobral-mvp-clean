@@ -61,54 +61,59 @@ def _inject_global_styles() -> None:
         """
         <style>
         /* =========================
-           CONTAINER GERAL
+           BASE GERAL
         ========================== */
         .block-container {
-            padding-top: 0.4rem !important;
+            padding-top: 0 !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }
 
-        html, body, [data-testid="stAppViewContainer"], .main {
+        [data-testid="stAppViewContainer"],
+        .main,
+        .block-container {
             overflow-x: hidden !important;
         }
 
-        /* Esconde header padrão do Streamlit para o topo ficar mais limpo */
         header[data-testid="stHeader"] {
             background: transparent !important;
         }
 
+        /* Remove excesso acima do conteúdo principal */
+        div[data-testid="stVerticalBlock"] > div:has(.vf-topbar-outer) {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+
         /* =========================
-           TOPO NOVO
+           TOPO
         ========================== */
-        .vf-topbar-shell {
-            width: 100%;
-            margin: 0 0 1.4rem 0;
-            padding: 0;
+        .vf-topbar-outer {
+            margin-left: -1rem;
+            margin-right: -1rem;
+            margin-bottom: 1.2rem;
         }
 
         .vf-topbar {
             width: 100%;
             background: #ffffff;
-            border-bottom: 1px solid #e8e8e8;
+            border-bottom: 1px solid #e7e7e7;
         }
 
         .vf-topbar-inner {
-            width: 100%;
-            min-height: 76px;
+            min-height: 78px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 20px;
-            padding: 0 18px;
+            gap: 24px;
+            padding: 0 20px;
             box-sizing: border-box;
         }
 
         .vf-brand {
             font-size: 30px;
             font-weight: 800;
-            color: #1f2a44;
-            letter-spacing: -0.02em;
+            color: #17305f;
             line-height: 1.1;
             white-space: nowrap;
         }
@@ -117,62 +122,51 @@ def _inject_global_styles() -> None:
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 26px;
+            gap: 28px;
             flex-wrap: wrap;
+            text-align: right;
         }
 
         .vf-link {
-            color: #1f2a44;
-            text-decoration: none;
-            font-weight: 600;
+            color: #17305f;
             font-size: 15px;
+            font-weight: 600;
+            line-height: 1.1;
             white-space: nowrap;
         }
 
-        .vf-link:hover {
-            text-decoration: underline;
-        }
-
         /* =========================
-           TÍTULO CENTRAL
+           BLOCO CENTRAL
         ========================== */
-        .vf-main-title-wrap {
+        .vf-hero-wrap {
             width: 100%;
             text-align: center;
-            margin-top: 0.6rem;
-            margin-bottom: 0.2rem;
-        }
-
-        .vf-main-title {
-            font-size: 42px;
-            font-weight: 800;
-            color: #1f2a44;
-            letter-spacing: -0.02em;
-            line-height: 1.1;
-            margin: 0;
-        }
-
-        .vf-main-subtitle {
-            margin-top: 10px;
+            margin-top: 0.4rem;
             margin-bottom: 0.8rem;
-            font-size: 15px;
+        }
+
+        .vf-hero-title {
+            margin: 0;
+            font-size: 46px;
+            font-weight: 800;
+            color: #17305f;
+            line-height: 1.05;
+            letter-spacing: -0.02em;
+        }
+
+        .vf-hero-subtitle {
+            margin-top: 10px;
             color: #6b7280;
-            text-align: center;
+            font-size: 16px;
+            line-height: 1.45;
         }
 
         /* =========================
-           TÍTULOS E CARTEIRA
+           CARTEIRA / LOGIN
         ========================== */
-        .vf-section-title {
-            font-size: 26px;
-            font-weight: 800;
-            color: #24324a;
-            margin-bottom: 12px;
-        }
-
         .vf-wallet-wrap {
-            margin-top: 0;
-            margin-bottom: 14px;
+            margin-top: 0.5rem;
+            margin-bottom: 1rem;
         }
 
         .vf-wallet-title {
@@ -210,9 +204,10 @@ def _inject_global_styles() -> None:
             line-height: 1.25;
         }
 
-        .vf-login-note {
-            font-size: 14px;
-            color: #6b7280;
+        .vf-section-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: #24324a;
             margin-bottom: 12px;
         }
 
@@ -266,15 +261,16 @@ def _inject_global_styles() -> None:
 
             .vf-links {
                 justify-content: flex-start;
-                gap: 18px;
+                text-align: left;
+                gap: 16px;
+            }
+
+            .vf-hero-title {
+                font-size: 36px;
             }
 
             .vf-wallet-grid {
                 grid-template-columns: 1fr;
-            }
-
-            .vf-main-title {
-                font-size: 34px;
             }
         }
         </style>
@@ -284,24 +280,24 @@ def _inject_global_styles() -> None:
 
 
 def _render_top_nav() -> None:
-    # Topo novo:
-    # - Viabilidade Fácil à esquerda
+    # Topo único do sistema:
+    # - nome à esquerda
     # - links à direita
-    # - sem barra/cartão arredondado
+    # - sem frase aqui
     st.markdown(
         """
-        <div class="vf-topbar-shell">
-          <div class="vf-topbar">
-            <div class="vf-topbar-inner">
-              <div class="vf-brand">Viabilidade Fácil</div>
-              <div class="vf-links">
-                <span class="vf-link">Como funciona</span>
-                <span class="vf-link">Área do cliente</span>
-                <span class="vf-link">Planos</span>
-                <span class="vf-link">Dúvidas/Suporte</span>
-              </div>
+        <div class="vf-topbar-outer">
+            <div class="vf-topbar">
+                <div class="vf-topbar-inner">
+                    <div class="vf-brand">Viabilidade Fácil</div>
+                    <div class="vf-links">
+                        <span class="vf-link">Como funciona</span>
+                        <span class="vf-link">Área do cliente</span>
+                        <span class="vf-link">Planos</span>
+                        <span class="vf-link">Dúvidas/Suporte</span>
+                    </div>
+                </div>
             </div>
-          </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -410,9 +406,9 @@ user_id = st.session_state.get("auth_user_id")
 
 st.markdown(
     """
-    <div class="vf-main-title-wrap">
-        <div class="vf-main-title">Viabilidade Urbana</div>
-        <div class="vf-main-subtitle">
+    <div class="vf-hero-wrap">
+        <div class="vf-hero-title">Viabilidade Urbana</div>
+        <div class="vf-hero-subtitle">
             Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
         </div>
     </div>
@@ -420,9 +416,12 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Área da direita:
+# - se logado, mostra carteira
+# - se não logado, mostra só o login
+# - sem repetir frase institucional
 right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
 with right_col_left:
-    # Mantido vazio para preservar a frase só uma vez, no bloco central acima.
     st.write("")
 
 with right_col_right:
