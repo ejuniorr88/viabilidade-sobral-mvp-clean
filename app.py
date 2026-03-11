@@ -60,38 +60,48 @@ def _inject_global_styles() -> None:
     st.markdown(
         """
         <style>
+        /* =========================
+           CONTAINER GERAL
+        ========================== */
         .block-container {
-            padding-top: 1rem !important;
+            padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }
 
+        html, body, [data-testid="stAppViewContainer"], .main {
+            overflow-x: hidden !important;
+        }
+
+        /* Esconde header padrão do Streamlit para o topo ficar mais limpo */
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+        }
+
+        /* =========================
+           TOPO NOVO
+        ========================== */
+        .vf-topbar-shell {
+            width: 100%;
+            margin: 0 0 1.4rem 0;
+            padding: 0;
+        }
+
         .vf-topbar {
-            position: sticky;
-            top: 0;
-            z-index: 999;
-            background: rgba(255,255,255,0.98);
-            border: 1px solid #e8e8e8;
-            border-radius: 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
-            margin-bottom: 1.5rem;
+            width: 100%;
+            background: #ffffff;
+            border-bottom: 1px solid #e8e8e8;
         }
 
         .vf-topbar-inner {
+            width: 100%;
+            min-height: 76px;
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             justify-content: space-between;
-            gap: 18px;
-            flex-wrap: wrap;
-            padding: 18px 22px;
-        }
-
-        .vf-topbar-left {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 10px;
-            min-width: 280px;
+            gap: 20px;
+            padding: 0 18px;
+            box-sizing: border-box;
         }
 
         .vf-brand {
@@ -100,33 +110,59 @@ def _inject_global_styles() -> None:
             color: #1f2a44;
             letter-spacing: -0.02em;
             line-height: 1.1;
+            white-space: nowrap;
         }
 
         .vf-links {
             display: flex;
-            gap: 24px;
-            flex-wrap: wrap;
             align-items: center;
+            justify-content: flex-end;
+            gap: 26px;
+            flex-wrap: wrap;
         }
 
         .vf-link {
-            color: #1d4ed8;
-            text-decoration: underline;
+            color: #1f2a44;
+            text-decoration: none;
             font-weight: 600;
             font-size: 15px;
             white-space: nowrap;
         }
 
-        .vf-main-title {
+        .vf-link:hover {
+            text-decoration: underline;
+        }
+
+        /* =========================
+           TÍTULO CENTRAL
+        ========================== */
+        .vf-main-title-wrap {
+            width: 100%;
             text-align: center;
+            margin-top: 0.6rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .vf-main-title {
             font-size: 42px;
             font-weight: 800;
             color: #1f2a44;
-            margin-top: 1.8rem;
-            margin-bottom: 1.2rem;
-            width: 100%;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+            margin: 0;
         }
 
+        .vf-main-subtitle {
+            margin-top: 10px;
+            margin-bottom: 0.8rem;
+            font-size: 15px;
+            color: #6b7280;
+            text-align: center;
+        }
+
+        /* =========================
+           TÍTULOS E CARTEIRA
+        ========================== */
         .vf-section-title {
             font-size: 26px;
             font-weight: 800;
@@ -135,7 +171,7 @@ def _inject_global_styles() -> None:
         }
 
         .vf-wallet-wrap {
-            margin-top: 8px;
+            margin-top: 0;
             margin-bottom: 14px;
         }
 
@@ -180,13 +216,16 @@ def _inject_global_styles() -> None:
             margin-bottom: 12px;
         }
 
+        /* =========================
+           SIDEBAR
+        ========================== */
         section[data-testid="stSidebar"] {
             background: #eef0f3;
             border-right: 1px solid #d9dee5;
         }
 
         section[data-testid="stSidebar"] .block-container {
-            padding-top: 4.8rem !important;
+            padding-top: 1.5rem !important;
             padding-bottom: 1.5rem !important;
         }
 
@@ -213,14 +252,21 @@ def _inject_global_styles() -> None:
             margin: 16px 0 18px 0;
         }
 
-        html, body, [data-testid="stAppViewContainer"], .main {
-            overflow-x: hidden !important;
-        }
-
+        /* =========================
+           RESPONSIVO
+        ========================== */
         @media (max-width: 1100px) {
             .vf-topbar-inner {
                 flex-direction: column;
                 align-items: flex-start;
+                justify-content: center;
+                padding-top: 14px;
+                padding-bottom: 14px;
+            }
+
+            .vf-links {
+                justify-content: flex-start;
+                gap: 18px;
             }
 
             .vf-wallet-grid {
@@ -228,7 +274,7 @@ def _inject_global_styles() -> None:
             }
 
             .vf-main-title {
-                margin-top: 1.4rem;
+                font-size: 34px;
             }
         }
         </style>
@@ -238,11 +284,15 @@ def _inject_global_styles() -> None:
 
 
 def _render_top_nav() -> None:
+    # Topo novo:
+    # - Viabilidade Fácil à esquerda
+    # - links à direita
+    # - sem barra/cartão arredondado
     st.markdown(
         """
-        <div class="vf-topbar">
-          <div class="vf-topbar-inner">
-            <div class="vf-topbar-left">
+        <div class="vf-topbar-shell">
+          <div class="vf-topbar">
+            <div class="vf-topbar-inner">
               <div class="vf-brand">Viabilidade Fácil</div>
               <div class="vf-links">
                 <span class="vf-link">Como funciona</span>
@@ -358,16 +408,22 @@ _render_top_nav()
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
 
-st.markdown('<div class="vf-main-title">Viabilidade Urbana</div>', unsafe_allow_html=True)
+st.markdown(
+    """
+    <div class="vf-main-title-wrap">
+        <div class="vf-main-title">Viabilidade Urbana</div>
+        <div class="vf-main-subtitle">
+            Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-# Frase única, sem duplicação
 right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
 with right_col_left:
-    if not (user_logged_in and user_id):
-        st.markdown(
-            '<div class="vf-login-note">Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.</div>',
-            unsafe_allow_html=True,
-        )
+    # Mantido vazio para preservar a frase só uma vez, no bloco central acima.
+    st.write("")
 
 with right_col_right:
     if user_logged_in and user_id:
