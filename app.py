@@ -168,13 +168,38 @@ def _inject_global_styles() -> None:
             margin-bottom: 12px;
         }
 
-        .vf-sidebar-section {
-            margin-bottom: 18px;
+        /* Sidebar visual */
+        section[data-testid="stSidebar"] {
+            background: #eef0f3;
+            border-right: 1px solid #d9dee5;
         }
 
-        .vf-sidebar-divider {
-            border-top: 1px solid #e9e9e9;
-            margin: 14px 0 18px 0;
+        section[data-testid="stSidebar"] .block-container {
+            padding-top: 1.2rem !important;
+            padding-bottom: 1.5rem !important;
+        }
+
+        section[data-testid="stSidebar"] h3 {
+            color: #22314d;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+        }
+
+        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] p,
+        section[data-testid="stSidebar"] div {
+            color: #2d3a53;
+        }
+
+        section[data-testid="stSidebar"] .stSelectbox > div > div,
+        section[data-testid="stSidebar"] .stTextInput > div > div,
+        section[data-testid="stSidebar"] [data-testid="stNumberInput"] > div > div {
+            border-radius: 12px;
+        }
+
+        .vf-side-divider {
+            border-top: 1px solid #cfd5dd;
+            margin: 16px 0 18px 0;
         }
 
         @media (max-width: 1100px) {
@@ -329,10 +354,11 @@ with right_col:
         )
         render_google_login_top()
 
-sidebar_col, main_col = st.columns([1.05, 3.25], gap="large")
-
-with sidebar_col:
-    st.markdown("### 1. Escolha o Uso")
+# =========================================================
+# Sidebar fixa com scroll nativo
+# =========================================================
+with st.sidebar:
+    st.markdown("### 📋 1. Escolha o Uso")
 
     categoria_label = st.selectbox(
         "Categoria:",
@@ -374,9 +400,9 @@ with sidebar_col:
     if categoria_label != "Residencial":
         st.caption("Essa categoria ficará disponível em breve.")
 
-    st.markdown('<div class="vf-sidebar-divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
 
-    st.markdown("### 2. Busca Direta")
+    st.markdown("### 🔎 2. Busca Direta")
     st.text_input(
         "Ou digite para pesquisar:",
         value="Em breve",
@@ -385,48 +411,50 @@ with sidebar_col:
     )
     st.caption("A busca direta ficará disponível em breve.")
 
-    st.markdown('<div class="vf-sidebar-divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
 
-    st.markdown("### 3. Dados do Lote")
+    st.markdown("### 📐 3. Dados do Lote")
     st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
 
     lot_area, built_ground, permeable_area = render_lote_section()
 
-with main_col:
-    st.markdown(
-        '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
-        unsafe_allow_html=True,
+# =========================================================
+# Área principal
+# =========================================================
+st.markdown(
+    '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
+    unsafe_allow_html=True,
+)
+
+radius_m = render_mapa_section(zones_gj)
+
+btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
+with btn_col2:
+    clicked_calcular = st.button(
+        "🚀 GERAR ESTUDO DE VIABILIDADE",
+        key="btn_calc",
+        use_container_width=True,
     )
 
-    radius_m = render_mapa_section(zones_gj)
+    limpar_tudo = st.button(
+        "🗑️ LIMPAR TUDO",
+        key="btn_clear_all",
+        use_container_width=True,
+    )
 
-    btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
-    with btn_col2:
-        clicked_calcular = st.button(
-            "🚀 GERAR ESTUDO DE VIABILIDADE",
-            key="btn_calc",
-            use_container_width=True,
-        )
-
-        limpar_tudo = st.button(
-            "🗑️ LIMPAR TUDO",
-            key="btn_clear_all",
-            use_container_width=True,
-        )
-
-        if limpar_tudo:
-            st.session_state.selected_lat = None
-            st.session_state.selected_lon = None
-            st.session_state.calc = {"use_type_code": st.session_state.calc.get("use_type_code", "RES_UNI")}
-            st.session_state.report_unlocked = False
-            st.session_state.free_calc_done = False
-            st.session_state.last_calc_signature = None
-            st.session_state.show_login_gate = False
-            st.session_state.scroll_to_login_gate = False
-            st.session_state.scroll_to_item3 = False
-            st.session_state.post_login_action = None
-            st.session_state.show_inline_payments = False
-            st.rerun()
+    if limpar_tudo:
+        st.session_state.selected_lat = None
+        st.session_state.selected_lon = None
+        st.session_state.calc = {"use_type_code": st.session_state.calc.get("use_type_code", "RES_UNI")}
+        st.session_state.report_unlocked = False
+        st.session_state.free_calc_done = False
+        st.session_state.last_calc_signature = None
+        st.session_state.show_login_gate = False
+        st.session_state.scroll_to_login_gate = False
+        st.session_state.scroll_to_item3 = False
+        st.session_state.post_login_action = None
+        st.session_state.show_inline_payments = False
+        st.rerun()
 
 st.session_state.calc["lot_area_m2"] = float(lot_area)
 st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or 0.0)
