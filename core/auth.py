@@ -170,6 +170,11 @@ def handle_oauth_callback() -> None:
     """
     Processa callback do Google vindo do Supabase.
     Também trata cenários de erro retornados na query string.
+
+    Patch importante:
+    - se não houver `code` na URL, tentamos sincronizar a sessão atual.
+    - isso ajuda o app a continuar reconhecendo o usuário logado
+      depois que ele volta para a aba principal ou recarrega a página.
     """
     params = get_all_auth_query_params()
     _push_auth_debug("handle_oauth_callback_enter", params)
@@ -194,8 +199,12 @@ def handle_oauth_callback() -> None:
         clear_auth_query_params()
         return
 
+    # Mudança principal:
+    # antes retornava imediatamente.
+    # agora sincroniza a sessão existente quando a página abre sem `code`.
     if not code:
         _push_auth_debug("handle_oauth_callback_no_code", {})
+        sync_user_from_current_session()
         return
 
     if st.session_state.get("last_oauth_code") == code:
@@ -310,6 +319,7 @@ def sign_out_current_user() -> None:
         "last_oauth_code",
         "post_login_action",
         "pending_login_reason",
+        "google_login_url",
     ]:
         st.session_state.pop(key, None)
 
