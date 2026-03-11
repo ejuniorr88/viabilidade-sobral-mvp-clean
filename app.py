@@ -9,7 +9,7 @@ from typing import Any, Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.write("APP VERSION MARKER: 2026-03-11-SCROLL-FIX-MINIMAL-V1")
+st.write("APP VERSION MARKER: 2026-03-11-SCROLL-BY-TEXT-V1")
 st.write("CWD:", os.getcwd())
 st.write("FILES in data/:", [p.name for p in pathlib.Path("data").glob("*")])
 
@@ -83,7 +83,8 @@ def _current_user_id() -> str | None:
 
 
 def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
-    # limpa estado do relatório pago e prepara a parte gratuita
+    # ATUALIZAÇÃO:
+    # Mantém a lógica já consolidada e só ativa a flag de scroll para o item 3
     st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
     st.session_state.last_calc_signature = st.session_state.get("current_signature")
@@ -91,15 +92,9 @@ def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
     calc.pop("err", None)
     calc.pop("rule", None)
 
-    # -----------------------------------------------------
-    # ÂNCORA DO ITEM 3
-    # fica exatamente antes da renderização da localização.
-    # assim, quando o usuário já estiver logado e clicar em calcular,
-    # o scroll cai no começo do item 3.
-    # -----------------------------------------------------
-    st.markdown('<div id="item-3-anchor"></div>', unsafe_allow_html=True)
-
-    _ = render_localizacao_section(True, zones_prepared, radius_m)
+    localizacao_calc = render_localizacao_section(True, zones_prepared, radius_m)
+    if isinstance(localizacao_calc, dict):
+        calc.update(localizacao_calc)
 
     if calc.get("zone") and not calc.get("rule"):
         try:
@@ -107,7 +102,6 @@ def _run_free_calc(calc: Dict[str, Any], zones_prepared, radius_m) -> None:
             if rule:
                 calc["rule"] = rule
                 st.session_state.free_calc_done = True
-                # ativa o scroll automático para o item 3
                 st.session_state.scroll_to_item3 = True
             else:
                 calc["err"] = (
@@ -155,54 +149,59 @@ def _try_unlock_report_after_payment(user_id: str) -> None:
         st.error(f"Não foi possível finalizar a liberação do relatório após o pagamento: {e}")
 
 
-def _scroll_to_login_box() -> None:
-    # -----------------------------------------------------
-    # BLOCO JÁ CONSOLIDADO:
-    # quando o usuário clicar em calcular/gerar relatório sem login,
-    # a página desce até o bloco de login.
-    # -----------------------------------------------------
+def _scroll_to_text(target_text: str, offset: int = 80) -> None:
+    # ATUALIZAÇÃO:
+    # Em vez de depender de id/âncora HTML, procura o texto visível da seção.
+    # Isso tende a funcionar melhor no Streamlit.
+    safe_text = json.dumps(target_text)
     components.html(
-        """
+        f"""
         <script>
-            const scrollToLogin = () => {
-                const rootDoc = window.parent.document;
-                const el = rootDoc.getElementById("login-required-box");
-                if (!el) return;
-                const y = el.getBoundingClientRect().top + window.parent.pageYOffset - 80;
-                window.parent.scrollTo({ top: y, behavior: "smooth" });
-            };
-            setTimeout(scrollToLogin, 200);
-            setTimeout(scrollToLogin, 700);
-            setTimeout(scrollToLogin, 1400);
+            const TARGET_TEXT = {safe_text};
+            const OFFSET = {offset};
+
+            function findElementByExactText(root, text) {{
+                const selectors = "h1,h2,h3,h4,h5,h6,p,div,label,span,strong";
+                const els = Array.from(root.querySelectorAll(selectors));
+                return els.find(el => {{
+                    const t = (el.innerText || el.textContent || "").trim();
+                    return t === text;
+                }});
+            }}
+
+            function doScroll() {{
+                const doc = window.parent.document;
+                const el = findElementByExactText(doc, TARGET_TEXT);
+                if (!el) return false;
+
+                const y = el.getBoundingClientRect().top + window.parent.pageYOffset - OFFSET;
+                window.parent.scrollTo({{ top: y, behavior: "smooth" }});
+                return true;
+            }}
+
+            // Tenta mais de uma vez porque o DOM do Streamlit pode estabilizar depois
+            setTimeout(doScroll, 200);
+            setTimeout(doScroll, 700);
+            setTimeout(doScroll, 1400);
+            setTimeout(doScroll, 2200);
         </script>
         """,
         height=0,
     )
+
+
+def _scroll_to_login_box() -> None:
+    # ATUALIZAÇÃO:
+    # mantém o comportamento sem login,
+    # mas agora procurando pelo título do bloco em vez de id
+    _scroll_to_text("Faça login para continuar", offset=80)
 
 
 def _scroll_to_item3_box() -> None:
-    # -----------------------------------------------------
-    # NOVO BLOCO:
-    # depois do cálculo com usuário logado,
-    # a página desce até o começo do item 3.
-    # -----------------------------------------------------
-    components.html(
-        """
-        <script>
-            const scrollToItem3 = () => {
-                const rootDoc = window.parent.document;
-                const el = rootDoc.getElementById("item-3-anchor");
-                if (!el) return;
-                const y = el.getBoundingClientRect().top + window.parent.pageYOffset - 100;
-                window.parent.scrollTo({ top: y, behavior: "smooth" });
-            };
-            setTimeout(scrollToItem3, 250);
-            setTimeout(scrollToItem3, 800);
-            setTimeout(scrollToItem3, 1600);
-        </script>
-        """,
-        height=0,
-    )
+    # ATUALIZAÇÃO:
+    # após clicar em calcular já logado,
+    # desce até o título do item 3
+    _scroll_to_text("3) Localização (zona + via)", offset=100)
 
 
 # =========================================================
@@ -257,7 +256,8 @@ if st.session_state.get("auth_message"):
 
 render_credits_panel(_card)
 
-# evita duplicar widgets quando o painel inline estiver ativo
+# ATUALIZAÇÃO:
+# evita duplicar widgets quando o painel inline estiver ativo embaixo do relatório
 if not st.session_state.get("payments_focus_mode"):
     render_payments_panel()
 
@@ -342,8 +342,8 @@ elif user_logged_in and st.session_state.get("post_login_action") == "generate_r
 # =========================================================
 if clicked_calcular:
     if not user_logged_in or not user_id:
-        # fluxo já consolidado:
-        # sem login -> mostra bloco de login e desce até ele
+        # ATUALIZAÇÃO:
+        # sem login -> mostra o bloco de login e desce até ele
         st.session_state.post_login_action = "calculate_viability"
         st.session_state.pending_login_reason = (
             "Para calcular a viabilidade, primeiro faça login com Google."
@@ -351,6 +351,7 @@ if clicked_calcular:
         st.session_state.force_scroll_to_login = True
         st.rerun()
     else:
+        # ATUALIZAÇÃO:
         # com login -> calcula e prepara scroll para o item 3
         _run_free_calc(calc, zones_prepared, radius_m)
 else:
@@ -373,7 +374,6 @@ if (not user_logged_in) and st.session_state.get("post_login_action") in ("calcu
 # Parte gratuita: mostrar apenas até o item 4
 # =========================================================
 if st.session_state.get("free_calc_done"):
-    # scroll para o item 3 depois que ele já foi renderizado no cálculo
     if st.session_state.get("scroll_to_item3"):
         _scroll_to_item3_box()
         st.session_state.scroll_to_item3 = False
