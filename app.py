@@ -1,6 +1,4 @@
-import os
 import json
-import pathlib
 from pathlib import Path
 from typing import Any, Dict
 
@@ -16,11 +14,6 @@ try:
     from core.zones_map import load_zones
 except Exception:
     from core.zones_mapa import load_zones  # type: ignore
-
-try:
-    from core.streets import load_streets  # noqa
-except Exception:
-    load_streets = None  # type: ignore
 
 try:
     from core.supabase_rules import fetch_rule, pick_rule  # type: ignore
@@ -63,79 +56,37 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
-def _render_login_gate_block() -> None:
-    """
-    Bloco inferior de login.
-    Continua aparecendo apenas quando o usuário tenta calcular sem estar logado.
-    """
-    st.markdown("### Faça login para continuar")
-    st.info("Para liberar a pesquisa de viabilidade, entre com sua conta Google.")
-
-    auth_url = None
-    try:
-        auth_url = start_google_login()
-    except Exception:
-        auth_url = None
-
-    if auth_url:
-        st.link_button(
-            "Entrar com Google",
-            auth_url,
-            use_container_width=True,
-        )
-        st.caption("O login será aberto em nova aba. Depois volte para esta aba.")
-    else:
-        st.error("Não foi possível gerar o link de login com Google.")
-
-
 def _inject_global_styles() -> None:
-    """
-    CSS global do layout.
-    Apenas ajustes visuais.
-    """
     st.markdown(
         """
         <style>
         .block-container {
-            padding-top: 7.5rem !important;
+            padding-top: 1.2rem !important;
             padding-bottom: 2rem !important;
         }
 
-        .vf-fixed-topbar {
-            position: fixed;
+        .vf-topbar {
+            position: sticky;
             top: 0;
-            left: 0;
-            right: 0;
             z-index: 999;
             background: rgba(255,255,255,0.98);
-            backdrop-filter: blur(8px);
-            border-bottom: 1px solid #ececec;
+            border: 1px solid #ececec;
+            border-radius: 16px;
+            padding: 18px 22px;
+            margin-bottom: 18px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.03);
         }
 
         .vf-topbar-inner {
-            max-width: 1700px;
-            margin: 0 auto;
-            padding: 8px 16px;
-        }
-
-        .vf-nav-wrap {
-            background: #ffffff;
-            border: 1px solid #ececec;
-            border-radius: 16px;
-            padding: 18px 22px;
-        }
-
-        .vf-nav {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 16px;
+            gap: 18px;
             flex-wrap: wrap;
         }
 
         .vf-brand {
-            font-size: 28px;
+            font-size: 30px;
             font-weight: 800;
             color: #1f2a44;
             letter-spacing: -0.02em;
@@ -143,7 +94,7 @@ def _inject_global_styles() -> None:
 
         .vf-links {
             display: flex;
-            gap: 30px;
+            gap: 28px;
             flex-wrap: wrap;
             align-items: center;
         }
@@ -160,7 +111,7 @@ def _inject_global_styles() -> None:
             font-size: 42px;
             font-weight: 800;
             color: #1f2a44;
-            margin-top: 6px;
+            margin-top: 8px;
             margin-bottom: 10px;
         }
 
@@ -211,27 +162,29 @@ def _inject_global_styles() -> None:
             line-height: 1.25;
         }
 
-        [data-testid="column"] .stSelectbox,
-        [data-testid="column"] .stTextInput {
-            margin-bottom: 2px;
+        .vf-login-note {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 12px;
         }
 
-        [data-testid="column"] .stSelectbox > div,
-        [data-testid="column"] .stTextInput > div {
-            width: 100%;
+        .vf-sidebar-section {
+            margin-bottom: 18px;
         }
 
-        [data-testid="column"] [data-testid="stNumberInput"] {
-            margin-bottom: 8px;
+        .vf-sidebar-divider {
+            border-top: 1px solid #e9e9e9;
+            margin: 14px 0 18px 0;
         }
 
         @media (max-width: 1100px) {
-            .vf-wallet-grid {
-                grid-template-columns: 1fr;
-            }
-            .vf-nav {
+            .vf-topbar-inner {
                 flex-direction: column;
                 align-items: flex-start;
+            }
+
+            .vf-wallet-grid {
+                grid-template-columns: 1fr;
             }
         }
         </style>
@@ -243,18 +196,14 @@ def _inject_global_styles() -> None:
 def _render_top_nav() -> None:
     st.markdown(
         """
-        <div class="vf-fixed-topbar">
+        <div class="vf-topbar">
           <div class="vf-topbar-inner">
-            <div class="vf-nav-wrap">
-              <div class="vf-nav">
-                <div class="vf-brand">Viabilidade Fácil</div>
-                <div class="vf-links">
-                  <a class="vf-link" href="#">Como funciona</a>
-                  <a class="vf-link" href="#">Área do cliente</a>
-                  <a class="vf-link" href="#">Planos</a>
-                  <a class="vf-link" href="#">Dúvidas/Suporte</a>
-                </div>
-              </div>
+            <div class="vf-brand">Viabilidade Fácil</div>
+            <div class="vf-links">
+              <span class="vf-link">Como funciona</span>
+              <span class="vf-link">Área do cliente</span>
+              <span class="vf-link">Planos</span>
+              <span class="vf-link">Dúvidas/Suporte</span>
             </div>
           </div>
         </div>
@@ -264,17 +213,12 @@ def _render_top_nav() -> None:
 
 
 def _render_wallet_summary() -> None:
-    """
-    Minha carteira discreta.
-    Mostra só usuário, e-mail e saldo.
-    """
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
     user_email = st.session_state.get("auth_user_email") or st.session_state.get("auth_email") or "—"
     user_id = st.session_state.get("auth_user_id")
-    user_logged_in = bool(st.session_state.get("auth_logged_in"))
 
     saldo = "—"
-    if user_logged_in and user_id:
+    if user_id:
         try:
             saldo = str(get_credit_balance(user_id))
         except Exception:
@@ -302,6 +246,27 @@ def _render_wallet_summary() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def _render_login_gate_block() -> None:
+    st.markdown("### Faça login para continuar")
+    st.info("Para liberar a pesquisa de viabilidade, entre com sua conta Google.")
+
+    auth_url = None
+    try:
+        auth_url = start_google_login()
+    except Exception:
+        auth_url = None
+
+    if auth_url:
+        st.link_button(
+            "Entrar com Google",
+            auth_url,
+            use_container_width=True,
+        )
+        st.caption("O login será aberto em nova aba. Depois volte para esta aba.")
+    else:
+        st.error("Não foi possível gerar o link de login com Google.")
 
 
 # =========================================================
@@ -339,28 +304,31 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
-
 handle_oauth_callback()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
 
-# =========================================================
-# Topo + estilos
-# =========================================================
 _inject_global_styles()
 _render_top_nav()
 
-title_col, wallet_col = st.columns([2.3, 2.0], gap="large")
+user_logged_in = bool(st.session_state.get("auth_logged_in"))
+user_id = st.session_state.get("auth_user_id")
+
+title_col, right_col = st.columns([2.3, 2.0], gap="large")
 with title_col:
     st.markdown('<div class="vf-main-title">Viabilidade Urbana</div>', unsafe_allow_html=True)
-with wallet_col:
-    render_google_login_top()
-    _render_wallet_summary()
 
-# =========================================================
-# Layout principal
-# =========================================================
+with right_col:
+    if user_logged_in and user_id:
+        _render_wallet_summary()
+    else:
+        st.markdown(
+            '<div class="vf-login-note">Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.</div>',
+            unsafe_allow_html=True,
+        )
+        render_google_login_top()
+
 sidebar_col, main_col = st.columns([1.05, 3.25], gap="large")
 
 with sidebar_col:
@@ -379,10 +347,10 @@ with sidebar_col:
     )
 
     residential_options = {
-        "Residencial Unifamiliar (Casa)": "RES_UNI",
-        "Multifamiliar R2.1 (2 unidades no mesmo lote)": "RES_MULTI_R21",
-        "Multifamiliar R2.2 (condomínio horizontal com via interna)": "RES_MULTI_R22",
-        "Multifamiliar R3 (condomínio vertical / prédio)": "RES_MULTI_R3",
+        "Residencial Unifamiliar (Casa)": ("RES_UNI", ""),
+        "Multifamiliar R2.1 (2 unidades no mesmo lote)": ("RES_MULTI_R21", "R21"),
+        "Multifamiliar R2.2 (condomínio horizontal com via interna)": ("RES_MULTI_R22", "R22"),
+        "Multifamiliar R3 (condomínio vertical / prédio)": ("RES_MULTI_R3", "R3"),
     }
 
     selected_use_label = st.selectbox(
@@ -393,11 +361,20 @@ with sidebar_col:
         disabled=(categoria_label != "Residencial"),
     )
 
-    st.session_state.calc["use_type_code"] = residential_options.get(selected_use_label, "RES_UNI")
+    selected_use_code, selected_multi_tipo = residential_options.get(selected_use_label, ("RES_UNI", ""))
+    st.session_state.calc["use_type_code"] = selected_use_code
+
+    if selected_use_code.startswith("RES_MULTI_"):
+        st.session_state.calc["project_mode"] = "GUIA_FASE_1"
+        st.session_state.calc["multi_tipo"] = selected_multi_tipo
+    else:
+        st.session_state.calc.pop("project_mode", None)
+        st.session_state.calc.pop("multi_tipo", None)
 
     if categoria_label != "Residencial":
         st.caption("Essa categoria ficará disponível em breve.")
-    st.markdown("---")
+
+    st.markdown('<div class="vf-sidebar-divider"></div>', unsafe_allow_html=True)
 
     st.markdown("### 2. Busca Direta")
     st.text_input(
@@ -407,12 +384,12 @@ with sidebar_col:
         key="vf_busca_direta",
     )
     st.caption("A busca direta ficará disponível em breve.")
-    st.markdown("---")
+
+    st.markdown('<div class="vf-sidebar-divider"></div>', unsafe_allow_html=True)
 
     st.markdown("### 3. Dados do Lote")
     st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
 
-    # Mantém o bloco funcional consolidado
     lot_area, built_ground, permeable_area = render_lote_section()
 
 with main_col:
@@ -451,9 +428,6 @@ with main_col:
             st.session_state.show_inline_payments = False
             st.rerun()
 
-# =========================================================
-# Dados base do lote
-# =========================================================
 st.session_state.calc["lot_area_m2"] = float(lot_area)
 st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or 0.0)
 st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
@@ -485,9 +459,6 @@ calc = st.session_state.calc
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
 
-# =========================================================
-# Âncora do login inferior
-# =========================================================
 st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
 
 run_free_calc_now = False
@@ -521,16 +492,10 @@ if st.session_state.get("show_login_gate") and not (user_logged_in and user_id):
     _render_login_gate_block()
     st.divider()
 
-# =========================================================
-# Âncora do item 3
-# =========================================================
 st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
 
 show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
 
-# =========================================================
-# Cálculo gratuito
-# =========================================================
 if run_free_calc_now:
     st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
@@ -559,9 +524,6 @@ if run_free_calc_now:
 elif show_item3:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
 
-# =========================================================
-# Parte gratuita
-# =========================================================
 if st.session_state.get("free_calc_done"):
     render_indices_section(
         calc=calc,
@@ -570,9 +532,6 @@ if st.session_state.get("free_calc_done"):
         get_rule_func=fetch_rule,
     )
 
-# =========================================================
-# Relatório pago
-# =========================================================
 can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
 if can_offer_report:
@@ -582,9 +541,6 @@ if can_offer_report:
         "A análise inicial acima é gratuita. Para liberar o relatório completo, "
         "gere o relatório com 1 crédito."
     )
-
-    user_logged_in = bool(st.session_state.get("auth_logged_in"))
-    user_id = st.session_state.get("auth_user_id")
 
     saldo_atual = None
     if user_logged_in and user_id:
@@ -643,9 +599,6 @@ if can_offer_report:
         st.markdown("### Comprar créditos")
         render_payments_panel()
 
-# =========================================================
-# Parte paga final
-# =========================================================
 if st.session_state.get("report_unlocked") and can_offer_report:
     st.markdown("---")
 
@@ -659,9 +612,6 @@ if st.session_state.get("report_unlocked") and can_offer_report:
 
     render_relatorio_section(calc)
 
-# =========================================================
-# Scrolls
-# =========================================================
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
         """
