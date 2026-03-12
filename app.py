@@ -349,6 +349,43 @@ def _render_login_gate_block() -> None:
     )
 
 
+def _mount_auth_sync_listener() -> None:
+    # Este listener roda na aba principal e recarrega a página
+    # quando a aba de callback sinaliza que o login foi concluído.
+    components.html(
+        """
+        <script>
+            (function () {
+                if (window.__vfAuthListenerMounted) return;
+                window.__vfAuthListenerMounted = true;
+
+                function reloadMainTab() {
+                    try {
+                        window.location.reload();
+                    } catch (e) {}
+                }
+
+                window.addEventListener("storage", function (event) {
+                    if (event.key === "vf_auth_done") {
+                        reloadMainTab();
+                    }
+                });
+
+                try {
+                    const bc = new BroadcastChannel("vf_auth_channel");
+                    bc.onmessage = function (event) {
+                        if (event && event.data === "auth_done") {
+                            reloadMainTab();
+                        }
+                    };
+                } catch (e) {}
+            })();
+        </script>
+        """,
+        height=0,
+    )
+
+
 def _render_auth_callback_screen() -> None:
     st.markdown(
         """
@@ -371,17 +408,38 @@ def _render_auth_callback_screen() -> None:
         <script>
             (function() {{
                 const destination = "{destination}";
+
+                try {{
+                    localStorage.setItem("vf_auth_done", String(Date.now()));
+                }} catch (e) {{}}
+
+                try {{
+                    const bc = new BroadcastChannel("vf_auth_channel");
+                    bc.postMessage("auth_done");
+                    bc.close();
+                }} catch (e) {{}}
+
                 try {{
                     if (window.opener && !window.opener.closed) {{
-                        window.opener.location.href = destination;
-                        setTimeout(function() {{
-                            window.close();
-                        }}, 300);
-                        return;
+                        try {{
+                            window.opener.location.replace(destination);
+                        }} catch (e) {{}}
                     }}
                 }} catch (e) {{}}
 
-                window.top.location.href = destination;
+                setTimeout(function() {{
+                    try {{
+                        window.location.replace(destination);
+                    }} catch (e) {{
+                        window.location.href = destination;
+                    }}
+                }}, 900);
+
+                setTimeout(function() {{
+                    try {{
+                        window.close();
+                    }} catch (e) {{}}
+                }}, 1800);
             }})();
         </script>
         """,
@@ -423,8 +481,13 @@ if "show_inline_payments" not in st.session_state:
 
 _inject_global_styles()
 
+# Listener da aba principal
+_mount_auth_sync_listener()
+
+# Trata callback primeiro
 handle_oauth_callback()
 
+# Se for callback, não carrega o resto do app
 if is_auth_callback_mode():
     _render_auth_callback_screen()
     st.stop()
