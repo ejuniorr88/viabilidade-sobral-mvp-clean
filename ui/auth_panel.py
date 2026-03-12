@@ -96,7 +96,6 @@ def _render_logged_in_box(prefix: str) -> None:
     with col1:
         if st.button("Sair", key=f"btn_logout_{prefix}", use_container_width=True):
             sign_out_current_user()
-            st.rerun()
 
     with col2:
         render_google_login_cta(
