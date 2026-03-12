@@ -182,7 +182,9 @@ def handle_oauth_callback() -> None:
             f"Erro no login Google: {error}"
             + (f" — {error_description}" if error_description else "")
         )
-        clear_auth_query_params(keep_auth_flow=True)
+        # remove TUDO, inclusive auth_flow, para não ficar preso na tela de callback
+        clear_auth_query_params(keep_auth_flow=False)
+        st.rerun()
         return
 
     if code:
@@ -215,18 +217,22 @@ def handle_oauth_callback() -> None:
             if st.session_state.get("auth_logged_in"):
                 st.session_state["last_oauth_code"] = code
                 st.session_state["auth_message"] = "Login efetuado com sucesso."
-                clear_auth_query_params(keep_auth_flow=True)
+                # remove TUDO, inclusive auth_flow, para sair do modo callback
+                clear_auth_query_params(keep_auth_flow=False)
+                st.rerun()
                 return
 
             clear_user_in_state()
             st.session_state["auth_message"] = "Não foi possível concluir o login Google."
-            clear_auth_query_params(keep_auth_flow=True)
+            clear_auth_query_params(keep_auth_flow=False)
+            st.rerun()
             return
 
         except Exception as e:
             clear_user_in_state()
             st.session_state["auth_message"] = f"Erro ao concluir o login Google: {e}"
-            clear_auth_query_params(keep_auth_flow=True)
+            clear_auth_query_params(keep_auth_flow=False)
+            st.rerun()
             return
 
     if st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
