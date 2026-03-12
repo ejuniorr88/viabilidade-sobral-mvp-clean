@@ -80,8 +80,6 @@ def clear_auth_query_params(*, keep_auth_flow: bool = False) -> None:
         "error",
         "error_code",
         "error_description",
-        "auth_from_popup",
-        "auth_popup_done",
     ]
 
     if not keep_auth_flow:
@@ -184,6 +182,7 @@ def handle_oauth_callback() -> None:
             f"Erro no login Google: {error}"
             + (f" — {error_description}" if error_description else "")
         )
+        # remove TUDO, inclusive auth_flow, para não ficar preso na tela de callback
         clear_auth_query_params(keep_auth_flow=False)
         st.rerun()
         return
@@ -192,8 +191,9 @@ def handle_oauth_callback() -> None:
         last_code = st.session_state.get("last_oauth_code")
         if last_code == code:
             sync_user_from_current_session(force=True)
-            clear_auth_query_params(keep_auth_flow=False)
-            st.rerun()
+            if st.session_state.get("auth_logged_in"):
+                clear_auth_query_params(keep_auth_flow=False)
+                st.rerun()
             return
 
         supabase = get_supabase_auth_client()
@@ -221,6 +221,7 @@ def handle_oauth_callback() -> None:
             if st.session_state.get("auth_logged_in"):
                 st.session_state["last_oauth_code"] = code
                 st.session_state["auth_message"] = "Login efetuado com sucesso."
+                # remove TUDO, inclusive auth_flow, para sair do modo callback
                 clear_auth_query_params(keep_auth_flow=False)
                 st.rerun()
                 return
@@ -241,7 +242,7 @@ def handle_oauth_callback() -> None:
     if st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
         return
 
-    sync_user_from_current_session()
+    sync_user_from_current_session(force=True if is_auth_callback_mode() else False)
 
 
 def start_google_login(force_select_account: bool = False) -> Optional[str]:
@@ -265,25 +266,41 @@ def start_google_login(force_select_account: bool = False) -> Optional[str]:
             }
         )
 
-        url = None
-        if isinstance(response, dict):
-            url = response.get("url")
-        else:
-            url = getattr(response, "url", None)
+        url: Optional[str] = None
 
-        if url:
-            st.session_state["last_google_login_url"] = url
-            return url
+        if hasattr(response, "url"):
+            url = response.url
+        elif isinstance(response, dict):
+            url = response.get("url")
+        elif isinstance(response, str):
+            url = response
+
+        if not url:
+            st.session_state["auth_message"] = "Não foi possível gerar a URL de login Google."
+            return None
+
+        if (
+            "auth_flow=callback" in url
+            and "accounts.google.com" not in url
+            and "/auth/v1/authorize" not in url
+        ):
+            st.session_state["auth_message"] = (
+                "A URL de login retornou incorreta (callback local em vez do authorize do Google)."
+            )
+            return None
+
+        return url
 
     except Exception as e:
         st.session_state["auth_message"] = f"Erro ao iniciar login Google: {e}"
-
-    return None
+        return None
 
 
 def sign_out_current_user() -> None:
+    supabase = get_supabase_auth_client()
+
     try:
-        get_supabase_auth_client().auth.sign_out()
+        supabase.auth.sign_out()
     except Exception:
         pass
 
@@ -292,16 +309,12 @@ def sign_out_current_user() -> None:
         "auth_user_id",
         "auth_user_email",
         "auth_user_name",
-        "auth_name",
-        "auth_email",
         "auth_message",
-        "auth_sync_done",
         "last_oauth_code",
-        "last_google_login_url",
+        "post_login_action",
+        "auth_sync_done",
     ]:
-        if key in st.session_state:
-            del st.session_state[key]
+        st.session_state.pop(key, None)
 
+    clear_auth_query_params()
     clear_user_in_state()
-    st.session_state["auth_sync_done"] = False
-    clear_auth_query_params(keep_auth_flow=False)
