@@ -26,7 +26,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback, is_auth_callback_mode, get_app_url
+from core.auth import handle_oauth_callback
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
@@ -60,9 +60,6 @@ def _inject_global_styles() -> None:
     st.markdown(
         """
         <style>
-        /* =========================
-           CONTAINER GERAL
-        ========================== */
         .block-container {
             padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
@@ -73,14 +70,10 @@ def _inject_global_styles() -> None:
             overflow-x: hidden !important;
         }
 
-        /* Esconde header padrão do Streamlit para o topo ficar mais limpo */
         header[data-testid="stHeader"] {
             background: transparent !important;
         }
 
-        /* =========================
-           TOPO NOVO
-        ========================== */
         .vf-topbar-shell {
             width: 100%;
             margin: 0 0 1.4rem 0;
@@ -129,13 +122,6 @@ def _inject_global_styles() -> None:
             white-space: nowrap;
         }
 
-        .vf-link:hover {
-            text-decoration: underline;
-        }
-
-        /* =========================
-           TÍTULO CENTRAL
-        ========================== */
         .vf-main-title-wrap {
             width: 100%;
             text-align: center;
@@ -160,9 +146,6 @@ def _inject_global_styles() -> None:
             text-align: center;
         }
 
-        /* =========================
-           TÍTULOS E CARTEIRA
-        ========================== */
         .vf-section-title {
             font-size: 26px;
             font-weight: 800;
@@ -210,15 +193,6 @@ def _inject_global_styles() -> None:
             line-height: 1.25;
         }
 
-        .vf-login-note {
-            font-size: 14px;
-            color: #6b7280;
-            margin-bottom: 12px;
-        }
-
-        /* =========================
-           SIDEBAR
-        ========================== */
         section[data-testid="stSidebar"] {
             background: #eef0f3;
             border-right: 1px solid #d9dee5;
@@ -229,62 +203,11 @@ def _inject_global_styles() -> None:
             padding-bottom: 1.5rem !important;
         }
 
-        section[data-testid="stSidebar"] h3 {
-            color: #22314d;
-            font-weight: 800;
-            letter-spacing: -0.01em;
-        }
-
-        section[data-testid="stSidebar"] label,
-        section[data-testid="stSidebar"] p,
-        section[data-testid="stSidebar"] div {
-            color: #2d3a53;
-        }
-
-        section[data-testid="stSidebar"] .stSelectbox > div > div,
-        section[data-testid="stSidebar"] .stTextInput > div > div,
-        section[data-testid="stSidebar"] [data-testid="stNumberInput"] > div > div {
-            border-radius: 12px;
-        }
-
         .vf-side-divider {
             border-top: 1px solid #cfd5dd;
             margin: 16px 0 18px 0;
         }
 
-        .vf-callback-shell {
-            min-height: 80vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .vf-callback-card {
-            width: min(560px, 92vw);
-            background: #ffffff;
-            border: 1px solid #e8e8e8;
-            border-radius: 18px;
-            padding: 28px 24px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.06);
-            text-align: center;
-        }
-
-        .vf-callback-title {
-            font-size: 26px;
-            font-weight: 800;
-            color: #17305f;
-            margin-bottom: 8px;
-        }
-
-        .vf-callback-text {
-            font-size: 15px;
-            color: #6b7280;
-            line-height: 1.5;
-        }
-
-        /* =========================
-           RESPONSIVO
-        ========================== */
         @media (max-width: 1100px) {
             .vf-topbar-inner {
                 flex-direction: column;
@@ -314,10 +237,6 @@ def _inject_global_styles() -> None:
 
 
 def _render_top_nav() -> None:
-    # Topo novo:
-    # - Viabilidade Fácil à esquerda
-    # - links à direita
-    # - sem barra/cartão arredondado
     st.markdown(
         """
         <div class="vf-topbar-shell">
@@ -381,102 +300,6 @@ def _render_login_gate_block() -> None:
     )
 
 
-def _mount_auth_sync_listener() -> None:
-    components.html(
-        """
-        <script>
-            (function () {
-                if (window.__vfAuthListenerMounted) return;
-                window.__vfAuthListenerMounted = true;
-
-                function reloadMainTab() {
-                    try {
-                        window.location.reload();
-                    } catch (e) {}
-                }
-
-                window.addEventListener("storage", function (event) {
-                    if (event.key === "vf_auth_done") {
-                        reloadMainTab();
-                    }
-                });
-
-                try {
-                    const bc = new BroadcastChannel("vf_auth_channel");
-                    bc.onmessage = function (event) {
-                        if (event && event.data === "auth_done") {
-                            reloadMainTab();
-                        }
-                    };
-                } catch (e) {}
-            })();
-        </script>
-        """,
-        height=0,
-    )
-
-
-def _render_auth_callback_screen() -> None:
-    st.markdown(
-        """
-        <div class="vf-callback-shell">
-            <div class="vf-callback-card">
-                <div class="vf-callback-title">Concluindo seu login…</div>
-                <div class="vf-callback-text">
-                    Aguarde alguns segundos enquanto finalizamos sua autenticação.
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    destination = get_app_url()
-
-    components.html(
-        f"""
-        <script>
-            (function() {{
-                const destination = "{destination}";
-
-                try {{
-                    localStorage.setItem("vf_auth_done", String(Date.now()));
-                }} catch (e) {{}}
-
-                try {{
-                    const bc = new BroadcastChannel("vf_auth_channel");
-                    bc.postMessage("auth_done");
-                    bc.close();
-                }} catch (e) {{}}
-
-                try {{
-                    if (window.opener && !window.opener.closed) {{
-                        try {{
-                            window.opener.location.replace(destination);
-                        }} catch (e) {{}}
-                    }}
-                }} catch (e) {{}}
-
-                setTimeout(function() {{
-                    try {{
-                        window.location.replace(destination);
-                    }} catch (e) {{
-                        window.location.href = destination;
-                    }}
-                }}, 900);
-
-                setTimeout(function() {{
-                    try {{
-                        window.close();
-                    }} catch (e) {{}}
-                }}, 1800);
-            }})();
-        </script>
-        """,
-        height=0,
-    )
-
-
 if "selected_lat" not in st.session_state:
     st.session_state.selected_lat = None
 if "selected_lon" not in st.session_state:
@@ -509,17 +332,13 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
-zones_gj = _zones_geojson()
-zones_prepared = _zones_prepared()
-
 _inject_global_styles()
-_mount_auth_sync_listener()
 
+# Trata callback logo no início e já sai do modo callback via rerun no auth.py
 handle_oauth_callback()
 
-if is_auth_callback_mode():
-    _render_auth_callback_screen()
-    st.stop()
+zones_gj = _zones_geojson()
+zones_prepared = _zones_prepared()
 
 _render_top_nav()
 
@@ -540,7 +359,6 @@ st.markdown(
 
 right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
 with right_col_left:
-    # Mantido vazio para preservar a frase só uma vez, no bloco central acima.
     st.write("")
 
 with right_col_right:
