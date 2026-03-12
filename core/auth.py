@@ -242,7 +242,7 @@ def handle_oauth_callback() -> None:
     if st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
         return
 
-    sync_user_from_current_session(force=True if is_auth_callback_mode() else False)
+    sync_user_from_current_session(force=False)
 
 
 def start_google_login(force_select_account: bool = False) -> Optional[str]:
