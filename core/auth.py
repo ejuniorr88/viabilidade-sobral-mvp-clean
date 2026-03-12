@@ -7,12 +7,15 @@ import streamlit as st
 from supabase import Client, create_client
 
 
-@st.cache_resource(show_spinner=False)
 def get_supabase_auth_client() -> Client:
-    return create_client(
-        st.secrets["SUPABASE_URL"],
-        st.secrets["SUPABASE_ANON_KEY"],
-    )
+    client = st.session_state.get("_supabase_auth_client")
+    if client is None:
+        client = create_client(
+            st.secrets["SUPABASE_URL"],
+            st.secrets["SUPABASE_ANON_KEY"],
+        )
+        st.session_state["_supabase_auth_client"] = client
+    return client
 
 
 def _push_auth_debug(step: str, data: Optional[Dict[str, Any]] = None) -> None:
@@ -43,20 +46,7 @@ def get_app_url() -> str:
 
 
 def build_auth_callback_url() -> str:
-    base_url = get_app_url()
-    parsed = urlparse(base_url)
-    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    query["auth_flow"] = "callback"
-    return urlunparse(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            parsed.params,
-            urlencode(query),
-            parsed.fragment,
-        )
-    )
+    return get_app_url()
 
 
 def safe_get_query_param(name: str) -> Optional[str]:
@@ -162,8 +152,6 @@ def sync_user_from_current_session(force: bool = False) -> None:
 
 
 def is_auth_callback_mode() -> bool:
-    if safe_get_query_param("auth_flow") == "callback":
-        return True
     if safe_get_query_param("code"):
         return True
     if safe_get_query_param("error"):
@@ -279,16 +267,6 @@ def start_google_login(force_select_account: bool = False) -> Optional[str]:
             st.session_state["auth_message"] = "Não foi possível gerar a URL de login Google."
             return None
 
-        if (
-            "auth_flow=callback" in url
-            and "accounts.google.com" not in url
-            and "/auth/v1/authorize" not in url
-        ):
-            st.session_state["auth_message"] = (
-                "A URL de login retornou incorreta (callback local em vez do authorize do Google)."
-            )
-            return None
-
         return url
 
     except Exception as e:
@@ -313,6 +291,7 @@ def sign_out_current_user() -> None:
         "last_oauth_code",
         "post_login_action",
         "auth_sync_done",
+        "_supabase_auth_client",
     ]:
         st.session_state.pop(key, None)
 
