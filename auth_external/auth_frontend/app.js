@@ -15,24 +15,29 @@
   };
 
   function setStatus(text, kind = "muted") {
+    if (!els.status) return;
     els.status.textContent = text;
     els.status.className = `status ${kind}`;
   }
 
   function setLoggedOutView() {
-    els.loginBtn.hidden = false;
-    els.logoutBtn.hidden = true;
-    els.continueBtn.hidden = true;
-    els.userBox.hidden = true;
-    els.userBox.textContent = "";
+    if (els.loginBtn) els.loginBtn.hidden = false;
+    if (els.logoutBtn) els.logoutBtn.hidden = true;
+    if (els.continueBtn) els.continueBtn.hidden = true;
+    if (els.userBox) {
+      els.userBox.hidden = true;
+      els.userBox.textContent = "";
+    }
   }
 
   function setLoggedInView(user) {
-    els.loginBtn.hidden = true;
-    els.logoutBtn.hidden = false;
-    els.continueBtn.hidden = false;
-    els.userBox.hidden = false;
-    els.userBox.textContent = JSON.stringify(user, null, 2);
+    if (els.loginBtn) els.loginBtn.hidden = true;
+    if (els.logoutBtn) els.logoutBtn.hidden = false;
+    if (els.continueBtn) els.continueBtn.hidden = false;
+    if (els.userBox) {
+      els.userBox.hidden = false;
+      els.userBox.textContent = JSON.stringify(user, null, 2);
+    }
   }
 
   async function verifyWithGateway(accessToken) {
@@ -54,6 +59,7 @@
 
   async function refreshState() {
     const { data, error } = await supabaseClient.auth.getSession();
+
     if (error) {
       setLoggedOutView();
       setStatus(`Erro ao ler sessão: ${error.message}`, "error");
@@ -68,47 +74,73 @@
     }
 
     try {
+      setStatus("Validando login no gateway...", "muted");
       const verified = await verifyWithGateway(session.access_token);
       localStorage.setItem("vf_access_token", session.access_token);
       localStorage.setItem("vf_user", JSON.stringify(verified.user));
       setLoggedInView(verified.user);
       setStatus("Login validado com sucesso. Agora você já pode seguir para o sistema.", "ok");
+
+      if (window.location.hash && window.location.hash.includes("access_token=")) {
+        history.replaceState(null, "", window.location.pathname);
+      }
     } catch (err) {
       setLoggedOutView();
       setStatus(err.message || String(err), "error");
     }
   }
 
-  els.loginBtn.addEventListener("click", async () => {
-    setStatus("Redirecionando para o Google...", "muted");
-
-    const { error } = await supabaseClient.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: cfg.LOGIN_REDIRECT_URL,
-        queryParams: {
-          prompt: "select_account",
-        },
-      },
-    });
-
-    if (error) {
-      setStatus(`Falha ao iniciar login: ${error.message}`, "error");
+  async function handleInitialCallback() {
+    if (window.location.hash && window.location.hash.includes("access_token=")) {
+      setStatus("Processando retorno do Google...", "muted");
+      // Dá um pequeno tempo para o supabase-js persistir a sessão vinda da URL/hash.
+      window.setTimeout(refreshState, 300);
+      return;
     }
+
+    await refreshState();
+  }
+
+  if (els.loginBtn) {
+    els.loginBtn.addEventListener("click", async () => {
+      setStatus("Redirecionando para o Google...", "muted");
+
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: cfg.LOGIN_REDIRECT_URL,
+          queryParams: {
+            prompt: "select_account",
+          },
+        },
+      });
+
+      if (error) {
+        setStatus(`Falha ao iniciar login: ${error.message}`, "error");
+      }
+    });
+  }
+
+  if (els.logoutBtn) {
+    els.logoutBtn.addEventListener("click", async () => {
+      setStatus("Encerrando sessão...", "muted");
+      await supabaseClient.auth.signOut();
+      localStorage.removeItem("vf_access_token");
+      localStorage.removeItem("vf_user");
+      setLoggedOutView();
+      setStatus("Sessão encerrada.", "muted");
+    });
+  }
+
+  if (els.continueBtn) {
+    els.continueBtn.addEventListener("click", () => {
+      window.location.href = cfg.STREAMLIT_APP_URL;
+    });
+  }
+
+  supabaseClient.auth.onAuthStateChange((_event, _session) => {
+    refreshState();
   });
 
-  els.logoutBtn.addEventListener("click", async () => {
-    setStatus("Encerrando sessão...", "muted");
-    await supabaseClient.auth.signOut();
-    localStorage.removeItem("vf_access_token");
-    localStorage.removeItem("vf_user");
-    setLoggedOutView();
-    setStatus("Sessão encerrada.", "muted");
-  });
-
-  els.continueBtn.addEventListener("click", () => {
-    window.location.href = cfg.STREAMLIT_APP_URL;
-  });
-
-  window.addEventListener("load", refreshState);
+  handleInitialCallback();
 })();
