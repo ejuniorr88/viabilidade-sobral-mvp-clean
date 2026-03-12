@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Optional
 
 import streamlit as st
+import streamlit.components.v1 as components
 
-from core.auth import start_google_login, sign_out_current_user
+from core.auth import start_google_login, sign_out_current_user, get_app_url
 
 
 def _is_logged_in() -> bool:
@@ -65,7 +66,7 @@ def render_google_login_cta(
     *,
     full_width: bool = False,
     message: Optional[str] = None,
-    force_select_account: bool = False,
+    force_select_account: bool = True,
     subtle: bool = False,
 ) -> None:
     auth_url = start_google_login(force_select_account=force_select_account)
@@ -85,7 +86,7 @@ def render_google_login_cta(
     )
 
     if not subtle:
-        st.caption("O login será concluído nesta mesma aba.")
+        st.caption("O login será concluído nesta mesma aba e sempre mostrará a escolha de conta.")
 
 
 def _render_logged_in_box(prefix: str) -> None:
@@ -96,6 +97,16 @@ def _render_logged_in_box(prefix: str) -> None:
     with col1:
         if st.button("Sair", key=f"btn_logout_{prefix}", use_container_width=True):
             sign_out_current_user()
+            app_url = get_app_url()
+            components.html(
+                f"""
+                <script>
+                window.top.location.replace({app_url!r});
+                </script>
+                """,
+                height=0,
+            )
+            st.stop()
 
     with col2:
         render_google_login_cta(
