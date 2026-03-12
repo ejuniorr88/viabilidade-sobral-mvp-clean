@@ -356,8 +356,7 @@ def _render_auth_callback_screen() -> None:
             <div class="vf-callback-card">
                 <div class="vf-callback-title">Concluindo seu login…</div>
                 <div class="vf-callback-text">
-                    Aguarde alguns segundos enquanto finalizamos sua autenticação
-                    e voltamos para a página principal.
+                    Aguarde alguns segundos enquanto finalizamos sua autenticação.
                 </div>
             </div>
         </div>
@@ -366,12 +365,22 @@ def _render_auth_callback_screen() -> None:
     )
 
     destination = get_app_url()
+
     components.html(
         f"""
         <script>
-            setTimeout(function() {{
-                window.top.location.href = "{destination}";
-            }}, 1200);
+            (function() {{
+                const destination = "{destination}";
+                try {{
+                    if (window.opener && !window.opener.closed) {{
+                        window.opener.location.href = destination;
+                        window.close();
+                        return;
+                    }}
+                }} catch (e) {{}}
+
+                window.top.location.href = destination;
+            }})();
         </script>
         """,
         height=0,
@@ -412,10 +421,10 @@ if "show_inline_payments" not in st.session_state:
 
 _inject_global_styles()
 
-# 1) Sempre trata o callback primeiro
+# Trata callback primeiro
 handle_oauth_callback()
 
-# 2) Se estivermos no modo de callback, NÃO carregamos mapa, sidebar e resto do app
+# Se for callback, não carrega o resto do app
 if is_auth_callback_mode():
     _render_auth_callback_screen()
     st.stop()
