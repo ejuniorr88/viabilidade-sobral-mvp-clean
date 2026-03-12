@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login | Viabilidade Fácil</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="card">
+        <p class="eyebrow">Viabilidade Fácil</p>
+        <h1>Entrar com Google</h1>
+        <p class="subtitle">
+          Este módulo externo cuida do login fora do Streamlit para evitar os bugs de PKCE e callback.
+        </p>
+
+        <button id="loginBtn" class="primary">Continuar com Google</button>
+        <button id="logoutBtn" class="secondary" hidden>Sair</button>
+        <button id="continueBtn" class="primary" hidden>Continuar para o sistema</button>
+
+        <div id="status" class="status muted">Aguardando ação.</div>
+        <pre id="userBox" class="user-box" hidden></pre>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
