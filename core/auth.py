@@ -162,9 +162,6 @@ def sync_user_from_current_session() -> None:
 
 
 def is_auth_callback_mode() -> bool:
-    # Regra corrigida:
-    # callback mode deve depender SOMENTE da URL/callback real,
-    # e não de flag persistida em session_state.
     if safe_get_query_param("auth_flow") == "callback":
         return True
     if safe_get_query_param("code"):
@@ -185,7 +182,6 @@ def handle_oauth_callback() -> None:
             f"Erro no login Google: {error}"
             + (f" — {error_description}" if error_description else "")
         )
-        # Mantemos auth_flow só no ciclo atual para a tela leve terminar seu trabalho.
         clear_auth_query_params(keep_auth_flow=True)
         return
 
@@ -240,9 +236,6 @@ def handle_oauth_callback() -> None:
 
 
 def start_google_login(force_select_account: bool = False) -> Optional[str]:
-    """
-    Gera a URL REAL de login Google via Supabase OAuth.
-    """
     supabase = get_supabase_auth_client()
     redirect_to = build_auth_callback_url()
 
