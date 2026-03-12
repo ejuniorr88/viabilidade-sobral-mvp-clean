@@ -1,13 +1,12 @@
-
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import streamlit as st
-import streamlit.components.v1 as components
 from supabase import Client, create_client
+
+from core.supabase_client import get_supabase_config
 
 
 AUTH_STATE_KEYS = [
@@ -15,20 +14,30 @@ AUTH_STATE_KEYS = [
     "auth_user_id",
     "auth_user_email",
     "auth_user_name",
-    "auth_message",
-    "last_oauth_code",
     "auth_sync_done",
-    "_supabase_auth_client",
+    "last_oauth_code",
+]
+
+LOGOUT_CLEAN_KEYS = [
+    "auth_logged_in",
+    "auth_user_id",
+    "auth_user_email",
+    "auth_user_name",
+    "auth_message",
+    "auth_sync_done",
+    "last_oauth_code",
+    "post_login_action",
+    "report_unlocked",
+    "last_calc_signature",
+    "show_inline_payments",
 ]
 
 
 def get_supabase_auth_client() -> Client:
     client = st.session_state.get("_supabase_auth_client")
     if client is None:
-        client = create_client(
-            st.secrets["SUPABASE_URL"],
-            st.secrets["SUPABASE_ANON_KEY"],
-        )
+        cfg = get_supabase_config()
+        client = create_client(cfg.url, cfg.anon_key)
         st.session_state["_supabase_auth_client"] = client
     return client
 
@@ -46,23 +55,32 @@ def get_app_url() -> str:
 
 
 def build_auth_callback_url() -> str:
-    # Mesma aba, mesma rota do app. O callback é tratado pelo próprio app
-    # quando chegam ?code=... / ?error=...
+    explicit = str(st.secrets.get("REDIRECT_URL", "")).strip()
+    if explicit:
+        parsed = urlparse(explicit)
+        if parsed.scheme and parsed.netloc:
+            return explicit.rstrip("/")
     return get_app_url()
+
+
+def _as_single_query_value(value: Any) -> Optional[str]:
+    if isinstance(value, list):
+        return value[0] if value else None
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value or None
 
 
 def safe_get_query_param(name: str) -> Optional[str]:
     try:
-        value = st.query_params.get(name)
-        if isinstance(value, list):
-            return value[0] if value else None
-        return value
+        return _as_single_query_value(st.query_params.get(name))
     except Exception:
-        params = st.experimental_get_query_params()
-        values = params.get(name)
-        if not values:
+        try:
+            params = st.experimental_get_query_params()
+            return _as_single_query_value(params.get(name))
+        except Exception:
             return None
-        return values[0]
 
 
 def clear_auth_query_params() -> None:
@@ -80,27 +98,6 @@ def clear_auth_query_params() -> None:
             st.experimental_set_query_params(**cleaned)
         except Exception:
             pass
-
-
-def browser_redirect(url: str) -> None:
-    safe_url = json.dumps(url)
-    components.html(
-        f"""
-        <script>
-        const nextUrl = {safe_url};
-        const go = () => {{
-          try {{ window.top.location.replace(nextUrl); }} catch (e1) {{
-            try {{ window.parent.location.replace(nextUrl); }} catch (e2) {{
-              window.location.replace(nextUrl);
-            }}
-          }}
-        }};
-        go();
-        </script>
-        """,
-        height=0,
-    )
-    st.stop()
 
 
 def extract_user_fields(user_obj: Any) -> Dict[str, Optional[str]]:
@@ -143,33 +140,65 @@ def clear_user_in_state() -> None:
     st.session_state["auth_sync_done"] = True
 
 
-def reset_auth_runtime_state(*, keep_message: bool = False) -> None:
-    keys = list(AUTH_STATE_KEYS)
-    if keep_message:
-        keys.remove("auth_message")
-    for key in keys:
-        st.session_state.pop(key, None)
-    if keep_message:
-        st.session_state["auth_sync_done"] = False
+def _extract_user_from_auth_response(result: Any) -> Any:
+    if result is None:
+        return None
+
+    user_obj = getattr(result, "user", None)
+    if user_obj is not None:
+        return user_obj
+
+    if isinstance(result, dict):
+        user_obj = result.get("user")
+        if user_obj is not None:
+            return user_obj
+        session_obj = result.get("session")
+    else:
+        session_obj = getattr(result, "session", None)
+
+    if session_obj is None:
+        return None
+
+    user_obj = getattr(session_obj, "user", None)
+    if user_obj is not None:
+        return user_obj
+    if isinstance(session_obj, dict):
+        return session_obj.get("user")
+    return None
 
 
-def sync_user_from_current_session(force: bool = False) -> None:
+def sync_user_from_current_session(force: bool = False) -> bool:
     if st.session_state.get("auth_sync_done") and not force:
-        return
+        return bool(st.session_state.get("auth_logged_in"))
+
+    supabase = get_supabase_auth_client()
 
     try:
-        supabase = get_supabase_auth_client()
-        result = supabase.auth.get_user()
-        user_obj = getattr(result, "user", None)
-        if user_obj is None and isinstance(result, dict):
-            user_obj = result.get("user")
+        session_result = supabase.auth.get_session()
+        session_obj = getattr(session_result, "session", None)
+        if session_obj is None and isinstance(session_result, dict):
+            session_obj = session_result.get("session")
+
+        user_obj = None
+        if session_obj is not None:
+            user_obj = getattr(session_obj, "user", None)
+            if user_obj is None and isinstance(session_obj, dict):
+                user_obj = session_obj.get("user")
+
+        if user_obj is None:
+            user_result = supabase.auth.get_user()
+            user_obj = getattr(user_result, "user", None)
+            if user_obj is None and isinstance(user_result, dict):
+                user_obj = user_result.get("user")
 
         if user_obj is not None:
             store_user_in_state(user_obj)
-        else:
-            clear_user_in_state()
+            return True
     except Exception:
-        clear_user_in_state()
+        pass
+
+    clear_user_in_state()
+    return False
 
 
 def handle_oauth_callback() -> None:
@@ -178,79 +207,60 @@ def handle_oauth_callback() -> None:
     code = safe_get_query_param("code")
 
     if error:
-        reset_auth_runtime_state(keep_message=False)
+        clear_user_in_state()
+        st.session_state["last_oauth_code"] = None
         st.session_state["auth_message"] = (
             f"Erro no login Google: {error}"
             + (f" — {error_description}" if error_description else "")
         )
         clear_auth_query_params()
-        browser_redirect(get_app_url())
+        st.rerun()
+        return
 
     if code:
-        last_code = st.session_state.get("last_oauth_code")
-        if last_code == code and st.session_state.get("auth_logged_in"):
+        if st.session_state.get("last_oauth_code") == code and sync_user_from_current_session(force=True):
             clear_auth_query_params()
-            browser_redirect(get_app_url())
+            st.rerun()
+            return
+
+        supabase = get_supabase_auth_client()
 
         try:
-            supabase = get_supabase_auth_client()
             result = supabase.auth.exchange_code_for_session({"auth_code": code})
+            user_obj = _extract_user_from_auth_response(result)
 
-            user_obj = getattr(result, "user", None)
-            session_obj = getattr(result, "session", None)
-
-            if user_obj is None and isinstance(result, dict):
-                user_obj = result.get("user")
-                session_obj = result.get("session")
-
-            if user_obj is None and session_obj is not None:
-                user_obj = getattr(session_obj, "user", None)
-                if user_obj is None and isinstance(session_obj, dict):
-                    user_obj = session_obj.get("user")
-
-            if user_obj is not None:
-                store_user_in_state(user_obj)
-                st.session_state["last_oauth_code"] = code
-                st.session_state["auth_message"] = "Login efetuado com sucesso."
-            else:
+            if user_obj is None:
                 sync_user_from_current_session(force=True)
+            else:
+                store_user_in_state(user_obj)
 
             if st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
+                st.session_state["last_oauth_code"] = code
+                st.session_state["auth_message"] = "Login efetuado com sucesso."
                 clear_auth_query_params()
-                browser_redirect(get_app_url())
+                st.rerun()
+                return
 
-            reset_auth_runtime_state(keep_message=False)
-            st.session_state["auth_message"] = "Não foi possível concluir o login Google."
+            raise RuntimeError("Usuário não encontrado após concluir o login.")
+        except Exception:
+            clear_user_in_state()
+            st.session_state["last_oauth_code"] = None
+            st.session_state["auth_message"] = "Não foi possível concluir o login Google. Tente novamente."
             clear_auth_query_params()
-            browser_redirect(get_app_url())
-        except Exception as exc:
-            reset_auth_runtime_state(keep_message=False)
-            st.session_state["auth_message"] = f"Erro ao concluir o login Google: {exc}"
-            clear_auth_query_params()
-            browser_redirect(get_app_url())
+            st.rerun()
+            return
 
     sync_user_from_current_session(force=False)
 
 
-def start_google_login(*, force_select_account: bool = True) -> Optional[str]:
-    reset_auth_runtime_state(keep_message=True)
-    clear_auth_query_params()
-
+def start_google_login(force_select_account: bool = False) -> Optional[str]:
     supabase = get_supabase_auth_client()
     redirect_to = build_auth_callback_url()
 
     options: Dict[str, Any] = {
         "redirect_to": redirect_to,
-        "queryParams": {
-            # robustez > conveniência: sempre permite escolher a conta correta
-            "prompt": "select_account",
-        },
+        "query_params": {"prompt": "select_account" if force_select_account else "select_account"},
     }
-
-    if not force_select_account:
-        # Mantido por compatibilidade; ainda usa select_account para evitar
-        # login automático com conta errada em ambiente Streamlit.
-        pass
 
     try:
         response = supabase.auth.sign_in_with_oauth(
@@ -260,48 +270,40 @@ def start_google_login(*, force_select_account: bool = True) -> Optional[str]:
             }
         )
 
-        url: Optional[str] = None
         if hasattr(response, "url"):
             url = response.url
         elif isinstance(response, dict):
             url = response.get("url")
         elif isinstance(response, str):
             url = response
+        else:
+            url = None
 
         if not url:
             st.session_state["auth_message"] = "Não foi possível gerar a URL de login Google."
             return None
 
+        st.session_state["auth_message"] = None
+        st.session_state["last_oauth_code"] = None
+        st.session_state["auth_sync_done"] = False
         return url
-    except Exception as exc:
-        st.session_state["auth_message"] = f"Erro ao iniciar login Google: {exc}"
+    except Exception as e:
+        st.session_state["auth_message"] = f"Erro ao iniciar login Google: {e}"
         return None
 
 
-def start_google_login_redirect(*, force_select_account: bool = True) -> None:
-    auth_url = start_google_login(force_select_account=force_select_account)
-    if not auth_url:
-        st.rerun()
-        return
-    browser_redirect(auth_url)
+def sign_out_current_user() -> None:
+    supabase = get_supabase_auth_client()
 
-
-def sign_out_current_user(*, redirect: bool = True) -> None:
     try:
-        supabase = get_supabase_auth_client()
-        try:
-            supabase.auth.sign_out()
-        except Exception:
-            pass
-    finally:
-        reset_auth_runtime_state(keep_message=False)
-        clear_auth_query_params()
-        clear_user_in_state()
+        supabase.auth.sign_out()
+    except Exception:
+        pass
 
-    if redirect:
-        browser_redirect(get_app_url())
+    for key in LOGOUT_CLEAN_KEYS:
+        st.session_state.pop(key, None)
 
-
-def switch_google_account() -> None:
-    sign_out_current_user(redirect=False)
-    start_google_login_redirect(force_select_account=True)
+    st.session_state.pop("_supabase_auth_client", None)
+    clear_auth_query_params()
+    clear_user_in_state()
+    st.rerun()
