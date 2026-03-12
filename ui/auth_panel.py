@@ -3,9 +3,8 @@ from __future__ import annotations
 from typing import Optional
 
 import streamlit as st
-import streamlit.components.v1 as components
 
-from core.auth import start_google_login, sign_out_current_user
+from core.auth import get_auth_url, logout_limpo
 
 
 def _is_logged_in() -> bool:
@@ -24,69 +23,79 @@ def _user_email() -> str:
     return st.session_state.get("auth_user_email") or "-"
 
 
-def _redirect_same_tab(url: str) -> None:
-    components.html(
-        f"""
-        <script>
-            window.parent.location.href = {url!r};
-        </script>
-        """,
-        height=0,
+def _clear_auth_feedback() -> None:
+    st.session_state.pop("auth_last_error", None)
+    st.session_state.pop("auth_message", None)
+
+
+def _render_login_flow(prefix: str, *, force_select_account: bool = False) -> None:
+    oauth_key = f"oauth_url_{prefix}"
+    generated_url = st.session_state.get(oauth_key)
+
+    if not generated_url:
+        if st.button(
+            "🚀 Entrar com Google" if not force_select_account else "Trocar usuário",
+            key=f"btn_login_generate_{prefix}_{'switch' if force_select_account else 'default'}",
+            use_container_width=True,
+            type="primary" if not force_select_account else "secondary",
+        ):
+            _clear_auth_feedback()
+            auth_url = get_auth_url(force_select_account=force_select_account)
+            if auth_url:
+                st.session_state[oauth_key] = auth_url
+                st.session_state["oauth_url"] = auth_url
+                st.rerun()
+        return
+
+    st.info("Sua autenticação foi preparada. Clique abaixo para prosseguir.")
+    st.link_button(
+        "Confirmar e ir para o Google",
+        generated_url,
+        use_container_width=True,
+        type="primary",
     )
 
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Gerar novo link", key=f"btn_login_regen_{prefix}", use_container_width=True):
+            _clear_auth_feedback()
+            auth_url = get_auth_url(force_select_account=force_select_account)
+            if auth_url:
+                st.session_state[oauth_key] = auth_url
+                st.session_state["oauth_url"] = auth_url
+                st.rerun()
+    with col2:
+        if st.button("Cancelar", key=f"btn_login_cancel_{prefix}", use_container_width=True):
+            st.session_state.pop(oauth_key, None)
+            st.session_state.pop("oauth_url", None)
+            st.rerun()
 
-def render_google_login_cta(
-    label: str = "Entrar com Google",
-    *,
-    full_width: bool = False,
-    message: Optional[str] = None,
-    force_select_account: bool = False,
-    subtle: bool = False,
-    button_key: Optional[str] = None,
-) -> None:
-    if message:
-        st.info(message)
 
-    button_type = "secondary" if subtle else "primary"
-    if st.button(label, key=button_key, use_container_width=full_width, type=button_type):
-        auth_url = start_google_login(force_select_account=force_select_account)
-        if not auth_url:
-            st.error(st.session_state.get("auth_message") or "Não foi possível iniciar o login com Google.")
-            return
-
-        _redirect_same_tab(auth_url)
-        st.stop()
-
-    if not subtle:
-        st.caption("O login será concluído nesta mesma aba.")
+def _render_feedback() -> None:
+    if st.session_state.get("auth_last_error"):
+        st.error(st.session_state["auth_last_error"])
+    elif st.session_state.get("auth_message"):
+        st.success(st.session_state["auth_message"])
 
 
 def _render_logged_in_box(prefix: str) -> None:
+    _render_feedback()
     st.success(f"{_user_name()} • {_user_email()}")
 
-    col1, col2 = st.columns([1.25, 1])
-
+    col1, col2 = st.columns([1.15, 1])
     with col1:
         if st.button("Sair", key=f"btn_logout_{prefix}", use_container_width=True):
-            sign_out_current_user()
-
+            logout_limpo()
     with col2:
-        render_google_login_cta(
-            "Trocar usuário",
-            full_width=True,
-            force_select_account=True,
-            subtle=True,
-            button_key=f"btn_switch_user_{prefix}",
-        )
+        _render_login_flow(f"{prefix}_switch", force_select_account=True)
 
 
-def _render_logged_out_box(prefix: str) -> None:
-    render_google_login_cta(
-        "Entrar com Google",
-        full_width=True,
-        force_select_account=False,
-        button_key=f"btn_login_{prefix}",
-    )
+def _render_logged_out_box(prefix: str, message: Optional[str] = None) -> None:
+    _render_feedback()
+    if message:
+        st.info(message)
+    _render_login_flow(prefix, force_select_account=False)
+    st.caption("O login será concluído na mesma aba após o retorno do Google.")
 
 
 def render_google_login_top() -> None:
@@ -103,11 +112,8 @@ def render_google_login_box(
 ) -> None:
     st.subheader(title)
 
-    if message:
-        st.info(message)
-
     if _is_logged_in():
         _render_logged_in_box("box")
         return
 
-    _render_logged_out_box("box")
+    _render_logged_out_box("box", message=message)
