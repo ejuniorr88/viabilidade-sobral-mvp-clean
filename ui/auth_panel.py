@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from core.auth import start_google_login, sign_out_current_user
 
@@ -24,29 +25,14 @@ def _user_email() -> str:
 
 
 def _redirect_same_tab(url: str) -> None:
-    safe_url = url.replace('"', '&quot;')
-    st.markdown(
-        f'''
+    components.html(
+        f"""
         <script>
-        window.location.assign("{safe_url}");
+            window.parent.location.href = {url!r};
         </script>
-        <meta http-equiv="refresh" content="0; url={safe_url}">
-        ''',
-        unsafe_allow_html=True,
+        """,
+        height=0,
     )
-    st.stop()
-
-
-def _render_login_button(
-    label: str,
-    auth_url: str,
-    *,
-    full_width: bool = False,
-    subtle: bool = False,
-    key: str,
-) -> None:
-    if st.button(label, key=key, use_container_width=full_width, type="secondary"):
-        _redirect_same_tab(auth_url)
 
 
 def render_google_login_cta(
@@ -56,24 +42,20 @@ def render_google_login_cta(
     message: Optional[str] = None,
     force_select_account: bool = False,
     subtle: bool = False,
-    key: str = "google_login_cta",
+    button_key: Optional[str] = None,
 ) -> None:
-    auth_url = start_google_login(force_select_account=force_select_account)
-
     if message:
         st.info(message)
 
-    if not auth_url:
-        st.error("Não foi possível iniciar o login com Google.")
-        return
+    button_type = "secondary" if subtle else "primary"
+    if st.button(label, key=button_key, use_container_width=full_width, type=button_type):
+        auth_url = start_google_login(force_select_account=force_select_account)
+        if not auth_url:
+            st.error(st.session_state.get("auth_message") or "Não foi possível iniciar o login com Google.")
+            return
 
-    _render_login_button(
-        label,
-        auth_url,
-        full_width=full_width,
-        subtle=subtle,
-        key=key,
-    )
+        _redirect_same_tab(auth_url)
+        st.stop()
 
     if not subtle:
         st.caption("O login será concluído nesta mesma aba.")
@@ -87,7 +69,6 @@ def _render_logged_in_box(prefix: str) -> None:
     with col1:
         if st.button("Sair", key=f"btn_logout_{prefix}", use_container_width=True):
             sign_out_current_user()
-            st.rerun()
 
     with col2:
         render_google_login_cta(
@@ -95,7 +76,7 @@ def _render_logged_in_box(prefix: str) -> None:
             full_width=True,
             force_select_account=True,
             subtle=True,
-            key=f"btn_switch_user_{prefix}",
+            button_key=f"btn_switch_user_{prefix}",
         )
 
 
@@ -104,7 +85,7 @@ def _render_logged_out_box(prefix: str) -> None:
         "Entrar com Google",
         full_width=True,
         force_select_account=False,
-        key=f"btn_login_{prefix}",
+        button_key=f"btn_login_{prefix}",
     )
 
 
