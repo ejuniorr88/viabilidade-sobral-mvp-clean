@@ -100,6 +100,19 @@ def clear_auth_query_params(*, keep_auth_flow: bool = False) -> None:
             pass
 
 
+def redirect_to_clean_app() -> None:
+    app_url = get_app_url()
+    st.markdown(
+        f"""
+        <script>
+        window.location.replace({app_url!r});
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+
 def extract_user_fields(user_obj: Any) -> Dict[str, Optional[str]]:
     if user_obj is None:
         return {"id": None, "email": None, "name": None}
@@ -184,7 +197,7 @@ def handle_oauth_callback() -> None:
         )
         # remove TUDO, inclusive auth_flow, para não ficar preso na tela de callback
         clear_auth_query_params(keep_auth_flow=False)
-        st.rerun()
+        redirect_to_clean_app()
         return
 
     if code:
@@ -193,7 +206,7 @@ def handle_oauth_callback() -> None:
             sync_user_from_current_session(force=True)
             if st.session_state.get("auth_logged_in"):
                 clear_auth_query_params(keep_auth_flow=False)
-                st.rerun()
+                redirect_to_clean_app()
             return
 
         supabase = get_supabase_auth_client()
@@ -223,20 +236,20 @@ def handle_oauth_callback() -> None:
                 st.session_state["auth_message"] = "Login efetuado com sucesso."
                 # remove TUDO, inclusive auth_flow, para sair do modo callback
                 clear_auth_query_params(keep_auth_flow=False)
-                st.rerun()
+                redirect_to_clean_app()
                 return
 
             clear_user_in_state()
             st.session_state["auth_message"] = "Não foi possível concluir o login Google."
             clear_auth_query_params(keep_auth_flow=False)
-            st.rerun()
+            redirect_to_clean_app()
             return
 
         except Exception as e:
             clear_user_in_state()
             st.session_state["auth_message"] = f"Erro ao concluir o login Google: {e}"
             clear_auth_query_params(keep_auth_flow=False)
-            st.rerun()
+            redirect_to_clean_app()
             return
 
     if st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
@@ -318,3 +331,4 @@ def sign_out_current_user() -> None:
 
     clear_auth_query_params()
     clear_user_in_state()
+    redirect_to_clean_app()
