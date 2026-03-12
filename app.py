@@ -374,7 +374,9 @@ def _render_auth_callback_screen() -> None:
                 try {{
                     if (window.opener && !window.opener.closed) {{
                         window.opener.location.href = destination;
-                        window.close();
+                        setTimeout(function() {{
+                            window.close();
+                        }}, 300);
                         return;
                     }}
                 }} catch (e) {{}}
@@ -421,10 +423,8 @@ if "show_inline_payments" not in st.session_state:
 
 _inject_global_styles()
 
-# Trata callback primeiro
 handle_oauth_callback()
 
-# Se for callback, não carrega o resto do app
 if is_auth_callback_mode():
     _render_auth_callback_screen()
     st.stop()
