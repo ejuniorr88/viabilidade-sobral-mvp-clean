@@ -30,9 +30,6 @@ def _render_login_anchor(
     full_width: bool = False,
     subtle: bool = False,
 ) -> None:
-    # Importante:
-    # não usar rel="noopener noreferrer", porque a aba de callback
-    # precisa conseguir atualizar a aba original e tentar se fechar.
     width_css = "width:100%;" if full_width else ""
     padding = "8px 12px" if subtle else "12px 16px"
     font_size = "13px" if subtle else "15px"
