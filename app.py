@@ -331,10 +331,10 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
-_inject_global_styles()
-
-# O exchange do code acontece na mesma aba principal.
+# O callback precisa ser tratado antes de carregar o resto do app.
 handle_oauth_callback()
+
+_inject_global_styles()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
