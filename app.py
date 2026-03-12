@@ -60,48 +60,55 @@ def _inject_global_styles() -> None:
     st.markdown(
         """
         <style>
+        /* =========================
+           CONTAINER GERAL
+        ========================== */
         .block-container {
-            padding-top: 0 !important;
+            padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }
 
-        [data-testid="stAppViewContainer"],
-        .main,
-        .block-container {
+        html, body, [data-testid="stAppViewContainer"], .main {
             overflow-x: hidden !important;
         }
 
+        /* Esconde header padrão do Streamlit para o topo ficar mais limpo */
         header[data-testid="stHeader"] {
             background: transparent !important;
         }
 
-        .vf-topbar-outer {
-            margin-left: -1rem;
-            margin-right: -1rem;
-            margin-bottom: 1.2rem;
+        /* =========================
+           TOPO NOVO
+        ========================== */
+        .vf-topbar-shell {
+            width: 100%;
+            margin: 0 0 1.4rem 0;
+            padding: 0;
         }
 
         .vf-topbar {
             width: 100%;
             background: #ffffff;
-            border-bottom: 1px solid #e7e7e7;
+            border-bottom: 1px solid #e8e8e8;
         }
 
         .vf-topbar-inner {
-            min-height: 78px;
+            width: 100%;
+            min-height: 76px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 24px;
-            padding: 0 20px;
+            gap: 20px;
+            padding: 0 18px;
             box-sizing: border-box;
         }
 
         .vf-brand {
             font-size: 30px;
             font-weight: 800;
-            color: #17305f;
+            color: #1f2a44;
+            letter-spacing: -0.02em;
             line-height: 1.1;
             white-space: nowrap;
         }
@@ -110,45 +117,62 @@ def _inject_global_styles() -> None:
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 28px;
+            gap: 26px;
             flex-wrap: wrap;
-            text-align: right;
         }
 
         .vf-link {
-            color: #17305f;
-            font-size: 15px;
+            color: #1f2a44;
+            text-decoration: none;
             font-weight: 600;
-            line-height: 1.1;
+            font-size: 15px;
             white-space: nowrap;
         }
 
-        .vf-hero-wrap {
+        .vf-link:hover {
+            text-decoration: underline;
+        }
+
+        /* =========================
+           TÍTULO CENTRAL
+        ========================== */
+        .vf-main-title-wrap {
             width: 100%;
             text-align: center;
-            margin-top: 0.4rem;
-            margin-bottom: 0.8rem;
+            margin-top: 0.6rem;
+            margin-bottom: 0.2rem;
         }
 
-        .vf-hero-title {
-            margin: 0;
-            font-size: 46px;
+        .vf-main-title {
+            font-size: 42px;
             font-weight: 800;
-            color: #17305f;
-            line-height: 1.05;
+            color: #1f2a44;
             letter-spacing: -0.02em;
+            line-height: 1.1;
+            margin: 0;
         }
 
-        .vf-hero-subtitle {
+        .vf-main-subtitle {
             margin-top: 10px;
+            margin-bottom: 0.8rem;
+            font-size: 15px;
             color: #6b7280;
-            font-size: 16px;
-            line-height: 1.45;
+            text-align: center;
+        }
+
+        /* =========================
+           TÍTULOS E CARTEIRA
+        ========================== */
+        .vf-section-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: #24324a;
+            margin-bottom: 12px;
         }
 
         .vf-wallet-wrap {
-            margin-top: 0.5rem;
-            margin-bottom: 1rem;
+            margin-top: 0;
+            margin-bottom: 14px;
         }
 
         .vf-wallet-title {
@@ -186,13 +210,15 @@ def _inject_global_styles() -> None:
             line-height: 1.25;
         }
 
-        .vf-section-title {
-            font-size: 26px;
-            font-weight: 800;
-            color: #24324a;
+        .vf-login-note {
+            font-size: 14px;
+            color: #6b7280;
             margin-bottom: 12px;
         }
 
+        /* =========================
+           SIDEBAR
+        ========================== */
         section[data-testid="stSidebar"] {
             background: #eef0f3;
             border-right: 1px solid #d9dee5;
@@ -256,6 +282,9 @@ def _inject_global_styles() -> None:
             line-height: 1.5;
         }
 
+        /* =========================
+           RESPONSIVO
+        ========================== */
         @media (max-width: 1100px) {
             .vf-topbar-inner {
                 flex-direction: column;
@@ -267,16 +296,15 @@ def _inject_global_styles() -> None:
 
             .vf-links {
                 justify-content: flex-start;
-                text-align: left;
-                gap: 16px;
-            }
-
-            .vf-hero-title {
-                font-size: 36px;
+                gap: 18px;
             }
 
             .vf-wallet-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .vf-main-title {
+                font-size: 34px;
             }
         }
         </style>
@@ -286,20 +314,24 @@ def _inject_global_styles() -> None:
 
 
 def _render_top_nav() -> None:
+    # Topo novo:
+    # - Viabilidade Fácil à esquerda
+    # - links à direita
+    # - sem barra/cartão arredondado
     st.markdown(
         """
-        <div class="vf-topbar-outer">
-            <div class="vf-topbar">
-                <div class="vf-topbar-inner">
-                    <div class="vf-brand">Viabilidade Fácil</div>
-                    <div class="vf-links">
-                        <span class="vf-link">Como funciona</span>
-                        <span class="vf-link">Área do cliente</span>
-                        <span class="vf-link">Planos</span>
-                        <span class="vf-link">Dúvidas/Suporte</span>
-                    </div>
-                </div>
+        <div class="vf-topbar-shell">
+          <div class="vf-topbar">
+            <div class="vf-topbar-inner">
+              <div class="vf-brand">Viabilidade Fácil</div>
+              <div class="vf-links">
+                <span class="vf-link">Como funciona</span>
+                <span class="vf-link">Área do cliente</span>
+                <span class="vf-link">Planos</span>
+                <span class="vf-link">Dúvidas/Suporte</span>
+              </div>
             </div>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -350,8 +382,6 @@ def _render_login_gate_block() -> None:
 
 
 def _mount_auth_sync_listener() -> None:
-    # Este listener roda na aba principal e recarrega a página
-    # quando a aba de callback sinaliza que o login foi concluído.
     components.html(
         """
         <script>
@@ -479,21 +509,17 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
-_inject_global_styles()
+zones_gj = _zones_geojson()
+zones_prepared = _zones_prepared()
 
-# Listener da aba principal
+_inject_global_styles()
 _mount_auth_sync_listener()
 
-# Trata callback primeiro
 handle_oauth_callback()
 
-# Se for callback, não carrega o resto do app
 if is_auth_callback_mode():
     _render_auth_callback_screen()
     st.stop()
-
-zones_gj = _zones_geojson()
-zones_prepared = _zones_prepared()
 
 _render_top_nav()
 
@@ -502,9 +528,9 @@ user_id = st.session_state.get("auth_user_id")
 
 st.markdown(
     """
-    <div class="vf-hero-wrap">
-        <div class="vf-hero-title">Viabilidade Urbana</div>
-        <div class="vf-hero-subtitle">
+    <div class="vf-main-title-wrap">
+        <div class="vf-main-title">Viabilidade Urbana</div>
+        <div class="vf-main-subtitle">
             Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
         </div>
     </div>
@@ -514,6 +540,7 @@ st.markdown(
 
 right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
 with right_col_left:
+    # Mantido vazio para preservar a frase só uma vez, no bloco central acima.
     st.write("")
 
 with right_col_right:
