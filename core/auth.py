@@ -43,9 +43,21 @@ def get_app_url() -> str:
 
 
 def build_auth_callback_url() -> str:
-    # Callback limpo na mesma aba. Não usamos auth_flow=callback
-    # para evitar interceptação por telas intermediárias no app.
-    return get_app_url()
+    base_url = get_app_url()
+    parsed = urlparse(base_url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query["auth_flow"] = "callback"
+    return urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            urlencode(query),
+            parsed.fragment,
+        )
+    )
+
 
 def safe_get_query_param(name: str) -> Optional[str]:
     try:
