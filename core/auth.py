@@ -21,6 +21,14 @@ def _push_auth_debug(step: str, data: Optional[Dict[str, Any]] = None) -> None:
     st.session_state["_auth_debug_logs"] = logs[-50:]
 
 
+def get_auth_debug_logs() -> list[dict]:
+    return st.session_state.get("_auth_debug_logs", [])
+
+
+def clear_auth_debug_logs() -> None:
+    st.session_state["_auth_debug_logs"] = []
+
+
 def get_app_url() -> str:
     raw = str(st.secrets.get("APP_URL", "http://localhost:8501")).strip()
     if not raw:
@@ -28,6 +36,7 @@ def get_app_url() -> str:
 
     parsed = urlparse(raw)
     if not parsed.scheme or not parsed.netloc:
+        _push_auth_debug("get_app_url_invalid", {"raw": raw})
         return "http://localhost:8501"
 
     return raw.rstrip("/")
@@ -176,7 +185,6 @@ def handle_oauth_callback() -> None:
             + (f" — {error_description}" if error_description else "")
         )
         st.session_state["oauth_callback_done"] = True
-        # mantém auth_flow por enquanto
         clear_auth_query_params(keep_auth_flow=True)
         return
 
@@ -211,7 +219,6 @@ def handle_oauth_callback() -> None:
                 st.session_state["last_oauth_code"] = code
                 st.session_state["auth_message"] = "Login efetuado com sucesso."
                 st.session_state["oauth_callback_done"] = True
-                # mantém auth_flow para a tela leve terminar o serviço
                 clear_auth_query_params(keep_auth_flow=True)
                 return
 
@@ -235,6 +242,13 @@ def handle_oauth_callback() -> None:
 
 
 def start_google_login(force_select_account: bool = False) -> Optional[str]:
+    """
+    Gera a URL REAL de login Google via Supabase OAuth.
+    Importante:
+    - redirect_to aponta para a callback leve do app
+    - o retorno desta função precisa ser a URL de authorize do Supabase/Google,
+      nunca a própria callback do app
+    """
     supabase = get_supabase_auth_client()
     redirect_to = build_auth_callback_url()
 
@@ -255,11 +269,32 @@ def start_google_login(force_select_account: bool = False) -> Optional[str]:
             }
         )
 
+        url: Optional[str] = None
+
         if hasattr(response, "url"):
-            return response.url
-        if isinstance(response, dict):
-            return response.get("url")
-        return None
+            url = response.url
+        elif isinstance(response, dict):
+            url = response.get("url")
+        elif isinstance(response, str):
+            url = response
+
+        if not url:
+            st.session_state["auth_message"] = "Não foi possível gerar a URL de login Google."
+            return None
+
+        # Proteção contra retorno incorreto apontando para a callback local
+        # em vez da URL real de authorize do Google/Supabase.
+        if (
+            "auth_flow=callback" in url
+            and "accounts.google.com" not in url
+            and "/auth/v1/authorize" not in url
+        ):
+            st.session_state["auth_message"] = (
+                "A URL de login retornou incorreta (callback local em vez do authorize do Google)."
+            )
+            return None
+
+        return url
 
     except Exception as e:
         st.session_state["auth_message"] = f"Erro ao iniciar login Google: {e}"
