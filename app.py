@@ -32,69 +32,6 @@ from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
 
 
-
-
-def _render_oauth_popup_bridge() -> None:
-    code = safe_get_query_param("code") or ""
-    error = safe_get_query_param("error") or ""
-    error_description = safe_get_query_param("error_description") or ""
-    state = safe_get_query_param("state") or ""
-    app_url = get_app_url()
-
-    def _js_escape(value: str) -> str:
-        return value.replace("\\", "\\\\").replace("`", "\\`")
-
-    app_url_js = _js_escape(app_url)
-    code_js = _js_escape(code)
-    error_js = _js_escape(error)
-    error_description_js = _js_escape(error_description)
-    state_js = _js_escape(state)
-
-    st.markdown("## Concluindo seu login…")
-    st.caption("Aguarde alguns segundos. Se a aba principal não atualizar, ela será redirecionada automaticamente.")
-
-    components.html(
-        f"""
-        <script>
-        (function() {{
-          const appUrl = `{app_url_js}`;
-          const code = `{code_js}`;
-          const error = `{error_js}`;
-          const errorDescription = `{error_description_js}`;
-          const state = `{state_js}`;
-
-          const target = new URL(appUrl, window.location.origin);
-          if (code) target.searchParams.set('code', code);
-          if (error) target.searchParams.set('error', error);
-          if (errorDescription) target.searchParams.set('error_description', errorDescription);
-          if (state) target.searchParams.set('state', state);
-          target.searchParams.set('auth_from_popup', '1');
-
-          let openerRedirected = false;
-          try {{
-            if (window.opener && !window.opener.closed) {{
-              window.opener.location.replace(target.toString());
-              openerRedirected = true;
-            }}
-          }} catch (e) {{}}
-
-          if (openerRedirected) {{
-            setTimeout(function() {{
-              try {{ window.close(); }} catch (e) {{}}
-              try {{ window.location.replace(appUrl); }} catch (e) {{ window.location.href = appUrl; }}
-            }}, 600);
-          }} else {{
-            setTimeout(function() {{
-              try {{ window.location.replace(target.toString()); }} catch (e) {{ window.location.href = target.toString(); }}
-            }}, 80);
-          }}
-        }})();
-        </script>
-        """,
-        height=80,
-    )
-
-
 @st.cache_data(show_spinner=False)
 def _zones_geojson() -> Dict[str, Any]:
     with open(ZONE_FILE, "r", encoding="utf-8") as f:
@@ -363,6 +300,53 @@ def _render_login_gate_block() -> None:
     )
 
 
+def _render_auth_callback_bridge() -> None:
+    code = safe_get_query_param("code") or ""
+    error = safe_get_query_param("error") or ""
+    error_code = safe_get_query_param("error_code") or ""
+    error_description = safe_get_query_param("error_description") or ""
+    state = safe_get_query_param("state") or ""
+    app_url = get_app_url()
+
+    st.markdown("## Concluindo seu login...")
+    st.caption("Aguarde alguns segundos. Se a aba principal não atualizar, ela será redirecionada automaticamente.")
+
+    bridge_html = f"""
+    <script>
+    (function() {{
+        const appUrl = {app_url!r};
+        const params = new URLSearchParams();
+        const code = {code!r};
+        const error = {error!r};
+        const errorCode = {error_code!r};
+        const errorDescription = {error_description!r};
+        const state = {state!r};
+
+        if (code) params.set("code", code);
+        if (error) params.set("error", error);
+        if (errorCode) params.set("error_code", errorCode);
+        if (errorDescription) params.set("error_description", errorDescription);
+        if (state) params.set("state", state);
+
+        const destination = params.toString() ? `${{appUrl}}/?${{params.toString()}}` : appUrl;
+
+        try {{
+            if (window.opener && !window.opener.closed) {{
+                window.opener.location.replace(destination);
+                window.close();
+                return;
+            }}
+        }} catch (e) {{}}
+
+        window.location.replace(destination);
+    }})();
+    </script>
+    """
+
+    components.html(bridge_html, height=0)
+    st.stop()
+
+
 if "selected_lat" not in st.session_state:
     st.session_state.selected_lat = None
 if "selected_lon" not in st.session_state:
@@ -397,13 +381,11 @@ if "show_inline_payments" not in st.session_state:
 
 _inject_global_styles()
 
-# Se estiver na aba de callback do OAuth, apenas devolve o code para a aba principal
-# e impede que o restante do app renderize nessa aba secundária.
+# Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
 if safe_get_query_param("auth_flow") == "callback":
-    _render_oauth_popup_bridge()
-    st.stop()
+    _render_auth_callback_bridge()
 
-# Trata o callback real na aba principal.
+# O exchange do code deve acontecer na aba principal.
 handle_oauth_callback()
 
 zones_gj = _zones_geojson()
