@@ -38,7 +38,7 @@ def _render_login_anchor(
 
     st.markdown(
         f"""
-        <a href="{auth_url}" style="
+        <a href="{auth_url}" target="_self" style="
             display:inline-block;
             {width_css}
             padding:{padding};
