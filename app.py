@@ -25,7 +25,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback
+from core.auth import handle_oauth_callback, sync_auth_state
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
@@ -331,8 +331,9 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
-# O callback precisa ser tratado antes de carregar o resto do app.
+# O callback precisa ser resolvido antes do restante do app.
 handle_oauth_callback()
+sync_auth_state(force=False)
 
 _inject_global_styles()
 
