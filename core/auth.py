@@ -139,8 +139,8 @@ def clear_user_in_state() -> None:
     st.session_state["auth_user_name"] = None
 
 
-def sync_user_from_current_session() -> None:
-    if st.session_state.get("auth_sync_done"):
+def sync_user_from_current_session(force: bool = False) -> None:
+    if not force and st.session_state.get("auth_sync_done"):
         return
 
     supabase = get_supabase_auth_client()
@@ -190,6 +190,10 @@ def handle_oauth_callback() -> None:
     if code:
         last_code = st.session_state.get("last_oauth_code")
         if last_code == code:
+            sync_user_from_current_session(force=True)
+            if st.session_state.get("auth_logged_in"):
+                clear_auth_query_params(keep_auth_flow=False)
+                st.rerun()
             return
 
         supabase = get_supabase_auth_client()
@@ -236,9 +240,21 @@ def handle_oauth_callback() -> None:
             return
 
     if st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
+        if safe_get_query_param("auth_flow") == "callback":
+            clear_auth_query_params(keep_auth_flow=False)
+            st.rerun()
         return
 
-    sync_user_from_current_session()
+    sync_user_from_current_session(force=is_auth_callback_mode())
+
+    if safe_get_query_param("auth_flow") == "callback":
+        if st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
+            clear_auth_query_params(keep_auth_flow=False)
+            st.rerun()
+        elif not safe_get_query_param("code") and not safe_get_query_param("error"):
+            st.session_state["auth_message"] = "Não foi possível concluir o login Google."
+            clear_auth_query_params(keep_auth_flow=False)
+            st.rerun()
 
 
 def start_google_login(force_select_account: bool = False) -> Optional[str]:
