@@ -38,7 +38,7 @@ def _render_login_anchor(
 
     st.markdown(
         f"""
-        <a href="{auth_url}" target="_blank" style="
+        <a href="{auth_url}" style="
             display:inline-block;
             {width_css}
             padding:{padding};
@@ -85,7 +85,7 @@ def render_google_login_cta(
     )
 
     if not subtle:
-        st.caption("O login abrirá em nova aba. Depois volte para esta página.")
+        st.caption("O login será concluído nesta mesma aba.")
 
 
 def _render_logged_in_box(prefix: str) -> None:
