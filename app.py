@@ -26,7 +26,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback
+from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
@@ -333,6 +333,58 @@ if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
 _inject_global_styles()
+
+# Se o login voltou na aba popup (?auth_flow=callback), apenas devolve o code/erro
+# para a aba principal. O exchange do código deve acontecer na aba principal,
+# senão a sessão fica presa na aba secundária e o app principal segue deslogado.
+if safe_get_query_param("auth_flow") == "callback":
+    app_base_url = get_app_url()
+    st.markdown("### Concluindo seu login…")
+    components.html(
+        f"""
+        <script>
+            (function() {{
+                const params = new URLSearchParams(window.location.search);
+                const target = new URL({app_base_url!r});
+
+                const keys = [
+                    "code",
+                    "state",
+                    "error",
+                    "error_code",
+                    "error_description"
+                ];
+
+                let hasPayload = false;
+                for (const key of keys) {{
+                    const value = params.get(key);
+                    if (value) {{
+                        target.searchParams.set(key, value);
+                        hasPayload = true;
+                    }}
+                }}
+
+                if (hasPayload) {{
+                    target.searchParams.set("auth_flow", "bridge");
+                }}
+
+                const targetUrl = target.toString();
+
+                try {{
+                    if (window.opener && !window.opener.closed) {{
+                        window.opener.location.href = targetUrl;
+                        window.setTimeout(() => window.close(), 250);
+                        return;
+                    }}
+                }} catch (e) {{}}
+
+                window.location.replace(targetUrl);
+            }})();
+        </script>
+        """,
+        height=80,
+    )
+    st.stop()
 
 # Trata callback logo no início e já sai do modo callback via rerun no auth.py
 handle_oauth_callback()
