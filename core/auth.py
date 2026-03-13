@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request, urlopen
 
 import streamlit as st
 from supabase import Client, create_client
@@ -48,6 +50,26 @@ def get_app_url() -> str:
     return raw.rstrip("/")
 
 
+def get_external_login_url() -> str:
+    raw = str(
+        st.secrets.get(
+            "EXTERNAL_LOGIN_URL",
+            "https://viabilidade-sobral-mvp-clean.vercel.app",
+        )
+    ).strip()
+    return raw.rstrip("/") or "https://viabilidade-sobral-mvp-clean.vercel.app"
+
+
+def get_gateway_url() -> str:
+    raw = str(
+        st.secrets.get(
+            "AUTH_GATEWAY_URL",
+            "https://viabilidade-auth-gateway.onrender.com",
+        )
+    ).strip()
+    return raw.rstrip("/") or "https://viabilidade-auth-gateway.onrender.com"
+
+
 def build_auth_callback_url() -> str:
     return get_app_url()
 
@@ -77,6 +99,7 @@ def clear_auth_query_params() -> None:
         "error_code",
         "error_description",
         "auth_flow",
+        "ext_access_token",
     ]
 
     try:
@@ -103,7 +126,7 @@ def extract_user_fields(user_obj: Any) -> Dict[str, Optional[str]]:
         return {
             "id": user_obj.get("id"),
             "email": user_obj.get("email"),
-            "name": meta.get("full_name") or meta.get("name"),
+            "name": user_obj.get("name") or meta.get("full_name") or meta.get("name"),
         }
 
     meta = getattr(user_obj, "user_metadata", None) or {}
@@ -134,58 +157,32 @@ def clear_user_in_state() -> None:
     st.session_state["auth_sync_done"] = True
 
 
-def _user_from_auth_result(result: Any, client: Client) -> Any:
-    user_obj = getattr(result, "user", None)
-    session_obj = getattr(result, "session", None)
-
-    if user_obj is None and isinstance(result, dict):
-        user_obj = result.get("user")
-        session_obj = result.get("session")
-
-    if user_obj is None and session_obj is not None:
-        user_obj = getattr(session_obj, "user", None)
-        if user_obj is None and isinstance(session_obj, dict):
-            user_obj = session_obj.get("user")
-
-    if user_obj is not None:
-        return user_obj
-
-    try:
-        current_user = client.auth.get_user()
-        fallback_user = getattr(current_user, "user", None)
-        if fallback_user is None and isinstance(current_user, dict):
-            fallback_user = current_user.get("user")
-        return fallback_user
-    except Exception:
-        return None
-
-
 def sync_auth_state(force: bool = False) -> bool:
     if st.session_state.get("auth_sync_done") and not force:
         return bool(st.session_state.get("auth_logged_in"))
 
-    client = get_supabase_auth_client()
+    # Com o fluxo externo, não tentamos mais concluir PKCE local do Streamlit.
+    return bool(st.session_state.get("auth_logged_in"))
 
-    try:
-        current_user = client.auth.get_user()
-        user_obj = getattr(current_user, "user", None)
-        if user_obj is None and isinstance(current_user, dict):
-            user_obj = current_user.get("user")
 
-        if user_obj is not None:
-            store_user_in_state(user_obj)
-            return True
-    except Exception:
-        pass
+def _verify_external_access_token(access_token: str) -> Dict[str, Any]:
+    payload = json.dumps({"access_token": access_token}).encode("utf-8")
+    req = Request(
+        f"{get_gateway_url()}/api/auth/session/verify",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
 
-    clear_user_in_state()
-    return False
+    with urlopen(req, timeout=30) as resp:
+        body = resp.read().decode("utf-8")
+        return json.loads(body) if body else {}
 
 
 def handle_oauth_callback() -> None:
     error = safe_get_query_param("error")
     error_description = safe_get_query_param("error_description")
-    code = safe_get_query_param("code")
+    external_access_token = safe_get_query_param("ext_access_token")
 
     if error:
         clear_user_in_state()
@@ -198,21 +195,18 @@ def handle_oauth_callback() -> None:
         st.rerun()
         return
 
-    if code:
-        client = get_supabase_auth_client()
-
+    if external_access_token:
         try:
-            result = client.auth.exchange_code_for_session({"auth_code": code})
-            user_obj = _user_from_auth_result(result, client)
-
-            if user_obj is None:
-                raise RuntimeError("Usuário não retornado pelo provedor.")
+            verified = _verify_external_access_token(external_access_token)
+            user_obj = verified.get("user") or {}
+            if not user_obj:
+                raise RuntimeError("Usuário não retornado pelo gateway.")
 
             store_user_in_state(user_obj)
-            st.session_state["last_oauth_code"] = code
             st.session_state["auth_message"] = "Login efetuado com sucesso."
             st.session_state.pop("auth_last_error", None)
             st.session_state.pop("oauth_url", None)
+            st.session_state["auth_external_access_token"] = external_access_token
             clear_auth_query_params()
             st.rerun()
             return
@@ -228,74 +222,26 @@ def handle_oauth_callback() -> None:
 
 
 def get_auth_url(force_select_account: bool = False) -> Optional[str]:
-    client = get_supabase_auth_client()
-    options: Dict[str, Any] = {
-        "redirect_to": build_auth_callback_url(),
-        "query_params": {},
-    }
-
+    base = get_external_login_url()
+    params: Dict[str, Any] = {}
     if force_select_account:
-        options["query_params"]["prompt"] = "select_account"
+        params["switch_account"] = "1"
 
-    try:
-        response = client.auth.sign_in_with_oauth(
-            {
-                "provider": "google",
-                "options": options,
-            }
-        )
-
-        url: Optional[str] = None
-        if hasattr(response, "url"):
-            url = response.url
-        elif isinstance(response, dict):
-            url = response.get("url")
-        elif isinstance(response, str):
-            url = response
-
-        if not url:
-            st.session_state["auth_last_error"] = "Não foi possível gerar a URL de login Google."
-            return None
-
-        return url
-    except Exception as e:
-        st.session_state["auth_last_error"] = f"Erro ao iniciar login Google: {e}"
-        return None
-
-
-def start_google_login(force_select_account: bool = False) -> Optional[str]:
-    return get_auth_url(force_select_account=force_select_account)
+    if params:
+        return f"{base}?{urlencode(params)}"
+    return base
 
 
 def logout_limpo() -> None:
-    client = get_supabase_auth_client()
-
-    try:
-        client.auth.sign_out()
-    except Exception:
-        pass
-
-    keys_to_clear = [
-        "auth_user_id",
-        "auth_user_email",
-        "auth_user_name",
-        "auth_logged_in",
-        "auth_message",
-        "auth_last_error",
-        "oauth_url",
-        "last_oauth_code",
-        "post_login_action",
-        "auth_sync_done",
-        "show_inline_payments",
-        "report_unlocked",
-    ]
-    for key in keys_to_clear:
-        st.session_state.pop(key, None)
-
-    clear_auth_query_params()
+    keep = {
+        "_supabase_auth_client": st.session_state.get("_supabase_auth_client"),
+    }
+    for k in AUTH_STATE_KEYS:
+        st.session_state.pop(k, None)
     clear_user_in_state()
+    st.session_state.pop("auth_external_access_token", None)
+    st.session_state.pop("oauth_url", None)
+    if keep.get("_supabase_auth_client") is not None:
+        st.session_state["_supabase_auth_client"] = keep["_supabase_auth_client"]
+    clear_auth_query_params()
     st.rerun()
-
-
-def sign_out_current_user() -> None:
-    logout_limpo()
