@@ -61,6 +61,14 @@ DICAS_VALIOSAS = [
 
 
 class _ReportPDF(FPDF):
+    def rounded_rect(self, x: float, y: float, w: float, h: float, r: float = 0, style: str = "") -> None:
+        # Compatibilidade com versões do fpdf/fpdf2 que não expõem rounded_rect.
+        rect_fn = getattr(super(), "rounded_rect", None)
+        if callable(rect_fn):
+            rect_fn(x, y, w, h, r, style=style)
+            return
+        self.rect(x, y, w, h, style=style)
+
     def header(self) -> None:
         self.set_font("Helvetica", "B", 20)
         self.set_text_color(24, 41, 74)
