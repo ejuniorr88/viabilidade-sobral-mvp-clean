@@ -29,7 +29,7 @@ from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
-from core.credits import consume_viability_credit, get_credit_balance
+from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 
 
 @st.cache_data(show_spinner=False)
@@ -395,6 +395,18 @@ _render_top_nav()
 
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
+user_email = st.session_state.get("auth_user_email")
+
+if user_logged_in and user_id and user_email:
+    reconcile_key = f"{user_id}:{user_email}"
+    if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
+        try:
+            reconcile_result = reconcile_wallet_to_current_user(user_id, user_email)
+            st.session_state["wallet_reconcile_done_for"] = reconcile_key
+            st.session_state["wallet_reconcile_result"] = reconcile_result
+        except Exception as e:
+            st.session_state["wallet_reconcile_error"] = str(e)
+
 
 st.markdown(
     """
@@ -545,6 +557,18 @@ if st.session_state.last_calc_signature and st.session_state.last_calc_signature
 calc = st.session_state.calc
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
+user_email = st.session_state.get("auth_user_email")
+
+if user_logged_in and user_id and user_email:
+    reconcile_key = f"{user_id}:{user_email}"
+    if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
+        try:
+            reconcile_result = reconcile_wallet_to_current_user(user_id, user_email)
+            st.session_state["wallet_reconcile_done_for"] = reconcile_key
+            st.session_state["wallet_reconcile_result"] = reconcile_result
+        except Exception as e:
+            st.session_state["wallet_reconcile_error"] = str(e)
+
 
 st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
 
@@ -643,7 +667,7 @@ if can_offer_report:
             "📄 Gerar relatório",
             key="btn_generate_report",
             use_container_width=True,
-            disabled=(not user_logged_in) or (saldo_atual is not None and int(saldo_atual) <= 0),
+            disabled=(not user_logged_in),
         )
 
     with c2:

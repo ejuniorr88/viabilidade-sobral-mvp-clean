@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 
 from core.auth import get_supabase_auth_client
-from core.payments import create_pending_payment_and_pix
+from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited
 
 
 # =========================================================
@@ -339,19 +339,38 @@ def _render_pix_block(payment_row: Dict[str, Any]) -> None:
         )
 
 
-def _render_pending_payment_status(supabase, payment_id: str) -> None:
+def _render_pending_payment_status(supabase, payment_id: str, current_user_id: Optional[str] = None) -> None:
     st.info("Aguardando confirmação do pagamento...")
+
+    def _do_refresh() -> Optional[Dict[str, Any]]:
+        try:
+            result = refresh_payment_status_and_credit(payment_id=payment_id, target_user_id=current_user_id)
+            payment = (result or {}).get("payment") or _fetch_payment_by_id(supabase, payment_id)
+            if payment:
+                st.session_state["current_payment_snapshot"] = payment
+                st.session_state["current_payment_id"] = _safe_get(payment, "id", payment_id)
+            credit_result = (result or {}).get("credit_result") or {}
+            if (payment or {}).get("status") == "paid":
+                if credit_result.get("credited"):
+                    st.success("Pagamento confirmado e créditos adicionados à carteira.")
+                else:
+                    st.success("Pagamento confirmado com sucesso.")
+            return payment
+        except Exception as e:
+            st.warning(f"Não foi possível atualizar o pagamento agora: {e}")
+            return _fetch_payment_by_id(supabase, payment_id)
 
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
         if st.button("Verificar pagamento agora", key=f"check_payment_{payment_id}"):
+            _do_refresh()
             st.rerun()
 
     with col2:
         auto_refresh = st.checkbox(
             "Atualizar automaticamente",
-            value=False,
+            value=bool(st.session_state.get(f"auto_refresh_{payment_id}", True)),
             key=f"auto_refresh_{payment_id}",
         )
 
@@ -366,13 +385,17 @@ def _render_pending_payment_status(supabase, payment_id: str) -> None:
     payment = _fetch_payment_by_id(supabase, payment_id)
     status = (payment or {}).get("status")
 
+    if auto_refresh and status == "pending":
+        time.sleep(int(refresh_seconds))
+        refreshed = _do_refresh()
+        refreshed_status = (refreshed or {}).get("status")
+        if refreshed_status in ("paid", "pending"):
+            st.rerun()
+
     if status == "paid":
         st.success("Pagamento confirmado com sucesso.")
     elif status == "pending":
         st.warning("Pagamento ainda pendente.")
-        if auto_refresh:
-            time.sleep(int(refresh_seconds))
-            st.rerun()
     elif status in ("failed", "cancelled", "refunded"):
         st.error(f"Pagamento com status: {status}")
     else:
@@ -415,19 +438,79 @@ def _render_buy_section(
                 )
                 if payment:
                     st.session_state["current_payment_id"] = _safe_get(payment, "id")
-                    st.success("Pix gerado com sucesso.")
+                    st.session_state["current_payment_snapshot"] = payment
+                    st.session_state["pix_created_success"] = True
                     st.rerun()
 
 
-def _render_current_payment_area(supabase) -> None:
+def _resolve_current_payment(supabase) -> Optional[Dict[str, Any]]:
+    payment_id = st.session_state.get("current_payment_id")
+    if not payment_id:
+        return None
+
+    snapshot = st.session_state.get("current_payment_snapshot") or {}
+    current_payment = _fetch_payment_by_id(supabase, payment_id)
+
+    if current_payment and snapshot:
+        merged = dict(snapshot)
+        merged.update(current_payment)
+        if not merged.get("pix_qr_code"):
+            merged["pix_qr_code"] = snapshot.get("pix_qr_code")
+        if not merged.get("pix_copy_paste"):
+            merged["pix_copy_paste"] = snapshot.get("pix_copy_paste")
+        current_payment = merged
+    elif not current_payment and snapshot and str(_safe_get(snapshot, "id")) == str(payment_id):
+        current_payment = snapshot
+    elif not current_payment:
+        st.session_state.pop("current_payment_id", None)
+        st.session_state.pop("current_payment_snapshot", None)
+        return None
+
+    return current_payment
+
+
+def _sync_current_payment_state(supabase, current_user_id: str) -> None:
+    current_payment = _resolve_current_payment(supabase)
+    if not current_payment:
+        return
+
+    payment_id = str(_safe_get(current_payment, "id", ""))
+    if not payment_id:
+        return
+
+    status = str(_safe_get(current_payment, "status", "")).strip().lower()
+    if status != "paid":
+        return
+
+    try:
+        result = ensure_paid_payment_is_credited(payment_id=payment_id, target_user_id=current_user_id)
+        latest_payment = (result or {}).get("payment") or _fetch_payment_by_id(supabase, payment_id) or current_payment
+        merged = dict(current_payment)
+        merged.update(latest_payment)
+        st.session_state["current_payment_snapshot"] = merged
+        st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
+        credit_result = (result or {}).get("credit_result") or {}
+        if credit_result.get("credited") and st.session_state.get("payments_focus_mode"):
+            st.session_state["payments_focus_mode"] = False
+    except Exception:
+        # Não interromper a renderização do painel; a área visual mostra o erro depois.
+        return
+
+
+def _render_current_payment_area(supabase, current_user_id: str) -> None:
     payment_id = st.session_state.get("current_payment_id")
     if not payment_id:
         return
 
-    current_payment = _fetch_payment_by_id(supabase, payment_id)
+    current_payment = _resolve_current_payment(supabase)
     if not current_payment:
-        st.session_state.pop("current_payment_id", None)
         return
+
+    if not _fetch_payment_by_id(supabase, payment_id) and st.session_state.get("current_payment_snapshot"):
+        st.warning(
+            "O Pix foi criado, mas não foi possível recarregar os dados do pagamento nesta execução. "
+            "Exibindo os dados retornados na criação."
+        )
 
     st.markdown("---")
     st.markdown("## Pagamento atual")
@@ -436,12 +519,42 @@ def _render_current_payment_area(supabase) -> None:
     status = _safe_get(current_payment, "status")
 
     if status == "pending":
-        _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")))
+        _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
     elif status == "paid":
-        st.success("Este pagamento já foi confirmado.")
+        credit_reprocess = None
+        try:
+            credit_reprocess = ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
+        except Exception as e:
+            st.warning(f"Pagamento confirmado, mas não foi possível reconciliar os créditos agora: {e}")
+
+        credit_result = (credit_reprocess or {}).get("credit_result") or {}
+        if credit_result.get("credited"):
+            if credit_result.get("moved"):
+                st.success("Este pagamento já foi confirmado e os créditos foram reconciliados para a sua carteira.")
+            else:
+                st.success("Este pagamento já foi confirmado e os créditos foram adicionados à carteira.")
+            if st.session_state.get("payments_focus_mode"):
+                st.session_state["payments_focus_mode"] = False
+            st.rerun()
+        elif credit_result.get("reason") == "already_credited":
+            st.success("Este pagamento já foi confirmado.")
+        else:
+            st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. Tentando reconciliar...")
+            if st.button("Reprocessar crédito deste pagamento", key=f"recredit_paid_{payment_id}"):
+                try:
+                    ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
+                except Exception as e:
+                    st.error(f"Não foi possível reprocessar o crédito agora: {e}")
+                st.rerun()
+
+        if st.button("Fechar pagamento atual", key=f"close_current_paid_{payment_id}"):
+            st.session_state.pop("current_payment_id", None)
+            st.session_state.pop("current_payment_snapshot", None)
+            st.rerun()
     else:
         if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
             st.session_state.pop("current_payment_id", None)
+            st.session_state.pop("current_payment_snapshot", None)
             st.rerun()
 
 
@@ -466,6 +579,10 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
 
     focus_mode = bool(st.session_state.get("payments_focus_mode"))
 
+    # Primeiro, sincroniza o pagamento atual com o usuário resolvido do painel.
+    # Só depois buscamos saldo/extrato/pagamentos para refletir o estado persistido.
+    _sync_current_payment_state(supabase_client, user_id)
+
     balance = _fetch_credit_balance(supabase_client, user_id)
     packages = _fetch_credit_packages(supabase_client)
     ledger_rows = _fetch_recent_ledger(supabase_client, user_id)
@@ -476,7 +593,7 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
     _render_wallet_header(profile, balance)
     _render_packages_table(packages, expanded=focus_mode)
     _render_buy_section(user_id, user_email, user_name, packages)
-    _render_current_payment_area(supabase_client)
+    _render_current_payment_area(supabase_client, current_user_id=user_id)
 
     if not focus_mode:
         _render_recent_ledger(ledger_rows)

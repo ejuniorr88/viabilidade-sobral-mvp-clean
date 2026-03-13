@@ -102,3 +102,24 @@ def qr_code_image_data_uri(qr_code_base64: Optional[str]) -> Optional[str]:
         return f"data:image/png;base64,{qr_code_base64}"
     except Exception:
         return None
+
+
+
+def fetch_payment_status(external_payment_id: str) -> Dict[str, Any]:
+    access_token = _get_access_token()
+    response = requests.get(
+        f"{MERCADOPAGO_API_BASE}/v1/payments/{external_payment_id}",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=45,
+    )
+    if response.status_code >= 400:
+        raise MercadoPagoPixError(
+            f"Mercado Pago retornou erro {response.status_code} ao consultar pagamento: {response.text}"
+        )
+    data = response.json()
+    return {
+        "external_payment_id": str(data.get("id") or external_payment_id),
+        "status": data.get("status") or "pending",
+        "status_detail": data.get("status_detail"),
+        "gateway_payload": data,
+    }

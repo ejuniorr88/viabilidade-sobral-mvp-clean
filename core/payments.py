@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 import streamlit as st
 from supabase import Client, create_client
 
-from core.pix_gateway import MercadoPagoPixError, create_pix_payment
+from core.pix_gateway import MercadoPagoPixError, create_pix_payment, fetch_payment_status
 
 
 @st.cache_resource(show_spinner=False)
@@ -119,4 +119,162 @@ def create_pending_payment_and_pix(
         "pending": pending,
         "updated": updated,
         "pix": pix,
+    }
+
+
+
+def _fetch_payment_row(*, payment_id: str) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    response = supabase.table("payments").select("*").eq("id", payment_id).limit(1).execute()
+    data = _safe_data(response) or []
+    if not data:
+        raise RuntimeError("Pagamento não encontrado no banco.")
+    return data[0]
+
+
+def _fetch_package_credits(*, package_id: str) -> int:
+    supabase = get_supabase_server_client()
+    response = supabase.table("credit_packages").select("credits").eq("id", package_id).limit(1).execute()
+    data = _safe_data(response) or []
+    if not data:
+        return 0
+    try:
+        return int(data[0].get("credits") or 0)
+    except Exception:
+        return 0
+
+
+def _get_payment_credit_row(*, payment_id: str) -> Optional[Dict[str, Any]]:
+    supabase = get_supabase_server_client()
+    description = f"Crédito por pagamento Pix {payment_id}"
+    response = (
+        supabase.table("credit_ledger")
+        .select("*")
+        .eq("source", "pix_purchase")
+        .eq("description", description)
+        .limit(1)
+        .execute()
+    )
+    data = _safe_data(response) or []
+    return data[0] if data else None
+
+
+def _read_balance(*, user_id: str) -> int:
+    supabase = get_supabase_server_client()
+    balance_resp = supabase.table("credit_balance").select("balance").eq("user_id", user_id).limit(1).execute()
+    balance_rows = _safe_data(balance_resp) or []
+    return int((balance_rows[0].get("balance") or 0) if balance_rows else 0)
+
+
+def _write_balance(*, user_id: str, balance: int) -> None:
+    supabase = get_supabase_server_client()
+    balance_resp = supabase.table("credit_balance").select("balance").eq("user_id", user_id).limit(1).execute()
+    balance_rows = _safe_data(balance_resp) or []
+    if balance_rows:
+        supabase.table("credit_balance").update({"balance": balance}).eq("user_id", user_id).execute()
+    else:
+        supabase.table("credit_balance").insert({"user_id": user_id, "balance": balance}).execute()
+
+
+def _move_credit_to_user(*, payment_row: Dict[str, Any], credit_row: Dict[str, Any], target_user_id: str) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    old_user_id = str(credit_row.get("user_id") or "")
+    payment_id = str(payment_row.get("id") or "")
+    credits = int(credit_row.get("amount") or 0)
+    if not old_user_id or not target_user_id or credits <= 0:
+        return {"credited": False, "reason": "move_missing_fields"}
+    if old_user_id == target_user_id:
+        return {"credited": False, "reason": "already_credited"}
+
+    old_balance = _read_balance(user_id=old_user_id)
+    target_balance = _read_balance(user_id=target_user_id)
+    _write_balance(user_id=old_user_id, balance=max(0, old_balance - credits))
+    _write_balance(user_id=target_user_id, balance=target_balance + credits)
+
+    supabase.table("credit_ledger").update({"user_id": target_user_id}).eq("id", credit_row.get("id")).execute()
+    supabase.table("payments").update({"user_id": target_user_id}).eq("id", payment_id).execute()
+    return {"credited": True, "credits": credits, "new_balance": target_balance + credits, "moved": True}
+
+
+def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Optional[str] = None) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    payment_user_id = str(payment_row.get("user_id") or "")
+    user_id = str(target_user_id or payment_user_id or "")
+    payment_id = str(payment_row.get("id") or "")
+    package_id = str(payment_row.get("package_id") or "")
+    if not user_id or not payment_id or not package_id:
+        return {"credited": False, "reason": "payment_missing_fields"}
+
+    existing_credit = _get_payment_credit_row(payment_id=payment_id)
+    if existing_credit:
+        existing_user_id = str(existing_credit.get("user_id") or "")
+        if existing_user_id == user_id:
+            return {"credited": False, "reason": "already_credited"}
+        return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
+
+    credits = _fetch_package_credits(package_id=package_id)
+    if credits <= 0:
+        return {"credited": False, "reason": "package_without_credits"}
+
+    current_balance = _read_balance(user_id=user_id)
+    new_balance = current_balance + credits
+    _write_balance(user_id=user_id, balance=new_balance)
+
+    supabase.table("credit_ledger").insert({
+        "user_id": user_id,
+        "amount": credits,
+        "entry_type": "credit",
+        "source": "pix_purchase",
+        "description": f"Crédito por pagamento Pix {payment_id}",
+    }).execute()
+    if payment_user_id != user_id:
+        supabase.table("payments").update({"user_id": user_id}).eq("id", payment_id).execute()
+
+    return {"credited": True, "credits": credits, "new_balance": new_balance}
+
+
+def ensure_paid_payment_is_credited(*, payment_id: str, target_user_id: Optional[str] = None) -> Dict[str, Any]:
+    """Reprocessa um pagamento já marcado como paid para garantir crédito na carteira."""
+    payment_row = _fetch_payment_row(payment_id=payment_id)
+    status = str(payment_row.get("status") or "").strip().lower()
+    if status != "paid":
+        return {"ok": False, "message": "Pagamento ainda não está pago.", "payment": payment_row}
+
+    credit_result = _apply_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
+    return {
+        "ok": True,
+        "message": "Pagamento reprocessado para crédito.",
+        "payment": payment_row,
+        "credit_result": credit_result,
+    }
+
+def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Optional[str] = None) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    payment_row = _fetch_payment_row(payment_id=payment_id)
+    external_payment_id = str(payment_row.get("external_payment_id") or "")
+    if not external_payment_id:
+        return {"ok": False, "message": "Pagamento sem external_payment_id.", "payment": payment_row}
+
+    gateway = fetch_payment_status(external_payment_id)
+    mp_status = (gateway.get("status") or "pending").strip().lower()
+    normalized_status = "paid" if mp_status == "approved" else mp_status
+
+    update_payload = {
+        "status": normalized_status,
+        "gateway_payload": gateway.get("gateway_payload") or {},
+    }
+    response = supabase.table("payments").update(update_payload).eq("id", payment_id).execute()
+    data = _safe_data(response) or []
+    updated_payment = data[0] if data else {**payment_row, **update_payload}
+
+    credit_result = {"credited": False, "reason": "not_paid"}
+    if normalized_status == "paid":
+        credit_result = _apply_credit_for_payment(payment_row=updated_payment, target_user_id=target_user_id)
+
+    return {
+        "ok": True,
+        "message": "Pagamento atualizado.",
+        "payment": updated_payment,
+        "credit_result": credit_result,
+        "gateway_status": mp_status,
     }
