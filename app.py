@@ -30,6 +30,7 @@ from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
+from core.report_pdf import generate_report_pdf_bytes
 
 
 @st.cache_data(show_spinner=False)
@@ -328,7 +329,7 @@ def _render_auth_callback_bridge() -> None:
         if (errorDescription) params.set("error_description", errorDescription);
         if (state) params.set("state", state);
 
-        const destination = params.toString() ? `${{appUrl}}/?${{params.toString()}}` : appUrl;
+        const destination = params.toString() ? `${appUrl}/?${params.toString()}` : appUrl;
 
         try {{
             if (window.opener && !window.opener.closed) {{
@@ -406,7 +407,6 @@ if user_logged_in and user_id and user_email:
             st.session_state["wallet_reconcile_result"] = reconcile_result
         except Exception as e:
             st.session_state["wallet_reconcile_error"] = str(e)
-
 
 st.markdown(
     """
@@ -569,7 +569,6 @@ if user_logged_in and user_id and user_email:
         except Exception as e:
             st.session_state["wallet_reconcile_error"] = str(e)
 
-
 st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
 
 run_free_calc_now = False
@@ -729,6 +728,32 @@ if st.session_state.get("report_unlocked") and can_offer_report:
     )
 
     render_relatorio_section(calc)
+
+    st.markdown("### Download do relatório")
+    try:
+        pdf_bytes = generate_report_pdf_bytes(
+            calc=calc,
+            session_state={
+                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+                "built_ground_m2": built_ground,
+                "permeable_area_m2": permeable_area,
+                "lot_front_m": st.session_state.calc.get("lot_front_m"),
+                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+            },
+        )
+
+        st.download_button(
+            label="⬇️ Baixar relatório em PDF",
+            data=pdf_bytes,
+            file_name="relatorio_viabilidade.pdf",
+            mime="application/pdf",
+            key="download_report_pdf",
+            use_container_width=True,
+        )
+    except Exception as e:
+        st.error(f"Não foi possível gerar o PDF do relatório: {e}")
 
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
