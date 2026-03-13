@@ -11,7 +11,7 @@ from fpdf import FPDF
 
 
 # =============================
-# Helpers de formato
+# Helpers
 # =============================
 
 def _safe_str(value: Any, default: str = "—") -> str:
@@ -112,8 +112,6 @@ def _extract_figures_from_rule(rule: Dict[str, Any]) -> List[Dict[str, Any]]:
                     "title": item.get("title") or item.get("titulo") or "Figura",
                     "caption": item.get("caption") or item.get("legenda") or "",
                     "url": url,
-                    "bucket": item.get("bucket"),
-                    "path": item.get("path"),
                 }
             )
     return out
@@ -128,8 +126,6 @@ def _download_temp_image(url: str) -> Optional[str]:
         lower = url.lower()
         if ".jpg" in lower or ".jpeg" in lower:
             suffix = ".jpg"
-        elif ".webp" in lower:
-            suffix = ".webp"
 
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
         tmp.write(data)
@@ -144,7 +140,7 @@ def _download_temp_image(url: str) -> Optional[str]:
 # Montagem do conteúdo
 # =============================
 
-def _build_rows(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, List[tuple[str, str]]]:
+def _build_rows(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
     rule = calc.get("rule") or {}
     zone = calc.get("zone") or calc.get("zone_sigla") or "—"
     via = calc.get("via_nome") or calc.get("street_name") or "—"
@@ -194,6 +190,22 @@ def _build_rows(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str
         ("Adequabilidade final", _safe_str(calc.get("adequabilidade_txt") or calc.get("adequability_result"))),
     ]
 
+    # Quadro técnico – parâmetros dos ambientes
+    environment_table = [
+        ("Área do terreno", _fmt_num(lot_area, suffix=" m²")),
+        ("Área térrea considerada", _fmt_num(built_ground, suffix=" m²")),
+        ("Área permeável considerada", _fmt_num(permeable_area, suffix=" m²")),
+        ("Frente", _fmt_num(front, suffix=" m")),
+        ("Profundidade", _fmt_num(depth, suffix=" m")),
+        ("TO máxima da zona", _fmt_pct(to_max)),
+        ("TP mínima da zona", _fmt_pct(tp_min)),
+        ("IA máximo da zona", _fmt_num(ia_max)),
+        ("Recuo frontal", _fmt_num(rule.get("recuo_frontal_m"), suffix=" m")),
+        ("Recuo lateral", _fmt_num(rule.get("recuo_lateral_m"), suffix=" m")),
+        ("Recuo fundos", _fmt_num(rule.get("recuo_fundos_m"), suffix=" m")),
+        ("Gabarito", _fmt_num(rule.get("gabarito_m"), suffix=" m")),
+    ]
+
     notes: List[tuple[str, str]] = []
 
     if calc.get("err"):
@@ -210,199 +222,4 @@ def _build_rows(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str
     notes.append(
         (
             "Passeios (calçadas)",
-            "Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via. Na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garantindo continuidade e alinhamento.",
-        )
-    )
-    notes.append(
-        (
-            "Piscinas",
-            "Piscinas não entram na área construída para TO, mas contam como área impermeável para TP e devem respeitar afastamento mínimo de 0,50 m das divisas.",
-        )
-    )
-
-    figures = _extract_figures_from_rule(rule)
-
-    return {
-        "identification": identification,
-        "parameters": parameters,
-        "calculations": calculations,
-        "notes": notes,
-        "figures": figures,
-    }
-
-
-def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
-    rows = _build_rows(calc, session_state)
-    return {
-        "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "title": "Relatório Urbanístico",
-        "sections": rows,
-    }
-
-
-# =============================
-# PDF visual
-# =============================
-
-class _ReportPDF(FPDF):
-    def header(self) -> None:
-        self.set_fill_color(31, 42, 68)
-        self.rect(0, 0, 210, 22, style="F")
-        self.set_xy(14, 6)
-        self.set_text_color(255, 255, 255)
-        self.set_font("Helvetica", "B", 16)
-        self.cell(0, 8, _sanitize("Viabilidade Fácil"), ln=True)
-        self.set_x(14)
-        self.set_font("Helvetica", "", 9)
-        self.cell(0, 5, _sanitize("Relatório Urbanístico"), ln=True)
-        self.set_text_color(0, 0, 0)
-        self.ln(6)
-
-    def footer(self) -> None:
-        self.set_y(-12)
-        self.set_draw_color(220, 220, 220)
-        self.line(14, self.get_y(), 196, self.get_y())
-        self.set_y(-10)
-        self.set_font("Helvetica", "", 8)
-        self.set_text_color(90, 90, 90)
-        self.cell(0, 6, _sanitize(f"Página {self.page_no()}"), align="C")
-        self.set_text_color(0, 0, 0)
-
-
-def _section_title(pdf: _ReportPDF, title: str) -> None:
-    pdf.ln(2)
-    pdf.set_fill_color(238, 242, 247)
-    pdf.set_draw_color(225, 230, 236)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(31, 42, 68)
-    pdf.cell(0, 8, _sanitize(title), ln=True, fill=True, border=1)
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(1)
-
-
-def _row(pdf: _ReportPDF, label: str, value: str) -> None:
-    x = pdf.get_x()
-    y = pdf.get_y()
-
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.multi_cell(52, 6, _sanitize(label), border=0)
-    pdf.set_xy(x + 54, y)
-
-    pdf.set_font("Helvetica", "", 10)
-    pdf.multi_cell(0, 6, _sanitize(value), border=0)
-    pdf.ln(0.5)
-
-
-def _render_section(pdf: _ReportPDF, title: str, rows: List[tuple[str, str]]) -> None:
-    _section_title(pdf, title)
-    for label, value in rows:
-        _row(pdf, f"{label}:", value)
-
-
-def _render_highlight_box(pdf: _ReportPDF, title: str, body: str) -> None:
-    pdf.set_fill_color(250, 251, 253)
-    pdf.set_draw_color(220, 226, 234)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(0, 7, _sanitize(title), ln=True, fill=True, border=1)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.multi_cell(0, 5.5, _sanitize(body), border=1, fill=False)
-    pdf.ln(1)
-
-
-def _render_figures(pdf: _ReportPDF, figures: List[Dict[str, Any]]) -> None:
-    if not figures:
-        return
-
-    _section_title(pdf, "5. Figuras anexas (Anexo V)")
-
-    temp_files: List[str] = []
-
-    try:
-        for fig in figures:
-            title = _safe_str(fig.get("title"), "Figura")
-            caption = _safe_str(fig.get("caption"), "")
-            url = fig.get("url")
-
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.multi_cell(0, 6, _sanitize(title))
-
-            if url:
-                tmp_path = _download_temp_image(url)
-                if tmp_path:
-                    temp_files.append(tmp_path)
-                    # largura útil ~182mm
-                    try:
-                        pdf.image(tmp_path, w=170)
-                        pdf.ln(2)
-                    except Exception:
-                        pdf.set_font("Helvetica", "", 9)
-                        pdf.multi_cell(0, 5, _sanitize(f"Não foi possível renderizar a imagem no PDF. URL: {url}"))
-                else:
-                    pdf.set_font("Helvetica", "", 9)
-                    pdf.multi_cell(0, 5, _sanitize(f"Não foi possível baixar a figura: {url}"))
-            else:
-                pdf.set_font("Helvetica", "", 9)
-                pdf.multi_cell(0, 5, _sanitize("Figura sem URL pública disponível."))
-
-            if caption and caption != "—":
-                pdf.set_font("Helvetica", "", 9)
-                pdf.multi_cell(0, 5, _sanitize(caption))
-
-            pdf.ln(3)
-    finally:
-        for path in temp_files:
-            try:
-                os.remove(path)
-            except Exception:
-                pass
-
-
-# =============================
-# Geração final
-# =============================
-
-def generate_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any]) -> bytes:
-    payload = build_report_payload(calc, session_state)
-    sections: Dict[str, Any] = payload["sections"]
-
-    pdf = _ReportPDF()
-    pdf.set_auto_page_break(auto=True, margin=14)
-    pdf.set_margins(14, 28, 14)
-    pdf.add_page()
-
-    pdf.set_font("Helvetica", "", 10)
-    pdf.set_text_color(90, 90, 90)
-    pdf.cell(0, 6, _sanitize(f"Emitido em: {payload['generated_at']}"), ln=True)
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(2)
-
-    _render_highlight_box(
-        pdf,
-        "Resumo",
-        "Este relatório apresenta a leitura inicial da viabilidade urbanística do lote analisado, com identificação da zona, parâmetros urbanísticos, síntese da análise e observações importantes para apoiar o início do projeto.",
-    )
-
-    _render_section(pdf, "1. Identificação da análise", sections["identification"])
-    _render_section(pdf, "2. Parâmetros urbanísticos", sections["parameters"])
-    _render_section(pdf, "3. Síntese da análise", sections["calculations"])
-    _render_section(pdf, "4. Dicas e observações importantes", sections["notes"])
-    _render_figures(pdf, sections.get("figures", []))
-
-    pdf.ln(2)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_text_color(110, 110, 110)
-    pdf.multi_cell(
-        0,
-        4.5,
-        _sanitize(
-            "Documento gerado pelo Viabilidade Fácil. O PDF foi estruturado para se aproximar da leitura do sistema e já permite evolução futura para histórico na área do cliente."
-        ),
-    )
-    pdf.set_text_color(0, 0, 0)
-
-    result = pdf.output(dest="S")
-    if isinstance(result, bytearray):
-        return bytes(result)
-    if isinstance(result, bytes):
-        return result
-    return result.encode("latin-1", errors="replace")
+            "Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via. Na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garan
