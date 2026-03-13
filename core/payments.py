@@ -196,6 +196,23 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any]) -> Dict[str, Any]:
     return {"credited": True, "credits": credits, "new_balance": new_balance}
 
 
+
+
+def ensure_paid_payment_is_credited(*, payment_id: str) -> Dict[str, Any]:
+    """Reprocessa um pagamento já marcado como paid para garantir crédito na carteira."""
+    payment_row = _fetch_payment_row(payment_id=payment_id)
+    status = str(payment_row.get("status") or "").strip().lower()
+    if status != "paid":
+        return {"ok": False, "message": "Pagamento ainda não está pago.", "payment": payment_row}
+
+    credit_result = _apply_credit_for_payment(payment_row=payment_row)
+    return {
+        "ok": True,
+        "message": "Pagamento reprocessado para crédito.",
+        "payment": payment_row,
+        "credit_result": credit_result,
+    }
+
 def refresh_payment_status_and_credit(*, payment_id: str) -> Dict[str, Any]:
     supabase = get_supabase_server_client()
     payment_row = _fetch_payment_row(payment_id=payment_id)
