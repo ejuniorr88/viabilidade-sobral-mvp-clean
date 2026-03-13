@@ -19,3 +19,4 @@ pyproj==3.6.1
 supabase
 python-dotenv
 requests
+fpdf2==2.8.3
