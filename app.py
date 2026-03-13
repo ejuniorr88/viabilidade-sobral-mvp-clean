@@ -26,7 +26,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback, is_auth_callback_mode, get_app_url
+from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
@@ -61,14 +61,12 @@ def _inject_global_styles() -> None:
         """
         <style>
         .block-container {
-            padding-top: 0 !important;
+            padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }
 
-        [data-testid="stAppViewContainer"],
-        .main,
-        .block-container {
+        html, body, [data-testid="stAppViewContainer"], .main {
             overflow-x: hidden !important;
         }
 
@@ -76,32 +74,34 @@ def _inject_global_styles() -> None:
             background: transparent !important;
         }
 
-        .vf-topbar-outer {
-            margin-left: -1rem;
-            margin-right: -1rem;
-            margin-bottom: 1.2rem;
+        .vf-topbar-shell {
+            width: 100%;
+            margin: 0 0 1.4rem 0;
+            padding: 0;
         }
 
         .vf-topbar {
             width: 100%;
             background: #ffffff;
-            border-bottom: 1px solid #e7e7e7;
+            border-bottom: 1px solid #e8e8e8;
         }
 
         .vf-topbar-inner {
-            min-height: 78px;
+            width: 100%;
+            min-height: 76px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 24px;
-            padding: 0 20px;
+            gap: 20px;
+            padding: 0 18px;
             box-sizing: border-box;
         }
 
         .vf-brand {
             font-size: 30px;
             font-weight: 800;
-            color: #17305f;
+            color: #1f2a44;
+            letter-spacing: -0.02em;
             line-height: 1.1;
             white-space: nowrap;
         }
@@ -110,45 +110,52 @@ def _inject_global_styles() -> None:
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 28px;
+            gap: 26px;
             flex-wrap: wrap;
-            text-align: right;
         }
 
         .vf-link {
-            color: #17305f;
-            font-size: 15px;
+            color: #1f2a44;
+            text-decoration: none;
             font-weight: 600;
-            line-height: 1.1;
+            font-size: 15px;
             white-space: nowrap;
         }
 
-        .vf-hero-wrap {
+        .vf-main-title-wrap {
             width: 100%;
             text-align: center;
-            margin-top: 0.4rem;
-            margin-bottom: 0.8rem;
+            margin-top: 0.6rem;
+            margin-bottom: 0.2rem;
         }
 
-        .vf-hero-title {
-            margin: 0;
-            font-size: 46px;
+        .vf-main-title {
+            font-size: 42px;
             font-weight: 800;
-            color: #17305f;
-            line-height: 1.05;
+            color: #1f2a44;
             letter-spacing: -0.02em;
+            line-height: 1.1;
+            margin: 0;
         }
 
-        .vf-hero-subtitle {
+        .vf-main-subtitle {
             margin-top: 10px;
+            margin-bottom: 0.8rem;
+            font-size: 15px;
             color: #6b7280;
-            font-size: 16px;
-            line-height: 1.45;
+            text-align: center;
+        }
+
+        .vf-section-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: #24324a;
+            margin-bottom: 12px;
         }
 
         .vf-wallet-wrap {
-            margin-top: 0.5rem;
-            margin-bottom: 1rem;
+            margin-top: 0;
+            margin-bottom: 14px;
         }
 
         .vf-wallet-title {
@@ -186,13 +193,6 @@ def _inject_global_styles() -> None:
             line-height: 1.25;
         }
 
-        .vf-section-title {
-            font-size: 26px;
-            font-weight: 800;
-            color: #24324a;
-            margin-bottom: 12px;
-        }
-
         section[data-testid="stSidebar"] {
             background: #eef0f3;
             border-right: 1px solid #d9dee5;
@@ -203,57 +203,9 @@ def _inject_global_styles() -> None:
             padding-bottom: 1.5rem !important;
         }
 
-        section[data-testid="stSidebar"] h3 {
-            color: #22314d;
-            font-weight: 800;
-            letter-spacing: -0.01em;
-        }
-
-        section[data-testid="stSidebar"] label,
-        section[data-testid="stSidebar"] p,
-        section[data-testid="stSidebar"] div {
-            color: #2d3a53;
-        }
-
-        section[data-testid="stSidebar"] .stSelectbox > div > div,
-        section[data-testid="stSidebar"] .stTextInput > div > div,
-        section[data-testid="stSidebar"] [data-testid="stNumberInput"] > div > div {
-            border-radius: 12px;
-        }
-
         .vf-side-divider {
             border-top: 1px solid #cfd5dd;
             margin: 16px 0 18px 0;
-        }
-
-        .vf-callback-shell {
-            min-height: 80vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .vf-callback-card {
-            width: min(560px, 92vw);
-            background: #ffffff;
-            border: 1px solid #e8e8e8;
-            border-radius: 18px;
-            padding: 28px 24px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.06);
-            text-align: center;
-        }
-
-        .vf-callback-title {
-            font-size: 26px;
-            font-weight: 800;
-            color: #17305f;
-            margin-bottom: 8px;
-        }
-
-        .vf-callback-text {
-            font-size: 15px;
-            color: #6b7280;
-            line-height: 1.5;
         }
 
         @media (max-width: 1100px) {
@@ -267,16 +219,15 @@ def _inject_global_styles() -> None:
 
             .vf-links {
                 justify-content: flex-start;
-                text-align: left;
-                gap: 16px;
-            }
-
-            .vf-hero-title {
-                font-size: 36px;
+                gap: 18px;
             }
 
             .vf-wallet-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .vf-main-title {
+                font-size: 34px;
             }
         }
         </style>
@@ -288,18 +239,18 @@ def _inject_global_styles() -> None:
 def _render_top_nav() -> None:
     st.markdown(
         """
-        <div class="vf-topbar-outer">
-            <div class="vf-topbar">
-                <div class="vf-topbar-inner">
-                    <div class="vf-brand">Viabilidade Fácil</div>
-                    <div class="vf-links">
-                        <span class="vf-link">Como funciona</span>
-                        <span class="vf-link">Área do cliente</span>
-                        <span class="vf-link">Planos</span>
-                        <span class="vf-link">Dúvidas/Suporte</span>
-                    </div>
-                </div>
+        <div class="vf-topbar-shell">
+          <div class="vf-topbar">
+            <div class="vf-topbar-inner">
+              <div class="vf-brand">Viabilidade Fácil</div>
+              <div class="vf-links">
+                <span class="vf-link">Como funciona</span>
+                <span class="vf-link">Área do cliente</span>
+                <span class="vf-link">Planos</span>
+                <span class="vf-link">Dúvidas/Suporte</span>
+              </div>
             </div>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -349,33 +300,51 @@ def _render_login_gate_block() -> None:
     )
 
 
-def _render_auth_callback_screen() -> None:
-    st.markdown(
-        """
-        <div class="vf-callback-shell">
-            <div class="vf-callback-card">
-                <div class="vf-callback-title">Concluindo seu login…</div>
-                <div class="vf-callback-text">
-                    Aguarde alguns segundos enquanto finalizamos sua autenticação
-                    e voltamos para a página principal.
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def _render_auth_callback_bridge() -> None:
+    code = safe_get_query_param("code") or ""
+    error = safe_get_query_param("error") or ""
+    error_code = safe_get_query_param("error_code") or ""
+    error_description = safe_get_query_param("error_description") or ""
+    state = safe_get_query_param("state") or ""
+    app_url = get_app_url()
 
-    destination = get_app_url()
-    components.html(
-        f"""
-        <script>
-            setTimeout(function() {{
-                window.top.location.href = "{destination}";
-            }}, 1200);
-        </script>
-        """,
-        height=0,
-    )
+    st.markdown("## Concluindo seu login...")
+    st.caption("Aguarde alguns segundos. Se a aba principal não atualizar, ela será redirecionada automaticamente.")
+
+    bridge_html = f"""
+    <script>
+    (function() {{
+        const appUrl = {app_url!r};
+        const params = new URLSearchParams();
+        const code = {code!r};
+        const error = {error!r};
+        const errorCode = {error_code!r};
+        const errorDescription = {error_description!r};
+        const state = {state!r};
+
+        if (code) params.set("code", code);
+        if (error) params.set("error", error);
+        if (errorCode) params.set("error_code", errorCode);
+        if (errorDescription) params.set("error_description", errorDescription);
+        if (state) params.set("state", state);
+
+        const destination = params.toString() ? `${{appUrl}}/?${{params.toString()}}` : appUrl;
+
+        try {{
+            if (window.opener && !window.opener.closed) {{
+                window.opener.location.replace(destination);
+                window.close();
+                return;
+            }}
+        }} catch (e) {{}}
+
+        window.location.replace(destination);
+    }})();
+    </script>
+    """
+
+    components.html(bridge_html, height=0)
+    st.stop()
 
 
 if "selected_lat" not in st.session_state:
@@ -412,13 +381,12 @@ if "show_inline_payments" not in st.session_state:
 
 _inject_global_styles()
 
-# 1) Sempre trata o callback primeiro
-handle_oauth_callback()
+# Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
+if safe_get_query_param("auth_flow") == "callback":
+    _render_auth_callback_bridge()
 
-# 2) Se estivermos no modo de callback, NÃO carregamos mapa, sidebar e resto do app
-if is_auth_callback_mode():
-    _render_auth_callback_screen()
-    st.stop()
+# O exchange do code deve acontecer na aba principal.
+handle_oauth_callback()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
@@ -430,9 +398,9 @@ user_id = st.session_state.get("auth_user_id")
 
 st.markdown(
     """
-    <div class="vf-hero-wrap">
-        <div class="vf-hero-title">Viabilidade Urbana</div>
-        <div class="vf-hero-subtitle">
+    <div class="vf-main-title-wrap">
+        <div class="vf-main-title">Viabilidade Urbana</div>
+        <div class="vf-main-subtitle">
             Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
         </div>
     </div>
@@ -675,6 +643,7 @@ if can_offer_report:
             "📄 Gerar relatório",
             key="btn_generate_report",
             use_container_width=True,
+            disabled=(not user_logged_in) or (saldo_atual is not None and int(saldo_atual) <= 0),
         )
 
     with c2:
@@ -689,6 +658,10 @@ if can_offer_report:
     if gerar_relatorio:
         if not user_logged_in or not user_id:
             st.error("Faça login com Google para gerar o relatório completo.")
+        elif saldo_atual is not None and int(saldo_atual) <= 0:
+            st.session_state.show_inline_payments = True
+            st.session_state.report_unlocked = False
+            st.error("Você não possui créditos suficientes para gerar o relatório.")
         else:
             try:
                 debit_result = consume_viability_credit(
@@ -699,6 +672,7 @@ if can_offer_report:
 
                 if not debit_result.get("ok"):
                     st.session_state.show_inline_payments = True
+                    st.session_state.report_unlocked = False
                     st.error(
                         debit_result.get("message")
                         or "Saldo insuficiente para gerar o relatório."
@@ -712,6 +686,7 @@ if can_offer_report:
 
             except Exception as e:
                 st.session_state.show_inline_payments = True
+                st.session_state.report_unlocked = False
                 st.error(f"Não foi possível descontar o crédito: {e}")
 
     if st.session_state.get("show_inline_payments"):
