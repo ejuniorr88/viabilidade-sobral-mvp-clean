@@ -151,7 +151,7 @@ def _payment_already_credited(*, user_id: str, payment_id: str) -> bool:
         supabase.table("credit_ledger")
         .select("id")
         .eq("user_id", user_id)
-        .eq("source", "mercadopago_pix")
+        .eq("source", "pix_purchase")
         .eq("description", description)
         .limit(1)
         .execute()
@@ -189,7 +189,7 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any]) -> Dict[str, Any]:
         "user_id": user_id,
         "amount": credits,
         "entry_type": "credit",
-        "source": "mercadopago_pix",
+        "source": "pix_purchase",
         "description": f"Crédito por pagamento Pix {payment_id}",
     }).execute()
 
