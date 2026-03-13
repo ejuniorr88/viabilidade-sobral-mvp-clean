@@ -21,13 +21,17 @@ AUTH_STATE_KEYS = [
     "auth_sync_done",
 ]
 
+_VERIFY_TIMEOUT_SECONDS = 8
+
 
 def get_supabase_auth_client() -> Client:
     client = st.session_state.get("_supabase_auth_client")
     if client is None:
         client = create_client(
             st.secrets["SUPABASE_URL"],
-            st.secrets["SUPABASE_ANON_KEY"],
+            st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+            if st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
+            else st.secrets["SUPABASE_ANON_KEY"],
         )
         st.session_state["_supabase_auth_client"] = client
     return client
@@ -91,7 +95,7 @@ def safe_get_query_param(name: str) -> Optional[str]:
             return None
 
 
-def clear_auth_query_params(remove_ext_access_token: bool = False) -> None:
+def clear_auth_query_params(remove_external_token: bool = False) -> None:
     keys = [
         "code",
         "state",
@@ -100,7 +104,7 @@ def clear_auth_query_params(remove_ext_access_token: bool = False) -> None:
         "error_description",
         "auth_flow",
     ]
-    if remove_ext_access_token:
+    if remove_external_token:
         keys.append("ext_access_token")
 
     try:
@@ -158,27 +162,6 @@ def clear_user_in_state() -> None:
     st.session_state["auth_sync_done"] = True
 
 
-def sync_auth_state(force: bool = False) -> bool:
-    if st.session_state.get("auth_sync_done") and not force:
-        return bool(st.session_state.get("auth_logged_in"))
-
-    access_token = st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
-    if access_token:
-        try:
-            verified = _verify_external_access_token(str(access_token))
-            user_obj = verified.get("user") or {}
-            if user_obj:
-                store_user_in_state(user_obj)
-                st.session_state["auth_external_access_token"] = str(access_token)
-                st.session_state.pop("auth_last_error", None)
-                return True
-        except Exception as e:
-            st.session_state["auth_last_error"] = f"Falha ao restaurar sessão: {e}"
-
-    clear_user_in_state()
-    return False
-
-
 def _verify_external_access_token(access_token: str) -> Dict[str, Any]:
     payload = json.dumps({"access_token": access_token}).encode("utf-8")
     req = Request(
@@ -188,9 +171,50 @@ def _verify_external_access_token(access_token: str) -> Dict[str, Any]:
         method="POST",
     )
 
-    with urlopen(req, timeout=30) as resp:
+    with urlopen(req, timeout=_VERIFY_TIMEOUT_SECONDS) as resp:
         body = resp.read().decode("utf-8")
         return json.loads(body) if body else {}
+
+
+def _get_external_token() -> Optional[str]:
+    return st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
+
+
+def _try_restore_from_external_token(force_verify: bool = False) -> bool:
+    token = _get_external_token()
+    if not token:
+        return False
+
+    cached_token = st.session_state.get("auth_external_access_token")
+    has_user = bool(st.session_state.get("auth_user_id") and st.session_state.get("auth_logged_in"))
+
+    if not force_verify and has_user and cached_token == token:
+        st.session_state["auth_sync_done"] = True
+        return True
+
+    verified = _verify_external_access_token(token)
+    user_obj = verified.get("user") or {}
+    if not user_obj:
+        raise RuntimeError("Usuário não retornado pelo gateway.")
+
+    store_user_in_state(user_obj)
+    st.session_state["auth_external_access_token"] = token
+    st.session_state.pop("auth_last_error", None)
+    return True
+
+
+def sync_auth_state(force: bool = False) -> bool:
+    if st.session_state.get("auth_sync_done") and not force:
+        return bool(st.session_state.get("auth_logged_in"))
+
+    try:
+        restored = _try_restore_from_external_token(force_verify=force)
+        st.session_state["auth_sync_done"] = True
+        return restored
+    except Exception as e:
+        clear_user_in_state()
+        st.session_state["auth_last_error"] = f"Falha ao restaurar login: {e}"
+        return False
 
 
 def handle_oauth_callback() -> None:
@@ -205,30 +229,35 @@ def handle_oauth_callback() -> None:
             + (f" — {error_description}" if error_description else "")
         )
         st.session_state.pop("oauth_url", None)
-        clear_auth_query_params(remove_ext_access_token=True)
+        clear_auth_query_params(remove_external_token=True)
         st.rerun()
         return
 
     if external_access_token:
         try:
-            verified = _verify_external_access_token(external_access_token)
-            user_obj = verified.get("user") or {}
-            if not user_obj:
-                raise RuntimeError("Usuário não retornado pelo gateway.")
+            # Se já validamos este mesmo token nesta sessão, não chama o gateway de novo.
+            if (
+                st.session_state.get("auth_external_access_token") == external_access_token
+                and st.session_state.get("auth_logged_in")
+                and st.session_state.get("auth_user_id")
+            ):
+                st.session_state["auth_sync_done"] = True
+                st.session_state.pop("auth_last_error", None)
+                return
 
-            store_user_in_state(user_obj)
+            _try_restore_from_external_token(force_verify=True)
             st.session_state["auth_message"] = "Login efetuado com sucesso."
-            st.session_state.pop("auth_last_error", None)
             st.session_state.pop("oauth_url", None)
-            st.session_state["auth_external_access_token"] = external_access_token
-            clear_auth_query_params(remove_ext_access_token=False)
+            # Mantém o ext_access_token para permitir reidratação no refresh.
+            clear_auth_query_params(remove_external_token=False)
             st.rerun()
             return
         except Exception as e:
             clear_user_in_state()
             st.session_state["auth_last_error"] = f"Falha ao concluir login: {e}"
             st.session_state.pop("oauth_url", None)
-            clear_auth_query_params(remove_ext_access_token=True)
+            # Se o token falhar, limpamos para evitar travar em estado intermediário.
+            clear_auth_query_params(remove_external_token=True)
             st.rerun()
             return
 
@@ -257,7 +286,7 @@ def logout_limpo() -> None:
     st.session_state.pop("oauth_url", None)
     if keep.get("_supabase_auth_client") is not None:
         st.session_state["_supabase_auth_client"] = keep["_supabase_auth_client"]
-    clear_auth_query_params(remove_ext_access_token=True)
+    clear_auth_query_params(remove_external_token=True)
     st.rerun()
 
 
