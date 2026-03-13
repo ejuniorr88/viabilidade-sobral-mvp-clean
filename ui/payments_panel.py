@@ -342,16 +342,35 @@ def _render_pix_block(payment_row: Dict[str, Any]) -> None:
 def _render_pending_payment_status(supabase, payment_id: str) -> None:
     st.info("Aguardando confirmação do pagamento...")
 
+    def _do_refresh() -> Optional[Dict[str, Any]]:
+        try:
+            result = refresh_payment_status_and_credit(payment_id=payment_id)
+            payment = (result or {}).get("payment") or _fetch_payment_by_id(supabase, payment_id)
+            if payment:
+                st.session_state["current_payment_snapshot"] = payment
+                st.session_state["current_payment_id"] = _safe_get(payment, "id", payment_id)
+            credit_result = (result or {}).get("credit_result") or {}
+            if (payment or {}).get("status") == "paid":
+                if credit_result.get("credited"):
+                    st.success("Pagamento confirmado e créditos adicionados à carteira.")
+                else:
+                    st.success("Pagamento confirmado com sucesso.")
+            return payment
+        except Exception as e:
+            st.warning(f"Não foi possível atualizar o pagamento agora: {e}")
+            return _fetch_payment_by_id(supabase, payment_id)
+
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
         if st.button("Verificar pagamento agora", key=f"check_payment_{payment_id}"):
+            _do_refresh()
             st.rerun()
 
     with col2:
         auto_refresh = st.checkbox(
             "Atualizar automaticamente",
-            value=False,
+            value=bool(st.session_state.get(f"auto_refresh_{payment_id}", True)),
             key=f"auto_refresh_{payment_id}",
         )
 
@@ -372,6 +391,7 @@ def _render_pending_payment_status(supabase, payment_id: str) -> None:
         st.warning("Pagamento ainda pendente.")
         if auto_refresh:
             time.sleep(int(refresh_seconds))
+            _do_refresh()
             st.rerun()
     elif status in ("failed", "cancelled", "refunded"):
         st.error(f"Pagamento com status: {status}")
@@ -425,9 +445,26 @@ def _render_current_payment_area(supabase) -> None:
     if not payment_id:
         return
 
+    snapshot = st.session_state.get("current_payment_snapshot") or {}
     current_payment = _fetch_payment_by_id(supabase, payment_id)
-    if not current_payment:
+
+    if current_payment and snapshot:
+        merged = dict(snapshot)
+        merged.update(current_payment)
+        if not merged.get("pix_qr_code"):
+            merged["pix_qr_code"] = snapshot.get("pix_qr_code")
+        if not merged.get("pix_copy_paste"):
+            merged["pix_copy_paste"] = snapshot.get("pix_copy_paste")
+        current_payment = merged
+    elif not current_payment and snapshot and str(_safe_get(snapshot, "id")) == str(payment_id):
+        current_payment = snapshot
+        st.warning(
+            "O Pix foi criado, mas não foi possível recarregar os dados do pagamento nesta execução. "
+            "Exibindo os dados retornados na criação."
+        )
+    elif not current_payment:
         st.session_state.pop("current_payment_id", None)
+        st.session_state.pop("current_payment_snapshot", None)
         return
 
     st.markdown("---")
@@ -440,9 +477,14 @@ def _render_current_payment_area(supabase) -> None:
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")))
     elif status == "paid":
         st.success("Este pagamento já foi confirmado.")
+        if st.button("Fechar pagamento atual", key=f"close_current_paid_{payment_id}"):
+            st.session_state.pop("current_payment_id", None)
+            st.session_state.pop("current_payment_snapshot", None)
+            st.rerun()
     else:
         if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
             st.session_state.pop("current_payment_id", None)
+            st.session_state.pop("current_payment_snapshot", None)
             st.rerun()
 
 
