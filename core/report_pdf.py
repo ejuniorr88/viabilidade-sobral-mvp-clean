@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import json
+import os
+import tempfile
 from datetime import datetime
-from io import BytesIO
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+from urllib.request import urlopen
 
 from fpdf import FPDF
 
+
+# =============================
+# Helpers de formato
+# =============================
 
 def _safe_str(value: Any, default: str = "—") -> str:
     if value is None:
@@ -14,7 +21,7 @@ def _safe_str(value: Any, default: str = "—") -> str:
     return text if text else default
 
 
-def _safe_float(value: Any) -> float | None:
+def _safe_float(value: Any) -> Optional[float]:
     try:
         if value is None or value == "":
             return None
@@ -38,22 +45,104 @@ def _fmt_pct(value: Any, dec: int = 1) -> str:
     return f"{number:.{dec}f}%"
 
 
-def _to_pct(rule: Dict[str, Any], key_pct: str, key_frac: str) -> float | None:
+def _to_pct(rule: Dict[str, Any], key_pct: str, key_frac: str) -> Optional[float]:
     value = rule.get(key_pct)
     if value is not None:
         return _safe_float(value)
+
     value = rule.get(key_frac)
     if value is None:
         return None
+
     parsed = _safe_float(value)
     if parsed is None:
         return None
+
     return parsed * 100.0 if 0 <= parsed <= 1.0 else parsed
 
 
 def _sanitize(text: str) -> str:
     return text.encode("latin-1", "replace").decode("latin-1")
 
+
+# =============================
+# Figuras do Anexo V
+# =============================
+
+def _build_public_storage_url(bucket: str, path: str) -> Optional[str]:
+    base = os.getenv("SUPABASE_URL", "").rstrip("/")
+    if not base:
+        try:
+            import streamlit as st
+            base = (st.secrets.get("SUPABASE_URL") or "").rstrip("/")
+        except Exception:
+            base = ""
+
+    if not base or not bucket or not path:
+        return None
+
+    path = path.lstrip("/")
+    return f"{base}/storage/v1/object/public/{bucket}/{path}"
+
+
+def _extract_figures_from_rule(rule: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not isinstance(rule, dict):
+        return []
+
+    src = rule.get("src") or {}
+    if isinstance(src, str):
+        try:
+            src = json.loads(src)
+        except Exception:
+            src = {}
+
+    if not isinstance(src, dict):
+        return []
+
+    figs = src.get("figures") or src.get("figuras") or []
+    if not isinstance(figs, list):
+        return []
+
+    out: List[Dict[str, Any]] = []
+    for item in figs:
+        if isinstance(item, dict) and item.get("bucket") and item.get("path"):
+            url = _build_public_storage_url(str(item.get("bucket")), str(item.get("path")))
+            out.append(
+                {
+                    "title": item.get("title") or item.get("titulo") or "Figura",
+                    "caption": item.get("caption") or item.get("legenda") or "",
+                    "url": url,
+                    "bucket": item.get("bucket"),
+                    "path": item.get("path"),
+                }
+            )
+    return out
+
+
+def _download_temp_image(url: str) -> Optional[str]:
+    try:
+        with urlopen(url, timeout=12) as resp:
+            data = resp.read()
+
+        suffix = ".png"
+        lower = url.lower()
+        if ".jpg" in lower or ".jpeg" in lower:
+            suffix = ".jpg"
+        elif ".webp" in lower:
+            suffix = ".webp"
+
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp.write(data)
+        tmp.flush()
+        tmp.close()
+        return tmp.name
+    except Exception:
+        return None
+
+
+# =============================
+# Montagem do conteúdo
+# =============================
 
 def _build_rows(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, List[tuple[str, str]]]:
     rule = calc.get("rule") or {}
@@ -106,6 +195,7 @@ def _build_rows(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str
     ]
 
     notes: List[tuple[str, str]] = []
+
     if calc.get("err"):
         notes.append(("Observação", _safe_str(calc.get("err"))))
 
@@ -113,96 +203,32 @@ def _build_rows(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str
         notes.append(
             (
                 "Lote irregular",
-                "Em lote irregular, a implantação final pode ser reduzida por recuos, forma do lote, alinhamento, servidões e exigências do licenciamento.",
+                "Como o lote é irregular, a implantação final pode ser reduzida por recuos, forma do lote, alinhamento, servidões e exigências do licenciamento.",
             )
         )
 
     notes.append(
         (
-            "Piscinas e áreas impermeáveis",
-            "Piscinas não entram na área construída para TO, mas contam como área impermeável para TP e devem respeitar afastamento mínimo de 0,50 m das divisas.",
+            "Passeios (calçadas)",
+            "Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via. Na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garantindo continuidade e alinhamento.",
         )
     )
     notes.append(
         (
-            "Calçadas",
-            "A largura da calçada deve seguir o loteamento aprovado, diretrizes municipais ou o alinhamento existente da via, observando o licenciamento local.",
+            "Piscinas",
+            "Piscinas não entram na área construída para TO, mas contam como área impermeável para TP e devem respeitar afastamento mínimo de 0,50 m das divisas.",
         )
     )
+
+    figures = _extract_figures_from_rule(rule)
 
     return {
         "identification": identification,
         "parameters": parameters,
         "calculations": calculations,
         "notes": notes,
+        "figures": figures,
     }
 
 
-class _ReportPDF(FPDF):
-    def header(self) -> None:
-        self.set_font("Helvetica", "B", 14)
-        self.cell(0, 8, _sanitize("Viabilidade Fácil — Relatório Urbanístico"), ln=True)
-        self.ln(2)
-
-    def footer(self) -> None:
-        self.set_y(-12)
-        self.set_font("Helvetica", "", 8)
-        self.cell(0, 6, _sanitize(f"Página {self.page_no()}"), align="C")
-
-
-
-def _render_section(pdf: _ReportPDF, title: str, rows: List[tuple[str, str]]) -> None:
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 7, _sanitize(title), ln=True)
-    pdf.set_font("Helvetica", "", 10)
-    for label, value in rows:
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.multi_cell(0, 6, _sanitize(f"{label}:"), new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(0, 6, _sanitize(value), new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(1)
-
-
-
-def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
-    rows = _build_rows(calc, session_state)
-    return {
-        "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "title": "Relatório Urbanístico",
-        "sections": rows,
-    }
-
-
-
-def generate_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any]) -> bytes:
-    payload = build_report_payload(calc, session_state)
-
-    pdf = _ReportPDF()
-    pdf.set_auto_page_break(auto=True, margin=12)
-    pdf.set_margins(14, 14, 14)
-    pdf.add_page()
-
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, _sanitize(f"Emitido em: {payload['generated_at']}"), ln=True)
-    pdf.ln(2)
-
-    sections: Dict[str, List[tuple[str, str]]] = payload["sections"]
-    _render_section(pdf, "1. Identificação da análise", sections["identification"])
-    _render_section(pdf, "2. Parâmetros urbanísticos", sections["parameters"])
-    _render_section(pdf, "3. Síntese da análise", sections["calculations"])
-    _render_section(pdf, "4. Observações importantes", sections["notes"])
-
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.multi_cell(
-        0,
-        5,
-        _sanitize(
-            "Este PDF foi estruturado para futura integração com histórico na área do cliente, mantendo a geração separada do armazenamento.")
-    )
-
-    result = pdf.output(dest="S")
-    if isinstance(result, bytearray):
-        return bytes(result)
-    if isinstance(result, bytes):
-        return result
-    return result.encode("latin-1", errors="replace")
+def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Di_
