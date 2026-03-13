@@ -93,7 +93,6 @@
   async function handleInitialCallback() {
     if (window.location.hash && window.location.hash.includes("access_token=")) {
       setStatus("Processando retorno do Google...", "muted");
-      // Dá um pequeno tempo para o supabase-js persistir a sessão vinda da URL/hash.
       window.setTimeout(refreshState, 300);
       return;
     }
@@ -133,8 +132,19 @@
   }
 
   if (els.continueBtn) {
-    els.continueBtn.addEventListener("click", () => {
-      window.location.href = cfg.STREAMLIT_APP_URL;
+    els.continueBtn.addEventListener("click", async () => {
+      try {
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error || !data?.session?.access_token) {
+          throw new Error(error?.message || "Sessão ausente para continuar.");
+        }
+
+        const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
+        streamlitUrl.searchParams.set("ext_access_token", data.session.access_token);
+        window.location.href = streamlitUrl.toString();
+      } catch (err) {
+        setStatus(err.message || String(err), "error");
+      }
     });
   }
 
