@@ -29,7 +29,8 @@ from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
-from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
+from core.credits import consume_viability_credit, get_credit_balance
+from core.report_pdf import generate_report_pdf_bytes
 
 
 @st.cache_data(show_spinner=False)
@@ -218,16 +219,37 @@ def _inject_global_styles() -> None:
             }
 
             .vf-links {
+                width: 100%;
                 justify-content: flex-start;
                 gap: 18px;
+            }
+
+            .vf-main-title {
+                font-size: 34px;
             }
 
             .vf-wallet-grid {
                 grid-template-columns: 1fr;
             }
+        }
+
+        @media (max-width: 640px) {
+            .vf-brand {
+                font-size: 24px;
+            }
 
             .vf-main-title {
-                font-size: 34px;
+                font-size: 28px;
+            }
+
+            .vf-main-subtitle {
+                font-size: 14px;
+                line-height: 1.45;
+                padding: 0 6px;
+            }
+
+            .vf-link {
+                font-size: 14px;
             }
         }
         </style>
@@ -236,486 +258,247 @@ def _inject_global_styles() -> None:
     )
 
 
-def _render_top_nav() -> None:
+def _render_topbar() -> None:
     st.markdown(
         """
         <div class="vf-topbar-shell">
-          <div class="vf-topbar">
-            <div class="vf-topbar-inner">
-              <div class="vf-brand">Viabilidade Fácil</div>
-              <div class="vf-links">
-                <span class="vf-link">Como funciona</span>
-                <span class="vf-link">Área do cliente</span>
-                <span class="vf-link">Planos</span>
-                <span class="vf-link">Dúvidas/Suporte</span>
-              </div>
+            <div class="vf-topbar">
+                <div class="vf-topbar-inner">
+                    <div class="vf-brand">Viabilidade Fácil</div>
+                    <div class="vf-links">
+                        <a class="vf-link" href="#como-funciona">Como funciona</a>
+                        <a class="vf-link" href="#area-do-cliente">Área do cliente</a>
+                        <a class="vf-link" href="#planos">Planos</a>
+                        <a class="vf-link" href="#duvidas-suporte">Dúvidas/Suporte</a>
+                    </div>
+                </div>
             </div>
-          </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def _render_wallet_summary() -> None:
-    user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
-    user_email = st.session_state.get("auth_user_email") or st.session_state.get("auth_email") or "—"
-    user_id = st.session_state.get("auth_user_id")
+def _render_main_title() -> None:
+    st.markdown(
+        """
+        <div class="vf-main-title-wrap">
+            <h1 class="vf-main-title">Viabilidade Fácil</h1>
+            <div class="vf-main-subtitle">
+                Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    saldo = "—"
-    if user_id:
-        try:
-            saldo = str(get_credit_balance(user_id))
-        except Exception:
-            saldo = "—"
+
+def _normalize_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value in (1, "1", "true", "True", "sim", "yes", "on"):
+        return True
+    return False
+
+
+def _get_calc_context() -> Dict[str, Any]:
+    return st.session_state.setdefault("calc", {})
+
+
+def _set_calc_context(data: Dict[str, Any]) -> None:
+    st.session_state["calc"] = data
+
+
+def _set_defaults() -> None:
+    defaults = {
+        "auth_logged_in": False,
+        "auth_user_id": None,
+        "auth_user_email": None,
+        "auth_user_name": None,
+        "auth_message": None,
+        "auth_last_error": None,
+        "oauth_url": None,
+        "calc": {},
+        "report_unlocked": False,
+        "show_inline_payments": False,
+        "scroll_to_login_gate": False,
+        "scroll_to_item3": False,
+        "lot_is_irregular": False,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+
+def _get_user_name_or_email() -> str:
+    return (
+        st.session_state.get("auth_user_name")
+        or st.session_state.get("auth_user_email")
+        or "Usuário"
+    )
+
+
+def _render_wallet_block() -> None:
+    user_id = st.session_state.get("auth_user_id")
+    email = st.session_state.get("auth_user_email")
+    if not user_id:
+        return
+
+    balance = get_credit_balance(user_id)
+
+    st.markdown('<div id="area-do-cliente"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="vf-wallet-wrap">', unsafe_allow_html=True)
+    st.markdown('<div class="vf-wallet-title">Minha carteira</div>', unsafe_allow_html=True)
 
     st.markdown(
         f"""
-        <div class="vf-wallet-wrap">
-          <div class="vf-wallet-title">Minha carteira</div>
-          <div class="vf-wallet-grid">
+        <div class="vf-wallet-grid">
             <div class="vf-wallet-card">
-              <div class="vf-wallet-label">Usuário</div>
-              <div class="vf-wallet-value">{user_name}</div>
+                <div class="vf-wallet-label">Usuário</div>
+                <div class="vf-wallet-value">{_get_user_name_or_email()}</div>
             </div>
             <div class="vf-wallet-card">
-              <div class="vf-wallet-label">E-mail</div>
-              <div class="vf-wallet-value">{user_email}</div>
+                <div class="vf-wallet-label">E-mail</div>
+                <div class="vf-wallet-value">{email or "—"}</div>
             </div>
             <div class="vf-wallet-card">
-              <div class="vf-wallet-label">Saldo de créditos</div>
-              <div class="vf-wallet-value">{saldo}</div>
+                <div class="vf-wallet-label">Saldo de créditos</div>
+                <div class="vf-wallet-value">{balance}</div>
             </div>
-          </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
-def _render_login_gate_block() -> None:
-    render_google_login_box(
-        title="Faça login para continuar",
-        message="Para liberar a pesquisa de viabilidade, entre com sua conta Google.",
-    )
-
-
-def _render_auth_callback_bridge() -> None:
-    code = safe_get_query_param("code") or ""
-    error = safe_get_query_param("error") or ""
-    error_code = safe_get_query_param("error_code") or ""
-    error_description = safe_get_query_param("error_description") or ""
-    state = safe_get_query_param("state") or ""
-    app_url = get_app_url()
-
-    st.markdown("## Concluindo seu login...")
-    st.caption("Aguarde alguns segundos. Se a aba principal não atualizar, ela será redirecionada automaticamente.")
-
-    bridge_html = f"""
-    <script>
-    (function() {{
-        const appUrl = {app_url!r};
-        const params = new URLSearchParams();
-        const code = {code!r};
-        const error = {error!r};
-        const errorCode = {error_code!r};
-        const errorDescription = {error_description!r};
-        const state = {state!r};
-
-        if (code) params.set("code", code);
-        if (error) params.set("error", error);
-        if (errorCode) params.set("error_code", errorCode);
-        if (errorDescription) params.set("error_description", errorDescription);
-        if (state) params.set("state", state);
-
-        const destination = params.toString() ? `${{appUrl}}/?${{params.toString()}}` : appUrl;
-
-        try {{
-            if (window.opener && !window.opener.closed) {{
-                window.opener.location.replace(destination);
-                window.close();
-                return;
-            }}
-        }} catch (e) {{}}
-
-        window.location.replace(destination);
-    }})();
-    </script>
-    """
-
-    components.html(bridge_html, height=0)
-    st.stop()
-
-
-if "selected_lat" not in st.session_state:
-    st.session_state.selected_lat = None
-if "selected_lon" not in st.session_state:
-    st.session_state.selected_lon = None
-if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
-    st.session_state.calc = {}
-st.session_state.calc.setdefault("use_type_code", "RES_UNI")
-
-if "report_unlocked" not in st.session_state:
+def _reset_report_gate() -> None:
     st.session_state.report_unlocked = False
-
-if "free_calc_done" not in st.session_state:
-    st.session_state.free_calc_done = False
-
-if "last_calc_signature" not in st.session_state:
-    st.session_state.last_calc_signature = None
-
-if "show_login_gate" not in st.session_state:
-    st.session_state.show_login_gate = False
-
-if "scroll_to_login_gate" not in st.session_state:
-    st.session_state.scroll_to_login_gate = False
-
-if "scroll_to_item3" not in st.session_state:
-    st.session_state.scroll_to_item3 = False
-
-if "post_login_action" not in st.session_state:
-    st.session_state.post_login_action = None
-
-if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
+
+
+def _ensure_sidebar_anchor() -> None:
+    with st.sidebar:
+        st.markdown('<div id="como-funciona"></div>', unsafe_allow_html=True)
+        st.markdown("### Informações iniciais")
+        st.markdown(
+            """
+            Este sistema ajuda na leitura inicial de viabilidade urbana.
+            Preencha os dados do lote, faça a análise e, se quiser,
+            gere o relatório completo ao final.
+            """
+        )
+        st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
+
+
+def _render_login_gate_box() -> None:
+    st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
+    st.markdown("### Entre para continuar")
+    st.info(
+        "Para liberar a geração do relatório e acessar sua carteira, entre com sua conta Google."
+    )
+    render_google_login_box()
+
+
+def _offer_report_gate(can_offer_report: bool) -> None:
+    if not can_offer_report:
+        return
+
+    user_id = st.session_state.get("auth_user_id")
+    logged_in = bool(st.session_state.get("auth_logged_in") and user_id)
+
+    if not logged_in:
+        st.session_state.scroll_to_login_gate = True
+        st.warning("Você precisa entrar para liberar o relatório completo.")
+        return
+
+    current_balance = get_credit_balance(user_id)
+    if current_balance <= 0:
+        st.session_state.show_inline_payments = True
+        st.warning("Você está sem créditos. Escolha um plano para continuar.")
+        return
+
+    ok, message = consume_viability_credit(user_id=user_id)
+    if ok:
+        st.session_state.report_unlocked = True
+        st.session_state.show_inline_payments = False
+        st.success("Relatório liberado com sucesso.")
+        st.session_state.scroll_to_item3 = True
+    else:
+        st.warning(message or "Não foi possível consumir o crédito.")
+        st.session_state.show_inline_payments = True
+
 
 _inject_global_styles()
-
-# Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
-if safe_get_query_param("auth_flow") == "callback":
-    _render_auth_callback_bridge()
-
-# O exchange do code deve acontecer na aba principal.
+_set_defaults()
 handle_oauth_callback()
+_render_topbar()
+_render_main_title()
+_ensure_sidebar_anchor()
 
-zones_gj = _zones_geojson()
+# Top login area
+render_google_login_top()
+
+if st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
+    _render_wallet_block()
+
+zones_geojson = _zones_geojson()
 zones_prepared = _zones_prepared()
+calc = _get_calc_context()
 
-_render_top_nav()
+col1, col2 = st.columns([1.15, 1], gap="large")
 
-user_logged_in = bool(st.session_state.get("auth_logged_in"))
-user_id = st.session_state.get("auth_user_id")
-user_email = st.session_state.get("auth_user_email")
+with col1:
+    st.markdown("## 1. Selecione o terreno")
+    render_mapa_section(zones_geojson, zones_prepared)
 
-if user_logged_in and user_id and user_email:
-    reconcile_key = f"{user_id}:{user_email}"
-    if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
-        try:
-            reconcile_result = reconcile_wallet_to_current_user(user_id, user_email)
-            st.session_state["wallet_reconcile_done_for"] = reconcile_key
-            st.session_state["wallet_reconcile_result"] = reconcile_result
-        except Exception as e:
-            st.session_state["wallet_reconcile_error"] = str(e)
-
-
-st.markdown(
-    """
-    <div class="vf-main-title-wrap">
-        <div class="vf-main-title">Viabilidade Urbana</div>
-        <div class="vf-main-subtitle">
-            Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
-with right_col_left:
-    st.write("")
-
-with right_col_right:
-    if user_logged_in and user_id:
-        _render_wallet_summary()
-        render_google_login_top()
-    else:
-        render_google_login_top()
-
-with st.sidebar:
-    st.markdown("### 📋 1. Escolha o Uso")
-
-    categoria_label = st.selectbox(
-        "Categoria:",
-        options=[
-            "Residencial",
-            "Comercial (Em breve)",
-            "Serviço (Em breve)",
-            "Saúde/Educação (Em breve)",
-        ],
-        index=0,
-        key="vf_categoria",
-    )
-
-    residential_options = {
-        "Residencial Unifamiliar (Casa)": ("RES_UNI", ""),
-        "Multifamiliar R2.1 (2 unidades no mesmo lote)": ("RES_MULTI_R21", "R21"),
-        "Multifamiliar R2.2 (condomínio horizontal com via interna)": ("RES_MULTI_R22", "R22"),
-        "Multifamiliar R3 (condomínio vertical / prédio)": ("RES_MULTI_R3", "R3"),
-    }
-
-    selected_use_label = st.selectbox(
-        "Opções na Categoria:",
-        options=list(residential_options.keys()),
-        index=0,
-        key="vf_residential_option",
-        disabled=(categoria_label != "Residencial"),
-    )
-
-    selected_use_code, selected_multi_tipo = residential_options.get(selected_use_label, ("RES_UNI", ""))
-    st.session_state.calc["use_type_code"] = selected_use_code
-
-    if selected_use_code.startswith("RES_MULTI_"):
-        st.session_state.calc["project_mode"] = "GUIA_FASE_1"
-        st.session_state.calc["multi_tipo"] = selected_multi_tipo
-    else:
-        st.session_state.calc.pop("project_mode", None)
-        st.session_state.calc.pop("multi_tipo", None)
-
-    if categoria_label != "Residencial":
-        st.caption("Essa categoria ficará disponível em breve.")
-
-    st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
-
-    st.markdown("### 🔎 2. Busca Direta")
-    st.text_input(
-        "Ou digite para pesquisar:",
-        value="Em breve",
-        disabled=True,
-        key="vf_busca_direta",
-    )
-    st.caption("A busca direta ficará disponível em breve.")
-
-    st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
-
-    st.markdown("### 📐 3. Dados do Lote")
-    st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
-
-    lot_area, built_ground, permeable_area = render_lote_section()
-
-st.markdown(
-    '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
-    unsafe_allow_html=True,
-)
-
-radius_m = render_mapa_section(zones_gj)
-
-btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
-with btn_col2:
-    clicked_calcular = st.button(
-        "🚀 GERAR ESTUDO DE VIABILIDADE",
-        key="btn_calc",
-        use_container_width=True,
-    )
-
-    limpar_tudo = st.button(
-        "🗑️ LIMPAR TUDO",
-        key="btn_clear_all",
-        use_container_width=True,
-    )
-
-    if limpar_tudo:
-        st.session_state.selected_lat = None
-        st.session_state.selected_lon = None
-        st.session_state.calc = {"use_type_code": st.session_state.calc.get("use_type_code", "RES_UNI")}
-        st.session_state.report_unlocked = False
-        st.session_state.free_calc_done = False
-        st.session_state.last_calc_signature = None
-        st.session_state.show_login_gate = False
-        st.session_state.scroll_to_login_gate = False
-        st.session_state.scroll_to_item3 = False
-        st.session_state.post_login_action = None
-        st.session_state.show_inline_payments = False
-        st.rerun()
-
-st.session_state.calc["lot_area_m2"] = float(lot_area)
-st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or 0.0)
-st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
-st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
-
-current_signature = json.dumps(
-    {
-        "lat": st.session_state.get("selected_lat"),
-        "lon": st.session_state.get("selected_lon"),
-        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-        "lot_front_m": st.session_state.calc.get("lot_front_m"),
-        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-        "use_type_code": st.session_state.calc.get("use_type_code"),
-        "categoria_label": categoria_label,
-    },
-    sort_keys=True,
-    default=str,
-)
-
-if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
-    st.session_state.report_unlocked = False
-    st.session_state.free_calc_done = False
-    st.session_state.show_inline_payments = False
-    st.session_state.calc.pop("err", None)
-    st.session_state.calc.pop("rule", None)
-
-calc = st.session_state.calc
-user_logged_in = bool(st.session_state.get("auth_logged_in"))
-user_id = st.session_state.get("auth_user_id")
-user_email = st.session_state.get("auth_user_email")
-
-if user_logged_in and user_id and user_email:
-    reconcile_key = f"{user_id}:{user_email}"
-    if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
-        try:
-            reconcile_result = reconcile_wallet_to_current_user(user_id, user_email)
-            st.session_state["wallet_reconcile_done_for"] = reconcile_key
-            st.session_state["wallet_reconcile_result"] = reconcile_result
-        except Exception as e:
-            st.session_state["wallet_reconcile_error"] = str(e)
-
-
-st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
-
-run_free_calc_now = False
-
-if clicked_calcular:
-    if categoria_label != "Residencial":
-        st.info("Essa categoria ainda está em desenvolvimento. Use Residencial por enquanto.")
-    else:
-        if not user_logged_in or not user_id:
-            st.session_state.show_login_gate = True
-            st.session_state.scroll_to_login_gate = True
-            st.session_state.post_login_action = "calculate_viability"
-        else:
-            st.session_state.show_login_gate = False
-            st.session_state.show_inline_payments = False
-            run_free_calc_now = True
-            st.session_state.scroll_to_item3 = True
-
-if (
-    st.session_state.get("post_login_action") == "calculate_viability"
-    and user_logged_in
-    and user_id
-    and categoria_label == "Residencial"
-):
-    run_free_calc_now = True
-    st.session_state.post_login_action = None
-    st.session_state.show_login_gate = False
-    st.session_state.scroll_to_item3 = True
-
-if st.session_state.get("show_login_gate") and not (user_logged_in and user_id):
-    _render_login_gate_block()
-    st.divider()
+with col2:
+    st.markdown("## 2. Dados do lote")
+    render_lote_section()
 
 st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
+st.markdown("## 3. Análise inicial")
 
-show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
+render_localizacao_section(calc)
 
-if run_free_calc_now:
-    st.session_state.report_unlocked = False
-    st.session_state.free_calc_done = False
-    st.session_state.last_calc_signature = current_signature
-    st.session_state.show_inline_payments = False
-
-    calc.pop("err", None)
-    calc.pop("rule", None)
-
-    _ = render_localizacao_section(True, zones_prepared, radius_m)
-
-    if calc.get("zone") and not calc.get("rule"):
-        try:
-            rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
-            if rule:
-                calc["rule"] = rule
-                st.session_state.free_calc_done = True
-            else:
-                calc["err"] = (
-                    f"Nenhuma regra no Supabase para zona={calc['zone']} "
-                    f"e uso={calc.get('use_type_code')}"
-                )
-        except Exception as e:
-            calc["err"] = f"Erro ao consultar Supabase: {e}"
-
-elif show_item3:
-    _ = render_localizacao_section(False, zones_prepared, radius_m)
-
-if st.session_state.get("free_calc_done"):
-    render_indices_section(
-        calc=calc,
-        card_func=_card,
-        pick_func=pick_rule,
-        get_rule_func=fetch_rule,
-    )
-
-can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err"))
-
-if can_offer_report:
-    st.markdown("---")
-    st.subheader("Relatório completo")
-    st.caption(
-        "A análise inicial acima é gratuita. Para liberar o relatório completo, "
-        "gere o relatório com 1 crédito."
-    )
-
-    saldo_atual = None
-    if user_logged_in and user_id:
-        try:
-            saldo_atual = get_credit_balance(user_id)
-        except Exception:
-            saldo_atual = None
-
-    c1, c2 = st.columns([1, 2])
-
-    with c1:
-        gerar_relatorio = st.button(
-            "📄 Gerar relatório",
-            key="btn_generate_report",
-            use_container_width=True,
-            disabled=(not user_logged_in),
+rule = None
+if calc.get("zone_sigla") and calc.get("use_type_code"):
+    try:
+        rule = fetch_rule(
+            zone_sigla=calc.get("zone_sigla"),
+            use_type_code=calc.get("use_type_code"),
+            subzone_code=calc.get("subzone_code"),
         )
+    except Exception:
+        rule = None
 
-    with c2:
-        if not user_logged_in:
-            st.info("Faça login com Google para gerar o relatório completo.")
-        else:
-            if saldo_atual is not None:
-                st.info(f"Saldo atual: {saldo_atual} crédito(s).")
-            else:
-                st.info("Não foi possível consultar o saldo neste momento.")
+render_indices_section(
+    calc=calc,
+    card_func=_card,
+    pick_func=pick_rule,
+)
 
-    if gerar_relatorio:
-        if not user_logged_in or not user_id:
-            st.error("Faça login com Google para gerar o relatório completo.")
-        elif saldo_atual is not None and int(saldo_atual) <= 0:
-            st.session_state.show_inline_payments = True
-            st.session_state.report_unlocked = False
-            st.error("Você não possui créditos suficientes para gerar o relatório.")
-        else:
-            try:
-                debit_result = consume_viability_credit(
-                    user_id=user_id,
-                    amount=1,
-                    description="Geração de relatório de viabilidade",
-                )
+lot_area = calc.get("lot_area_m2")
+built_ground = calc.get("built_ground_m2")
+permeable_area = calc.get("permeable_area_m2")
+can_offer_report = bool(calc)
 
-                if not debit_result.get("ok"):
-                    st.session_state.show_inline_payments = True
-                    st.session_state.report_unlocked = False
-                    st.error(
-                        debit_result.get("message")
-                        or "Saldo insuficiente para gerar o relatório."
-                    )
-                else:
-                    st.session_state.show_inline_payments = False
-                    st.session_state.report_unlocked = True
-                    novo_saldo = debit_result.get("new_balance")
-                    st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-                    st.rerun()
+st.markdown("---")
+st.markdown("## Relatório completo")
 
-            except Exception as e:
-                st.session_state.show_inline_payments = True
-                st.session_state.report_unlocked = False
-                st.error(f"Não foi possível descontar o crédito: {e}")
+if not st.session_state.get("auth_logged_in"):
+    st.info("Entre com sua conta para liberar sua carteira e o relatório completo.")
+    _render_login_gate_box()
+else:
+    current_balance = get_credit_balance(st.session_state.get("auth_user_id"))
+    cta_label = f"📄 Gerar relatório (saldo atual: {current_balance} crédito{'s' if current_balance != 1 else ''})"
+    if st.button(cta_label, type="primary", use_container_width=True):
+        _offer_report_gate(can_offer_report)
 
-    if st.session_state.get("show_inline_payments"):
-        st.markdown("### Comprar créditos")
-        render_payments_panel()
+if st.session_state.get("show_inline_payments"):
+    st.markdown('<div id="planos"></div>', unsafe_allow_html=True)
+    st.markdown("### Comprar créditos")
+    render_payments_panel()
 
 if st.session_state.get("report_unlocked") and can_offer_report:
     st.markdown("---")
@@ -729,6 +512,32 @@ if st.session_state.get("report_unlocked") and can_offer_report:
     )
 
     render_relatorio_section(calc)
+
+    st.markdown("### Download do relatório")
+    try:
+        pdf_bytes = generate_report_pdf_bytes(
+            calc=calc,
+            session_state={
+                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+                "built_ground_m2": built_ground,
+                "permeable_area_m2": permeable_area,
+                "lot_front_m": st.session_state.calc.get("lot_front_m"),
+                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+            },
+        )
+
+        st.download_button(
+            label="⬇️ Baixar relatório em PDF",
+            data=pdf_bytes,
+            file_name="relatorio_viabilidade.pdf",
+            mime="application/pdf",
+            key="download_report_pdf",
+            use_container_width=True,
+        )
+    except Exception as e:
+        st.error(f"Não foi possível gerar o PDF do relatório: {e}")
 
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
