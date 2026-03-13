@@ -29,8 +29,7 @@ from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
-from core.credits import consume_viability_credit, get_credit_balance
-from core.report_pdf import generate_report_pdf_bytes
+from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 
 
 @st.cache_data(show_spinner=False)
@@ -329,7 +328,7 @@ def _render_auth_callback_bridge() -> None:
         if (errorDescription) params.set("error_description", errorDescription);
         if (state) params.set("state", state);
 
-        const destination = params.toString() ? `${appUrl}?${params.toString()}` : appUrl;
+        const destination = params.toString() ? `${{appUrl}}/?${{params.toString()}}` : appUrl;
 
         try {{
             if (window.opener && !window.opener.closed) {{
@@ -352,102 +351,117 @@ if "selected_lat" not in st.session_state:
     st.session_state.selected_lat = None
 if "selected_lon" not in st.session_state:
     st.session_state.selected_lon = None
-if "calc" not in st.session_state:
+if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
     st.session_state.calc = {}
+st.session_state.calc.setdefault("use_type_code", "RES_UNI")
+
 if "report_unlocked" not in st.session_state:
     st.session_state.report_unlocked = False
+
 if "free_calc_done" not in st.session_state:
     st.session_state.free_calc_done = False
+
 if "last_calc_signature" not in st.session_state:
     st.session_state.last_calc_signature = None
+
 if "show_login_gate" not in st.session_state:
     st.session_state.show_login_gate = False
+
 if "scroll_to_login_gate" not in st.session_state:
     st.session_state.scroll_to_login_gate = False
+
 if "scroll_to_item3" not in st.session_state:
     st.session_state.scroll_to_item3 = False
+
 if "post_login_action" not in st.session_state:
     st.session_state.post_login_action = None
+
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
 _inject_global_styles()
-handle_oauth_callback()
 
-qp_auth_flow = safe_get_query_param("auth_flow")
-if qp_auth_flow == "callback":
+# Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
+if safe_get_query_param("auth_flow") == "callback":
     _render_auth_callback_bridge()
 
-_render_top_nav()
-
-top_left, top_right = st.columns([2.6, 1.4], gap="large")
-with top_left:
-    st.markdown(
-        """
-        <div class="vf-main-title-wrap">
-          <div class="vf-main-title">Viabilidade Fácil</div>
-          <div class="vf-main-subtitle">
-            Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    render_google_login_top()
-
-with top_right:
-    if st.session_state.get("auth_logged_in"):
-        _render_wallet_summary()
+# O exchange do code deve acontecer na aba principal.
+handle_oauth_callback()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
 
-with st.sidebar:
-    st.markdown("### Informações iniciais")
-    st.markdown(
-        """
-        Este sistema ajuda na leitura inicial de
-        viabilidade urbana. Preencha os dados
-        do lote, faça a análise e, se quiser, gere
-        o relatório completo ao final.
-        """
-    )
-    st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
+_render_top_nav()
 
-    st.markdown("### 1. Escolha o Uso")
+user_logged_in = bool(st.session_state.get("auth_logged_in"))
+user_id = st.session_state.get("auth_user_id")
+user_email = st.session_state.get("auth_user_email")
+
+if user_logged_in and user_id and user_email:
+    reconcile_key = f"{user_id}:{user_email}"
+    if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
+        try:
+            reconcile_result = reconcile_wallet_to_current_user(user_id, user_email)
+            st.session_state["wallet_reconcile_done_for"] = reconcile_key
+            st.session_state["wallet_reconcile_result"] = reconcile_result
+        except Exception as e:
+            st.session_state["wallet_reconcile_error"] = str(e)
+
+
+st.markdown(
+    """
+    <div class="vf-main-title-wrap">
+        <div class="vf-main-title">Viabilidade Urbana</div>
+        <div class="vf-main-subtitle">
+            Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
+with right_col_left:
+    st.write("")
+
+with right_col_right:
+    if user_logged_in and user_id:
+        _render_wallet_summary()
+        render_google_login_top()
+    else:
+        render_google_login_top()
+
+with st.sidebar:
+    st.markdown("### 📋 1. Escolha o Uso")
+
     categoria_label = st.selectbox(
         "Categoria:",
-        ["Residencial"],
+        options=[
+            "Residencial",
+            "Comercial (Em breve)",
+            "Serviço (Em breve)",
+            "Saúde/Educação (Em breve)",
+        ],
         index=0,
-        key="categoria_label",
+        key="vf_categoria",
     )
 
-    options_map = {
-        "Residencial": {
-            "Residencial Unifamiliar (Casa)": "RES_UNI",
-            "Residencial Multifamiliar - R1/R2": "RES_MULTI_R12",
-            "Residencial Multifamiliar - R3": "RES_MULTI_R3",
-        }
+    residential_options = {
+        "Residencial Unifamiliar (Casa)": ("RES_UNI", ""),
+        "Multifamiliar R2.1 (2 unidades no mesmo lote)": ("RES_MULTI_R21", "R21"),
+        "Multifamiliar R2.2 (condomínio horizontal com via interna)": ("RES_MULTI_R22", "R22"),
+        "Multifamiliar R3 (condomínio vertical / prédio)": ("RES_MULTI_R3", "R3"),
     }
 
     selected_use_label = st.selectbox(
         "Opções na Categoria:",
-        list(options_map[categoria_label].keys()),
-        key="selected_use_label",
+        options=list(residential_options.keys()),
+        index=0,
+        key="vf_residential_option",
+        disabled=(categoria_label != "Residencial"),
     )
-    selected_use_code = options_map[categoria_label][selected_use_label]
-    st.session_state.calc["use_type_code"] = selected_use_code
 
-    selected_multi_tipo = None
-    if selected_use_code.startswith("RES_MULTI_"):
-        selected_multi_tipo = st.radio(
-            "Tipologia:",
-            ["GUIA_FASE_1"],
-            format_func=lambda x: "Guia do projetista",
-            key="selected_multi_tipo",
-            horizontal=True,
-        )
-
+    selected_use_code, selected_multi_tipo = residential_options.get(selected_use_label, ("RES_UNI", ""))
     st.session_state.calc["use_type_code"] = selected_use_code
 
     if selected_use_code.startswith("RES_MULTI_"):
@@ -543,6 +557,18 @@ if st.session_state.last_calc_signature and st.session_state.last_calc_signature
 calc = st.session_state.calc
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
+user_email = st.session_state.get("auth_user_email")
+
+if user_logged_in and user_id and user_email:
+    reconcile_key = f"{user_id}:{user_email}"
+    if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
+        try:
+            reconcile_result = reconcile_wallet_to_current_user(user_id, user_email)
+            st.session_state["wallet_reconcile_done_for"] = reconcile_key
+            st.session_state["wallet_reconcile_result"] = reconcile_result
+        except Exception as e:
+            st.session_state["wallet_reconcile_error"] = str(e)
+
 
 st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
 
@@ -703,32 +729,6 @@ if st.session_state.get("report_unlocked") and can_offer_report:
     )
 
     render_relatorio_section(calc)
-
-    st.markdown("### Download do relatório")
-    try:
-        pdf_bytes = generate_report_pdf_bytes(
-            calc=calc,
-            session_state={
-                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-                "built_ground_m2": built_ground,
-                "permeable_area_m2": permeable_area,
-                "lot_front_m": st.session_state.calc.get("lot_front_m"),
-                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-            },
-        )
-
-        st.download_button(
-            label="⬇️ Baixar relatório em PDF",
-            data=pdf_bytes,
-            file_name="relatorio_viabilidade.pdf",
-            mime="application/pdf",
-            key="download_report_pdf",
-            use_container_width=True,
-        )
-    except Exception as e:
-        st.error(f"Não foi possível gerar o PDF do relatório: {e}")
 
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
