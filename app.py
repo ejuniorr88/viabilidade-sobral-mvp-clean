@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
@@ -25,7 +26,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback, sync_auth_state
+from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
@@ -299,6 +300,53 @@ def _render_login_gate_block() -> None:
     )
 
 
+def _render_auth_callback_bridge() -> None:
+    code = safe_get_query_param("code") or ""
+    error = safe_get_query_param("error") or ""
+    error_code = safe_get_query_param("error_code") or ""
+    error_description = safe_get_query_param("error_description") or ""
+    state = safe_get_query_param("state") or ""
+    app_url = get_app_url()
+
+    st.markdown("## Concluindo seu login...")
+    st.caption("Aguarde alguns segundos. Se a aba principal não atualizar, ela será redirecionada automaticamente.")
+
+    bridge_html = f"""
+    <script>
+    (function() {{
+        const appUrl = {app_url!r};
+        const params = new URLSearchParams();
+        const code = {code!r};
+        const error = {error!r};
+        const errorCode = {error_code!r};
+        const errorDescription = {error_description!r};
+        const state = {state!r};
+
+        if (code) params.set("code", code);
+        if (error) params.set("error", error);
+        if (errorCode) params.set("error_code", errorCode);
+        if (errorDescription) params.set("error_description", errorDescription);
+        if (state) params.set("state", state);
+
+        const destination = params.toString() ? `${{appUrl}}/?${{params.toString()}}` : appUrl;
+
+        try {{
+            if (window.opener && !window.opener.closed) {{
+                window.opener.location.replace(destination);
+                window.close();
+                return;
+            }}
+        }} catch (e) {{}}
+
+        window.location.replace(destination);
+    }})();
+    </script>
+    """
+
+    components.html(bridge_html, height=0)
+    st.stop()
+
+
 if "selected_lat" not in st.session_state:
     st.session_state.selected_lat = None
 if "selected_lon" not in st.session_state:
@@ -331,11 +379,14 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
-# O callback precisa ser resolvido antes do restante do app.
-handle_oauth_callback()
-sync_auth_state(force=False)
-
 _inject_global_styles()
+
+# Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
+if safe_get_query_param("auth_flow") == "callback":
+    _render_auth_callback_bridge()
+
+# O exchange do code deve acontecer na aba principal.
+handle_oauth_callback()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
@@ -592,6 +643,7 @@ if can_offer_report:
             "📄 Gerar relatório",
             key="btn_generate_report",
             use_container_width=True,
+            disabled=(not user_logged_in) or (saldo_atual is not None and int(saldo_atual) <= 0),
         )
 
     with c2:
@@ -606,6 +658,10 @@ if can_offer_report:
     if gerar_relatorio:
         if not user_logged_in or not user_id:
             st.error("Faça login com Google para gerar o relatório completo.")
+        elif saldo_atual is not None and int(saldo_atual) <= 0:
+            st.session_state.show_inline_payments = True
+            st.session_state.report_unlocked = False
+            st.error("Você não possui créditos suficientes para gerar o relatório.")
         else:
             try:
                 debit_result = consume_viability_credit(
@@ -616,6 +672,7 @@ if can_offer_report:
 
                 if not debit_result.get("ok"):
                     st.session_state.show_inline_payments = True
+                    st.session_state.report_unlocked = False
                     st.error(
                         debit_result.get("message")
                         or "Saldo insuficiente para gerar o relatório."
@@ -629,6 +686,7 @@ if can_offer_report:
 
             except Exception as e:
                 st.session_state.show_inline_payments = True
+                st.session_state.report_unlocked = False
                 st.error(f"Não foi possível descontar o crédito: {e}")
 
     if st.session_state.get("show_inline_payments"):
