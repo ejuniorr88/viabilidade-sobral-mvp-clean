@@ -30,7 +30,6 @@ from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from core.credits import consume_viability_credit, get_credit_balance
-from core.report_pdf import generate_report_pdf_bytes
 
 
 @st.cache_data(show_spinner=False)
@@ -644,7 +643,7 @@ if can_offer_report:
             "📄 Gerar relatório",
             key="btn_generate_report",
             use_container_width=True,
-            disabled=(not user_logged_in) or (saldo_atual is not None and int(saldo_atual) <= 0),
+            disabled=(not user_logged_in),
         )
 
     with c2:
@@ -706,25 +705,6 @@ if st.session_state.get("report_unlocked") and can_offer_report:
     )
 
     render_relatorio_section(calc)
-
-    st.markdown("---")
-    st.subheader("Download do relatório em PDF")
-    st.caption("O PDF usa a base do relatório atual e já fica estruturado para futura integração com histórico na área do cliente.")
-
-    try:
-        pdf_bytes = generate_report_pdf_bytes(calc=calc, session_state=dict(st.session_state))
-        report_zone = (calc.get("zone") or calc.get("zone_sigla") or "zona").lower().replace(" ", "_")
-        report_name = f"relatorio_viabilidade_{report_zone}.pdf"
-        st.download_button(
-            "⬇️ Baixar relatório em PDF",
-            data=pdf_bytes,
-            file_name=report_name,
-            mime="application/pdf",
-            key="download_report_pdf",
-            use_container_width=True,
-        )
-    except Exception as e:
-        st.error(f"Não foi possível gerar o PDF neste momento: {e}")
 
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
