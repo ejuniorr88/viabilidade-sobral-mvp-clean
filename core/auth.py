@@ -245,3 +245,12 @@ def logout_limpo() -> None:
         st.session_state["_supabase_auth_client"] = keep["_supabase_auth_client"]
     clear_auth_query_params()
     st.rerun()
+
+
+# Compat wrappers for existing ui/auth_panel.py
+def start_google_login(force_select_account: bool = False) -> Optional[str]:
+    return get_auth_url(force_select_account=force_select_account)
+
+
+def sign_out_current_user() -> None:
+    logout_limpo()
