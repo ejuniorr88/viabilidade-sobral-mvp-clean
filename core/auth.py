@@ -24,14 +24,12 @@ AUTH_STATE_KEYS = [
 
 def get_supabase_auth_client() -> Client:
     client = st.session_state.get("_supabase_auth_client")
-    if client is not None:
-        return client
-
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY") or st.secrets["SUPABASE_ANON_KEY"]
-
-    client = create_client(url, key)
-    st.session_state["_supabase_auth_client"] = client
+    if client is None:
+        client = create_client(
+            st.secrets["SUPABASE_URL"],
+            st.secrets["SUPABASE_ANON_KEY"],
+        )
+        st.session_state["_supabase_auth_client"] = client
     return client
 
 
@@ -93,7 +91,7 @@ def safe_get_query_param(name: str) -> Optional[str]:
             return None
 
 
-def clear_auth_query_params() -> None:
+def clear_auth_query_params(remove_ext_access_token: bool = False) -> None:
     keys = [
         "code",
         "state",
@@ -101,8 +99,9 @@ def clear_auth_query_params() -> None:
         "error_code",
         "error_description",
         "auth_flow",
-        "ext_access_token",
     ]
+    if remove_ext_access_token:
+        keys.append("ext_access_token")
 
     try:
         for key in keys:
@@ -163,8 +162,21 @@ def sync_auth_state(force: bool = False) -> bool:
     if st.session_state.get("auth_sync_done") and not force:
         return bool(st.session_state.get("auth_logged_in"))
 
-    # Com o fluxo externo, não tentamos mais concluir PKCE local do Streamlit.
-    return bool(st.session_state.get("auth_logged_in"))
+    access_token = st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
+    if access_token:
+        try:
+            verified = _verify_external_access_token(str(access_token))
+            user_obj = verified.get("user") or {}
+            if user_obj:
+                store_user_in_state(user_obj)
+                st.session_state["auth_external_access_token"] = str(access_token)
+                st.session_state.pop("auth_last_error", None)
+                return True
+        except Exception as e:
+            st.session_state["auth_last_error"] = f"Falha ao restaurar sessão: {e}"
+
+    clear_user_in_state()
+    return False
 
 
 def _verify_external_access_token(access_token: str) -> Dict[str, Any]:
@@ -193,7 +205,7 @@ def handle_oauth_callback() -> None:
             + (f" — {error_description}" if error_description else "")
         )
         st.session_state.pop("oauth_url", None)
-        clear_auth_query_params()
+        clear_auth_query_params(remove_ext_access_token=True)
         st.rerun()
         return
 
@@ -209,14 +221,14 @@ def handle_oauth_callback() -> None:
             st.session_state.pop("auth_last_error", None)
             st.session_state.pop("oauth_url", None)
             st.session_state["auth_external_access_token"] = external_access_token
-            clear_auth_query_params()
+            clear_auth_query_params(remove_ext_access_token=False)
             st.rerun()
             return
         except Exception as e:
             clear_user_in_state()
             st.session_state["auth_last_error"] = f"Falha ao concluir login: {e}"
             st.session_state.pop("oauth_url", None)
-            clear_auth_query_params()
+            clear_auth_query_params(remove_ext_access_token=True)
             st.rerun()
             return
 
@@ -245,7 +257,7 @@ def logout_limpo() -> None:
     st.session_state.pop("oauth_url", None)
     if keep.get("_supabase_auth_client") is not None:
         st.session_state["_supabase_auth_client"] = keep["_supabase_auth_client"]
-    clear_auth_query_params()
+    clear_auth_query_params(remove_ext_access_token=True)
     st.rerun()
 
 
