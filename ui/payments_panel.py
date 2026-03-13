@@ -339,12 +339,12 @@ def _render_pix_block(payment_row: Dict[str, Any]) -> None:
         )
 
 
-def _render_pending_payment_status(supabase, payment_id: str) -> None:
+def _render_pending_payment_status(supabase, payment_id: str, current_user_id: Optional[str] = None) -> None:
     st.info("Aguardando confirmação do pagamento...")
 
     def _do_refresh() -> Optional[Dict[str, Any]]:
         try:
-            result = refresh_payment_status_and_credit(payment_id=payment_id)
+            result = refresh_payment_status_and_credit(payment_id=payment_id, target_user_id=current_user_id)
             payment = (result or {}).get("payment") or _fetch_payment_by_id(supabase, payment_id)
             if payment:
                 st.session_state["current_payment_snapshot"] = payment
@@ -477,17 +477,20 @@ def _render_current_payment_area(supabase) -> None:
     status = _safe_get(current_payment, "status")
 
     if status == "pending":
-        _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")))
+        _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=st.session_state.get("auth_user_id"))
     elif status == "paid":
         credit_reprocess = None
         try:
-            credit_reprocess = ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")))
+            credit_reprocess = ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=st.session_state.get("auth_user_id"))
         except Exception as e:
             st.warning(f"Pagamento confirmado, mas não foi possível reconciliar os créditos agora: {e}")
 
         credit_result = (credit_reprocess or {}).get("credit_result") or {}
         if credit_result.get("credited"):
-            st.success("Este pagamento já foi confirmado e os créditos foram adicionados à carteira.")
+            if credit_result.get("moved"):
+                st.success("Este pagamento já foi confirmado e os créditos foram reconciliados para a sua carteira.")
+            else:
+                st.success("Este pagamento já foi confirmado e os créditos foram adicionados à carteira.")
             if st.session_state.get("payments_focus_mode"):
                 st.session_state["payments_focus_mode"] = False
             st.rerun()
@@ -497,7 +500,7 @@ def _render_current_payment_area(supabase) -> None:
             st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. Tentando reconciliar...")
             if st.button("Reprocessar crédito deste pagamento", key=f"recredit_paid_{payment_id}"):
                 try:
-                    ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")))
+                    ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=st.session_state.get("auth_user_id"))
                 except Exception as e:
                     st.error(f"Não foi possível reprocessar o crédito agora: {e}")
                 st.rerun()
