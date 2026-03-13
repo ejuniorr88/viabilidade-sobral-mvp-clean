@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 import streamlit as st
 from supabase import Client, create_client
 
-from core.pix_gateway import MercadoPagoPixError, create_pix_payment, get_payment_status
+from core.pix_gateway import MercadoPagoPixError, create_pix_payment, fetch_payment_status
 
 
 @st.cache_resource(show_spinner=False)
@@ -122,35 +122,31 @@ def create_pending_payment_and_pix(
     }
 
 
-def _fetch_payment_server_side(payment_id: str) -> Optional[Dict[str, Any]]:
+
+def _fetch_payment_row(*, payment_id: str) -> Dict[str, Any]:
     supabase = get_supabase_server_client()
-    response = (
-        supabase.table("payments")
-        .select("*")
-        .eq("id", payment_id)
-        .limit(1)
-        .execute()
-    )
+    response = supabase.table("payments").select("*").eq("id", payment_id).limit(1).execute()
     data = _safe_data(response) or []
-    return data[0] if data else None
+    if not data:
+        raise RuntimeError("Pagamento não encontrado no banco.")
+    return data[0]
 
 
-def _fetch_package_server_side(package_id: str) -> Optional[Dict[str, Any]]:
+def _fetch_package_credits(*, package_id: str) -> int:
     supabase = get_supabase_server_client()
-    response = (
-        supabase.table("credit_packages")
-        .select("*")
-        .eq("id", package_id)
-        .limit(1)
-        .execute()
-    )
+    response = supabase.table("credit_packages").select("credits").eq("id", package_id).limit(1).execute()
     data = _safe_data(response) or []
-    return data[0] if data else None
+    if not data:
+        return 0
+    try:
+        return int(data[0].get("credits") or 0)
+    except Exception:
+        return 0
 
 
-def _credits_already_applied(user_id: str, payment_id: str) -> bool:
+def _payment_already_credited(*, user_id: str, payment_id: str) -> bool:
     supabase = get_supabase_server_client()
-    description = f"Créditos adicionados via Pix ({payment_id})"
+    description = f"Crédito por pagamento Pix {payment_id}"
     response = (
         supabase.table("credit_ledger")
         .select("id")
@@ -164,98 +160,69 @@ def _credits_already_applied(user_id: str, payment_id: str) -> bool:
     return bool(data)
 
 
-def _apply_credits_for_paid_payment(payment_row: Dict[str, Any]) -> Dict[str, Any]:
+def _apply_credit_for_payment(*, payment_row: Dict[str, Any]) -> Dict[str, Any]:
     supabase = get_supabase_server_client()
-    user_id = str(payment_row.get("user_id") or "").strip()
-    package_id = str(payment_row.get("package_id") or "").strip()
-    payment_id = str(payment_row.get("id") or "").strip()
+    user_id = str(payment_row.get("user_id") or "")
+    payment_id = str(payment_row.get("id") or "")
+    package_id = str(payment_row.get("package_id") or "")
+    if not user_id or not payment_id or not package_id:
+        return {"credited": False, "reason": "payment_missing_fields"}
 
-    if not user_id or not package_id or not payment_id:
-        raise RuntimeError("Pagamento sem user_id/package_id/id suficientes para creditar carteira.")
+    if _payment_already_credited(user_id=user_id, payment_id=payment_id):
+        return {"credited": False, "reason": "already_credited"}
 
-    if _credits_already_applied(user_id, payment_id):
-        return {"ok": True, "already_applied": True, "credits": 0}
-
-    package = _fetch_package_server_side(package_id)
-    if not package:
-        raise RuntimeError("Pacote de créditos não encontrado para o pagamento aprovado.")
-
-    credits = int(float(package.get("credits") or 0))
+    credits = _fetch_package_credits(package_id=package_id)
     if credits <= 0:
-        raise RuntimeError("Pacote com quantidade de créditos inválida.")
+        return {"credited": False, "reason": "package_without_credits"}
 
-    current_resp = (
-        supabase.table("credit_balance")
-        .select("balance")
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
-    current_rows = _safe_data(current_resp) or []
-    current_balance = int(float((current_rows[0].get("balance") if current_rows else 0) or 0))
+    balance_resp = supabase.table("credit_balance").select("balance").eq("user_id", user_id).limit(1).execute()
+    balance_rows = _safe_data(balance_resp) or []
+    current_balance = int((balance_rows[0].get("balance") or 0) if balance_rows else 0)
     new_balance = current_balance + credits
 
-    if current_rows:
+    if balance_rows:
         supabase.table("credit_balance").update({"balance": new_balance}).eq("user_id", user_id).execute()
     else:
         supabase.table("credit_balance").insert({"user_id": user_id, "balance": new_balance}).execute()
 
     supabase.table("credit_ledger").insert({
         "user_id": user_id,
-        "entry_type": "credit",
         "amount": credits,
+        "entry_type": "credit",
         "source": "mercadopago_pix",
-        "description": f"Créditos adicionados via Pix ({payment_id})",
+        "description": f"Crédito por pagamento Pix {payment_id}",
     }).execute()
 
-    return {"ok": True, "already_applied": False, "credits": credits, "new_balance": new_balance}
+    return {"credited": True, "credits": credits, "new_balance": new_balance}
 
 
-def sync_payment_status_and_apply_credits(payment_id: str) -> Dict[str, Any]:
-    payment_row = _fetch_payment_server_side(payment_id)
-    if not payment_row:
-        raise RuntimeError("Pagamento não encontrado no banco para sincronização.")
-
-    external_payment_id = str(payment_row.get("external_payment_id") or "").strip()
-    if not external_payment_id:
-        raise RuntimeError("Pagamento sem external_payment_id para consultar no Mercado Pago.")
-
-    mp_data = get_payment_status(external_payment_id)
-    new_status = (mp_data.get("status") or "pending").lower()
-
+def refresh_payment_status_and_credit(*, payment_id: str) -> Dict[str, Any]:
     supabase = get_supabase_server_client()
-    gateway_payload = payment_row.get("gateway_payload") or {}
-    if not isinstance(gateway_payload, dict):
-        gateway_payload = {"previous_payload": gateway_payload}
-    merged_payload = {**gateway_payload, "status_sync": mp_data}
+    payment_row = _fetch_payment_row(payment_id=payment_id)
+    external_payment_id = str(payment_row.get("external_payment_id") or "")
+    if not external_payment_id:
+        return {"ok": False, "message": "Pagamento sem external_payment_id.", "payment": payment_row}
+
+    gateway = fetch_payment_status(external_payment_id)
+    mp_status = (gateway.get("status") or "pending").strip().lower()
+    normalized_status = "paid" if mp_status == "approved" else mp_status
 
     update_payload = {
-        "status": new_status,
-        "gateway_payload": merged_payload,
+        "status": normalized_status,
+        "gateway_payload": gateway.get("gateway_payload") or {},
     }
-    detail = mp_data.get("status_detail")
-    if detail and "status_detail" in payment_row:
-        update_payload["status_detail"] = detail
+    response = supabase.table("payments").update(update_payload).eq("id", payment_id).execute()
+    data = _safe_data(response) or []
+    updated_payment = data[0] if data else {**payment_row, **update_payload}
 
-    try:
-        update_payload["updated_at"] = "now()"
-    except Exception:
-        pass
+    credit_result = {"credited": False, "reason": "not_paid"}
+    if normalized_status == "paid":
+        credit_result = _apply_credit_for_payment(payment_row=updated_payment)
 
-    supabase.table("payments").update(update_payload).eq("id", payment_id).execute()
-
-    credits_result = {"ok": False, "already_applied": False, "credits": 0}
-    if new_status in ("approved", "paid"):
-        credits_result = _apply_credits_for_paid_payment({**payment_row, **update_payload})
-        if new_status == "approved":
-            supabase.table("payments").update({"status": "paid"}).eq("id", payment_id).execute()
-            new_status = "paid"
-
-    refreshed = _fetch_payment_server_side(payment_id) or {**payment_row, **update_payload, "status": new_status}
     return {
-        "payment": refreshed,
-        "status": new_status,
-        "status_detail": detail,
-        "credits": credits_result,
-        "gateway": mp_data,
+        "ok": True,
+        "message": "Pagamento atualizado.",
+        "payment": updated_payment,
+        "credit_result": credit_result,
+        "gateway_status": mp_status,
     }
