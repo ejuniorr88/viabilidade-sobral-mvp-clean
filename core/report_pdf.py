@@ -1,786 +1,408 @@
+from __future__ import annotations
+
 import json
-from pathlib import Path
-from typing import Any, Dict
+import os
+import tempfile
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from urllib.request import urlopen
 
-import streamlit as st
-import streamlit.components.v1 as components
-
-st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
-
-DATA_DIR = Path("data")
-ZONE_FILE = DATA_DIR / "zoneamento_light.json"
-
-try:
-    from core.zones_map import load_zones
-except Exception:
-    from core.zones_mapa import load_zones  # type: ignore
-
-try:
-    from core.supabase_rules import fetch_rule, pick_rule  # type: ignore
-except Exception:
-    from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
-
-from ui.mapa import render_mapa_section
-from ui.lote import render_lote_section
-from ui.localizacao import render_localizacao_section
-from ui.indices import render_indices_section
-from ui.analise import render_analise_section
-from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
-from ui.auth_panel import render_google_login_top, render_google_login_box
-from ui.payments_panel import render_payments_panel
-from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
-from core.report_pdf import generate_report_pdf_bytes
+from fpdf import FPDF
 
 
-@st.cache_data(show_spinner=False)
-def _zones_geojson() -> Dict[str, Any]:
-    with open(ZONE_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+# =============================
+# Helpers de formato
+# =============================
+
+def _safe_str(value: Any, default: str = "—") -> str:
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text if text else default
 
 
-@st.cache_resource(show_spinner=False)
-def _zones_prepared():
-    return load_zones(ZONE_FILE)
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except Exception:
+        return None
 
 
-def _card(title: str, value: Any, suffix: str = "") -> None:
-    v = "—" if value is None or value == "" else f"{value}{suffix}"
-    st.markdown(
-        f"""
-        <div style="padding:12px;border:1px solid #e7e7e7;border-radius:12px;margin-bottom:10px;background:#fff;">
-            <div style="font-size:12px;opacity:.75">{title}</div>
-            <div style="font-size:20px;font-weight:700">{v}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def _fmt_num(value: Any, dec: int = 2, suffix: str = "") -> str:
+    number = _safe_float(value)
+    if number is None:
+        return "—"
+    text = f"{number:,.{dec}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{text}{suffix}"
 
 
-def _inject_global_styles() -> None:
-    st.markdown(
-        """
-        <style>
-        .block-container {
-            padding-top: 0.4rem !important;
-            padding-bottom: 2rem !important;
-            max-width: 100% !important;
-        }
-
-        html, body, [data-testid="stAppViewContainer"], .main {
-            overflow-x: hidden !important;
-        }
-
-        header[data-testid="stHeader"] {
-            background: transparent !important;
-        }
-
-        .vf-topbar-shell {
-            width: 100%;
-            margin: 0 0 1.4rem 0;
-            padding: 0;
-        }
-
-        .vf-topbar {
-            width: 100%;
-            background: #ffffff;
-            border-bottom: 1px solid #e8e8e8;
-        }
-
-        .vf-topbar-inner {
-            width: 100%;
-            min-height: 76px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            padding: 0 18px;
-            box-sizing: border-box;
-        }
-
-        .vf-brand {
-            font-size: 30px;
-            font-weight: 800;
-            color: #1f2a44;
-            letter-spacing: -0.02em;
-            line-height: 1.1;
-            white-space: nowrap;
-        }
-
-        .vf-links {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 26px;
-            flex-wrap: wrap;
-        }
-
-        .vf-link {
-            color: #1f2a44;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 15px;
-            white-space: nowrap;
-        }
-
-        .vf-main-title-wrap {
-            width: 100%;
-            text-align: center;
-            margin-top: 0.6rem;
-            margin-bottom: 0.2rem;
-        }
-
-        .vf-main-title {
-            font-size: 42px;
-            font-weight: 800;
-            color: #1f2a44;
-            letter-spacing: -0.02em;
-            line-height: 1.1;
-            margin: 0;
-        }
-
-        .vf-main-subtitle {
-            margin-top: 10px;
-            margin-bottom: 0.8rem;
-            font-size: 15px;
-            color: #6b7280;
-            text-align: center;
-        }
-
-        .vf-section-title {
-            font-size: 26px;
-            font-weight: 800;
-            color: #24324a;
-            margin-bottom: 12px;
-        }
-
-        .vf-wallet-wrap {
-            margin-top: 0;
-            margin-bottom: 14px;
-        }
-
-        .vf-wallet-title {
-            font-size: 18px;
-            font-weight: 800;
-            color: #24324a;
-            margin-bottom: 10px;
-        }
-
-        .vf-wallet-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
-        }
-
-        .vf-wallet-card {
-            background: #ffffff;
-            border: 1px solid #e8e8e8;
-            border-radius: 14px;
-            padding: 12px 14px;
-            min-height: 84px;
-        }
-
-        .vf-wallet-label {
-            font-size: 12px;
-            color: #6b7280;
-            margin-bottom: 6px;
-        }
-
-        .vf-wallet-value {
-            font-size: 17px;
-            font-weight: 700;
-            color: #1f2a44;
-            word-break: break-word;
-            line-height: 1.25;
-        }
-
-        section[data-testid="stSidebar"] {
-            background: #eef0f3;
-            border-right: 1px solid #d9dee5;
-        }
-
-        section[data-testid="stSidebar"] .block-container {
-            padding-top: 1.5rem !important;
-            padding-bottom: 1.5rem !important;
-        }
-
-        .vf-side-divider {
-            border-top: 1px solid #cfd5dd;
-            margin: 16px 0 18px 0;
-        }
-
-        @media (max-width: 1100px) {
-            .vf-topbar-inner {
-                flex-direction: column;
-                align-items: flex-start;
-                justify-content: center;
-                padding-top: 14px;
-                padding-bottom: 14px;
-            }
-
-            .vf-links {
-                justify-content: flex-start;
-                gap: 18px;
-            }
-
-            .vf-wallet-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .vf-main-title {
-                font-size: 34px;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+def _fmt_pct(value: Any, dec: int = 1) -> str:
+    number = _safe_float(value)
+    if number is None:
+        return "—"
+    return f"{number:.{dec}f}%"
 
 
-def _render_top_nav() -> None:
-    st.markdown(
-        """
-        <div class="vf-topbar-shell">
-          <div class="vf-topbar">
-            <div class="vf-topbar-inner">
-              <div class="vf-brand">Viabilidade Fácil</div>
-              <div class="vf-links">
-                <span class="vf-link">Como funciona</span>
-                <span class="vf-link">Área do cliente</span>
-                <span class="vf-link">Planos</span>
-                <span class="vf-link">Dúvidas/Suporte</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def _to_pct(rule: Dict[str, Any], key_pct: str, key_frac: str) -> Optional[float]:
+    value = rule.get(key_pct)
+    if value is not None:
+        return _safe_float(value)
+
+    value = rule.get(key_frac)
+    if value is None:
+        return None
+
+    parsed = _safe_float(value)
+    if parsed is None:
+        return None
+
+    return parsed * 100.0 if 0 <= parsed <= 1.0 else parsed
 
 
-def _render_wallet_summary() -> None:
-    user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
-    user_email = st.session_state.get("auth_user_email") or st.session_state.get("auth_email") or "—"
-    user_id = st.session_state.get("auth_user_id")
+def _sanitize(text: str) -> str:
+    return text.encode("latin-1", "replace").decode("latin-1")
 
-    saldo = "—"
-    if user_id:
+
+# =============================
+# Figuras do Anexo V
+# =============================
+
+def _build_public_storage_url(bucket: str, path: str) -> Optional[str]:
+    base = os.getenv("SUPABASE_URL", "").rstrip("/")
+    if not base:
         try:
-            saldo = str(get_credit_balance(user_id))
+            import streamlit as st
+            base = (st.secrets.get("SUPABASE_URL") or "").rstrip("/")
         except Exception:
-            saldo = "—"
+            base = ""
 
-    st.markdown(
-        f"""
-        <div class="vf-wallet-wrap">
-          <div class="vf-wallet-title">Minha carteira</div>
-          <div class="vf-wallet-grid">
-            <div class="vf-wallet-card">
-              <div class="vf-wallet-label">Usuário</div>
-              <div class="vf-wallet-value">{user_name}</div>
-            </div>
-            <div class="vf-wallet-card">
-              <div class="vf-wallet-label">E-mail</div>
-              <div class="vf-wallet-value">{user_email}</div>
-            </div>
-            <div class="vf-wallet-card">
-              <div class="vf-wallet-label">Saldo de créditos</div>
-              <div class="vf-wallet-value">{saldo}</div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    if not base or not bucket or not path:
+        return None
+
+    path = path.lstrip("/")
+    return f"{base}/storage/v1/object/public/{bucket}/{path}"
 
 
-def _render_login_gate_block() -> None:
-    render_google_login_box(
-        title="Faça login para continuar",
-        message="Para liberar a pesquisa de viabilidade, entre com sua conta Google.",
-    )
+def _extract_figures_from_rule(rule: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not isinstance(rule, dict):
+        return []
 
-
-def _render_auth_callback_bridge() -> None:
-    code = safe_get_query_param("code") or ""
-    error = safe_get_query_param("error") or ""
-    error_code = safe_get_query_param("error_code") or ""
-    error_description = safe_get_query_param("error_description") or ""
-    state = safe_get_query_param("state") or ""
-    app_url = get_app_url()
-
-    st.markdown("## Concluindo seu login...")
-    st.caption("Aguarde alguns segundos. Se a aba principal não atualizar, ela será redirecionada automaticamente.")
-
-    bridge_html = f"""
-    <script>
-    (function() {{
-        const appUrl = {app_url!r};
-        const params = new URLSearchParams();
-        const code = {code!r};
-        const error = {error!r};
-        const errorCode = {error_code!r};
-        const errorDescription = {error_description!r};
-        const state = {state!r};
-
-        if (code) params.set("code", code);
-        if (error) params.set("error", error);
-        if (errorCode) params.set("error_code", errorCode);
-        if (errorDescription) params.set("error_description", errorDescription);
-        if (state) params.set("state", state);
-
-        const destination = params.toString() ? `${appUrl}/?${params.toString()}` : appUrl;
-
-        try {{
-            if (window.opener && !window.opener.closed) {{
-                window.opener.location.replace(destination);
-                window.close();
-                return;
-            }}
-        }} catch (e) {{}}
-
-        window.location.replace(destination);
-    }})();
-    </script>
-    """
-
-    components.html(bridge_html, height=0)
-    st.stop()
-
-
-if "selected_lat" not in st.session_state:
-    st.session_state.selected_lat = None
-if "selected_lon" not in st.session_state:
-    st.session_state.selected_lon = None
-if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
-    st.session_state.calc = {}
-st.session_state.calc.setdefault("use_type_code", "RES_UNI")
-
-if "report_unlocked" not in st.session_state:
-    st.session_state.report_unlocked = False
-
-if "free_calc_done" not in st.session_state:
-    st.session_state.free_calc_done = False
-
-if "last_calc_signature" not in st.session_state:
-    st.session_state.last_calc_signature = None
-
-if "show_login_gate" not in st.session_state:
-    st.session_state.show_login_gate = False
-
-if "scroll_to_login_gate" not in st.session_state:
-    st.session_state.scroll_to_login_gate = False
-
-if "scroll_to_item3" not in st.session_state:
-    st.session_state.scroll_to_item3 = False
-
-if "post_login_action" not in st.session_state:
-    st.session_state.post_login_action = None
-
-if "show_inline_payments" not in st.session_state:
-    st.session_state.show_inline_payments = False
-
-_inject_global_styles()
-
-# Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
-if safe_get_query_param("auth_flow") == "callback":
-    _render_auth_callback_bridge()
-
-# O exchange do code deve acontecer na aba principal.
-handle_oauth_callback()
-
-zones_gj = _zones_geojson()
-zones_prepared = _zones_prepared()
-
-_render_top_nav()
-
-user_logged_in = bool(st.session_state.get("auth_logged_in"))
-user_id = st.session_state.get("auth_user_id")
-user_email = st.session_state.get("auth_user_email")
-
-if user_logged_in and user_id and user_email:
-    reconcile_key = f"{user_id}:{user_email}"
-    if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
+    src = rule.get("src") or {}
+    if isinstance(src, str):
         try:
-            reconcile_result = reconcile_wallet_to_current_user(user_id, user_email)
-            st.session_state["wallet_reconcile_done_for"] = reconcile_key
-            st.session_state["wallet_reconcile_result"] = reconcile_result
-        except Exception as e:
-            st.session_state["wallet_reconcile_error"] = str(e)
+            src = json.loads(src)
+        except Exception:
+            src = {}
 
-st.markdown(
-    """
-    <div class="vf-main-title-wrap">
-        <div class="vf-main-title">Viabilidade Urbana</div>
-        <div class="vf-main-subtitle">
-            Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+    if not isinstance(src, dict):
+        return []
 
-right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
-with right_col_left:
-    st.write("")
+    figs = src.get("figures") or src.get("figuras") or []
+    if not isinstance(figs, list):
+        return []
 
-with right_col_right:
-    if user_logged_in and user_id:
-        _render_wallet_summary()
-        render_google_login_top()
-    else:
-        render_google_login_top()
+    out: List[Dict[str, Any]] = []
+    for item in figs:
+        if isinstance(item, dict) and item.get("bucket") and item.get("path"):
+            url = _build_public_storage_url(str(item.get("bucket")), str(item.get("path")))
+            out.append(
+                {
+                    "title": item.get("title") or item.get("titulo") or "Figura",
+                    "caption": item.get("caption") or item.get("legenda") or "",
+                    "url": url,
+                    "bucket": item.get("bucket"),
+                    "path": item.get("path"),
+                }
+            )
+    return out
 
-with st.sidebar:
-    st.markdown("### 📋 1. Escolha o Uso")
 
-    categoria_label = st.selectbox(
-        "Categoria:",
-        options=[
-            "Residencial",
-            "Comercial (Em breve)",
-            "Serviço (Em breve)",
-            "Saúde/Educação (Em breve)",
-        ],
-        index=0,
-        key="vf_categoria",
+def _download_temp_image(url: str) -> Optional[str]:
+    try:
+        with urlopen(url, timeout=12) as resp:
+            data = resp.read()
+
+        suffix = ".png"
+        lower = url.lower()
+        if ".jpg" in lower or ".jpeg" in lower:
+            suffix = ".jpg"
+        elif ".webp" in lower:
+            suffix = ".webp"
+
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp.write(data)
+        tmp.flush()
+        tmp.close()
+        return tmp.name
+    except Exception:
+        return None
+
+
+# =============================
+# Montagem do conteúdo
+# =============================
+
+def _build_rows(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, List[tuple[str, str]]]:
+    rule = calc.get("rule") or {}
+    zone = calc.get("zone") or calc.get("zone_sigla") or "—"
+    via = calc.get("via_nome") or calc.get("street_name") or "—"
+    via_tipo = calc.get("via_tipo") or calc.get("street_type") or "—"
+    uso = calc.get("use_type_code") or "—"
+
+    lot_area = _safe_float(calc.get("lot_area_m2") or session_state.get("lot_area_m2"))
+    built_ground = _safe_float(session_state.get("built_ground_m2"))
+    permeable_area = _safe_float(session_state.get("permeable_area_m2"))
+    front = _safe_float(session_state.get("lot_front_m"))
+    depth = _safe_float(session_state.get("lot_depth_m"))
+    is_corner = bool(session_state.get("lot_is_corner"))
+    is_irregular = bool(session_state.get("lot_is_irregular"))
+
+    to_max = _to_pct(rule, "to_max_pct", "to_max")
+    tp_min = _to_pct(rule, "tp_min_pct", "tp_min")
+    ia_max = rule.get("ia_max")
+
+    identification = [
+        ("Zona", _safe_str(zone)),
+        ("Via", _safe_str(via)),
+        ("Tipo de via", _safe_str(via_tipo)),
+        ("Uso analisado", _safe_str(uso)),
+        ("Tipo de lote", "Esquina" if is_corner else "Meio de quadra"),
+        ("Terreno irregular", "Sim" if is_irregular else "Não"),
+        ("Área do terreno", _fmt_num(lot_area, suffix=" m²")),
+        ("Frente do lote", _fmt_num(front, suffix=" m")),
+        ("Profundidade do lote", _fmt_num(depth, suffix=" m")),
+    ]
+
+    parameters = [
+        ("TO máxima", _fmt_pct(to_max)),
+        ("TP mínima", _fmt_pct(tp_min)),
+        ("IA máximo", _fmt_num(ia_max)),
+        ("Recuo frontal", _fmt_num(rule.get("recuo_frontal_m"), suffix=" m")),
+        ("Recuo lateral", _fmt_num(rule.get("recuo_lateral_m"), suffix=" m")),
+        ("Recuo fundos", _fmt_num(rule.get("recuo_fundos_m"), suffix=" m")),
+        ("Gabarito", _fmt_num(rule.get("gabarito_m"), suffix=" m")),
+    ]
+
+    calculations = [
+        ("Área térrea informada", _fmt_num(built_ground, suffix=" m²")),
+        ("Área permeável informada", _fmt_num(permeable_area, suffix=" m²")),
+        ("Taxa de ocupação calculada", _fmt_pct(calc.get("to_pct"))),
+        ("Taxa de permeabilidade calculada", _fmt_pct(calc.get("tp_pct"))),
+        ("Índice de aproveitamento calculado", _fmt_num(calc.get("ia"))),
+        ("Adequabilidade final", _safe_str(calc.get("adequabilidade_txt") or calc.get("adequability_result"))),
+    ]
+
+    notes: List[tuple[str, str]] = []
+
+    if calc.get("err"):
+        notes.append(("Observação", _safe_str(calc.get("err"))))
+
+    if is_irregular:
+        notes.append(
+            (
+                "Lote irregular",
+                "Como o lote é irregular, a implantação final pode ser reduzida por recuos, forma do lote, alinhamento, servidões e exigências do licenciamento.",
+            )
+        )
+
+    notes.append(
+        (
+            "Passeios (calçadas)",
+            "Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via. Na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garantindo continuidade e alinhamento.",
+        )
+    )
+    notes.append(
+        (
+            "Piscinas",
+            "Piscinas não entram na área construída para TO, mas contam como área impermeável para TP e devem respeitar afastamento mínimo de 0,50 m das divisas.",
+        )
     )
 
-    residential_options = {
-        "Residencial Unifamiliar (Casa)": ("RES_UNI", ""),
-        "Multifamiliar R2.1 (2 unidades no mesmo lote)": ("RES_MULTI_R21", "R21"),
-        "Multifamiliar R2.2 (condomínio horizontal com via interna)": ("RES_MULTI_R22", "R22"),
-        "Multifamiliar R3 (condomínio vertical / prédio)": ("RES_MULTI_R3", "R3"),
+    figures = _extract_figures_from_rule(rule)
+
+    return {
+        "identification": identification,
+        "parameters": parameters,
+        "calculations": calculations,
+        "notes": notes,
+        "figures": figures,
     }
 
-    selected_use_label = st.selectbox(
-        "Opções na Categoria:",
-        options=list(residential_options.keys()),
-        index=0,
-        key="vf_residential_option",
-        disabled=(categoria_label != "Residencial"),
-    )
 
-    selected_use_code, selected_multi_tipo = residential_options.get(selected_use_label, ("RES_UNI", ""))
-    st.session_state.calc["use_type_code"] = selected_use_code
+def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
+    rows = _build_rows(calc, session_state)
+    return {
+        "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "title": "Relatório Urbanístico",
+        "sections": rows,
+    }
 
-    if selected_use_code.startswith("RES_MULTI_"):
-        st.session_state.calc["project_mode"] = "GUIA_FASE_1"
-        st.session_state.calc["multi_tipo"] = selected_multi_tipo
-    else:
-        st.session_state.calc.pop("project_mode", None)
-        st.session_state.calc.pop("multi_tipo", None)
 
-    if categoria_label != "Residencial":
-        st.caption("Essa categoria ficará disponível em breve.")
+# =============================
+# PDF visual
+# =============================
 
-    st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
+class _ReportPDF(FPDF):
+    def header(self) -> None:
+        self.set_fill_color(31, 42, 68)
+        self.rect(0, 0, 210, 22, style="F")
+        self.set_xy(14, 6)
+        self.set_text_color(255, 255, 255)
+        self.set_font("Helvetica", "B", 16)
+        self.cell(0, 8, _sanitize("Viabilidade Fácil"), ln=True)
+        self.set_x(14)
+        self.set_font("Helvetica", "", 9)
+        self.cell(0, 5, _sanitize("Relatório Urbanístico"), ln=True)
+        self.set_text_color(0, 0, 0)
+        self.ln(6)
 
-    st.markdown("### 🔎 2. Busca Direta")
-    st.text_input(
-        "Ou digite para pesquisar:",
-        value="Em breve",
-        disabled=True,
-        key="vf_busca_direta",
-    )
-    st.caption("A busca direta ficará disponível em breve.")
+    def footer(self) -> None:
+        self.set_y(-12)
+        self.set_draw_color(220, 220, 220)
+        self.line(14, self.get_y(), 196, self.get_y())
+        self.set_y(-10)
+        self.set_font("Helvetica", "", 8)
+        self.set_text_color(90, 90, 90)
+        self.cell(0, 6, _sanitize(f"Página {self.page_no()}"), align="C")
+        self.set_text_color(0, 0, 0)
 
-    st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
 
-    st.markdown("### 📐 3. Dados do Lote")
-    st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
+def _section_title(pdf: _ReportPDF, title: str) -> None:
+    pdf.ln(2)
+    pdf.set_fill_color(238, 242, 247)
+    pdf.set_draw_color(225, 230, 236)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(31, 42, 68)
+    pdf.cell(0, 8, _sanitize(title), ln=True, fill=True, border=1)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(1)
 
-    lot_area, built_ground, permeable_area = render_lote_section()
 
-st.markdown(
-    '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
-    unsafe_allow_html=True,
-)
+def _row(pdf: _ReportPDF, label: str, value: str) -> None:
+    x = pdf.get_x()
+    y = pdf.get_y()
 
-radius_m = render_mapa_section(zones_gj)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.multi_cell(52, 6, _sanitize(label), border=0)
+    pdf.set_xy(x + 54, y)
 
-btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
-with btn_col2:
-    clicked_calcular = st.button(
-        "🚀 GERAR ESTUDO DE VIABILIDADE",
-        key="btn_calc",
-        use_container_width=True,
-    )
+    pdf.set_font("Helvetica", "", 10)
+    pdf.multi_cell(0, 6, _sanitize(value), border=0)
+    pdf.ln(0.5)
 
-    limpar_tudo = st.button(
-        "🗑️ LIMPAR TUDO",
-        key="btn_clear_all",
-        use_container_width=True,
-    )
 
-    if limpar_tudo:
-        st.session_state.selected_lat = None
-        st.session_state.selected_lon = None
-        st.session_state.calc = {"use_type_code": st.session_state.calc.get("use_type_code", "RES_UNI")}
-        st.session_state.report_unlocked = False
-        st.session_state.free_calc_done = False
-        st.session_state.last_calc_signature = None
-        st.session_state.show_login_gate = False
-        st.session_state.scroll_to_login_gate = False
-        st.session_state.scroll_to_item3 = False
-        st.session_state.post_login_action = None
-        st.session_state.show_inline_payments = False
-        st.rerun()
+def _render_section(pdf: _ReportPDF, title: str, rows: List[tuple[str, str]]) -> None:
+    _section_title(pdf, title)
+    for label, value in rows:
+        _row(pdf, f"{label}:", value)
 
-st.session_state.calc["lot_area_m2"] = float(lot_area)
-st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or 0.0)
-st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
-st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 
-current_signature = json.dumps(
-    {
-        "lat": st.session_state.get("selected_lat"),
-        "lon": st.session_state.get("selected_lon"),
-        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-        "lot_front_m": st.session_state.calc.get("lot_front_m"),
-        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-        "use_type_code": st.session_state.calc.get("use_type_code"),
-        "categoria_label": categoria_label,
-    },
-    sort_keys=True,
-    default=str,
-)
+def _render_highlight_box(pdf: _ReportPDF, title: str, body: str) -> None:
+    pdf.set_fill_color(250, 251, 253)
+    pdf.set_draw_color(220, 226, 234)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 7, _sanitize(title), ln=True, fill=True, border=1)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.multi_cell(0, 5.5, _sanitize(body), border=1, fill=False)
+    pdf.ln(1)
 
-if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
-    st.session_state.report_unlocked = False
-    st.session_state.free_calc_done = False
-    st.session_state.show_inline_payments = False
-    st.session_state.calc.pop("err", None)
-    st.session_state.calc.pop("rule", None)
 
-calc = st.session_state.calc
-user_logged_in = bool(st.session_state.get("auth_logged_in"))
-user_id = st.session_state.get("auth_user_id")
-user_email = st.session_state.get("auth_user_email")
+def _render_figures(pdf: _ReportPDF, figures: List[Dict[str, Any]]) -> None:
+    if not figures:
+        return
 
-if user_logged_in and user_id and user_email:
-    reconcile_key = f"{user_id}:{user_email}"
-    if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
-        try:
-            reconcile_result = reconcile_wallet_to_current_user(user_id, user_email)
-            st.session_state["wallet_reconcile_done_for"] = reconcile_key
-            st.session_state["wallet_reconcile_result"] = reconcile_result
-        except Exception as e:
-            st.session_state["wallet_reconcile_error"] = str(e)
+    _section_title(pdf, "5. Figuras anexas (Anexo V)")
 
-st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
+    temp_files: List[str] = []
 
-run_free_calc_now = False
-
-if clicked_calcular:
-    if categoria_label != "Residencial":
-        st.info("Essa categoria ainda está em desenvolvimento. Use Residencial por enquanto.")
-    else:
-        if not user_logged_in or not user_id:
-            st.session_state.show_login_gate = True
-            st.session_state.scroll_to_login_gate = True
-            st.session_state.post_login_action = "calculate_viability"
-        else:
-            st.session_state.show_login_gate = False
-            st.session_state.show_inline_payments = False
-            run_free_calc_now = True
-            st.session_state.scroll_to_item3 = True
-
-if (
-    st.session_state.get("post_login_action") == "calculate_viability"
-    and user_logged_in
-    and user_id
-    and categoria_label == "Residencial"
-):
-    run_free_calc_now = True
-    st.session_state.post_login_action = None
-    st.session_state.show_login_gate = False
-    st.session_state.scroll_to_item3 = True
-
-if st.session_state.get("show_login_gate") and not (user_logged_in and user_id):
-    _render_login_gate_block()
-    st.divider()
-
-st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
-
-show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
-
-if run_free_calc_now:
-    st.session_state.report_unlocked = False
-    st.session_state.free_calc_done = False
-    st.session_state.last_calc_signature = current_signature
-    st.session_state.show_inline_payments = False
-
-    calc.pop("err", None)
-    calc.pop("rule", None)
-
-    _ = render_localizacao_section(True, zones_prepared, radius_m)
-
-    if calc.get("zone") and not calc.get("rule"):
-        try:
-            rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
-            if rule:
-                calc["rule"] = rule
-                st.session_state.free_calc_done = True
-            else:
-                calc["err"] = (
-                    f"Nenhuma regra no Supabase para zona={calc['zone']} "
-                    f"e uso={calc.get('use_type_code')}"
-                )
-        except Exception as e:
-            calc["err"] = f"Erro ao consultar Supabase: {e}"
-
-elif show_item3:
-    _ = render_localizacao_section(False, zones_prepared, radius_m)
-
-if st.session_state.get("free_calc_done"):
-    render_indices_section(
-        calc=calc,
-        card_func=_card,
-        pick_func=pick_rule,
-        get_rule_func=fetch_rule,
-    )
-
-can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err"))
-
-if can_offer_report:
-    st.markdown("---")
-    st.subheader("Relatório completo")
-    st.caption(
-        "A análise inicial acima é gratuita. Para liberar o relatório completo, "
-        "gere o relatório com 1 crédito."
-    )
-
-    saldo_atual = None
-    if user_logged_in and user_id:
-        try:
-            saldo_atual = get_credit_balance(user_id)
-        except Exception:
-            saldo_atual = None
-
-    c1, c2 = st.columns([1, 2])
-
-    with c1:
-        gerar_relatorio = st.button(
-            "📄 Gerar relatório",
-            key="btn_generate_report",
-            use_container_width=True,
-            disabled=(not user_logged_in),
-        )
-
-    with c2:
-        if not user_logged_in:
-            st.info("Faça login com Google para gerar o relatório completo.")
-        else:
-            if saldo_atual is not None:
-                st.info(f"Saldo atual: {saldo_atual} crédito(s).")
-            else:
-                st.info("Não foi possível consultar o saldo neste momento.")
-
-    if gerar_relatorio:
-        if not user_logged_in or not user_id:
-            st.error("Faça login com Google para gerar o relatório completo.")
-        elif saldo_atual is not None and int(saldo_atual) <= 0:
-            st.session_state.show_inline_payments = True
-            st.session_state.report_unlocked = False
-            st.error("Você não possui créditos suficientes para gerar o relatório.")
-        else:
-            try:
-                debit_result = consume_viability_credit(
-                    user_id=user_id,
-                    amount=1,
-                    description="Geração de relatório de viabilidade",
-                )
-
-                if not debit_result.get("ok"):
-                    st.session_state.show_inline_payments = True
-                    st.session_state.report_unlocked = False
-                    st.error(
-                        debit_result.get("message")
-                        or "Saldo insuficiente para gerar o relatório."
-                    )
-                else:
-                    st.session_state.show_inline_payments = False
-                    st.session_state.report_unlocked = True
-                    novo_saldo = debit_result.get("new_balance")
-                    st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-                    st.rerun()
-
-            except Exception as e:
-                st.session_state.show_inline_payments = True
-                st.session_state.report_unlocked = False
-                st.error(f"Não foi possível descontar o crédito: {e}")
-
-    if st.session_state.get("show_inline_payments"):
-        st.markdown("### Comprar créditos")
-        render_payments_panel()
-
-if st.session_state.get("report_unlocked") and can_offer_report:
-    st.markdown("---")
-
-    render_analise_section(
-        calc,
-        lot_area=lot_area,
-        built_ground=built_ground,
-        permeable_area=permeable_area,
-        pick_func=pick_rule,
-    )
-
-    render_relatorio_section(calc)
-
-    st.markdown("### Download do relatório")
     try:
-        pdf_bytes = generate_report_pdf_bytes(
-            calc=calc,
-            session_state={
-                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-                "built_ground_m2": built_ground,
-                "permeable_area_m2": permeable_area,
-                "lot_front_m": st.session_state.calc.get("lot_front_m"),
-                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-            },
-        )
+        for fig in figures:
+            title = _safe_str(fig.get("title"), "Figura")
+            caption = _safe_str(fig.get("caption"), "")
+            url = fig.get("url")
 
-        st.download_button(
-            label="⬇️ Baixar relatório em PDF",
-            data=pdf_bytes,
-            file_name="relatorio_viabilidade.pdf",
-            mime="application/pdf",
-            key="download_report_pdf",
-            use_container_width=True,
-        )
-    except Exception as e:
-        st.error(f"Não foi possível gerar o PDF do relatório: {e}")
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.multi_cell(0, 6, _sanitize(title))
 
-if st.session_state.get("scroll_to_login_gate"):
-    components.html(
-        """
-        <script>
-            const rootDoc = window.parent.document;
-            const el = rootDoc.getElementById("login-gate-start");
-            if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-        </script>
-        """,
-        height=0,
+            if url:
+                tmp_path = _download_temp_image(url)
+                if tmp_path:
+                    temp_files.append(tmp_path)
+                    # largura útil ~182mm
+                    try:
+                        pdf.image(tmp_path, w=170)
+                        pdf.ln(2)
+                    except Exception:
+                        pdf.set_font("Helvetica", "", 9)
+                        pdf.multi_cell(0, 5, _sanitize(f"Não foi possível renderizar a imagem no PDF. URL: {url}"))
+                else:
+                    pdf.set_font("Helvetica", "", 9)
+                    pdf.multi_cell(0, 5, _sanitize(f"Não foi possível baixar a figura: {url}"))
+            else:
+                pdf.set_font("Helvetica", "", 9)
+                pdf.multi_cell(0, 5, _sanitize("Figura sem URL pública disponível."))
+
+            if caption and caption != "—":
+                pdf.set_font("Helvetica", "", 9)
+                pdf.multi_cell(0, 5, _sanitize(caption))
+
+            pdf.ln(3)
+    finally:
+        for path in temp_files:
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+
+
+# =============================
+# Geração final
+# =============================
+
+def generate_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any]) -> bytes:
+    payload = build_report_payload(calc, session_state)
+    sections: Dict[str, Any] = payload["sections"]
+
+    pdf = _ReportPDF()
+    pdf.set_auto_page_break(auto=True, margin=14)
+    pdf.set_margins(14, 28, 14)
+    pdf.add_page()
+
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(90, 90, 90)
+    pdf.cell(0, 6, _sanitize(f"Emitido em: {payload['generated_at']}"), ln=True)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(2)
+
+    _render_highlight_box(
+        pdf,
+        "Resumo",
+        "Este relatório apresenta a leitura inicial da viabilidade urbanística do lote analisado, com identificação da zona, parâmetros urbanísticos, síntese da análise e observações importantes para apoiar o início do projeto.",
     )
-    st.session_state.scroll_to_login_gate = False
 
-if st.session_state.get("scroll_to_item3"):
-    components.html(
-        """
-        <script>
-            const rootDoc = window.parent.document;
-            const el = rootDoc.getElementById("item-3-start");
-            if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-        </script>
-        """,
-        height=0,
+    _render_section(pdf, "1. Identificação da análise", sections["identification"])
+    _render_section(pdf, "2. Parâmetros urbanísticos", sections["parameters"])
+    _render_section(pdf, "3. Síntese da análise", sections["calculations"])
+    _render_section(pdf, "4. Dicas e observações importantes", sections["notes"])
+    _render_figures(pdf, sections.get("figures", []))
+
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(110, 110, 110)
+    pdf.multi_cell(
+        0,
+        4.5,
+        _sanitize(
+            "Documento gerado pelo Viabilidade Fácil. O PDF foi estruturado para se aproximar da leitura do sistema e já permite evolução futura para histórico na área do cliente."
+        ),
     )
-    st.session_state.scroll_to_item3 = False
+    pdf.set_text_color(0, 0, 0)
+
+    result = pdf.output(dest="S")
+    if isinstance(result, bytearray):
+        return bytes(result)
+    if isinstance(result, bytes):
+        return result
+    return result.encode("latin-1", errors="replace")
