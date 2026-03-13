@@ -2,9 +2,28 @@ from __future__ import annotations
 
 import ast
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
+
+import streamlit as st
+from supabase import Client, create_client
 
 from core.auth import get_supabase_auth_client
+
+
+@st.cache_resource(show_spinner=False)
+def get_supabase_server_client() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not key:
+        raise RuntimeError("Falta configurar SUPABASE_SERVICE_ROLE_KEY nos Secrets do Streamlit.")
+    return create_client(url, key)
+
+
+def _safe_data(response: Any) -> Any:
+    data = getattr(response, "data", None)
+    if data is None and isinstance(response, dict):
+        data = response.get("data")
+    return data
 
 
 def _safe_table_select(
@@ -225,3 +244,81 @@ def consume_viability_credit(
             "ok": False,
             "message": f"Erro ao consumir crédito: {e}",
         }
+
+
+def _list_auth_user_ids_by_email(email: Optional[str]) -> List[str]:
+    if not email:
+        return []
+    try:
+        admin = get_supabase_server_client().auth.admin
+        response = admin.list_users()
+        users = getattr(response, "users", None)
+        if users is None and isinstance(response, dict):
+            users = response.get("users")
+        result: List[str] = []
+        for user in users or []:
+            user_email = getattr(user, "email", None)
+            user_id = getattr(user, "id", None)
+            if user_email and user_id and str(user_email).strip().lower() == str(email).strip().lower():
+                result.append(str(user_id))
+        return result
+    except Exception:
+        return []
+
+
+def reconcile_wallet_to_current_user(current_user_id: Optional[str], current_email: Optional[str]) -> Dict[str, Any]:
+    current_user_id = str(current_user_id or "").strip()
+    current_email = str(current_email or "").strip().lower()
+    if not current_user_id or not current_email:
+        return {"ok": False, "reason": "missing_identity"}
+
+    server = get_supabase_server_client()
+    candidate_ids: Set[str] = set(_list_auth_user_ids_by_email(current_email))
+    candidate_ids.add(current_user_id)
+
+    if len(candidate_ids) <= 1:
+        return {"ok": True, "moved": 0, "balance": get_credit_balance(current_user_id)}
+
+    moved_from: List[str] = []
+    total_balance = 0
+    for uid in candidate_ids:
+        rows = _safe_data(server.table("credit_balance").select("balance").eq("user_id", uid).limit(1).execute()) or []
+        bal = int((rows[0].get("balance") or 0) if rows else 0)
+        total_balance += bal
+        if uid != current_user_id:
+            try:
+                server.table("credit_ledger").update({"user_id": current_user_id}).eq("user_id", uid).execute()
+            except Exception:
+                pass
+            try:
+                server.table("payments").update({"user_id": current_user_id}).eq("user_id", uid).execute()
+            except Exception:
+                pass
+            try:
+                server.table("credit_balance").upsert({"user_id": uid, "balance": 0}, on_conflict="user_id").execute()
+            except Exception:
+                try:
+                    existing = _safe_data(server.table("credit_balance").select("user_id").eq("user_id", uid).limit(1).execute()) or []
+                    if existing:
+                        server.table("credit_balance").update({"balance": 0}).eq("user_id", uid).execute()
+                    else:
+                        server.table("credit_balance").insert({"user_id": uid, "balance": 0}).execute()
+                except Exception:
+                    pass
+            moved_from.append(uid)
+
+    try:
+        server.table("credit_balance").upsert({"user_id": current_user_id, "balance": total_balance}, on_conflict="user_id").execute()
+    except Exception:
+        existing = _safe_data(server.table("credit_balance").select("user_id").eq("user_id", current_user_id).limit(1).execute()) or []
+        if existing:
+            server.table("credit_balance").update({"balance": total_balance}).eq("user_id", current_user_id).execute()
+        else:
+            server.table("credit_balance").insert({"user_id": current_user_id, "balance": total_balance}).execute()
+
+    return {
+        "ok": True,
+        "moved": len(moved_from),
+        "moved_from": moved_from,
+        "balance": total_balance,
+    }
