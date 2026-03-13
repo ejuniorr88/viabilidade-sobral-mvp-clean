@@ -24,12 +24,14 @@ AUTH_STATE_KEYS = [
 
 def get_supabase_auth_client() -> Client:
     client = st.session_state.get("_supabase_auth_client")
-    if client is None:
-        client = create_client(
-            st.secrets["SUPABASE_URL"],
-            st.secrets["SUPABASE_ANON_KEY"],
-        )
-        st.session_state["_supabase_auth_client"] = client
+    if client is not None:
+        return client
+
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY") or st.secrets["SUPABASE_ANON_KEY"]
+
+    client = create_client(url, key)
+    st.session_state["_supabase_auth_client"] = client
     return client
 
 
