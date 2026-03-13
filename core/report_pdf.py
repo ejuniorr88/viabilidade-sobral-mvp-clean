@@ -9,6 +9,11 @@ from urllib.request import urlopen
 
 from fpdf import FPDF
 
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover
+    Image = None
+
 
 def _safe_str(value: Any, default: str = "—") -> str:
     if value is None:
@@ -127,6 +132,40 @@ def _download_temp_image(url: str) -> Optional[str]:
     except Exception:
         return None
 
+
+
+
+def _short_ref(text: Any, limit: int = 90) -> str:
+    value = _safe_str(text, "")
+    if not value:
+        return ""
+    value = value.replace("\n", " ").replace("\r", " ").strip()
+    if len(value) <= limit:
+        return value
+    head = max(20, limit // 2 - 2)
+    tail = max(12, limit - head - 3)
+    return f"{value[:head]}...{value[-tail:]}"
+
+
+def _fit_image_size(path: str, max_w: float, max_h: float) -> tuple[float, float]:
+    if max_w <= 0 or max_h <= 0:
+        return max(1.0, max_w), max(1.0, max_h)
+
+    if Image is None:
+        return max_w, min(max_h, 120.0)
+
+    try:
+        with Image.open(path) as img:
+            width_px, height_px = img.size
+        if width_px <= 0 or height_px <= 0:
+            return max_w, min(max_h, 120.0)
+
+        ratio = min(max_w / width_px, max_h / height_px)
+        if ratio <= 0:
+            return max_w, min(max_h, 120.0)
+        return width_px * ratio, height_px * ratio
+    except Exception:
+        return max_w, min(max_h, 120.0)
 
 def _build_rows(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
     rule = calc.get("rule") or {}
@@ -354,11 +393,12 @@ def _render_figures(pdf: _ReportPDF, figures: List[Dict[str, Any]]) -> None:
             url = fig.get("url")
 
             pdf.add_page()
-
+            pdf.set_x(pdf.l_margin)
             pdf.set_font("Helvetica", "B", 10)
             pdf.multi_cell(0, 6, _sanitize(title))
 
             if caption and caption != "—":
+                pdf.set_x(pdf.l_margin)
                 pdf.set_font("Helvetica", "", 9)
                 pdf.multi_cell(0, 5, _sanitize(caption))
                 pdf.ln(2)
@@ -369,21 +409,36 @@ def _render_figures(pdf: _ReportPDF, figures: List[Dict[str, Any]]) -> None:
                     temp_files.append(tmp_path)
                     try:
                         current_y = pdf.get_y()
-                        available_h = 270 - current_y
-                        if available_h < 80:
+                        usable_w = pdf.w - pdf.l_margin - pdf.r_margin
+                        usable_h = pdf.h - pdf.b_margin - current_y
+                        if usable_h < 60:
                             pdf.add_page()
                             current_y = pdf.get_y()
-                            available_h = 270 - current_y
+                            usable_h = pdf.h - pdf.b_margin - current_y
 
-                        pdf.image(tmp_path, x=20, y=current_y, w=170)
-                        pdf.set_y(current_y + min(available_h, 160) + 4)
+                        img_w, img_h = _fit_image_size(tmp_path, usable_w, max(40.0, usable_h - 2.0))
+                        pdf.image(tmp_path, x=pdf.l_margin, y=current_y, w=img_w, h=img_h)
+                        pdf.set_y(current_y + img_h + 4)
                     except Exception:
+                        pdf.set_x(pdf.l_margin)
                         pdf.set_font("Helvetica", "", 9)
-                        pdf.multi_cell(0, 5, _sanitize(f"Não foi possível renderizar a imagem no PDF. URL: {url}"))
+                        pdf.multi_cell(0, 5, _sanitize("Não foi possível renderizar esta figura no PDF. A geração do relatório continuará sem interromper o restante do documento."))
+                        ref = _short_ref(url)
+                        if ref:
+                            pdf.set_x(pdf.l_margin)
+                            pdf.set_font("Helvetica", "I", 8)
+                            pdf.multi_cell(0, 4.5, _sanitize(f"Referência da figura: {ref}"))
                 else:
+                    pdf.set_x(pdf.l_margin)
                     pdf.set_font("Helvetica", "", 9)
-                    pdf.multi_cell(0, 5, _sanitize(f"Não foi possível baixar a figura: {url}"))
+                    pdf.multi_cell(0, 5, _sanitize("Não foi possível baixar esta figura para o PDF."))
+                    ref = _short_ref(url)
+                    if ref:
+                        pdf.set_x(pdf.l_margin)
+                        pdf.set_font("Helvetica", "I", 8)
+                        pdf.multi_cell(0, 4.5, _sanitize(f"Referência da figura: {ref}"))
             else:
+                pdf.set_x(pdf.l_margin)
                 pdf.set_font("Helvetica", "", 9)
                 pdf.multi_cell(0, 5, _sanitize("Figura sem URL pública disponível."))
 
