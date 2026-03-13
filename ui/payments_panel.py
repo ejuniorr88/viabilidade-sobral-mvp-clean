@@ -443,10 +443,10 @@ def _render_buy_section(
                     st.rerun()
 
 
-def _render_current_payment_area(supabase, current_user_id: Optional[str] = None) -> None:
+def _resolve_current_payment(supabase) -> Optional[Dict[str, Any]]:
     payment_id = st.session_state.get("current_payment_id")
     if not payment_id:
-        return
+        return None
 
     snapshot = st.session_state.get("current_payment_snapshot") or {}
     current_payment = _fetch_payment_by_id(supabase, payment_id)
@@ -461,14 +461,56 @@ def _render_current_payment_area(supabase, current_user_id: Optional[str] = None
         current_payment = merged
     elif not current_payment and snapshot and str(_safe_get(snapshot, "id")) == str(payment_id):
         current_payment = snapshot
+    elif not current_payment:
+        st.session_state.pop("current_payment_id", None)
+        st.session_state.pop("current_payment_snapshot", None)
+        return None
+
+    return current_payment
+
+
+def _sync_current_payment_state(supabase, current_user_id: str) -> None:
+    current_payment = _resolve_current_payment(supabase)
+    if not current_payment:
+        return
+
+    payment_id = str(_safe_get(current_payment, "id", ""))
+    if not payment_id:
+        return
+
+    status = str(_safe_get(current_payment, "status", "")).strip().lower()
+    if status != "paid":
+        return
+
+    try:
+        result = ensure_paid_payment_is_credited(payment_id=payment_id, target_user_id=current_user_id)
+        latest_payment = (result or {}).get("payment") or _fetch_payment_by_id(supabase, payment_id) or current_payment
+        merged = dict(current_payment)
+        merged.update(latest_payment)
+        st.session_state["current_payment_snapshot"] = merged
+        st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
+        credit_result = (result or {}).get("credit_result") or {}
+        if credit_result.get("credited") and st.session_state.get("payments_focus_mode"):
+            st.session_state["payments_focus_mode"] = False
+    except Exception:
+        # Não interromper a renderização do painel; a área visual mostra o erro depois.
+        return
+
+
+def _render_current_payment_area(supabase, current_user_id: str) -> None:
+    payment_id = st.session_state.get("current_payment_id")
+    if not payment_id:
+        return
+
+    current_payment = _resolve_current_payment(supabase)
+    if not current_payment:
+        return
+
+    if not _fetch_payment_by_id(supabase, payment_id) and st.session_state.get("current_payment_snapshot"):
         st.warning(
             "O Pix foi criado, mas não foi possível recarregar os dados do pagamento nesta execução. "
             "Exibindo os dados retornados na criação."
         )
-    elif not current_payment:
-        st.session_state.pop("current_payment_id", None)
-        st.session_state.pop("current_payment_snapshot", None)
-        return
 
     st.markdown("---")
     st.markdown("## Pagamento atual")
@@ -536,6 +578,10 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
         return
 
     focus_mode = bool(st.session_state.get("payments_focus_mode"))
+
+    # Primeiro, sincroniza o pagamento atual com o usuário resolvido do painel.
+    # Só depois buscamos saldo/extrato/pagamentos para refletir o estado persistido.
+    _sync_current_payment_state(supabase_client, user_id)
 
     balance = _fetch_credit_balance(supabase_client, user_id)
     packages = _fetch_credit_packages(supabase_client)
