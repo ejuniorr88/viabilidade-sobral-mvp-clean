@@ -29,8 +29,10 @@ from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
+from ui.client_area import render_client_area
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
+from core.client_reports import save_client_report, build_report_signature
 
 
 @st.cache_data(show_spinner=False)
@@ -379,6 +381,15 @@ if "post_login_action" not in st.session_state:
 
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
+
+if "last_generated_pdf_bytes" not in st.session_state:
+    st.session_state.last_generated_pdf_bytes = None
+
+if "last_generated_pdf_signature" not in st.session_state:
+    st.session_state.last_generated_pdf_signature = None
+
+if "last_saved_report_signature" not in st.session_state:
+    st.session_state.last_saved_report_signature = None
 
 _inject_global_styles()
 
@@ -744,6 +755,20 @@ if st.session_state.get("report_unlocked") and can_offer_report:
             },
         )
 
+        st.session_state["last_generated_pdf_bytes"] = pdf_bytes
+        current_report_signature = build_report_signature(
+            calc=calc,
+            session_state={
+                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+                "lot_front_m": st.session_state.calc.get("lot_front_m"),
+                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+            },
+            pdf_bytes=pdf_bytes,
+        )
+        st.session_state["last_generated_pdf_signature"] = current_report_signature
+
         st.download_button(
             label="⬇️ Baixar relatório em PDF",
             data=pdf_bytes,
@@ -752,8 +777,46 @@ if st.session_state.get("report_unlocked") and can_offer_report:
             key="download_report_pdf",
             use_container_width=True,
         )
+
+        save_disabled = st.session_state.get("last_saved_report_signature") == current_report_signature
+        if st.button(
+            "💾 Salvar este relatório na área do cliente",
+            key="save_report_to_client_area",
+            use_container_width=True,
+            disabled=save_disabled,
+        ):
+            try:
+                save_result = save_client_report(
+                    user_id=user_id,
+                    user_email=st.session_state.get("auth_user_email") or "",
+                    calc={
+                        **calc,
+                        "selected_use_label": selected_use_label,
+                        "categoria_label": categoria_label,
+                    },
+                    session_state={
+                        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+                        "lot_front_m": st.session_state.calc.get("lot_front_m"),
+                        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+                        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+                        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+                    },
+                    pdf_bytes=pdf_bytes,
+                )
+                st.session_state["last_saved_report_signature"] = current_report_signature
+                if save_result.get("already_exists"):
+                    st.success("Este relatório já estava salvo na sua área do cliente.")
+                else:
+                    st.success("Relatório salvo com sucesso na área do cliente.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Não foi possível salvar o relatório na área do cliente: {e}")
     except Exception as e:
         st.error(f"Não foi possível gerar o PDF do relatório: {e}")
+
+if user_logged_in and user_id:
+    st.markdown("---")
+    render_client_area(user_id)
 
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
