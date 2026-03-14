@@ -29,10 +29,11 @@ from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
-from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
+from ui.client_area import render_client_area_page
 from core.client_reports import save_client_report, build_report_signature
+from urllib.parse import urlencode
 
 
 @st.cache_data(show_spinner=False)
@@ -239,35 +240,39 @@ def _inject_global_styles() -> None:
     )
 
 
+def _nav_href(target_page: str | None = None) -> str:
+    params = {}
+    for key in ["ext_access_token", "code", "error", "error_code", "error_description", "state"]:
+        value = safe_get_query_param(key) or ""
+        if value:
+            params[key] = value
+    if target_page and target_page != "study":
+        params["vf_page"] = target_page
+    query = urlencode(params)
+    return f"?{query}" if query else "?"
+
+
 def _render_top_nav() -> None:
+    study_href = _nav_href("study")
+    client_href = _nav_href("client")
     st.markdown(
-        """
+        f"""
         <div class="vf-topbar-shell">
           <div class="vf-topbar">
             <div class="vf-topbar-inner">
-              <div class="vf-brand">Viabilidade Fácil</div>
+              <a class="vf-brand" href="{study_href}">Viabilidade Fácil</a>
+              <div class="vf-links">
+                <span class="vf-link">Como funciona</span>
+                <a class="vf-link" href="{client_href}">Área do cliente</a>
+                <span class="vf-link">Planos</span>
+                <span class="vf-link">Dúvidas/Suporte</span>
+              </div>
             </div>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-    nav1, nav2, nav3, nav4, nav5 = st.columns([1.2, 1.2, 1, 1, 1.2])
-    with nav1:
-        if st.button("Estudo de viabilidade", key="nav_study", use_container_width=True):
-            st.session_state["nav_page"] = "study"
-            st.rerun()
-    with nav2:
-        if st.button("Área do cliente", key="nav_client_area", use_container_width=True):
-            st.session_state["nav_page"] = "client_area"
-            st.rerun()
-    with nav3:
-        st.button("Como funciona", key="nav_how", use_container_width=True, disabled=True)
-    with nav4:
-        st.button("Planos", key="nav_plans", use_container_width=True, disabled=True)
-    with nav5:
-        st.button("Dúvidas/Suporte", key="nav_support", use_container_width=True, disabled=True)
 
 
 def _render_wallet_summary() -> None:
@@ -392,9 +397,6 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
-if "nav_page" not in st.session_state:
-    st.session_state.nav_page = "study"
-
 if "last_generated_pdf_bytes" not in st.session_state:
     st.session_state.last_generated_pdf_bytes = None
 
@@ -422,8 +424,9 @@ user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
 user_email = st.session_state.get("auth_user_email")
 user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
+current_page = safe_get_query_param("vf_page") or "study"
 
-if st.session_state.get("nav_page") == "client_area":
+if current_page == "client":
     if user_logged_in and user_id:
         saldo_cliente = None
         try:
@@ -775,22 +778,27 @@ if st.session_state.get("report_unlocked") and can_offer_report:
 
     st.markdown("### Download do relatório")
     try:
+        report_session_state = {
+            "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+            "built_ground_m2": built_ground,
+            "permeable_area_m2": permeable_area,
+            "lot_front_m": st.session_state.calc.get("lot_front_m"),
+            "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+            "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+            "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+        }
+
         pdf_bytes = generate_report_pdf_bytes(
             calc=calc,
-            session_state={
-                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-                "built_ground_m2": built_ground,
-                "permeable_area_m2": permeable_area,
-                "lot_front_m": st.session_state.calc.get("lot_front_m"),
-                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-            },
+            session_state=report_session_state,
         )
 
-        st.session_state["last_generated_pdf_bytes"] = pdf_bytes
         current_report_signature = build_report_signature(
-            calc=calc,
+            calc={
+                **calc,
+                "selected_use_label": selected_use_label,
+                "categoria_label": categoria_label,
+            },
             session_state={
                 "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
                 "lot_front_m": st.session_state.calc.get("lot_front_m"),
@@ -800,6 +808,8 @@ if st.session_state.get("report_unlocked") and can_offer_report:
             },
             pdf_bytes=pdf_bytes,
         )
+
+        st.session_state["last_generated_pdf_bytes"] = pdf_bytes
         st.session_state["last_generated_pdf_signature"] = current_report_signature
 
         st.download_button(
@@ -811,7 +821,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
             use_container_width=True,
         )
 
-        if st.session_state.get("last_saved_report_signature") != current_report_signature:
+        if user_logged_in and user_id and st.session_state.get("last_saved_report_signature") != current_report_signature:
             try:
                 save_result = save_client_report(
                     user_id=user_id,
@@ -832,12 +842,12 @@ if st.session_state.get("report_unlocked") and can_offer_report:
                 )
                 st.session_state["last_saved_report_signature"] = current_report_signature
                 if save_result.get("already_exists"):
-                    st.info("Este relatório já estava salvo automaticamente na sua área do cliente.")
+                    st.caption("Este relatório já estava salvo automaticamente na sua área do cliente.")
                 else:
-                    st.success("Relatório salvo automaticamente na sua área do cliente.")
+                    st.caption("Relatório salvo automaticamente na sua área do cliente.")
             except Exception as e:
                 st.error(f"Não foi possível salvar automaticamente o relatório na área do cliente: {e}")
-        else:
+        elif user_logged_in and user_id:
             st.caption("Este relatório já está salvo na sua área do cliente.")
     except Exception as e:
         st.error(f"Não foi possível gerar o PDF do relatório: {e}")
