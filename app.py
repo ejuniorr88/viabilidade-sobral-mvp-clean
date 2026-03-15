@@ -109,11 +109,6 @@ def _inject_global_styles() -> None:
             white-space: nowrap;
         }
 
-        .vf-brand-link {
-            text-decoration: none !important;
-            color: #1f2a44 !important;
-        }
-
         .vf-links {
             display: flex;
             align-items: center;
@@ -250,12 +245,12 @@ def _render_top_nav() -> None:
         <div class="vf-topbar-shell">
           <div class="vf-topbar">
             <div class="vf-topbar-inner">
-              <a class="vf-brand vf-brand-link" href="?page=home">Viabilidade Fácil</a>
+              <div class="vf-brand" onclick="(function(){const u=new URL(window.location.href);u.searchParams.set('page','home');window.location.href=u.toString();})()">Viabilidade Fácil</div>
               <div class="vf-links">
-                <a class="vf-link" href="#">Como funciona</a>
-                <a class="vf-link" href="?page=client">Área do cliente</a>
-                <a class="vf-link" href="#">Planos</a>
-                <a class="vf-link" href="#">Dúvidas/Suporte</a>
+                <span class="vf-link">Como funciona</span>
+                <span class="vf-link" onclick="(function(){const u=new URL(window.location.href);u.searchParams.set('page','client');window.location.href=u.toString();})()">Área do cliente</span>
+                <span class="vf-link">Planos</span>
+                <span class="vf-link">Dúvidas/Suporte</span>
               </div>
             </div>
           </div>
