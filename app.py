@@ -570,7 +570,6 @@ if st.session_state.get("report_unlocked") and can_offer_report:
                 "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
                 "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
             },
-            pdf_bytes=pdf_bytes,
         )
         st.session_state["last_generated_pdf_signature"] = current_report_signature
 
@@ -601,6 +600,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
                         "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
                     },
                     pdf_bytes=pdf_bytes,
+                    report_signature=current_report_signature,
                 )
                 st.session_state["last_saved_report_signature"] = current_report_signature
                 if save_result.get("already_exists"):
