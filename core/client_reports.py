@@ -1,238 +1,202 @@
 from __future__ import annotations
 
 import hashlib
-import io
+import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
-from uuid import uuid4
+from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
-from core.auth import get_supabase_auth_client
+import streamlit as st
+from supabase import Client, create_client
 
-REPORTS_TABLE = "client_reports"
-REPORTS_BUCKET = "client-reports"
-SIGNED_URL_EXPIRES_IN = 60 * 30
-
-
-def _now_utc() -> datetime:
-    return datetime.utcnow()
+_BUCKET = "client-reports"
+_TZ = ZoneInfo("America/Fortaleza")
 
 
-def _safe_name(value: Any) -> str:
-    raw = str(value or "").strip().lower()
-    if not raw:
-        return "sem_nome"
-    out = []
-    for ch in raw:
-        if ch.isalnum() or ch in ("-", "_"):
-            out.append(ch)
-        elif ch in (" ", "/", "\\"):
-            out.append("_")
-    cleaned = "".join(out).strip("_")
-    return cleaned[:80] or "sem_nome"
-
-
-def _to_float(value: Any, default: float = 0.0) -> float:
+def _read_secret(key: str) -> str:
+    value = None
     try:
-        if value is None or value == "":
-            return default
-        return float(value)
+        value = st.secrets.get(key)
     except Exception:
-        return default
+        value = None
+    if value:
+        return str(value)
+    raise RuntimeError(f"Secret ausente: {key}")
 
 
-def _pick(*values: Any) -> Any:
-    for value in values:
-        if value is not None and value != "":
-            return value
-    return None
+@st.cache_resource(show_spinner=False)
+def get_supabase_service_client() -> Client:
+    url = _read_secret("SUPABASE_URL")
+    key = None
+    try:
+        key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
+    except Exception:
+        key = None
+    if not key:
+        key = _read_secret("SUPABASE_ANON_KEY")
+    return create_client(url, str(key))
 
 
-def _get_lot_front(calc: Dict[str, Any], session_state: Dict[str, Any]) -> float:
-    return _to_float(
-        _pick(
-            session_state.get("lot_front_m"),
-            session_state.get("lot_testada_m"),
-            calc.get("lot_front_m"),
-            calc.get("lot_testada_m"),
-        ),
-        0.0,
-    )
+def _normalize_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
-def _get_lot_depth(calc: Dict[str, Any], session_state: Dict[str, Any]) -> float:
-    return _to_float(
-        _pick(
-            session_state.get("lot_depth_m"),
-            session_state.get("lot_profundidade_m"),
-            calc.get("lot_depth_m"),
-            calc.get("lot_profundidade_m"),
-        ),
-        0.0,
-    )
+def _normalize_number(value: Any, decimals: int = 2) -> float:
+    try:
+        return round(float(value), decimals)
+    except Exception:
+        return 0.0
 
 
-def build_report_title(calc: Dict[str, Any], session_state: Dict[str, Any]) -> str:
-    project_option = _pick(calc.get("selected_use_label"), calc.get("project_option"), calc.get("use_type_code"), "Relatório")
-    zone = _pick(calc.get("zone"), calc.get("zone_label"), "Sem zona")
-    road = _pick(calc.get("street_name"), calc.get("road_name"), "Sem rua")
-    area = _to_float(_pick(session_state.get("lot_area_m2"), calc.get("lot_area_m2")), 0.0)
-    area_text = f"{area:,.0f} m²".replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"{project_option} • {zone} • {road} • {area_text}"
+def _safe_local_now() -> datetime:
+    return datetime.now(_TZ)
 
 
-def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any], pdf_bytes: bytes) -> str:
-    signature_payload = "|".join(
-        [
-            str(_pick(calc.get("use_type_code"), "")),
-            str(_pick(calc.get("zone"), calc.get("zone_label"), "")),
-            str(_pick(calc.get("street_name"), calc.get("road_name"), "")),
-            str(_pick(session_state.get("lot_area_m2"), calc.get("lot_area_m2"), "")),
-            str(_get_lot_front(calc, session_state)),
-            str(_get_lot_depth(calc, session_state)),
-            hashlib.sha256(pdf_bytes).hexdigest(),
-        ]
-    )
-    return hashlib.sha256(signature_payload.encode("utf-8")).hexdigest()
+def _build_title(calc: Dict[str, Any], session_state: Dict[str, Any]) -> str:
+    project = _normalize_text(calc.get("selected_use_label") or calc.get("categoria_label") or calc.get("use_type_code") or "Relatório")
+    zone = _normalize_text(calc.get("zone") or calc.get("zone_label") or "—")
+    road = _normalize_text(calc.get("street_name") or calc.get("road_name") or calc.get("logradouro") or "Sem rua")
+    area = _normalize_number(session_state.get("lot_area_m2") or calc.get("lot_area_m2"))
+    return f"{project} • {zone} • {road} • {area:.0f} m²"
 
 
-def _build_storage_path(user_id: str, calc: Dict[str, Any]) -> Tuple[str, str]:
-    now = _now_utc()
-    zone = _safe_name(_pick(calc.get("zone"), calc.get("zone_label"), "sem_zona"))
-    use_code = _safe_name(_pick(calc.get("use_type_code"), "relatorio"))
-    stamp = now.strftime("%Y%m%d_%H%M%S")
-    short_id = uuid4().hex[:8]
-    file_name = f"report_{use_code}_{zone}_{stamp}_{short_id}.pdf"
-    path = f"{user_id}/{now.strftime('%Y/%m')}/{file_name}"
-    return path, file_name
+def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) -> str:
+    payload = {
+        "use_type_code": _normalize_text(calc.get("use_type_code")),
+        "selected_use_label": _normalize_text(calc.get("selected_use_label")),
+        "categoria_label": _normalize_text(calc.get("categoria_label")),
+        "zone": _normalize_text(calc.get("zone") or calc.get("zone_label")),
+        "road_name": _normalize_text(calc.get("street_name") or calc.get("road_name") or calc.get("logradouro")),
+        "road_type": _normalize_text(calc.get("road_type") or calc.get("via_type")),
+        "lot_area_m2": _normalize_number(session_state.get("lot_area_m2") or calc.get("lot_area_m2")),
+        "lot_front_m": _normalize_number(session_state.get("lot_front_m") or calc.get("lot_front_m")),
+        "lot_depth_m": _normalize_number(session_state.get("lot_depth_m") or calc.get("lot_depth_m")),
+        "lot_is_corner": bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner")),
+        "lot_is_irregular": bool(session_state.get("lot_is_irregular") or calc.get("lot_is_irregular")),
+        "selected_lat": _normalize_number(calc.get("selected_lat") or st.session_state.get("selected_lat"), 6),
+        "selected_lon": _normalize_number(calc.get("selected_lon") or st.session_state.get("selected_lon"), 6),
+    }
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _extract_signed_url(result: Any) -> Optional[str]:
-    if isinstance(result, dict):
-        return result.get("signedURL") or result.get("signedUrl") or result.get("signed_url")
-    signed = getattr(result, "signedURL", None) or getattr(result, "signedUrl", None) or getattr(result, "signed_url", None)
-    if signed:
-        return signed
-    data = getattr(result, "data", None)
-    if isinstance(data, dict):
-        return data.get("signedURL") or data.get("signedUrl") or data.get("signed_url")
-    return None
+def _storage_path(user_id: str, report_signature: str) -> str:
+    now = _safe_local_now()
+    return f"{user_id}/{now:%Y}/{now:%m}/report_{report_signature[:20]}.pdf"
 
 
 def save_client_report(
-    *,
     user_id: str,
     user_email: str,
     calc: Dict[str, Any],
     session_state: Dict[str, Any],
     pdf_bytes: bytes,
+    report_signature: str | None = None,
 ) -> Dict[str, Any]:
     if not user_id:
-        raise ValueError("Usuário não autenticado.")
+        raise RuntimeError("Usuário não identificado para salvar relatório.")
     if not pdf_bytes:
-        raise ValueError("PDF vazio.")
+        raise RuntimeError("PDF vazio. Nada para salvar.")
 
-    supabase = get_supabase_auth_client()
-    report_signature = build_report_signature(calc, session_state, pdf_bytes)
+    client = get_supabase_service_client()
+    signature = report_signature or build_report_signature(calc, session_state)
 
     existing = (
-        supabase.table(REPORTS_TABLE)
-        .select("id, title, pdf_storage_path, pdf_file_name, created_at, report_signature")
+        client.table("client_reports")
+        .select("id,pdf_storage_path,report_signature")
         .eq("user_id", user_id)
-        .eq("report_signature", report_signature)
+        .eq("report_signature", signature)
         .limit(1)
         .execute()
     )
-    rows = getattr(existing, "data", None) or []
-    if rows:
-        return {"ok": True, "already_exists": True, "report": rows[0]}
+    if existing.data:
+        return {"ok": True, "already_exists": True, "row": existing.data[0]}
 
-    storage_path, file_name = _build_storage_path(user_id, calc)
-    storage_api = supabase.storage.from_(REPORTS_BUCKET)
-    upload_errors: List[str] = []
+    storage_path = _storage_path(user_id, signature)
+    file_name = storage_path.rsplit("/", 1)[-1]
 
-    upload_attempts = [
-        lambda: storage_api.upload(storage_path, pdf_bytes, {"content-type": "application/pdf", "upsert": "false"}),
-        lambda: storage_api.upload(storage_path, pdf_bytes, file_options={"content-type": "application/pdf", "upsert": "false"}),
-        lambda: storage_api.upload(storage_path, io.BytesIO(pdf_bytes), {"content-type": "application/pdf", "upsert": "false"}),
-        lambda: storage_api.upload(storage_path, io.BytesIO(pdf_bytes), file_options={"content-type": "application/pdf", "upsert": "false"}),
-    ]
+    upload_error = None
+    try:
+        client.storage.from_(_BUCKET).upload(
+            path=storage_path,
+            file=pdf_bytes,
+            file_options={"content-type": "application/pdf", "upsert": "false"},
+        )
+    except Exception as exc:
+        upload_error = exc
 
-    uploaded = False
-    for attempt in upload_attempts:
-        try:
-            attempt()
-            uploaded = True
-            break
-        except Exception as exc:
-            upload_errors.append(str(exc))
+    if upload_error is not None:
+        # se já existir arquivo com mesmo nome/signature, tratamos como duplicado benigno
+        message = str(upload_error).lower()
+        if "already exists" not in message and "duplicate" not in message and "409" not in message:
+            raise RuntimeError(f"Falha ao salvar PDF no Storage: {upload_error}")
 
-    if not uploaded:
-        raise RuntimeError("Falha ao salvar PDF no Storage: " + " | ".join(upload_errors[:2]))
-
-    lot_area = _to_float(_pick(session_state.get("lot_area_m2"), calc.get("lot_area_m2")), 0.0)
-    front = _get_lot_front(calc, session_state)
-    depth = _get_lot_depth(calc, session_state)
-    road_name = _pick(calc.get("street_name"), calc.get("road_name"))
-    road_type = _pick(calc.get("street_class"), calc.get("road_type"))
-    zone = _pick(calc.get("zone"), calc.get("zone_label"))
-
-    payload = {
+    local_now = _safe_local_now()
+    road_name = _normalize_text(calc.get("street_name") or calc.get("road_name") or calc.get("logradouro"))
+    zone = _normalize_text(calc.get("zone") or calc.get("zone_label"))
+    row = {
         "user_id": user_id,
-        "user_email": user_email,
-        "title": build_report_title(calc, session_state),
-        "report_type": _pick(calc.get("use_type_code"), "urban_report"),
-        "project_category": _pick(calc.get("categoria_label"), calc.get("project_category"), "Residencial"),
-        "project_option": _pick(calc.get("selected_use_label"), calc.get("project_option"), calc.get("use_type_code")),
+        "user_email": _normalize_text(user_email),
+        "title": _build_title(calc, session_state),
+        "report_type": "urban_report",
+        "project_category": _normalize_text(calc.get("categoria_label")),
+        "project_option": _normalize_text(calc.get("selected_use_label")),
         "zone_code": zone,
         "zone_label": zone,
         "road_name": road_name,
-        "road_type": road_type,
-        "lot_area_m2": lot_area,
-        "lot_front_m": front,
-        "lot_depth_m": depth,
-        "pdf_bucket": REPORTS_BUCKET,
+        "road_type": _normalize_text(calc.get("road_type") or calc.get("via_type")),
+        "lot_area_m2": _normalize_number(session_state.get("lot_area_m2") or calc.get("lot_area_m2")),
+        "lot_front_m": _normalize_number(session_state.get("lot_front_m") or calc.get("lot_front_m")),
+        "lot_depth_m": _normalize_number(session_state.get("lot_depth_m") or calc.get("lot_depth_m")),
+        "pdf_bucket": _BUCKET,
         "pdf_storage_path": storage_path,
         "pdf_file_name": file_name,
         "pdf_size_bytes": len(pdf_bytes),
         "status": "saved",
-        "report_signature": report_signature,
+        "report_signature": signature,
         "report_context": {
-            "zone": zone,
-            "road_name": road_name,
-            "road_type": road_type,
-            "project_option": _pick(calc.get("selected_use_label"), calc.get("project_option"), calc.get("use_type_code")),
-            "lot_area_m2": lot_area,
-            "lot_front_m": front,
-            "lot_depth_m": depth,
-            "saved_at_iso": _now_utc().isoformat(),
+            "saved_at_local": local_now.isoformat(),
+            "saved_at_label": local_now.strftime("%d/%m/%Y %H:%M"),
         },
     }
 
-    inserted = supabase.table(REPORTS_TABLE).insert(payload).execute()
-    row = (getattr(inserted, "data", None) or [{}])[0]
-    return {"ok": True, "already_exists": False, "report": row}
+    try:
+        inserted = client.table("client_reports").insert(row).execute()
+        if inserted.data:
+            return {"ok": True, "already_exists": False, "row": inserted.data[0]}
+        return {"ok": True, "already_exists": False, "row": row}
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "duplicate key" in msg or "already exists" in msg or "23505" in msg:
+            existing = (
+                client.table("client_reports")
+                .select("id,pdf_storage_path,report_signature")
+                .eq("user_id", user_id)
+                .eq("report_signature", signature)
+                .limit(1)
+                .execute()
+            )
+            return {"ok": True, "already_exists": True, "row": existing.data[0] if existing.data else row}
+        raise RuntimeError(f"Falha ao registrar relatório no banco: {exc}")
 
 
-def list_client_reports(user_id: str, limit: int = 30) -> List[Dict[str, Any]]:
-    if not user_id:
-        return []
-    supabase = get_supabase_auth_client()
-    response = (
-        supabase.table(REPORTS_TABLE)
-        .select(
-            "id, title, user_email, report_type, project_category, project_option, zone_code, zone_label, road_name, road_type, lot_area_m2, lot_front_m, lot_depth_m, pdf_file_name, pdf_storage_path, created_at, status"
-        )
+def list_client_reports(user_id: str) -> List[Dict[str, Any]]:
+    client = get_supabase_service_client()
+    result = (
+        client.table("client_reports")
+        .select("id,title,zone_label,road_name,created_at,report_context,pdf_storage_path,pdf_file_name")
         .eq("user_id", user_id)
         .order("created_at", desc=True)
-        .limit(limit)
         .execute()
     )
-    return getattr(response, "data", None) or []
+    return result.data or []
 
 
-def get_report_signed_url(storage_path: str, expires_in: int = SIGNED_URL_EXPIRES_IN) -> Optional[str]:
-    if not storage_path:
-        return None
-    supabase = get_supabase_auth_client()
-    result = supabase.storage.from_(REPORTS_BUCKET).create_signed_url(storage_path, expires_in)
-    return _extract_signed_url(result)
+def build_download_signed_url(storage_path: str, expires_in: int = 3600) -> str:
+    client = get_supabase_service_client()
+    data = client.storage.from_(_BUCKET).create_signed_url(storage_path, expires_in)
+    if isinstance(data, dict):
+        return data.get("signedURL") or data.get("signedUrl") or ""
+    return ""
