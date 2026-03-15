@@ -1,3 +1,4 @@
+import inspect
 import json
 from pathlib import Path
 from typing import Any, Dict
@@ -26,6 +27,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
+import core.auth as auth_runtime
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
@@ -203,21 +205,49 @@ def _render_login_gate_block() -> None:
 
 
 
-def _render_auth_debug_feedback() -> None:
-    auth_error = st.session_state.get("auth_last_error")
-    auth_message = st.session_state.get("auth_message")
-    ext_token_present = bool(safe_get_query_param("ext_access_token"))
+def _render_brutal_auth_debug(context_label: str) -> None:
+    raw_query = {}
+    try:
+        raw_query = {k: v for k, v in st.query_params.items()}
+    except Exception:
+        try:
+            raw_query = st.experimental_get_query_params()
+        except Exception as e:
+            raw_query = {"_query_params_error": str(e)}
 
-    if auth_error:
-        st.error(f"Diagnóstico do login: {auth_error}")
-    elif ext_token_present and not st.session_state.get("auth_logged_in"):
-        st.warning(
-            "O login retornou com ext_access_token, mas a sessão ainda não foi reconhecida como autenticada. "
-            "Isso indica falha no callback/reidratação do login."
-        )
+    ext_token = None
+    try:
+        ext_token = safe_get_query_param("ext_access_token")
+    except Exception as e:
+        ext_token = f"<erro lendo ext_access_token: {e}>"
 
-    if auth_message and st.session_state.get("auth_logged_in"):
-        st.success(auth_message)
+    auth_module_file = None
+    try:
+        auth_module_file = inspect.getsourcefile(auth_runtime) or getattr(auth_runtime, "__file__", None)
+    except Exception as e:
+        auth_module_file = f"<erro lendo arquivo auth: {e}>"
+
+    payload = {
+        "context": context_label,
+        "query_params_raw": raw_query,
+        "ext_access_token_present": bool(ext_token),
+        "ext_access_token_prefix": (str(ext_token)[:40] + "...") if ext_token else None,
+        "auth_logged_in": st.session_state.get("auth_logged_in"),
+        "auth_user_id": st.session_state.get("auth_user_id"),
+        "auth_user_email": st.session_state.get("auth_user_email"),
+        "auth_user_name": st.session_state.get("auth_user_name"),
+        "auth_last_error": st.session_state.get("auth_last_error"),
+        "auth_message": st.session_state.get("auth_message"),
+        "auth_external_access_token_present": bool(st.session_state.get("auth_external_access_token")),
+        "auth_external_access_token_prefix": ((str(st.session_state.get("auth_external_access_token"))[:40] + "...") if st.session_state.get("auth_external_access_token") else None),
+        "auth_sync_done": st.session_state.get("auth_sync_done"),
+        "show_client_area": st.session_state.get("show_client_area"),
+        "post_login_action": st.session_state.get("post_login_action"),
+        "auth_runtime_module_file": auth_module_file,
+    }
+
+    st.error("DEBUG DE LOGIN ATIVO — envie um print deste bloco.")
+    st.json(payload, expanded=True)
 
 def _render_auth_callback_bridge() -> None:
     code = safe_get_query_param("code") or ""
@@ -337,6 +367,7 @@ user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth
 _render_top_nav()
 
 if st.session_state.get("show_client_area"):
+    _render_brutal_auth_debug("client_area_gate")
     if user_logged_in and user_id:
         saldo_cliente = None
         try:
@@ -358,7 +389,6 @@ if st.session_state.get("show_client_area"):
             st.rerun()
         st.markdown("## Área do cliente")
         st.info("Faça login com Google para acessar sua área do cliente e ver seus relatórios salvos.")
-        _render_auth_debug_feedback()
         _render_login_gate_block()
     st.stop()
 
@@ -372,9 +402,11 @@ if user_logged_in and user_id and user_email:
         except Exception as e:
             st.session_state["wallet_reconcile_error"] = str(e)
 
+if safe_get_query_param("ext_access_token") or st.session_state.get("auth_last_error"):
+    _render_brutal_auth_debug("main_page_top")
+
 st.title("Viabilidade Urbana")
 st.caption("Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.")
-_render_auth_debug_feedback()
 
 right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
 with right_col_left:
