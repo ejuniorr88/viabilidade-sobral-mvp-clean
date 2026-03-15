@@ -59,6 +59,91 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
+
+
+def _inject_global_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 0.45rem !important;
+        }
+
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+        }
+
+        .vf-topbar-wrap {
+            margin: 0 0 0.35rem 0;
+        }
+
+        .vf-brand-text {
+            font-size: 28px;
+            font-weight: 800;
+            color: #1f2a44;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+            margin-top: 6px;
+            margin-bottom: 6px;
+        }
+
+        .vf-nav-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1f2a44;
+            text-align: center;
+            white-space: nowrap;
+            margin-top: 10px;
+        }
+
+        div[data-testid="stButton"] > button[kind="tertiary"],
+        div[data-testid="stButton"] > button[kind="secondary"] {
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            color: #1f2a44 !important;
+            font-weight: 600 !important;
+            font-size: 15px !important;
+            padding: 0 !important;
+            min-height: auto !important;
+        }
+
+        div[data-testid="stButton"] > button[kind="tertiary"]:hover,
+        div[data-testid="stButton"] > button[kind="secondary"]:hover {
+            color: #1f2a44 !important;
+            background: transparent !important;
+        }
+
+        .vf-top-divider {
+            border-top: 1px solid #e8e8e8;
+            margin-top: 8px;
+            margin-bottom: 1.25rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_top_nav() -> None:
+    st.markdown('<div class="vf-topbar-wrap">', unsafe_allow_html=True)
+    brand_col, nav_col = st.columns([1.7, 1.0], gap="small")
+    with brand_col:
+        st.markdown('<div class="vf-brand-text">Viabilidade Fácil</div>', unsafe_allow_html=True)
+    with nav_col:
+        n1, n2, n3, n4 = st.columns(4, gap="small")
+        with n1:
+            st.markdown('<div class="vf-nav-text">Como funciona</div>', unsafe_allow_html=True)
+        with n2:
+            if st.button("Área do cliente", key="top_nav_client_area", type="tertiary", use_container_width=True):
+                st.session_state["show_client_area"] = True
+                st.rerun()
+        with n3:
+            st.markdown('<div class="vf-nav-text">Planos</div>', unsafe_allow_html=True)
+        with n4:
+            st.markdown('<div class="vf-nav-text">Dúvidas/Suporte</div>', unsafe_allow_html=True)
+    st.markdown('</div><div class="vf-top-divider"></div>', unsafe_allow_html=True)
+
 def _render_wallet_summary() -> None:
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
     user_email = st.session_state.get("auth_user_email") or st.session_state.get("auth_email") or "—"
@@ -71,247 +156,14 @@ def _render_wallet_summary() -> None:
         except Exception:
             saldo = "—"
 
-    st.markdown(
-        f"""
-        <div class="vf-wallet-wrap">
-          <div class="vf-wallet-title">Minha carteira</div>
-          <div class="vf-wallet-grid">
-            <div class="vf-wallet-card">
-              <div class="vf-wallet-label">Usuário</div>
-              <div class="vf-wallet-value">{user_name}</div>
-            </div>
-            <div class="vf-wallet-card">
-              <div class="vf-wallet-label">E-mail</div>
-              <div class="vf-wallet-value">{user_email}</div>
-            </div>
-            <div class="vf-wallet-card">
-              <div class="vf-wallet-label">Saldo de créditos</div>
-              <div class="vf-wallet-value">{saldo}</div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _inject_global_styles() -> None:
-    st.markdown(
-        """
-        <style>
-        .block-container {
-            padding-top: 0.4rem !important;
-            padding-bottom: 2rem !important;
-            max-width: 100% !important;
-        }
-
-        html, body, [data-testid="stAppViewContainer"], .main {
-            overflow-x: hidden !important;
-        }
-
-        header[data-testid="stHeader"] {
-            background: transparent !important;
-        }
-
-        .vf-topbar-shell {
-            width: 100%;
-            margin: 0 0 1.4rem 0;
-            padding: 0;
-        }
-
-        .vf-topbar {
-            width: 100%;
-            background: #ffffff;
-            border-bottom: 1px solid #e8e8e8;
-        }
-
-        .vf-topbar-inner {
-            width: 100%;
-            min-height: 76px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            padding: 0 18px;
-            box-sizing: border-box;
-        }
-
-        .vf-brand {
-            font-size: 30px;
-            font-weight: 800;
-            color: #1f2a44;
-            letter-spacing: -0.02em;
-            line-height: 1.1;
-            white-space: nowrap;
-        }
-
-        .vf-links {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 26px;
-            flex-wrap: wrap;
-        }
-
-        .vf-link, .vf-link:visited, .vf-link:hover, .vf-link:active {
-            color: #1f2a44;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 15px;
-            white-space: nowrap;
-        }
-
-        .vf-main-title-wrap {
-            width: 100%;
-            text-align: center;
-            margin-top: 0.6rem;
-            margin-bottom: 0.2rem;
-        }
-
-        .vf-main-title {
-            font-size: 42px;
-            font-weight: 800;
-            color: #1f2a44;
-            letter-spacing: -0.02em;
-            line-height: 1.1;
-            margin: 0;
-        }
-
-        .vf-main-subtitle {
-            margin-top: 10px;
-            margin-bottom: 0.8rem;
-            font-size: 15px;
-            color: #6b7280;
-            text-align: center;
-        }
-
-        .vf-section-title {
-            font-size: 26px;
-            font-weight: 800;
-            color: #24324a;
-            margin-bottom: 12px;
-        }
-
-        .vf-wallet-wrap {
-            margin-top: 0;
-            margin-bottom: 14px;
-        }
-
-        .vf-wallet-title {
-            font-size: 18px;
-            font-weight: 800;
-            color: #24324a;
-            margin-bottom: 10px;
-        }
-
-        .vf-wallet-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
-        }
-
-        .vf-wallet-card {
-            background: #ffffff;
-            border: 1px solid #e8e8e8;
-            border-radius: 14px;
-            padding: 12px 14px;
-            min-height: 84px;
-        }
-
-        .vf-wallet-label {
-            font-size: 12px;
-            color: #6b7280;
-            margin-bottom: 6px;
-        }
-
-        .vf-wallet-value {
-            font-size: 17px;
-            font-weight: 700;
-            color: #1f2a44;
-            word-break: break-word;
-            line-height: 1.25;
-        }
-
-        section[data-testid="stSidebar"] {
-            background: #eef0f3;
-            border-right: 1px solid #d9dee5;
-        }
-
-        section[data-testid="stSidebar"] .block-container {
-            padding-top: 1.5rem !important;
-            padding-bottom: 1.5rem !important;
-        }
-
-        .vf-side-divider {
-            border-top: 1px solid #cfd5dd;
-            margin: 16px 0 18px 0;
-        }
-
-        @media (max-width: 1100px) {
-            .vf-topbar-inner {
-                flex-direction: column;
-                align-items: flex-start;
-                justify-content: center;
-                padding-top: 14px;
-                padding-bottom: 14px;
-            }
-
-            .vf-links {
-                justify-content: flex-start;
-                gap: 18px;
-            }
-
-            .vf-wallet-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .vf-main-title {
-                font-size: 34px;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _render_top_nav() -> None:
-    st.markdown(
-        """
-        <div class="vf-topbar-shell">
-          <div class="vf-topbar">
-            <div class="vf-topbar-inner">
-              <div class="vf-brand">Viabilidade Fácil</div>
-              <div class="vf-links">
-                <span class="vf-link">Como funciona</span>
-                <a class="vf-link" href="?nav=client">Área do cliente</a>
-                <span class="vf-link">Planos</span>
-                <span class="vf-link">Dúvidas/Suporte</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _consume_top_nav_action() -> None:
-    nav_target = safe_get_query_param("nav") or ""
-    if nav_target != "client":
-        return
-
-    st.session_state["show_client_area"] = True
-
-    try:
-        if hasattr(st, "query_params"):
-            query_params = st.query_params
-            if "nav" in query_params:
-                del query_params["nav"]
-    except Exception:
-        pass
-
-    st.rerun()
+    st.markdown("**Minha carteira**")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        _card("Usuário", user_name)
+    with c2:
+        _card("E-mail", user_email)
+    with c3:
+        _card("Saldo de créditos", saldo)
 
 
 def _render_login_gate_block() -> None:
@@ -412,25 +264,23 @@ if "last_generated_pdf_signature" not in st.session_state:
 if "last_saved_report_signature" not in st.session_state:
     st.session_state.last_saved_report_signature = None
 
-_inject_global_styles()
-
 # Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
 if safe_get_query_param("auth_flow") == "callback":
     _render_auth_callback_bridge()
 
 # O exchange do code deve acontecer na aba principal.
 handle_oauth_callback()
-_consume_top_nav_action()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
-
-_render_top_nav()
 
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
 user_email = st.session_state.get("auth_user_email")
 user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
+
+_inject_global_styles()
+_render_top_nav()
 
 if st.session_state.get("show_client_area"):
     if user_logged_in and user_id:
@@ -467,17 +317,8 @@ if user_logged_in and user_id and user_email:
         except Exception as e:
             st.session_state["wallet_reconcile_error"] = str(e)
 
-st.markdown(
-    """
-    <div class="vf-main-title-wrap">
-        <div class="vf-main-title">Viabilidade Urbana</div>
-        <div class="vf-main-subtitle">
-            Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.title("Viabilidade Urbana")
+st.caption("Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.")
 
 right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
 with right_col_left:
