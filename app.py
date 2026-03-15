@@ -26,7 +26,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param, sync_auth_state
+from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
 from ui.client_area import render_client_area_page
@@ -201,6 +201,24 @@ def _render_login_gate_block() -> None:
     )
 
 
+
+
+def _render_auth_debug_feedback() -> None:
+    auth_error = st.session_state.get("auth_last_error")
+    auth_message = st.session_state.get("auth_message")
+    ext_token_present = bool(safe_get_query_param("ext_access_token"))
+
+    if auth_error:
+        st.error(f"Diagnóstico do login: {auth_error}")
+    elif ext_token_present and not st.session_state.get("auth_logged_in"):
+        st.warning(
+            "O login retornou com ext_access_token, mas a sessão ainda não foi reconhecida como autenticada. "
+            "Isso indica falha no callback/reidratação do login."
+        )
+
+    if auth_message and st.session_state.get("auth_logged_in"):
+        st.success(auth_message)
+
 def _render_auth_callback_bridge() -> None:
     code = safe_get_query_param("code") or ""
     error = safe_get_query_param("error") or ""
@@ -299,14 +317,6 @@ if safe_get_query_param("auth_flow") == "callback":
 # O exchange do code deve acontecer na aba principal.
 handle_oauth_callback()
 
-# Reidrata a sessão no app principal antes de qualquer gate visual.
-# Isso evita cair no bloco de login da Área do cliente enquanto o retorno
-# com ext_access_token ainda está sendo consolidado.
-try:
-    sync_auth_state(force=bool(safe_get_query_param("ext_access_token")))
-except Exception:
-    pass
-
 _inject_global_styles()
 
 if safe_get_query_param("nav") == "client":
@@ -327,22 +337,6 @@ user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth
 _render_top_nav()
 
 if st.session_state.get("show_client_area"):
-    # Se o login acabou de voltar com token externo, tenta mais uma sync antes
-    # de mostrar o gate de login da Área do cliente.
-    if (not user_logged_in or not user_id) and safe_get_query_param("ext_access_token"):
-        try:
-            restored_now = sync_auth_state(force=True)
-            if restored_now:
-                st.rerun()
-        except Exception:
-            pass
-
-    # Releitura local após tentativa de sync.
-    user_logged_in = bool(st.session_state.get("auth_logged_in"))
-    user_id = st.session_state.get("auth_user_id")
-    user_email = st.session_state.get("auth_user_email")
-    user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
-
     if user_logged_in and user_id:
         saldo_cliente = None
         try:
@@ -364,6 +358,7 @@ if st.session_state.get("show_client_area"):
             st.rerun()
         st.markdown("## Área do cliente")
         st.info("Faça login com Google para acessar sua área do cliente e ver seus relatórios salvos.")
+        _render_auth_debug_feedback()
         _render_login_gate_block()
     st.stop()
 
@@ -379,6 +374,7 @@ if user_logged_in and user_id and user_email:
 
 st.title("Viabilidade Urbana")
 st.caption("Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.")
+_render_auth_debug_feedback()
 
 right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
 with right_col_left:
