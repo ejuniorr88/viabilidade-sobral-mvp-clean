@@ -78,10 +78,27 @@ def _inject_global_styles() -> None:
             background: transparent !important;
         }
 
-        .vf-brand-wrap {
+        .vf-topbar-shell {
+            width: 100%;
+            margin: 0 0 1.4rem 0;
+            padding: 0;
+        }
+
+        .vf-topbar {
+            width: 100%;
+            background: #ffffff;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .vf-topbar-inner {
+            width: 100%;
+            min-height: 76px;
             display: flex;
             align-items: center;
-            min-height: 76px;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 0 18px;
+            box-sizing: border-box;
         }
 
         .vf-brand {
@@ -91,59 +108,42 @@ def _inject_global_styles() -> None:
             letter-spacing: -0.02em;
             line-height: 1.1;
             white-space: nowrap;
-            margin: 0;
         }
 
-        .vf-top-divider {
-            border-top: 1px solid #e8e8e8;
-            margin: 0 0 1.4rem 0;
+        .vf-links {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 26px;
+            flex-wrap: wrap;
         }
 
-        .vf-nav-text {
-            font-size: 16px;
-            font-weight: 700;
+        .vf-link {
             color: #1f2a44;
-            line-height: 1;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
             white-space: nowrap;
-            text-align: center;
-            display: block;
-            margin-top: 16px;
+            cursor: pointer;
         }
 
-        div[data-testid="stButton"] > button[kind="secondary"],
-        div[data-testid="stButton"] > button[kind="tertiary"] {
-            border: none !important;
-            background: transparent !important;
-            color: #1f2a44 !important;
-            font-size: 16px !important;
-            font-weight: 700 !important;
-            padding: 0 !important;
-            min-height: auto !important;
-            line-height: 1 !important;
-            box-shadow: none !important;
-            justify-content: center !important;
-        }
-
-        div[data-testid="stButton"] > button[kind="secondary"]:hover,
-        div[data-testid="stButton"] > button[kind="tertiary"]:hover {
-            color: #1f2a44 !important;
-            background: transparent !important;
-            border: none !important;
-        }
-
-        div[data-testid="stButton"] > button[kind="secondary"]:focus,
-        div[data-testid="stButton"] > button[kind="tertiary"]:focus {
-            box-shadow: none !important;
-            outline: none !important;
+        .vf-link:hover {
+            color: #1f2a44;
+            text-decoration: none;
         }
 
         @media (max-width: 900px) {
+            .vf-topbar-inner {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 10px 12px;
+            }
+            .vf-links {
+                justify-content: flex-start;
+                gap: 16px;
+            }
             .vf-brand {
                 font-size: 24px;
-            }
-            .vf-nav-text {
-                margin-top: 8px;
-                text-align: left;
             }
         }
         </style>
@@ -153,22 +153,24 @@ def _inject_global_styles() -> None:
 
 
 def _render_top_nav() -> None:
-    left, spacer, c1, c2, c3, c4 = st.columns([3.0, 1.6, 1.2, 1.3, 0.8, 1.2], gap="small")
-    with left:
-        st.markdown('<div class="vf-brand-wrap"><div class="vf-brand">Viabilidade Fácil</div></div>', unsafe_allow_html=True)
-    with spacer:
-        st.write("")
-    with c1:
-        st.markdown('<div class="vf-nav-text">Como funciona</div>', unsafe_allow_html=True)
-    with c2:
-        if st.button("Área do cliente", key="top_nav_client_area", type="tertiary", use_container_width=True):
-            st.session_state["show_client_area"] = True
-            st.rerun()
-    with c3:
-        st.markdown('<div class="vf-nav-text">Planos</div>', unsafe_allow_html=True)
-    with c4:
-        st.markdown('<div class="vf-nav-text">Dúvidas/Suporte</div>', unsafe_allow_html=True)
-    st.markdown('<div class="vf-top-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="vf-topbar-shell">
+          <div class="vf-topbar">
+            <div class="vf-topbar-inner">
+              <div class="vf-brand">Viabilidade Fácil</div>
+              <div class="vf-links">
+                <span class="vf-link">Como funciona</span>
+                <a class="vf-link" href="/?nav=client" target="_self">Área do cliente</a>
+                <span class="vf-link">Planos</span>
+                <span class="vf-link">Dúvidas/Suporte</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def _render_wallet_summary() -> None:
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
@@ -290,14 +292,21 @@ if "last_generated_pdf_signature" not in st.session_state:
 if "last_saved_report_signature" not in st.session_state:
     st.session_state.last_saved_report_signature = None
 
-_inject_global_styles()
-
 # Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
 if safe_get_query_param("auth_flow") == "callback":
     _render_auth_callback_bridge()
 
 # O exchange do code deve acontecer na aba principal.
 handle_oauth_callback()
+
+_inject_global_styles()
+
+if safe_get_query_param("nav") == "client":
+    st.session_state["show_client_area"] = True
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
