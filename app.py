@@ -29,11 +29,10 @@ from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
+from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
-from ui.client_area import render_client_area_page
 from core.client_reports import save_client_report, build_report_signature
-from urllib.parse import urlencode
 
 
 @st.cache_data(show_spinner=False)
@@ -60,221 +59,6 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
-def _inject_global_styles() -> None:
-    st.markdown(
-        """
-        <style>
-        .block-container {
-            padding-top: 0.4rem !important;
-            padding-bottom: 2rem !important;
-            max-width: 100% !important;
-        }
-
-        html, body, [data-testid="stAppViewContainer"], .main {
-            overflow-x: hidden !important;
-        }
-
-        header[data-testid="stHeader"] {
-            background: transparent !important;
-        }
-
-        .vf-topbar-shell {
-            width: 100%;
-            margin: 0 0 1.4rem 0;
-            padding: 0;
-        }
-
-        .vf-topbar {
-            width: 100%;
-            background: #ffffff;
-            border-bottom: 1px solid #e8e8e8;
-        }
-
-        .vf-topbar-inner {
-            width: 100%;
-            min-height: 76px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            padding: 0 18px;
-            box-sizing: border-box;
-        }
-
-        .vf-brand {
-            font-size: 30px;
-            font-weight: 800;
-            color: #1f2a44;
-            letter-spacing: -0.02em;
-            line-height: 1.1;
-            white-space: nowrap;
-        }
-
-        .vf-links {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 26px;
-            flex-wrap: wrap;
-        }
-
-        .vf-link {
-            color: #1f2a44;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 15px;
-            white-space: nowrap;
-        }
-
-        .vf-main-title-wrap {
-            width: 100%;
-            text-align: center;
-            margin-top: 0.6rem;
-            margin-bottom: 0.2rem;
-        }
-
-        .vf-main-title {
-            font-size: 42px;
-            font-weight: 800;
-            color: #1f2a44;
-            letter-spacing: -0.02em;
-            line-height: 1.1;
-            margin: 0;
-        }
-
-        .vf-main-subtitle {
-            margin-top: 10px;
-            margin-bottom: 0.8rem;
-            font-size: 15px;
-            color: #6b7280;
-            text-align: center;
-        }
-
-        .vf-section-title {
-            font-size: 26px;
-            font-weight: 800;
-            color: #24324a;
-            margin-bottom: 12px;
-        }
-
-        .vf-wallet-wrap {
-            margin-top: 0;
-            margin-bottom: 14px;
-        }
-
-        .vf-wallet-title {
-            font-size: 18px;
-            font-weight: 800;
-            color: #24324a;
-            margin-bottom: 10px;
-        }
-
-        .vf-wallet-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
-        }
-
-        .vf-wallet-card {
-            background: #ffffff;
-            border: 1px solid #e8e8e8;
-            border-radius: 14px;
-            padding: 12px 14px;
-            min-height: 84px;
-        }
-
-        .vf-wallet-label {
-            font-size: 12px;
-            color: #6b7280;
-            margin-bottom: 6px;
-        }
-
-        .vf-wallet-value {
-            font-size: 17px;
-            font-weight: 700;
-            color: #1f2a44;
-            word-break: break-word;
-            line-height: 1.25;
-        }
-
-        section[data-testid="stSidebar"] {
-            background: #eef0f3;
-            border-right: 1px solid #d9dee5;
-        }
-
-        section[data-testid="stSidebar"] .block-container {
-            padding-top: 1.5rem !important;
-            padding-bottom: 1.5rem !important;
-        }
-
-        .vf-side-divider {
-            border-top: 1px solid #cfd5dd;
-            margin: 16px 0 18px 0;
-        }
-
-        @media (max-width: 1100px) {
-            .vf-topbar-inner {
-                flex-direction: column;
-                align-items: flex-start;
-                justify-content: center;
-                padding-top: 14px;
-                padding-bottom: 14px;
-            }
-
-            .vf-links {
-                justify-content: flex-start;
-                gap: 18px;
-            }
-
-            .vf-wallet-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .vf-main-title {
-                font-size: 34px;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _nav_href(target_page: str | None = None) -> str:
-    params = {}
-    for key in ["ext_access_token", "code", "error", "error_code", "error_description", "state"]:
-        value = safe_get_query_param(key) or ""
-        if value:
-            params[key] = value
-    if target_page and target_page != "study":
-        params["vf_page"] = target_page
-    query = urlencode(params)
-    return f"?{query}" if query else "?"
-
-
-def _render_top_nav() -> None:
-    study_href = _nav_href("study")
-    client_href = _nav_href("client")
-    st.markdown(
-        f"""
-        <div class="vf-topbar-shell">
-          <div class="vf-topbar">
-            <div class="vf-topbar-inner">
-              <a class="vf-brand" href="{study_href}">Viabilidade Fácil</a>
-              <div class="vf-links">
-                <span class="vf-link">Como funciona</span>
-                <a class="vf-link" href="{client_href}">Área do cliente</a>
-                <span class="vf-link">Planos</span>
-                <span class="vf-link">Dúvidas/Suporte</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def _render_wallet_summary() -> None:
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
     user_email = st.session_state.get("auth_user_email") or st.session_state.get("auth_email") or "—"
@@ -287,28 +71,14 @@ def _render_wallet_summary() -> None:
         except Exception:
             saldo = "—"
 
-    st.markdown(
-        f"""
-        <div class="vf-wallet-wrap">
-          <div class="vf-wallet-title">Minha carteira</div>
-          <div class="vf-wallet-grid">
-            <div class="vf-wallet-card">
-              <div class="vf-wallet-label">Usuário</div>
-              <div class="vf-wallet-value">{user_name}</div>
-            </div>
-            <div class="vf-wallet-card">
-              <div class="vf-wallet-label">E-mail</div>
-              <div class="vf-wallet-value">{user_email}</div>
-            </div>
-            <div class="vf-wallet-card">
-              <div class="vf-wallet-label">Saldo de créditos</div>
-              <div class="vf-wallet-value">{saldo}</div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("**Minha carteira**")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        _card("Usuário", user_name)
+    with c2:
+        _card("E-mail", user_email)
+    with c3:
+        _card("Saldo de créditos", saldo)
 
 
 def _render_login_gate_block() -> None:
@@ -397,6 +167,9 @@ if "post_login_action" not in st.session_state:
 if "show_inline_payments" not in st.session_state:
     st.session_state.show_inline_payments = False
 
+if "show_client_area" not in st.session_state:
+    st.session_state.show_client_area = False
+
 if "last_generated_pdf_bytes" not in st.session_state:
     st.session_state.last_generated_pdf_bytes = None
 
@@ -405,8 +178,6 @@ if "last_generated_pdf_signature" not in st.session_state:
 
 if "last_saved_report_signature" not in st.session_state:
     st.session_state.last_saved_report_signature = None
-
-_inject_global_styles()
 
 # Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
 if safe_get_query_param("auth_flow") == "callback":
@@ -418,21 +189,21 @@ handle_oauth_callback()
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
 
-_render_top_nav()
-
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
 user_email = st.session_state.get("auth_user_email")
 user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
-current_page = safe_get_query_param("vf_page") or "study"
 
-if current_page == "client":
+if st.session_state.get("show_client_area"):
     if user_logged_in and user_id:
         saldo_cliente = None
         try:
             saldo_cliente = get_credit_balance(user_id)
         except Exception:
             saldo_cliente = None
+        if st.button("← Voltar para o estudo", key="client_area_back"):
+            st.session_state["show_client_area"] = False
+            st.rerun()
         render_client_area_page(
             user_id=user_id,
             user_name=user_name,
@@ -440,6 +211,9 @@ if current_page == "client":
             credit_balance=saldo_cliente,
         )
     else:
+        if st.button("← Voltar para o estudo", key="client_area_back_guest"):
+            st.session_state["show_client_area"] = False
+            st.rerun()
         st.markdown("## Área do cliente")
         st.info("Faça login com Google para acessar sua área do cliente e ver seus relatórios salvos.")
         _render_login_gate_block()
@@ -455,23 +229,18 @@ if user_logged_in and user_id and user_email:
         except Exception as e:
             st.session_state["wallet_reconcile_error"] = str(e)
 
-st.markdown(
-    """
-    <div class="vf-main-title-wrap">
-        <div class="vf-main-title">Viabilidade Urbana</div>
-        <div class="vf-main-subtitle">
-            Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.title("Viabilidade Urbana")
+st.caption("Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.")
 
 right_col_left, right_col_right = st.columns([2.2, 1.2], gap="large")
 with right_col_left:
     st.write("")
 
 with right_col_right:
+    if st.button("Área do cliente", key="open_client_area_top", use_container_width=True):
+        st.session_state["show_client_area"] = True
+        st.rerun()
+
     if user_logged_in and user_id:
         _render_wallet_summary()
         render_google_login_top()
@@ -778,27 +547,22 @@ if st.session_state.get("report_unlocked") and can_offer_report:
 
     st.markdown("### Download do relatório")
     try:
-        report_session_state = {
-            "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-            "built_ground_m2": built_ground,
-            "permeable_area_m2": permeable_area,
-            "lot_front_m": st.session_state.calc.get("lot_front_m"),
-            "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-            "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-            "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-        }
-
         pdf_bytes = generate_report_pdf_bytes(
             calc=calc,
-            session_state=report_session_state,
+            session_state={
+                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+                "built_ground_m2": built_ground,
+                "permeable_area_m2": permeable_area,
+                "lot_front_m": st.session_state.calc.get("lot_front_m"),
+                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+            },
         )
 
+        st.session_state["last_generated_pdf_bytes"] = pdf_bytes
         current_report_signature = build_report_signature(
-            calc={
-                **calc,
-                "selected_use_label": selected_use_label,
-                "categoria_label": categoria_label,
-            },
+            calc=calc,
             session_state={
                 "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
                 "lot_front_m": st.session_state.calc.get("lot_front_m"),
@@ -808,8 +572,6 @@ if st.session_state.get("report_unlocked") and can_offer_report:
             },
             pdf_bytes=pdf_bytes,
         )
-
-        st.session_state["last_generated_pdf_bytes"] = pdf_bytes
         st.session_state["last_generated_pdf_signature"] = current_report_signature
 
         st.download_button(
@@ -821,7 +583,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
             use_container_width=True,
         )
 
-        if user_logged_in and user_id and st.session_state.get("last_saved_report_signature") != current_report_signature:
+        if st.session_state.get("last_saved_report_signature") != current_report_signature:
             try:
                 save_result = save_client_report(
                     user_id=user_id,
@@ -842,12 +604,12 @@ if st.session_state.get("report_unlocked") and can_offer_report:
                 )
                 st.session_state["last_saved_report_signature"] = current_report_signature
                 if save_result.get("already_exists"):
-                    st.caption("Este relatório já estava salvo automaticamente na sua área do cliente.")
+                    st.info("Este relatório já estava salvo automaticamente na sua área do cliente.")
                 else:
-                    st.caption("Relatório salvo automaticamente na sua área do cliente.")
+                    st.success("Relatório salvo automaticamente na sua área do cliente.")
             except Exception as e:
                 st.error(f"Não foi possível salvar automaticamente o relatório na área do cliente: {e}")
-        elif user_logged_in and user_id:
+        else:
             st.caption("Este relatório já está salvo na sua área do cliente.")
     except Exception as e:
         st.error(f"Não foi possível gerar o PDF do relatório: {e}")
