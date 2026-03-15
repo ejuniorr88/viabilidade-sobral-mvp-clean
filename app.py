@@ -59,65 +59,85 @@ def _card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
-
-
 def _inject_global_styles() -> None:
     st.markdown(
         """
         <style>
         .block-container {
-            padding-top: 0.45rem !important;
+            padding-top: 0.4rem !important;
+            padding-bottom: 2rem !important;
+            max-width: 100% !important;
+        }
+
+        html, body, [data-testid="stAppViewContainer"], .main {
+            overflow-x: hidden !important;
         }
 
         header[data-testid="stHeader"] {
             background: transparent !important;
         }
 
-        .vf-topbar-wrap {
-            margin: 0 0 0.35rem 0;
+        .vf-topbar-shell {
+            width: 100%;
+            margin: 0 0 1.4rem 0;
+            padding: 0;
         }
 
-        .vf-brand-text {
-            font-size: 28px;
+        .vf-topbar {
+            width: 100%;
+            background: #ffffff;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .vf-topbar-inner {
+            width: 100%;
+            min-height: 76px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 0 18px;
+            box-sizing: border-box;
+        }
+
+        .vf-brand {
+            font-size: 30px;
             font-weight: 800;
             color: #1f2a44;
             letter-spacing: -0.02em;
             line-height: 1.1;
-            margin-top: 6px;
-            margin-bottom: 6px;
-        }
-
-        .vf-nav-text {
-            font-size: 15px;
-            font-weight: 600;
-            color: #1f2a44;
-            text-align: center;
             white-space: nowrap;
-            margin-top: 10px;
         }
 
-        div[data-testid="stButton"] > button[kind="tertiary"],
-        div[data-testid="stButton"] > button[kind="secondary"] {
-            border: none !important;
-            background: transparent !important;
-            box-shadow: none !important;
-            color: #1f2a44 !important;
-            font-weight: 600 !important;
-            font-size: 15px !important;
-            padding: 0 !important;
-            min-height: auto !important;
+        .vf-links {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            gap: 34px;
         }
 
-        div[data-testid="stButton"] > button[kind="tertiary"]:hover,
-        div[data-testid="stButton"] > button[kind="secondary"]:hover {
-            color: #1f2a44 !important;
-            background: transparent !important;
+        .vf-link {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1f2a44;
+            text-decoration: none;
+            line-height: 1;
+            white-space: nowrap;
         }
 
-        .vf-top-divider {
-            border-top: 1px solid #e8e8e8;
-            margin-top: 8px;
-            margin-bottom: 1.25rem;
+        @media (max-width: 900px) {
+            .vf-topbar-inner {
+                min-height: auto;
+                align-items: flex-start;
+                flex-direction: column;
+                padding-top: 14px;
+                padding-bottom: 14px;
+            }
+
+            .vf-links {
+                gap: 18px;
+            }
         }
         </style>
         """,
@@ -126,23 +146,25 @@ def _inject_global_styles() -> None:
 
 
 def _render_top_nav() -> None:
-    st.markdown('<div class="vf-topbar-wrap">', unsafe_allow_html=True)
-    brand_col, nav_col = st.columns([1.7, 1.0], gap="small")
-    with brand_col:
-        st.markdown('<div class="vf-brand-text">Viabilidade Fácil</div>', unsafe_allow_html=True)
-    with nav_col:
-        n1, n2, n3, n4 = st.columns(4, gap="small")
-        with n1:
-            st.markdown('<div class="vf-nav-text">Como funciona</div>', unsafe_allow_html=True)
-        with n2:
-            if st.button("Área do cliente", key="top_nav_client_area", type="tertiary", use_container_width=True):
-                st.session_state["show_client_area"] = True
-                st.rerun()
-        with n3:
-            st.markdown('<div class="vf-nav-text">Planos</div>', unsafe_allow_html=True)
-        with n4:
-            st.markdown('<div class="vf-nav-text">Dúvidas/Suporte</div>', unsafe_allow_html=True)
-    st.markdown('</div><div class="vf-top-divider"></div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="vf-topbar-shell">
+          <div class="vf-topbar">
+            <div class="vf-topbar-inner">
+              <div class="vf-brand">Viabilidade Fácil</div>
+              <div class="vf-links">
+                <span class="vf-link">Como funciona</span>
+                <span class="vf-link">Área do cliente</span>
+                <span class="vf-link">Planos</span>
+                <span class="vf-link">Dúvidas/Suporte</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 def _render_wallet_summary() -> None:
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
@@ -264,6 +286,9 @@ if "last_generated_pdf_signature" not in st.session_state:
 if "last_saved_report_signature" not in st.session_state:
     st.session_state.last_saved_report_signature = None
 
+_inject_global_styles()
+_render_top_nav()
+
 # Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
 if safe_get_query_param("auth_flow") == "callback":
     _render_auth_callback_bridge()
@@ -278,9 +303,6 @@ user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
 user_email = st.session_state.get("auth_user_email")
 user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
-
-_inject_global_styles()
-_render_top_nav()
 
 if st.session_state.get("show_client_area"):
     if user_logged_in and user_id:
