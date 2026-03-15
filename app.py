@@ -283,9 +283,6 @@ if "show_inline_payments" not in st.session_state:
 if "show_client_area" not in st.session_state:
     st.session_state.show_client_area = False
 
-if "client_area_post_login_retry" not in st.session_state:
-    st.session_state.client_area_post_login_retry = False
-
 if "last_generated_pdf_bytes" not in st.session_state:
     st.session_state.last_generated_pdf_bytes = None
 
@@ -302,6 +299,14 @@ if safe_get_query_param("auth_flow") == "callback":
 # O exchange do code deve acontecer na aba principal.
 handle_oauth_callback()
 
+# Reidrata a sessão no app principal antes de qualquer gate visual.
+# Isso evita cair no bloco de login da Área do cliente enquanto o retorno
+# com ext_access_token ainda está sendo consolidado.
+try:
+    sync_auth_state(force=bool(safe_get_query_param("ext_access_token")))
+except Exception:
+    pass
+
 _inject_global_styles()
 
 if safe_get_query_param("nav") == "client":
@@ -310,25 +315,6 @@ if safe_get_query_param("nav") == "client":
         st.query_params.clear()
     except Exception:
         pass
-
-# Resgate pós-login da Área do cliente:
-# se a intenção é abrir a Área do cliente e o token voltou na URL,
-# forçamos uma sincronização extra antes de renderizar o gate.
-if st.session_state.get("show_client_area") and safe_get_query_param("ext_access_token"):
-    if not (st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id")):
-        try:
-            restored = sync_auth_state(force=True)
-        except Exception:
-            restored = False
-
-        if restored and st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"):
-            st.session_state["client_area_post_login_retry"] = False
-            st.rerun()
-        elif not st.session_state.get("client_area_post_login_retry"):
-            st.session_state["client_area_post_login_retry"] = True
-            st.rerun()
-    else:
-        st.session_state["client_area_post_login_retry"] = False
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
@@ -341,8 +327,23 @@ user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth
 _render_top_nav()
 
 if st.session_state.get("show_client_area"):
+    # Se o login acabou de voltar com token externo, tenta mais uma sync antes
+    # de mostrar o gate de login da Área do cliente.
+    if (not user_logged_in or not user_id) and safe_get_query_param("ext_access_token"):
+        try:
+            restored_now = sync_auth_state(force=True)
+            if restored_now:
+                st.rerun()
+        except Exception:
+            pass
+
+    # Releitura local após tentativa de sync.
+    user_logged_in = bool(st.session_state.get("auth_logged_in"))
+    user_id = st.session_state.get("auth_user_id")
+    user_email = st.session_state.get("auth_user_email")
+    user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
+
     if user_logged_in and user_id:
-        st.session_state["client_area_post_login_retry"] = False
         saldo_cliente = None
         try:
             saldo_cliente = get_credit_balance(user_id)
@@ -360,15 +361,7 @@ if st.session_state.get("show_client_area"):
     else:
         if st.button("← Voltar para o estudo", key="client_area_back_guest"):
             st.session_state["show_client_area"] = False
-            st.session_state["client_area_post_login_retry"] = False
             st.rerun()
-
-        # Se o token acabou de voltar e a sessão ainda está sincronizando, evita exibir
-        # o gate prematuramente na mesma execução.
-        if safe_get_query_param("ext_access_token") and not st.session_state.get("client_area_post_login_retry"):
-            st.info("Concluindo seu login na Área do cliente...")
-            st.stop()
-
         st.markdown("## Área do cliente")
         st.info("Faça login com Google para acessar sua área do cliente e ver seus relatórios salvos.")
         _render_login_gate_block()
