@@ -1,4 +1,3 @@
-import inspect
 import json
 from pathlib import Path
 from typing import Any, Dict
@@ -27,7 +26,6 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section
-import core.auth as auth_runtime
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
@@ -84,23 +82,7 @@ def _inject_global_styles() -> None:
             width: 100%;
             margin: 0 0 1.4rem 0;
             padding: 0;
-        }
-
-        .vf-topbar {
-            width: 100%;
-            background: #ffffff;
             border-bottom: 1px solid #e8e8e8;
-        }
-
-        .vf-topbar-inner {
-            width: 100%;
-            min-height: 76px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            padding: 0 18px;
-            box-sizing: border-box;
         }
 
         .vf-brand {
@@ -110,40 +92,43 @@ def _inject_global_styles() -> None:
             letter-spacing: -0.02em;
             line-height: 1.1;
             white-space: nowrap;
+            margin-top: 0.5rem;
+            margin-bottom: 0.65rem;
         }
 
-        .vf-links {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 26px;
-            flex-wrap: wrap;
+        .vf-nav-btn .stButton > button[kind="tertiary"] {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: #1f2a44 !important;
+            font-weight: 600 !important;
+            font-size: 15px !important;
+            white-space: nowrap !important;
+            padding: 0 !important;
+            min-height: auto !important;
+            line-height: 1.1 !important;
+            justify-content: flex-end !important;
         }
 
-        .vf-link {
-            color: #1f2a44;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 15px;
-            white-space: nowrap;
-            cursor: pointer;
+        .vf-nav-btn .stButton > button[kind="tertiary"]:hover {
+            color: #1f2a44 !important;
+            background: transparent !important;
         }
 
-        .vf-link:hover {
-            color: #1f2a44;
-            text-decoration: none;
+        .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
+        .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible,
+        .vf-nav-btn .stButton > button[kind="tertiary"]:active {
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            background: transparent !important;
+        }
+
+        .vf-nav-spacer {
+            height: 0.45rem;
         }
 
         @media (max-width: 900px) {
-            .vf-topbar-inner {
-                flex-direction: column;
-                align-items: flex-start;
-                padding: 10px 12px;
-            }
-            .vf-links {
-                justify-content: flex-start;
-                gap: 16px;
-            }
             .vf-brand {
                 font-size: 24px;
             }
@@ -155,24 +140,37 @@ def _inject_global_styles() -> None:
 
 
 def _render_top_nav() -> None:
-    st.markdown(
-        """
-        <div class="vf-topbar-shell">
-          <div class="vf-topbar">
-            <div class="vf-topbar-inner">
-              <div class="vf-brand">Viabilidade Fácil</div>
-              <div class="vf-links">
-                <span class="vf-link">Como funciona</span>
-                <a class="vf-link" href="/?nav=client" target="_self">Área do cliente</a>
-                <span class="vf-link">Planos</span>
-                <span class="vf-link">Dúvidas/Suporte</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="vf-topbar-shell">', unsafe_allow_html=True)
+    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.2, 1.35, 1.55, 0.95, 1.6], gap="small")
+
+    with brand_col:
+        st.markdown('<div class="vf-brand">Viabilidade Fácil</div>', unsafe_allow_html=True)
+
+    with nav1:
+        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with nav2:
+        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
+        if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=False):
+            st.session_state["show_client_area"] = True
+            if not st.session_state.get("auth_logged_in"):
+                st.session_state["post_login_action"] = "open_client_area"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with nav3:
+        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with nav4:
+        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def _render_wallet_summary() -> None:
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
@@ -202,52 +200,6 @@ def _render_login_gate_block() -> None:
         message="Para liberar a pesquisa de viabilidade, entre com sua conta Google.",
     )
 
-
-
-
-def _render_brutal_auth_debug(context_label: str) -> None:
-    raw_query = {}
-    try:
-        raw_query = {k: v for k, v in st.query_params.items()}
-    except Exception:
-        try:
-            raw_query = st.experimental_get_query_params()
-        except Exception as e:
-            raw_query = {"_query_params_error": str(e)}
-
-    ext_token = None
-    try:
-        ext_token = safe_get_query_param("ext_access_token")
-    except Exception as e:
-        ext_token = f"<erro lendo ext_access_token: {e}>"
-
-    auth_module_file = None
-    try:
-        auth_module_file = inspect.getsourcefile(auth_runtime) or getattr(auth_runtime, "__file__", None)
-    except Exception as e:
-        auth_module_file = f"<erro lendo arquivo auth: {e}>"
-
-    payload = {
-        "context": context_label,
-        "query_params_raw": raw_query,
-        "ext_access_token_present": bool(ext_token),
-        "ext_access_token_prefix": (str(ext_token)[:40] + "...") if ext_token else None,
-        "auth_logged_in": st.session_state.get("auth_logged_in"),
-        "auth_user_id": st.session_state.get("auth_user_id"),
-        "auth_user_email": st.session_state.get("auth_user_email"),
-        "auth_user_name": st.session_state.get("auth_user_name"),
-        "auth_last_error": st.session_state.get("auth_last_error"),
-        "auth_message": st.session_state.get("auth_message"),
-        "auth_external_access_token_present": bool(st.session_state.get("auth_external_access_token")),
-        "auth_external_access_token_prefix": ((str(st.session_state.get("auth_external_access_token"))[:40] + "...") if st.session_state.get("auth_external_access_token") else None),
-        "auth_sync_done": st.session_state.get("auth_sync_done"),
-        "show_client_area": st.session_state.get("show_client_area"),
-        "post_login_action": st.session_state.get("post_login_action"),
-        "auth_runtime_module_file": auth_module_file,
-    }
-
-    st.error("DEBUG DE LOGIN ATIVO — envie um print deste bloco.")
-    st.json(payload, expanded=True)
 
 def _render_auth_callback_bridge() -> None:
     code = safe_get_query_param("code") or ""
@@ -356,6 +308,10 @@ if safe_get_query_param("nav") == "client":
     except Exception:
         pass
 
+if st.session_state.get("auth_logged_in") and st.session_state.get("post_login_action") == "open_client_area":
+    st.session_state["show_client_area"] = True
+    st.session_state["post_login_action"] = None
+
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
 
@@ -367,7 +323,6 @@ user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth
 _render_top_nav()
 
 if st.session_state.get("show_client_area"):
-    _render_brutal_auth_debug("client_area_gate")
     if user_logged_in and user_id:
         saldo_cliente = None
         try:
@@ -401,9 +356,6 @@ if user_logged_in and user_id and user_email:
             st.session_state["wallet_reconcile_result"] = reconcile_result
         except Exception as e:
             st.session_state["wallet_reconcile_error"] = str(e)
-
-if safe_get_query_param("ext_access_token") or st.session_state.get("auth_last_error"):
-    _render_brutal_auth_debug("main_page_top")
 
 st.title("Viabilidade Urbana")
 st.caption("Selecione o terreno, faça a análise inicial e gere o relatório completo quando quiser.")
