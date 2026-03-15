@@ -100,13 +100,14 @@ def _inject_global_styles() -> None:
             box-sizing: border-box;
         }
 
-        .vf-brand {
+        .vf-brand, .vf-brand-link {
             font-size: 30px;
             font-weight: 800;
             color: #1f2a44;
             letter-spacing: -0.02em;
             line-height: 1.1;
             white-space: nowrap;
+            text-decoration: none;
         }
 
         .vf-links {
@@ -123,6 +124,7 @@ def _inject_global_styles() -> None:
             font-weight: 600;
             font-size: 15px;
             white-space: nowrap;
+            cursor: pointer;
         }
 
         .vf-main-title-wrap {
@@ -245,12 +247,12 @@ def _render_top_nav() -> None:
         <div class="vf-topbar-shell">
           <div class="vf-topbar">
             <div class="vf-topbar-inner">
-              <div class="vf-brand" onclick="(function(){const u=new URL(window.location.href);u.searchParams.set('page','home');window.location.href=u.toString();})()">Viabilidade Fácil</div>
+              <a class="vf-brand-link" href="?page=home">Viabilidade Fácil</a>
               <div class="vf-links">
-                <span class="vf-link">Como funciona</span>
-                <span class="vf-link" onclick="(function(){const u=new URL(window.location.href);u.searchParams.set('page','client');window.location.href=u.toString();})()">Área do cliente</span>
-                <span class="vf-link">Planos</span>
-                <span class="vf-link">Dúvidas/Suporte</span>
+                <a class="vf-link" href="#">Como funciona</a>
+                <a class="vf-link" href="?page=client">Área do cliente</a>
+                <a class="vf-link" href="#">Planos</a>
+                <a class="vf-link" href="#">Dúvidas/Suporte</a>
               </div>
             </div>
           </div>
@@ -258,7 +260,6 @@ def _render_top_nav() -> None:
         """,
         unsafe_allow_html=True,
     )
-
 
 
 def _render_wallet_summary() -> None:
@@ -451,6 +452,7 @@ with right_col_left:
 
 with right_col_right:
     if user_logged_in and user_id:
+        _render_wallet_summary()
         render_google_login_top()
     else:
         render_google_login_top()
