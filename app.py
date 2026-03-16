@@ -557,17 +557,24 @@ if run_free_calc_now:
 
     _ = render_localizacao_section(True, zones_prepared, radius_m)
 
+    if calc.get("zone"):
+        # A seção 4 deve abrir sempre que a localização foi resolvida; a regra pode ser
+        # buscada novamente dentro do item 4 se ainda não estiver em calc["rule"].
+        st.session_state.free_calc_done = True
+
     if calc.get("zone") and not calc.get("rule"):
         try:
-            rule = fetch_rule(calc.get("zone_lookup") or calc.get("zone_sigla") or calc["zone"], calc.get("use_type_code") or "RES_UNI", calc.get("subzone_code") or "PADRAO", calc.get("zone_label_raw") or calc.get("zone"))
+            rule = fetch_rule(
+                calc.get("zone_lookup") or calc.get("zone_sigla") or calc["zone"],
+                calc.get("use_type_code") or "RES_UNI",
+                calc.get("subzone_code") or "PADRAO",
+                calc.get("zone_label_raw") or calc.get("zone") or calc.get("zone_display_label"),
+            )
             if rule:
                 calc["rule"] = rule
-                st.session_state.free_calc_done = True
             else:
-                calc["err"] = (
-                    f"Nenhuma regra no Supabase para zona={calc['zone']} "
-                    f"e uso={calc.get('use_type_code')}"
-                )
+                # Não bloquear a seção 4; ela própria tenta resolver e mostra a info adequada.
+                calc.pop("err", None)
         except Exception as e:
             calc["err"] = f"Erro ao consultar Supabase: {e}"
 
@@ -582,7 +589,7 @@ if st.session_state.get("free_calc_done"):
         get_rule_func=fetch_rule,
     )
 
-can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err"))
+can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and bool(calc.get("rule")) and not bool(calc.get("err"))
 
 if can_offer_report:
     st.markdown("---")
