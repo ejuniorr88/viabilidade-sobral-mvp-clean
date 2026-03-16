@@ -453,17 +453,18 @@ def _extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dic
         "a_op2_max": a_op2_max,
         "a_adotada": a_adotada,
         "zone_description": _fetch_zone_description(
-            zone_sigla=zone,
+            zone_sigla=_pick_text(calc.get("zone_sigla"), zone),
             subzone_code=_pick_text(calc.get("subzone_code"), rule.get("subzone_code"), default="PADRAO"),
+            zone_label=_pick_text(calc.get("zone_label_raw"), zone),
         ),
     }
 
 
 
 
-def _fetch_zone_description(zone_sigla: str, subzone_code: str) -> Optional[Dict[str, Any]]:
+def _fetch_zone_description(zone_sigla: str, subzone_code: str, zone_label: str = "") -> Optional[Dict[str, Any]]:
     try:
-        return fetch_zone_description(zone_sigla or "", subzone_code or "PADRAO")
+        return fetch_zone_description(zone_sigla or "", subzone_code or "PADRAO", zone_label or zone_sigla or "")
     except Exception:
         return None
 
