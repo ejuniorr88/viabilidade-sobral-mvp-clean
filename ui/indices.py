@@ -122,7 +122,7 @@ def render_indices_section(
     """
     st.header("4) Índices Urbanísticos (Supabase)")
 
-    zone = calc.get("zone") or calc.get("zone_sigla")
+    zone = calc.get("zone_lookup") or calc.get("zone") or calc.get("zone_sigla")
     use_type = calc.get("use_type_code")
 
     if not zone or not use_type:
@@ -135,7 +135,7 @@ def render_indices_section(
     try:
         desired_subzone = calc.get('subzone_code') or 'PADRAO'
         rule_subzone = (rule or {}).get('subzone_code') if isinstance(rule, dict) else None
-        if (calc.get('zone') == 'ZEIP' or calc.get('zone_sigla') == 'ZEIP') and rule and rule_subzone and rule_subzone != desired_subzone:
+        if (calc.get('zone_lookup') == 'ZEIP' or calc.get('zone') == 'ZEIP' or calc.get('zone_sigla') == 'ZEIP') and rule and rule_subzone and rule_subzone != desired_subzone:
             rule = None
             calc.pop('rule', None)
     except Exception:

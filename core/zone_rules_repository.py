@@ -5,6 +5,28 @@ from typing import Any, Dict, Optional, List
 from .supabase_client import get_supabase
 
 
+
+
+def _zone_sigla_candidates(zone_sigla: str) -> List[str]:
+    import re
+    z = str(zone_sigla or "").strip()
+    if not z:
+        return []
+    out = [z]
+    up = z.upper()
+
+    def _add(v: str) -> None:
+        if v and v not in out:
+            out.append(v)
+
+    for base in ("ZEPE", "ZEIA", "ZEIS", "ZPP"):
+        m = re.search(rf"{base}\s*-?\s*([123])$", up)
+        if m:
+            n = m.group(1)
+            _add(f"{base}{n}")
+            _add(f"{base} {n}")
+    return out
+
 def _is_missing(v: Any) -> bool:
     """True if v is None / empty string / NaN."""
     if v is None:
@@ -148,7 +170,7 @@ def get_zone_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADR
     q = (
         sb.table("zone_rules")
         .select("*")
-        .eq("zone_sigla", zone_sigla)
+        .in_("zone_sigla", _zone_sigla_candidates(zone_sigla) or [zone_sigla])
         .eq("use_type_code", use_type_code)
     )
 
