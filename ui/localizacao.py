@@ -24,7 +24,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     st.subheader("3) Localização (zona + via)")
 
     calcular, zones_prepared, radius_m = _coerce_call(args, kwargs)
-
     calc: Dict[str, Any] = st.session_state.calc
 
     use_type_code = (calc.get("use_type_code") or "RES_UNI").strip().upper()
@@ -61,26 +60,31 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                         "display_label": zone,
                     } if zone else None
 
-            zone = info.get("zone_sigla") if info else None
+            zone_sigla = info.get("zone_sigla") if info else None
             subzone = (info.get("subzone_code") if info else None) or "PADRAO"
+            display_label = (info.get("display_label") if info else None) or zone_sigla
+            zone_label_raw = (info.get("zona_sigla_text") if info else None) or display_label
 
             street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
 
-            calc["zone"] = zone
-            calc["zone_sigla"] = zone
+            # contrato consolidado: a UI exibe `zone`, enquanto as consultas usam zone_sigla/subzone_code
+            calc["zone"] = display_label or zone_sigla
+            calc["zone_sigla"] = zone_sigla
             calc["subzone_code"] = subzone
-            calc["zone_display_label"] = info.get("display_label") if info else zone
+            calc["zone_display_label"] = display_label
+            calc["zone_label_raw"] = zone_label_raw
             calc["zone_raw_sigla"] = info.get("raw_sigla") if info else None
             calc["zone_raw_subzona"] = info.get("raw_subzona") if info else None
             calc["zone_zona_sigla_text"] = info.get("zona_sigla_text") if info else None
 
             if street_info:
+                dist = street_info.get("distance_m") or street_info.get("dist_m") or street_info.get("distance")
                 calc["via_nome"] = street_info.get("name")
                 calc["via_tipo"] = street_info.get("type")
-                calc["via_dist_m"] = street_info.get("distance_m") or street_info.get("dist_m") or street_info.get("distance")
+                calc["via_dist_m"] = dist
                 calc["street_name"] = street_info.get("name")
                 calc["street_type"] = street_info.get("type")
-                calc["street_dist"] = street_info.get("distance_m") or street_info.get("dist_m") or street_info.get("distance")
+                calc["street_dist"] = dist
             else:
                 calc["via_nome"] = None
                 calc["via_tipo"] = None
@@ -89,21 +93,21 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                 calc["street_type"] = None
                 calc["street_dist"] = None
 
-            if zone != prev_zone or subzone != prev_sub:
+            if calc.get("zone") != prev_zone or subzone != prev_sub:
                 calc.pop("rule", None)
                 calc["basic"] = None
                 calc["ia_utilizado"] = None
                 calc["to_utilizada_pct"] = None
                 calc["tp_prevista_pct"] = None
 
-            if not zone:
+            if not calc.get("zone"):
                 calc["ok"] = False
                 calc["err"] = "Clique dentro de uma zona."
             else:
                 calc["ok"] = True
                 calc["err"] = None
 
-    zone = calc.get("zone") or calc.get("zone_sigla")
+    zone = calc.get("zone")
     via_nome = calc.get("via_nome") or calc.get("street_name")
     via_tipo = calc.get("via_tipo") or calc.get("street_type")
 
@@ -119,7 +123,7 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
         st.write(via_tipo or "—")
 
     if str(calc.get("subzone_code") or "PADRAO") != "PADRAO":
-        st.caption(f"Subzona/Setor: {calc.get('subzone_code','PADRAO')}")
+        st.caption(f"Subzona/Setor: {calc.get('subzone_code', 'PADRAO')}")
 
     dist = calc.get("via_dist_m") if calc.get("via_dist_m") is not None else calc.get("street_dist")
     if dist is not None:
