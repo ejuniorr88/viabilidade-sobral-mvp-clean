@@ -25,7 +25,7 @@ from ui.lote import render_lote_section
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
-from ui.relatorio import render_relatorio_section, render_zone_description_section
+from ui.relatorio import render_relatorio_section
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
@@ -559,7 +559,7 @@ if run_free_calc_now:
 
     if calc.get("zone") and not calc.get("rule"):
         try:
-            rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
+            rule = fetch_rule(calc.get("zone_sigla") or calc["zone"], calc.get("use_type_code") or "RES_UNI", calc.get("subzone_code") or "PADRAO", calc.get("zone_label_raw") or calc.get("zone"))
             if rule:
                 calc["rule"] = rule
                 st.session_state.free_calc_done = True
@@ -658,8 +658,6 @@ if can_offer_report:
 
 if st.session_state.get("report_unlocked") and can_offer_report:
     st.markdown("---")
-
-    render_zone_description_section(calc)
 
     render_analise_section(
         calc,
