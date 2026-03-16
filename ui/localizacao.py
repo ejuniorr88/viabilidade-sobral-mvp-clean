@@ -61,18 +61,15 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                         "display_label": zone,
                     } if zone else None
 
-            zone_lookup = info.get("zone_sigla") if info else None
-            zone_display = (info.get("display_label") if info else None) or zone_lookup
+            zone = info.get("zone_sigla") if info else None
             subzone = (info.get("subzone_code") if info else None) or "PADRAO"
 
             street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
 
-            calc["zone"] = zone_display
-            calc["zone_sigla"] = zone_lookup
-            calc["zone_lookup"] = zone_lookup
+            calc["zone"] = zone
+            calc["zone_sigla"] = zone
             calc["subzone_code"] = subzone
-            calc["zone_display_label"] = zone_display
-            calc["zone_label_raw"] = zone_display
+            calc["zone_display_label"] = info.get("display_label") if info else zone
             calc["zone_raw_sigla"] = info.get("raw_sigla") if info else None
             calc["zone_raw_subzona"] = info.get("raw_subzona") if info else None
             calc["zone_zona_sigla_text"] = info.get("zona_sigla_text") if info else None
@@ -99,7 +96,7 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                 calc["to_utilizada_pct"] = None
                 calc["tp_prevista_pct"] = None
 
-            if not zone_lookup:
+            if not zone:
                 calc["ok"] = False
                 calc["err"] = "Clique dentro de uma zona."
             else:
