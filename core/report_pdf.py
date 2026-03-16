@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 from datetime import datetime
+from .zone_descriptions import fetch_zone_description
 from typing import Any, Dict, List, Optional, Sequence
 from urllib.request import urlopen
 
@@ -451,8 +452,34 @@ def _extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dic
         "a_op1_max": a_op1_max,
         "a_op2_max": a_op2_max,
         "a_adotada": a_adotada,
+        "zone_description": _fetch_zone_description(
+            zone_sigla=zone,
+            subzone_code=_pick_text(calc.get("subzone_code"), rule.get("subzone_code"), default="PADRAO"),
+        ),
     }
 
+
+
+
+def _fetch_zone_description(zone_sigla: str, subzone_code: str) -> Optional[Dict[str, Any]]:
+    try:
+        return fetch_zone_description(zone_sigla or "", subzone_code or "PADRAO")
+    except Exception:
+        return None
+
+
+def _render_zone_description_block(pdf: _ReportPDF, ctx: Dict[str, Any]) -> None:
+    desc = ctx.get("zone_description") or {}
+    text = _pick_text(desc.get("description_text"))
+    if not text:
+        return
+    title = _pick_text(desc.get("title"), default="Descricao da zona")
+    _section_title(pdf, "DESCRICAO DA ZONA")
+    pdf.set_font("Helvetica", "B", 10.8)
+    pdf.multi_cell(_full_width(pdf), 5.4, _sanitize(title))
+    pdf.ln(0.6)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.multi_cell(_full_width(pdf), 5.3, _sanitize(text))
 
 def _meta_header(pdf: _ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None:
     pdf.set_font("Helvetica", "", 9)
@@ -766,6 +793,7 @@ def generate_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any
     ctx = _extract_context(calc, session_state)
     _meta_header(pdf, ctx, payload["generated_at"])
     _render_localizacao_indices_analise(pdf, ctx)
+    _render_zone_description_block(pdf, ctx)
     _render_relatorio_narrativo(pdf, ctx)
     _render_quadro_tecnico(pdf)
     _render_dicas_valiosas(pdf)
