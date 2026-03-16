@@ -134,32 +134,39 @@ def resolve_zone_from_feature_properties(props: Dict[str, Any]) -> ZoneResolutio
 
 
 def _zone_variants(zone_sigla_db: str) -> List[str]:
+    """Return additive lookup variants without replacing existing working paths.
+
+    Important rule for this project: when a new zone-family variant is added,
+    it must preserve the variants that already worked for other families.
+    """
     zone = _norm(zone_sigla_db)
     out = [zone]
-    # ZEPE can be stored either as ZEPE1 or ZEPE 1
-    if zone.startswith("ZEPE") and len(zone) > 4 and zone[4:].isdigit():
-        out.append(f"ZEPE {zone[4:]}")
-    if zone.startswith("ZEPE "):
-        out.append(zone.replace("ZEPE ", "ZEPE", 1))
-    # ZEIA can be stored either as ZEIA1 or ZEIA 1
-    if zone.startswith("ZEIA") and len(zone) > 4 and zone[4:].isdigit():
-        out.append(f"ZEIA {zone[4:]}")
-    if zone.startswith("ZEIA "):
-        out.append(zone.replace("ZEIA ", "ZEIA", 1))
-    # ZPP may exist as ZPP1/ZPP2/ZPP3 or ZPP 1/ZPP 2/ZPP 3
-    if zone.startswith("ZPP") and len(zone) > 3 and zone[3:].isdigit():
-        out.append(f"ZPP {zone[3:]}")
-    if zone.startswith("ZPP "):
-        out.append(zone.replace("ZPP ", "ZPP", 1))
-    # ZEIS may also vary between ZEIS1 and ZEIS 1 in some cadastros
-    if zone.startswith("ZEIS") and len(zone) > 4 and zone[4:].isdigit():
-        out.append(f"ZEIS {zone[4:]}")
-    if zone.startswith("ZEIS "):
-        out.append(zone.replace("ZEIS ", "ZEIS", 1))
+
+    def _add_spaced_compact(prefix: str) -> None:
+        # COMPACT -> SPACED (e.g. ZEPE2 -> ZEPE 2, ZPP3 -> ZPP 3)
+        if zone.startswith(prefix) and len(zone) > len(prefix) and zone[len(prefix):].isdigit():
+            out.append(f"{prefix} {zone[len(prefix):]}")
+        # SPACED -> COMPACT (e.g. ZEPE 2 -> ZEPE2, ZPP 3 -> ZPP3)
+        if zone.startswith(prefix + " "):
+            suffix = zone[len(prefix) + 1 :]
+            if suffix.isdigit():
+                out.append(prefix + suffix)
+
+    # Keep previous working variants for ZEPE / ZEIA and ADD support for ZPP / ZEIS.
+    for prefix in ("ZEPE", "ZEIA", "ZPP", "ZEIS"):
+        _add_spaced_compact(prefix)
+
+    # Preserve APP aliases that were already working for ZEIA.
     if zone == "ZEIA-APP":
         out.append("ZEIA/APP")
+        out.append("ZEIA APP")
     if zone == "ZEIA/APP":
         out.append("ZEIA-APP")
+        out.append("ZEIA APP")
+    if zone == "ZEIA APP":
+        out.append("ZEIA-APP")
+        out.append("ZEIA/APP")
+
     seen = set()
     ordered: List[str] = []
     for item in out:
