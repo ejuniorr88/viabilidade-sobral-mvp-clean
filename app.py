@@ -574,17 +574,18 @@ if run_free_calc_now:
 elif show_item3:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
 
-if calc.get("zone"):
+section4_can_try = bool(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_lookup")) and bool(calc.get("use_type_code"))
+if section4_can_try:
     render_indices_section(
         calc=calc,
         card_func=_card,
         pick_func=pick_rule,
         get_rule_func=fetch_rule,
     )
-    if calc.get("rule") and not calc.get("err"):
+    if calc.get("rule"):
         st.session_state.free_calc_done = True
 
-can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err")) and bool(calc.get("rule"))
+can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
 if can_offer_report:
     st.markdown("---")
