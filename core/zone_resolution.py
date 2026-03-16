@@ -136,14 +136,26 @@ def resolve_zone_from_feature_properties(props: Dict[str, Any]) -> ZoneResolutio
 def _zone_variants(zone_sigla_db: str) -> List[str]:
     zone = _norm(zone_sigla_db)
     out = [zone]
+    # ZEPE can be stored either as ZEPE1 or ZEPE 1
     if zone.startswith("ZEPE") and len(zone) > 4 and zone[4:].isdigit():
         out.append(f"ZEPE {zone[4:]}")
     if zone.startswith("ZEPE "):
         out.append(zone.replace("ZEPE ", "ZEPE", 1))
+    # ZEIA can be stored either as ZEIA1 or ZEIA 1
     if zone.startswith("ZEIA") and len(zone) > 4 and zone[4:].isdigit():
         out.append(f"ZEIA {zone[4:]}")
     if zone.startswith("ZEIA "):
         out.append(zone.replace("ZEIA ", "ZEIA", 1))
+    # ZPP may exist as ZPP1/ZPP2/ZPP3 or ZPP 1/ZPP 2/ZPP 3
+    if zone.startswith("ZPP") and len(zone) > 3 and zone[3:].isdigit():
+        out.append(f"ZPP {zone[3:]}")
+    if zone.startswith("ZPP "):
+        out.append(zone.replace("ZPP ", "ZPP", 1))
+    # ZEIS may also vary between ZEIS1 and ZEIS 1 in some cadastros
+    if zone.startswith("ZEIS") and len(zone) > 4 and zone[4:].isdigit():
+        out.append(f"ZEIS {zone[4:]}")
+    if zone.startswith("ZEIS "):
+        out.append(zone.replace("ZEIS ", "ZEIS", 1))
     if zone == "ZEIA-APP":
         out.append("ZEIA/APP")
     if zone == "ZEIA/APP":
