@@ -5,23 +5,11 @@ from typing import Any, Dict, Optional, Tuple
 import streamlit as st
 
 try:
-    from core.zones_map import zone_from_latlon
+    from core.zones_map import zone_from_latlon, zone_info_from_latlon
 except Exception:
-    from core.zones_mapa import zone_from_latlon  # type: ignore
+    from core.zones_mapa import zone_from_latlon, zone_info_from_latlon  # type: ignore
 
 from core.streets import find_street
-
-# ZEIP sectors (subzone_code)
-try:
-    from core.zeip_sectors import zeip_sector_from_latlon
-except Exception:
-    zeip_sector_from_latlon = None  # type: ignore
-
-# ZEIS sectors (ZEIS 1/2/3)
-try:
-    from core.zeis_sectors import zeis_sector_from_latlon
-except Exception:
-    zeis_sector_from_latlon = None  # type: ignore
 
 
 def _coerce_call(args, kwargs) -> Tuple[bool, Any, int]:
@@ -59,21 +47,14 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
             prev_zone = calc.get("zone")
             prev_sub = calc.get("subzone_code") or "PADRAO"
 
-            zone = zone_from_latlon(zones_prepared, lat, lon) if zones_prepared else None
-
-            # ZEIS: se o zoneamento retornar "ZEIS", detectar setor 1/2/3 pelo arquivo data/zeis_setores.geojson
-            if zone and str(zone).strip().upper() == "ZEIS" and zeis_sector_from_latlon:
-                try:
-                    sec = zeis_sector_from_latlon(lat, lon)
-                    if sec:
-                        zone = sec  # "ZEIS 1/2/3"
-                except Exception:
-                    pass
+            zone_info = zone_info_from_latlon(zones_prepared, lat, lon) if zones_prepared else None
+            zone = zone_info.get("zone_display") if zone_info else None
 
             street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
 
             calc["zone"] = zone
             calc["zone_sigla"] = zone
+            calc["zone_lookup"] = zone_info.get("zone_lookup") if zone_info else zone
 
             # Via
             if street_info:
@@ -92,19 +73,14 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                 calc["street_type"] = None
                 calc["street_dist"] = None
 
-            # Subzona / Setor ZEIP
-            subzone = "PADRAO"
-            if zone and str(zone).strip().upper() == "ZEIP" and zeip_sector_from_latlon:
-                try:
-                    subzone = zeip_sector_from_latlon(lat, lon) or "PADRAO"
-                except Exception:
-                    subzone = "PADRAO"
+            # Subzona vinda do próprio zoneamento_light.json
+            subzone = (zone_info.get("subzone_code") if zone_info else None) or "PADRAO"
             calc["subzone_code"] = subzone
 
-            # Recarregar regra/cálculos quando mudar de setor ZEIP OU quando mudar a zona (inclui ZEIS 1/2/3)
+            # Recarregar regra/cálculos quando mudar de zona ou subzona
             zone_changed = (zone != prev_zone)
-            zeip_sector_changed = (str(zone).strip().upper() == "ZEIP" and subzone != prev_sub)
-            if zone_changed or zeip_sector_changed:
+            subzone_changed = (subzone != prev_sub)
+            if zone_changed or subzone_changed:
                 calc.pop("rule", None)
                 calc["basic"] = None
                 calc["ia_utilizado"] = None
@@ -134,9 +110,9 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
         st.write("Tipo de via")
         st.write(via_tipo or "—")
 
-    # Mostrar setor ZEIP
-    if str(zone).strip().upper() == "ZEIP":
-        st.caption(f"Setor ZEIP: {calc.get('subzone_code','PADRAO')}")
+    # Mostrar subzona/setor quando houver
+    if (calc.get("subzone_code") or "PADRAO") != "PADRAO":
+        st.caption(f"Subzona/Setor: {calc.get('subzone_code','PADRAO')}")
 
     dist = calc.get("via_dist_m") if calc.get("via_dist_m") is not None else calc.get("street_dist")
     if dist is not None:
