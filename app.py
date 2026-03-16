@@ -559,7 +559,7 @@ if run_free_calc_now:
 
     if calc.get("zone") and not calc.get("rule"):
         try:
-            rule = fetch_rule(calc.get("zone_lookup") or calc["zone"], calc.get("use_type_code") or "RES_UNI", calc.get("subzone_code") or "PADRAO")
+            rule = fetch_rule(calc["zone"], calc.get("use_type_code") or "RES_UNI")
             if rule:
                 calc["rule"] = rule
                 st.session_state.free_calc_done = True
