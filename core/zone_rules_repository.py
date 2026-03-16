@@ -3,29 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, List
 
 from .supabase_client import get_supabase
+from .zone_resolution import build_lookup_candidates
 
-
-
-
-def _zone_sigla_candidates(zone_sigla: str) -> List[str]:
-    import re
-    z = str(zone_sigla or "").strip()
-    if not z:
-        return []
-    out = [z]
-    up = z.upper()
-
-    def _add(v: str) -> None:
-        if v and v not in out:
-            out.append(v)
-
-    for base in ("ZEPE", "ZEIA", "ZEIS", "ZPP"):
-        m = re.search(rf"{base}\s*-?\s*([123])$", up)
-        if m:
-            n = m.group(1)
-            _add(f"{base}{n}")
-            _add(f"{base} {n}")
-    return out
 
 def _is_missing(v: Any) -> bool:
     """True if v is None / empty string / NaN."""
@@ -155,7 +134,7 @@ def _normalize(rule: Dict[str, Any]) -> Dict[str, Any]:
     return r
 
 
-def get_zone_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO") -> Optional[Dict[str, Any]]:
+def get_zone_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO", zone_label: str = "") -> Optional[Dict[str, Any]]:
     """
     Return the best rule for (zone, use_type, subzone), filling gaps from other candidates.
     Strategy:
@@ -170,13 +149,13 @@ def get_zone_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADR
     q = (
         sb.table("zone_rules")
         .select("*")
-        .in_("zone_sigla", _zone_sigla_candidates(zone_sigla) or [zone_sigla])
+        .in_("zone_sigla", [z for z,_ in build_lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label)])
         .eq("use_type_code", use_type_code)
     )
 
     # Se seu Supabase aceitar in_ com None:
     try:
-        q = q.in_("subzone_code", [subzone_code, None])
+        q = q.in_("subzone_code", [subzone_code, "PADRAO", None])
     except Exception:
         # fallback: não filtra por subzone; traz tudo e filtra em Python
         pass
@@ -189,7 +168,7 @@ def get_zone_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADR
         filtered = []
         for r in rows:
             sc = r.get("subzone_code")
-            if sc == subzone_code or _is_missing(sc):
+            if sc == subzone_code or sc == "PADRAO" or _is_missing(sc):
                 filtered.append(r)
         if filtered:
             rows = filtered
