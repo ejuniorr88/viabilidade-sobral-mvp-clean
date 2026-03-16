@@ -5,6 +5,7 @@ from typing import Any, Dict
 import streamlit as st
 
 from .relatorio_blocks import render_quadro_tecnico, render_dicas_valiosas, render_figuras_anexo_v, render_multifamiliar_guia
+from core.zone_descriptions import fetch_zone_description
 
 
 
@@ -60,6 +61,33 @@ def _md_table(rows: list[tuple[str, str]]) -> str:
         out.append(f"| {a} | {b} |")
     return "\n".join(out)
 
+
+
+
+def _render_zone_description(calc: Dict[str, Any], rule: Dict[str, Any]) -> None:
+    zone_sigla = (
+        calc.get("zone_sigla")
+        or calc.get("zone")
+        or rule.get("zone_sigla")
+        or ""
+    )
+    subzone_code = (
+        calc.get("subzone_code")
+        or rule.get("subzone_code")
+        or "PADRAO"
+    )
+    try:
+        desc = fetch_zone_description(str(zone_sigla), str(subzone_code))
+    except Exception:
+        desc = None
+
+    if not desc or not desc.get("description_text"):
+        return
+
+    title = desc.get("title") or "Sobre esta zona"
+    st.markdown("---\n### 🧭 Descrição da zona")
+    st.markdown(f"**{title}**")
+    st.markdown(str(desc.get("description_text")))
 
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
     is_irregular = bool(st.session_state.get("lot_is_irregular", False))
@@ -146,6 +174,8 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 """
     )
     st.caption(f"Via: {via} | Tipo de via: {via_tipo} | Uso: {uso}")
+
+    _render_zone_description(calc, rule)
 
     st.markdown("---\n### 📍 1️⃣ Quanto posso ocupar no chão?")
     if to_max is None or A_to is None:
