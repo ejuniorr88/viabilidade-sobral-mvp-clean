@@ -64,7 +64,11 @@ def _md_table(rows: list[tuple[str, str]]) -> str:
 
 
 
-def _render_zone_description(calc: Dict[str, Any], rule: Dict[str, Any]) -> None:
+def render_zone_description_section(calc: Dict[str, Any]) -> None:
+    if not isinstance(calc, dict) or not calc.get("ok"):
+        return
+
+    rule = calc.get("rule") or {}
     zone_sigla = (
         calc.get("zone_sigla")
         or calc.get("zone")
@@ -76,6 +80,7 @@ def _render_zone_description(calc: Dict[str, Any], rule: Dict[str, Any]) -> None
         or rule.get("subzone_code")
         or "PADRAO"
     )
+
     try:
         desc = fetch_zone_description(str(zone_sigla), str(subzone_code))
     except Exception:
@@ -85,7 +90,7 @@ def _render_zone_description(calc: Dict[str, Any], rule: Dict[str, Any]) -> None
         return
 
     title = desc.get("title") or "Sobre esta zona"
-    st.markdown("---\n### 🧭 Descrição da zona")
+    st.subheader("Descrição da zona")
     st.markdown(f"**{title}**")
     st.markdown(str(desc.get("description_text")))
 
@@ -174,8 +179,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 """
     )
     st.caption(f"Via: {via} | Tipo de via: {via_tipo} | Uso: {uso}")
-
-    _render_zone_description(calc, rule)
 
     st.markdown("---\n### 📍 1️⃣ Quanto posso ocupar no chão?")
     if to_max is None or A_to is None:
