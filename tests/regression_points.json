@@ -1,0 +1,46 @@
+{
+  "territorial_points": [
+    {
+      "name": "zpp1_referencia",
+      "lat": -3.691564,
+      "lon": -40.339648,
+      "expected_zone": "ZPP 1",
+      "notes": "Usar para conferir seção 3 e seção 4 da ZPP 1."
+    },
+    {
+      "name": "zpp3_referencia",
+      "lat": -3.692645,
+      "lon": -40.337484,
+      "expected_zone": "ZPP 3",
+      "notes": "Usar para conferir lookup da ZPP 3 e rua/tipo de via."
+    },
+    {
+      "name": "zeia_app_pendente_mapear",
+      "lat": null,
+      "lon": null,
+      "expected_zone": "ZEIA-APP",
+      "notes": "Preencher com uma coordenada real confirmada do projeto."
+    },
+    {
+      "name": "zeia1_pendente_mapear",
+      "lat": null,
+      "lon": null,
+      "expected_zone": "ZEIA 1",
+      "notes": "Preencher com uma coordenada real confirmada do projeto."
+    },
+    {
+      "name": "zeia2_pendente_mapear",
+      "lat": null,
+      "lon": null,
+      "expected_zone": "ZEIA 2",
+      "notes": "Preencher com uma coordenada real confirmada do projeto."
+    },
+    {
+      "name": "zeia3_pendente_mapear",
+      "lat": null,
+      "lon": null,
+      "expected_zone": "ZEIA 3",
+      "notes": "Preencher com uma coordenada real confirmada do projeto."
+    }
+  ]
+}
