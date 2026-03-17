@@ -576,66 +576,6 @@ elif show_item3:
 
 section4_can_try = bool(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_lookup")) and bool(calc.get("use_type_code"))
 
-# Debug temporário — item 4 / gate / rule
-st.markdown("### Debug temporário — item 4")
-try:
-    _debug_before = {
-        "show_item3": show_item3,
-        "free_calc_done": bool(st.session_state.get("free_calc_done")),
-        "section4_can_try": section4_can_try,
-        "last_click": st.session_state.get("last_click"),
-        "calc.lat": calc.get("lat"),
-        "calc.lon": calc.get("lon"),
-        "calc.zone": calc.get("zone"),
-        "calc.zone_sigla": calc.get("zone_sigla"),
-        "calc.zone_lookup": calc.get("zone_lookup"),
-        "calc.zone_label_raw": calc.get("zone_label_raw"),
-        "calc.zone_raw_sigla": calc.get("zone_raw_sigla"),
-        "calc.zone_raw_subzona": calc.get("zone_raw_subzona"),
-        "calc.zone_zona_sigla_text": calc.get("zone_zona_sigla_text"),
-        "calc.subzone_code": calc.get("subzone_code"),
-        "calc.use_type_code": calc.get("use_type_code"),
-        "calc.has_rule_before": bool(calc.get("rule")),
-        "calc.err_before": calc.get("err"),
-        "zone_debug_selection": calc.get("zone_debug_selection"),
-    }
-    try:
-        _direct_rule = fetch_rule(
-            calc.get("zone_sigla") or calc.get("zone") or "",
-            calc.get("use_type_code") or "RES_UNI",
-            calc.get("subzone_code") or "PADRAO",
-            calc.get("zone_label_raw") or calc.get("zone") or "",
-        )
-        _debug_before["direct_fetch_rule_found"] = bool(_direct_rule)
-        _debug_before["direct_fetch_rule_zone_sigla"] = (_direct_rule or {}).get("zone_sigla") if isinstance(_direct_rule, dict) else None
-        _debug_before["direct_fetch_rule_subzone_code"] = (_direct_rule or {}).get("subzone_code") if isinstance(_direct_rule, dict) else None
-    except Exception as _e:
-        _debug_before["direct_fetch_rule_error"] = str(_e)
-    st.json(_debug_before)
-except Exception as e:
-    st.error(f"Falha no debug temporário do item 4: {e}")
-
-if section4_can_try:
-    render_indices_section(
-        calc=calc,
-        card_func=_card,
-        pick_func=pick_rule,
-        get_rule_func=fetch_rule,
-    )
-    if calc.get("rule"):
-        st.session_state.free_calc_done = True
-
-    try:
-        st.json({
-            "after_render_indices.has_rule": bool(calc.get("rule")),
-            "after_render_indices.rule.zone_sigla": (calc.get("rule") or {}).get("zone_sigla") if isinstance(calc.get("rule"), dict) else None,
-            "after_render_indices.rule.subzone_code": (calc.get("rule") or {}).get("subzone_code") if isinstance(calc.get("rule"), dict) else None,
-            "after_render_indices.err": calc.get("err"),
-            "after_render_indices.free_calc_done": bool(st.session_state.get("free_calc_done")),
-        })
-    except Exception as e:
-        st.error(f"Falha no debug pós-item-4: {e}")
-
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
 if can_offer_report:
