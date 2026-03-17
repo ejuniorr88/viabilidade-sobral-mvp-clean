@@ -109,6 +109,45 @@ def _normalize_zone(props: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
+def _zone_specificity(z: ZoneFeature) -> tuple[int, int, float]:
+    """Prefer more specific classifications when multiple features cover the same point.
+
+    This avoids returning a broader ZEIA-APP feature just because it appears
+    earlier in the GeoJSON than a more specific ZEIA1/ZEIA2/ZEIA3 polygon.
+    """
+    zone = (z.zone_sigla or "").upper()
+    sub = (z.subzone_code or "").upper()
+
+    family_rank = 0
+    detail_rank = 0
+
+    if zone == "ZEIP":
+        family_rank = 3
+        detail_rank = 2 if sub != "PADRAO" else 1
+    elif zone.startswith("ZEIA"):
+        family_rank = 3
+        if re.fullmatch(r"ZEIA\d+", zone):
+            detail_rank = 3
+        elif zone == "ZEIA-APP":
+            detail_rank = 2
+        else:
+            detail_rank = 1
+    elif zone.startswith("ZEIS ") or zone.startswith("ZPP ") or re.fullmatch(r"ZEPE\d+", zone):
+        family_rank = 3
+        detail_rank = 2
+    elif zone in {"ZEIS", "ZPP", "ZEPE"}:
+        family_rank = 3
+        detail_rank = 1
+
+    area = 0.0
+    try:
+        area = float(z.geom.area)
+    except Exception:
+        area = 0.0
+
+    return (family_rank, detail_rank, -area)
+
+
 def load_zones(zone_file: Path) -> List[ZoneFeature]:
     obj = json.loads(zone_file.read_text(encoding="utf-8"))
 
@@ -148,38 +187,34 @@ def load_zones(zone_file: Path) -> List[ZoneFeature]:
 def zone_info_from_latlon(zones: List[ZoneFeature], lat: float, lon: float) -> Optional[Dict[str, str]]:
     p = Point(float(lon), float(lat))
 
+    covering: List[ZoneFeature] = []
     for z in zones:
         try:
             if z.geom_prep.covers(p):
-                return {
-                    "zone_sigla": z.zone_sigla,
-                    "subzone_code": z.subzone_code,
-                    "display_label": z.display_label,
-                    "raw_sigla": z.raw_sigla,
-                    "raw_subzona": z.raw_subzona,
-                    "zona_sigla_text": z.zona_sigla_text,
-                    "sigla_raw": z.raw_sigla,
-                    "subzona_raw": z.raw_subzona,
-                    "zone_display": z.display_label,
-                    "zone_lookup": z.zone_sigla,
-                }
-        except Exception:
-            try:
-                if z.geom.covers(p):
-                    return {
-                        "zone_sigla": z.zone_sigla,
-                        "subzone_code": z.subzone_code,
-                        "display_label": z.display_label,
-                        "raw_sigla": z.raw_sigla,
-                        "raw_subzona": z.raw_subzona,
-                        "zona_sigla_text": z.zona_sigla_text,
-                        "sigla_raw": z.raw_sigla,
-                        "subzona_raw": z.raw_subzona,
-                        "zone_display": z.display_label,
-                        "zone_lookup": z.zone_sigla,
-                    }
-            except Exception:
+                covering.append(z)
                 continue
+        except Exception:
+            pass
+        try:
+            if z.geom.covers(p):
+                covering.append(z)
+        except Exception:
+            continue
+
+    if covering:
+        best = sorted(covering, key=_zone_specificity, reverse=True)[0]
+        return {
+            "zone_sigla": best.zone_sigla,
+            "subzone_code": best.subzone_code,
+            "display_label": best.display_label,
+            "raw_sigla": best.raw_sigla,
+            "raw_subzona": best.raw_subzona,
+            "zona_sigla_text": best.zona_sigla_text,
+            "sigla_raw": best.raw_sigla,
+            "subzona_raw": best.raw_subzona,
+            "zone_display": best.display_label,
+            "zone_lookup": best.zone_sigla,
+        }
 
     best = None
     best_dist = None
