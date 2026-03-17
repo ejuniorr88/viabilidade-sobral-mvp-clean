@@ -79,9 +79,20 @@ def normalize_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
     if ia_max is not None:
         r["ia_max"] = float(ia_max)
 
-    for k in ["recuo_frontal_m","recuo_lateral_m","recuo_fundos_m","gabarito_m",
-              "area_min_lote_m2","testada_min_meio_m","testada_min_esquina_m",
-              "ia_min","to_subsolo_max","to_sub_max","area_max_lote_m2","testada_max_m"]:
+    for k in [
+        "recuo_frontal_m",
+        "recuo_lateral_m",
+        "recuo_fundos_m",
+        "gabarito_m",
+        "area_min_lote_m2",
+        "testada_min_meio_m",
+        "testada_min_esquina_m",
+        "ia_min",
+        "to_subsolo_max",
+        "to_sub_max",
+        "area_max_lote_m2",
+        "testada_max_m",
+    ]:
         if k in r:
             fv = _to_float(r.get(k))
             if fv is not None:
@@ -96,58 +107,71 @@ def normalize_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
     return r
 
 
+def _zone_variants(zone: str) -> list[str]:
+    """Expande apenas variantes de escrita da mesma zona, preservando prioridade.
 
-
-def _expand_zone_variants(zone: str) -> list[str]:
-    """Gera variantes mínimas de zone_sigla para casar diferenças históricas do banco.
-    Ex.: ZEIA-APP / ZEIA APP / ZEIA/APP / ZEIA_APP
+    Importante:
+    - não transformar ZEIA1/2/3 em ZEIA genérica
+    - aceitar variante com underscore para ZEIA-APP
     """
     z = (zone or "").strip()
     if not z:
         return []
+
     variants: list[str] = []
-    candidates = [
-        z,
-        z.replace("/", "-"),
-        z.replace(" ", "-"),
-        z.replace("/", "_"),
-        z.replace("-", "_"),
-        z.replace(" ", "_"),
-        z.replace("_", "-"),
-        z.replace("_", " "),
-        z.replace("-", " "),
-        z.replace("/", " "),
-    ]
-    for c in candidates:
-        c = c.strip()
-        if c and c not in variants:
-            variants.append(c)
+    def add(v: str) -> None:
+        v = (v or "").strip()
+        if v and v not in variants:
+            variants.append(v)
+
+    add(z)
+
+    normalized = z.upper().replace(" ", "").replace("/", "-")
+    if normalized == "ZEIA-APP":
+        add("ZEIA-APP")
+        add("ZEIA APP")
+        add("ZEIA/APP")
+        add("ZEIA_APP")
     return variants
 
-def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO", zone_label: str = "") -> Optional[Dict[str, Any]]:
-    """Busca regra usando a resolução central de zona/subzona e fallback padronizado."""
-    sb = get_supabase()
+
+def _lookup_candidates(zone_sigla: str, subzone_code: str = "PADRAO", zone_label: str = "") -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
     for zone, sub in build_lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
-        for zone_variant in _expand_zone_variants(zone):
-            q = (
-                sb.table("zone_rules")
-                .select("*")
-                .eq("zone_sigla", zone_variant)
-                .eq("use_type_code", use_type_code)
-                .eq("subzone_code", sub)
-                .limit(1)
-            )
-            res = q.execute()
-            data = getattr(res, "data", None) or []
-            if data:
-                return normalize_rule(data[0])
+        for variant in _zone_variants(zone):
+            item = (variant, sub)
+            if item not in candidates:
+                candidates.append(item)
+    return candidates
+
+
+def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO", zone_label: str = "") -> Optional[Dict[str, Any]]:
+    """Busca regra usando a resolução central de zona/subzona e fallback padronizado.
+
+    Sem cache, para não congelar lookup antigo após ajuste de banco/código.
+    """
+    sb = get_supabase()
+
+    for zone, sub in _lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
+        q = (
+            sb.table("zone_rules")
+            .select("*")
+            .eq("zone_sigla", zone)
+            .eq("use_type_code", use_type_code)
+            .eq("subzone_code", sub)
+            .limit(1)
+        )
+        res = q.execute()
+        data = getattr(res, "data", None) or []
+        if data:
+            return normalize_rule(data[0])
 
     # compat: bancos sem subzone_code ou registros antigos
-    zone_candidates = []
-    for zone, _ in build_lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
-        for zone_variant in _expand_zone_variants(zone):
-            if zone_variant not in zone_candidates:
-                zone_candidates.append(zone_variant)
+    zone_candidates: list[str] = []
+    for zone, _ in _lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
+        if zone not in zone_candidates:
+            zone_candidates.append(zone)
+
     for zone in zone_candidates:
         q2 = (
             sb.table("zone_rules")
@@ -160,4 +184,5 @@ def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO"
         data2 = getattr(res2, "data", None) or []
         if data2:
             return normalize_rule(data2[0])
+
     return None
