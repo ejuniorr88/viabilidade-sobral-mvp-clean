@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from functools import lru_cache
 from typing import Any, Dict, Optional
 
 from .zone_resolution import build_lookup_candidates
@@ -95,9 +94,6 @@ def normalize_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
             pass
 
     return r
-
-
-@lru_cache(maxsize=256)
 def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO", zone_label: str = "") -> Optional[Dict[str, Any]]:
     """Busca regra usando a resolução central de zona/subzona e fallback padronizado."""
     sb = get_supabase()
