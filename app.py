@@ -33,6 +33,8 @@ from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
+from core.zone_descriptions import fetch_zone_description
+from core.zone_resolution import build_lookup_candidates
 
 
 @st.cache_data(show_spinner=False)
@@ -574,18 +576,15 @@ if run_free_calc_now:
 elif show_item3:
     _ = render_localizacao_section(False, zones_prepared, radius_m)
 
-section4_can_try = bool(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_lookup")) and bool(calc.get("use_type_code"))
-if section4_can_try:
+if st.session_state.get("free_calc_done"):
     render_indices_section(
         calc=calc,
         card_func=_card,
         pick_func=pick_rule,
         get_rule_func=fetch_rule,
     )
-    if calc.get("rule"):
-        st.session_state.free_calc_done = True
 
-can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err"))
+can_offer_report = bool(st.session_state.get("free_calc_done")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
 if can_offer_report:
     st.markdown("---")
@@ -669,6 +668,48 @@ if st.session_state.get("report_unlocked") and can_offer_report:
         permeable_area=permeable_area,
         pick_func=pick_rule,
     )
+
+    # Debug temporário — descrição da zona
+    st.markdown("### Debug temporário — descrição da zona")
+    try:
+        _zone = str(calc.get("zone") or "")
+        _zone_lookup = str(calc.get("zone_lookup") or "")
+        _zone_sigla = str(calc.get("zone_sigla") or "")
+        _zone_label = str(calc.get("zone_label") or "")
+        _zone_label_raw = str(calc.get("zone_label_raw") or "")
+        _subzone_code = str(calc.get("subzone_code") or "PADRAO")
+        _rule = calc.get("rule") or {}
+        _rule_zone_sigla = str((_rule.get("zone_sigla") if isinstance(_rule, dict) else None) or "")
+        _rule_subzone_code = str((_rule.get("subzone_code") if isinstance(_rule, dict) else None) or "")
+
+        _cands = build_lookup_candidates(
+            zone_sigla=_zone_sigla or _zone_lookup or _zone,
+            subzone_code=_subzone_code or _rule_subzone_code or "PADRAO",
+            zone_label=_zone_label or _zone_label_raw or _zone_lookup or _zone,
+        )
+        _desc = fetch_zone_description(
+            zone_sigla=_zone_sigla or _zone_lookup or _zone,
+            subzone_code=_subzone_code or _rule_subzone_code or "PADRAO",
+            zone_label=_zone_label or _zone_label_raw or _zone_lookup or _zone,
+        )
+
+        debug_payload = {
+            "zone": _zone,
+            "zone_lookup": _zone_lookup,
+            "zone_sigla": _zone_sigla,
+            "zone_label": _zone_label,
+            "zone_label_raw": _zone_label_raw,
+            "subzone_code": _subzone_code,
+            "rule.zone_sigla": _rule_zone_sigla,
+            "rule.subzone_code": _rule_subzone_code,
+            "lookup_candidates": _cands,
+            "found": bool(_desc),
+            "description_title": (_desc or {}).get("title") if isinstance(_desc, dict) else None,
+            "description_row": _desc,
+        }
+        st.json(debug_payload)
+    except Exception as e:
+        st.error(f"Debug da descrição da zona falhou: {e}")
 
     render_relatorio_section(calc)
 
