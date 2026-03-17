@@ -25,7 +25,7 @@ from ui.lote import render_lote_section
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
-from ui.relatorio import render_relatorio_section
+from ui.relatorio import render_relatorio_section, render_zone_description_section
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
@@ -33,9 +33,6 @@ from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
-from core.zone_descriptions import fetch_zone_description
-from core.zone_resolution import build_lookup_candidates
-from core.supabase_client import get_supabase
 
 
 @st.cache_data(show_spinner=False)
@@ -670,82 +667,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
         pick_func=pick_rule,
     )
 
-    # Debug temporário — descrição da zona
-    st.markdown("### Debug temporário — descrição da zona")
-    try:
-        _zone = str(calc.get("zone") or "")
-        _zone_lookup = str(calc.get("zone_lookup") or "")
-        _zone_sigla = str(calc.get("zone_sigla") or "")
-        _zone_label = str(calc.get("zone_label") or "")
-        _zone_label_raw = str(calc.get("zone_label_raw") or "")
-        _subzone_code = str(calc.get("subzone_code") or "PADRAO")
-        _rule = calc.get("rule") or {}
-        _rule_zone_sigla = str((_rule.get("zone_sigla") if isinstance(_rule, dict) else None) or "")
-        _rule_subzone_code = str((_rule.get("subzone_code") if isinstance(_rule, dict) else None) or "")
-
-        _zone_for_lookup = _zone_sigla or _zone_lookup or _zone
-        _sub_for_lookup = _subzone_code or _rule_subzone_code or "PADRAO"
-        _label_for_lookup = _zone_label or _zone_label_raw or _zone_lookup or _zone
-
-        _cands = build_lookup_candidates(
-            zone_sigla=_zone_for_lookup,
-            subzone_code=_sub_for_lookup,
-            zone_label=_label_for_lookup,
-        )
-        _desc = fetch_zone_description(
-            zone_sigla=_zone_for_lookup,
-            subzone_code=_sub_for_lookup,
-            zone_label=_label_for_lookup,
-        )
-
-        _sb = get_supabase()
-        _direct_rows = []
-        _direct_errors = []
-        for _cand_zone, _cand_sub in _cands:
-            try:
-                _res = (
-                    _sb.table("zone_description_texts")
-                    .select("*")
-                    .eq("zone_sigla", _cand_zone)
-                    .eq("subzone_code", _cand_sub)
-                    .eq("is_active", True)
-                    .limit(1)
-                    .execute()
-                )
-                _rows = getattr(_res, "data", None) or []
-                _direct_rows.append({
-                    "zone_sigla": _cand_zone,
-                    "subzone_code": _cand_sub,
-                    "rows": _rows,
-                    "found": bool(_rows),
-                })
-            except Exception as _e:
-                _direct_errors.append({
-                    "zone_sigla": _cand_zone,
-                    "subzone_code": _cand_sub,
-                    "error": str(_e),
-                })
-
-        debug_payload = {
-            "zone": _zone,
-            "zone_lookup": _zone_lookup,
-            "zone_sigla": _zone_sigla,
-            "zone_label": _zone_label,
-            "zone_label_raw": _zone_label_raw,
-            "subzone_code": _subzone_code,
-            "rule.zone_sigla": _rule_zone_sigla,
-            "rule.subzone_code": _rule_subzone_code,
-            "lookup_candidates": _cands,
-            "function_found": bool(_desc),
-            "function_description_title": (_desc or {}).get("title") if isinstance(_desc, dict) else None,
-            "function_description_row": _desc,
-            "direct_query_results": _direct_rows,
-            "direct_query_errors": _direct_errors,
-        }
-        st.json(debug_payload)
-    except Exception as e:
-        st.error(f"Debug da descrição da zona falhou: {e}")
-
+    render_zone_description_section(calc)
     render_relatorio_section(calc)
 
     st.markdown("### Download do relatório")
