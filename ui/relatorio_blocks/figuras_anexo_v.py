@@ -41,8 +41,29 @@ def _extract_figures_from_rule(rule: Dict[str, Any]) -> list[Dict[str, Any]]:
     return out
 
 
-def render_figuras_anexo_v(rule: Dict[str, Any]) -> None:
-    figs = _extract_figures_from_rule(rule)
+def _extract_figure_number(figure: Dict[str, Any]) -> int | None:
+    title = str(figure.get("title") or figure.get("titulo") or "")
+    path = str(figure.get("path") or "")
+    text = f"{title} {path}".lower()
+    for n in range(1, 8):
+        candidates = [
+            f"figura {n}", f"figura_{n}", f"figura-{n}",
+            f"fig {n}", f"fig_{n}", f"fig-{n}",
+            f"anexo v {n}", f"/{n}.", f"_{n}.", f"-{n}.",
+        ]
+        if any(c in text for c in candidates):
+            return n
+    return None
+
+
+def filter_figuras_by_lot_type(figs: list[Dict[str, Any]], is_corner: bool = False) -> list[Dict[str, Any]]:
+    allowed = {5, 6, 7} if is_corner else {1, 2, 3, 4}
+    filtered = [f for f in figs if _extract_figure_number(f) in allowed]
+    return filtered or figs
+
+
+def render_figuras_anexo_v(rule: Dict[str, Any], is_corner: bool = False) -> None:
+    figs = filter_figuras_by_lot_type(_extract_figures_from_rule(rule), is_corner=is_corner)
     if figs:
         st.markdown("---\n### 📎 Figuras anexas (Anexo V)")
         for i in range(0, len(figs), 2):
@@ -64,4 +85,3 @@ def render_figuras_anexo_v(rule: Dict[str, Any]) -> None:
                         st.markdown(f"Imagem: {bucket}/{path}")
                     if caption and caption != title:
                         st.caption(caption)
-

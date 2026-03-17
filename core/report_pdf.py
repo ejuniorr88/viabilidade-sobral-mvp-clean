@@ -4,6 +4,8 @@ import json
 import os
 import tempfile
 from datetime import datetime
+from ui.relatorio_blocks.dicas_valiosas import get_dicas_valiosas
+from ui.relatorio_blocks.figuras_anexo_v import filter_figuras_by_lot_type
 from .zone_descriptions import fetch_zone_description
 from typing import Any, Dict, List, Optional, Sequence
 from urllib.request import urlopen
@@ -711,9 +713,9 @@ def _render_quadro_tecnico(pdf: _ReportPDF) -> None:
     _bullet_list(pdf, QUADRO_OBS)
 
 
-def _render_dicas_valiosas(pdf: _ReportPDF) -> None:
+def _render_dicas_valiosas(pdf: _ReportPDF, is_corner: bool = False) -> None:
     _section_title(pdf, "DICAS VALIOSAS")
-    for titulo, texto in DICAS_VALIOSAS:
+    for titulo, texto in get_dicas_valiosas(is_corner=is_corner):
         pdf.set_font("Helvetica", "B", 10.8)
         pdf.multi_cell(_full_width(pdf), 5.4, _sanitize(titulo + ":"))
         pdf.set_font("Helvetica", "", 10)
@@ -780,7 +782,7 @@ def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) ->
         "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
         "calc": calc,
         "session_state": session_state,
-        "figures": _extract_figures_from_rule(rule),
+        "figures": filter_figuras_by_lot_type(_extract_figures_from_rule(rule), is_corner=bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner"))),
     }
 
 
@@ -797,7 +799,7 @@ def generate_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any
     _render_zone_description_block(pdf, ctx)
     _render_relatorio_narrativo(pdf, ctx)
     _render_quadro_tecnico(pdf)
-    _render_dicas_valiosas(pdf)
+    _render_dicas_valiosas(pdf, is_corner=bool(ctx["is_corner"]))
     _render_figuras(pdf, payload.get("figures", []))
 
     pdf.ln(2)
