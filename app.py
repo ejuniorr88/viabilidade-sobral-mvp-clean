@@ -25,7 +25,7 @@ from ui.lote import render_lote_section
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
-from ui.relatorio import render_relatorio_section
+from ui.relatorio import render_relatorio_section, render_zone_description_section
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
@@ -576,6 +576,38 @@ elif show_item3:
 
 section4_can_try = bool(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_lookup")) and bool(calc.get("use_type_code"))
 
+# Debug temporário — item 4 / gate / rule
+st.markdown("### Debug temporário — item 4")
+try:
+    _debug_before = {
+        "show_item3": show_item3,
+        "free_calc_done": bool(st.session_state.get("free_calc_done")),
+        "section4_can_try": section4_can_try,
+        "calc.zone": calc.get("zone"),
+        "calc.zone_sigla": calc.get("zone_sigla"),
+        "calc.zone_lookup": calc.get("zone_lookup"),
+        "calc.zone_label_raw": calc.get("zone_label_raw"),
+        "calc.subzone_code": calc.get("subzone_code"),
+        "calc.use_type_code": calc.get("use_type_code"),
+        "calc.has_rule_before": bool(calc.get("rule")),
+        "calc.err_before": calc.get("err"),
+    }
+    try:
+        _direct_rule = fetch_rule(
+            calc.get("zone_sigla") or calc.get("zone") or "",
+            calc.get("use_type_code") or "RES_UNI",
+            calc.get("subzone_code") or "PADRAO",
+            calc.get("zone_label_raw") or calc.get("zone") or "",
+        )
+        _debug_before["direct_fetch_rule_found"] = bool(_direct_rule)
+        _debug_before["direct_fetch_rule_zone_sigla"] = (_direct_rule or {}).get("zone_sigla") if isinstance(_direct_rule, dict) else None
+        _debug_before["direct_fetch_rule_subzone_code"] = (_direct_rule or {}).get("subzone_code") if isinstance(_direct_rule, dict) else None
+    except Exception as _e:
+        _debug_before["direct_fetch_rule_error"] = str(_e)
+    st.json(_debug_before)
+except Exception as e:
+    st.error(f"Falha no debug temporário do item 4: {e}")
+
 if section4_can_try:
     render_indices_section(
         calc=calc,
@@ -585,6 +617,17 @@ if section4_can_try:
     )
     if calc.get("rule"):
         st.session_state.free_calc_done = True
+
+    try:
+        st.json({
+            "after_render_indices.has_rule": bool(calc.get("rule")),
+            "after_render_indices.rule.zone_sigla": (calc.get("rule") or {}).get("zone_sigla") if isinstance(calc.get("rule"), dict) else None,
+            "after_render_indices.rule.subzone_code": (calc.get("rule") or {}).get("subzone_code") if isinstance(calc.get("rule"), dict) else None,
+            "after_render_indices.err": calc.get("err"),
+            "after_render_indices.free_calc_done": bool(st.session_state.get("free_calc_done")),
+        })
+    except Exception as e:
+        st.error(f"Falha no debug pós-item-4: {e}")
 
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
@@ -671,6 +714,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
         pick_func=pick_rule,
     )
 
+    render_zone_description_section(calc)
     render_relatorio_section(calc)
 
     st.markdown("### Download do relatório")
