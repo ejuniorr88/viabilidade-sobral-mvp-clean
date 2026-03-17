@@ -81,8 +81,16 @@ def render_zone_description_section(calc: Dict[str, Any]) -> None:
         or "PADRAO"
     )
 
+    zone_label = (
+        calc.get("zone_label_raw")
+        or calc.get("zone")
+        or rule.get("zone_sigla")
+        or zone_sigla
+        or ""
+    )
+
     try:
-        desc = fetch_zone_description(str(zone_sigla), str(subzone_code))
+        desc = fetch_zone_description(str(zone_sigla), str(subzone_code), str(zone_label))
     except Exception:
         desc = None
 
