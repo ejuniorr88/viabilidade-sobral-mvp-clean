@@ -471,6 +471,7 @@ st.session_state.calc["lot_area_m2"] = float(lot_area)
 st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or 0.0)
 st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
+st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
 
 current_signature = json.dumps(
     {
@@ -480,6 +481,7 @@ current_signature = json.dumps(
         "lot_front_m": st.session_state.calc.get("lot_front_m"),
         "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
         "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
         "use_type_code": st.session_state.calc.get("use_type_code"),
         "categoria_label": categoria_label,
     },
@@ -728,6 +730,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
                 "lot_front_m": st.session_state.calc.get("lot_front_m"),
                 "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
                 "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
                 "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
             },
         )
@@ -740,6 +743,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
                 "lot_front_m": st.session_state.calc.get("lot_front_m"),
                 "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
                 "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
                 "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
             },
         )
@@ -769,6 +773,7 @@ if st.session_state.get("report_unlocked") and can_offer_report:
                         "lot_front_m": st.session_state.calc.get("lot_front_m"),
                         "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
                         "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
                         "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
                     },
                     pdf_bytes=pdf_bytes,
