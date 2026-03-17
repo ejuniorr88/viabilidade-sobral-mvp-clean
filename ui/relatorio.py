@@ -124,6 +124,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     via = calc.get("via_nome") or calc.get("street_name") or "—"
     via_tipo = calc.get("via_tipo") or calc.get("street_type") or "—"
     uso = calc.get("use_type_code") or "RES_UNI"
+    is_corner = bool(st.session_state.get("lot_is_corner") or False)
 
     # =============================
     # Multifamiliar — Fase 1 (Guia)
@@ -141,7 +142,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     A = float(calc.get("lot_area_m2") or 0.0)
     W = float(st.session_state.get("lot_front_m") or 0.0)
     D = float(st.session_state.get("lot_depth_m") or 0.0)
-    is_corner = bool(st.session_state.get("lot_is_corner") or False)
     tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
@@ -359,8 +359,8 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
     )
 
     render_quadro_tecnico()
-    render_dicas_valiosas(is_corner=is_corner)
-    render_figuras_anexo_v(rule, is_corner=is_corner)
+    render_dicas_valiosas()
+    render_figuras_anexo_v(rule)
 
     with st.expander("Ver regra completa (JSON)"):
 
