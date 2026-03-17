@@ -583,14 +583,21 @@ try:
         "show_item3": show_item3,
         "free_calc_done": bool(st.session_state.get("free_calc_done")),
         "section4_can_try": section4_can_try,
+        "last_click": st.session_state.get("last_click"),
+        "calc.lat": calc.get("lat"),
+        "calc.lon": calc.get("lon"),
         "calc.zone": calc.get("zone"),
         "calc.zone_sigla": calc.get("zone_sigla"),
         "calc.zone_lookup": calc.get("zone_lookup"),
         "calc.zone_label_raw": calc.get("zone_label_raw"),
+        "calc.zone_raw_sigla": calc.get("zone_raw_sigla"),
+        "calc.zone_raw_subzona": calc.get("zone_raw_subzona"),
+        "calc.zone_zona_sigla_text": calc.get("zone_zona_sigla_text"),
         "calc.subzone_code": calc.get("subzone_code"),
         "calc.use_type_code": calc.get("use_type_code"),
         "calc.has_rule_before": bool(calc.get("rule")),
         "calc.err_before": calc.get("err"),
+        "zone_debug_selection": calc.get("zone_debug_selection"),
     }
     try:
         _direct_rule = fetch_rule(
