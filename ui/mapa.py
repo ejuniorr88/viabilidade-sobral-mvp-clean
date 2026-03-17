@@ -5,42 +5,6 @@ import folium
 from streamlit_folium import st_folium
 
 
-def _safe_prop(feature, key, default=""):
-    try:
-        return ((feature or {}).get("properties") or {}).get(key, default)
-    except Exception:
-        return default
-
-
-def _zone_style(feature):
-    sigla = str(_safe_prop(feature, "sigla", "") or "").upper().strip()
-    subzona = str(_safe_prop(feature, "subzona", "") or "").upper().strip()
-    zona_sigla = str(_safe_prop(feature, "zona_sigla", "") or "").upper().strip()
-    zeia_text = " ".join([sigla, subzona, zona_sigla]).upper()
-
-    style = {
-        "fillOpacity": 0.08,
-        "weight": 1,
-        "color": "#3388ff",
-    }
-
-    # Destaque visual das ZEIA para auditoria do clique.
-    if sigla == "ZEIA" or "ZEIA" in zeia_text:
-        style.update({"fillOpacity": 0.18, "weight": 2})
-        if "APP" in zeia_text:
-            style.update({"color": "#d62728"})
-        elif "3" in zeia_text:
-            style.update({"color": "#9467bd"})
-        elif "2" in zeia_text:
-            style.update({"color": "#ff7f0e"})
-        elif "1" in zeia_text:
-            style.update({"color": "#2ca02c"})
-        else:
-            style.update({"color": "#17becf"})
-
-    return style
-
-
 def _render_map(zones_gj, lat0=-3.689, lon0=-40.349, click_lat=None, click_lon=None):
     """Renderiza mapa Folium + GeoJson de zonas e marcador do clique."""
     m = folium.Map(
@@ -54,15 +18,8 @@ def _render_map(zones_gj, lat0=-3.689, lon0=-40.349, click_lat=None, click_lon=N
         folium.GeoJson(
             zones_gj,
             name="Zonas",
-            style_function=_zone_style,
-            highlight_function=lambda _: {"weight": 4, "fillOpacity": 0.28},
-            tooltip=folium.GeoJsonTooltip(
-                fields=["sigla", "subzona", "zona_sigla"],
-                aliases=["Sigla", "Subzona", "Zona"],
-                localize=True,
-                sticky=False,
-                labels=True,
-            ),
+            style_function=lambda _: {"fillOpacity": 0.08, "weight": 1},
+            tooltip=folium.GeoJsonTooltip(fields=["sigla"], aliases=["Zona"]),
         ).add_to(m)
 
     if click_lat is not None and click_lon is not None:
@@ -90,10 +47,6 @@ def render_mapa_section(
     - Retorna o radius_m (int)
     """
     st.subheader("1) Selecione o ponto no mapa")
-    st.caption(
-        "Auditoria visual ZEIA: APP em vermelho, ZEIA 1 em verde, ZEIA 2 em laranja, "
-        "ZEIA 3 em roxo e ZEIA genérica em azul-claro. Passe o mouse para ver sigla/subzona."
-    )
 
     # raio (int) — Streamlit não aceita misturar int/float no number_input
     radius_m = st.number_input(
