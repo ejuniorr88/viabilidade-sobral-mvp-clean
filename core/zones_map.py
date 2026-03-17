@@ -79,8 +79,6 @@ def _normalize_zone(props: Dict[str, Any]) -> Dict[str, str]:
             display_label = raw_sub or raw_sigla or "ZPP"
 
     elif sig == "ZEIA":
-        # APP só quando houver indicação explícita de APP.
-        # ZEIA1/2/3 precisam continuar específicas.
         zeia_text = " ".join([sig, sub, zona_sigla_upper]).upper()
 
         if "APP" in zeia_text:
@@ -109,43 +107,60 @@ def _normalize_zone(props: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
-def _zone_specificity(z: ZoneFeature) -> tuple[int, int, float]:
-    """Prefer more specific classifications when multiple features cover the same point.
-
-    This avoids returning a broader ZEIA-APP feature just because it appears
-    earlier in the GeoJSON than a more specific ZEIA1/ZEIA2/ZEIA3 polygon.
-    """
+def _zone_specificity_rank(z: ZoneFeature) -> int:
     zone = (z.zone_sigla or "").upper()
-    sub = (z.subzone_code or "").upper()
+    label = (z.display_label or "").upper()
+    raw_sub = (z.raw_subzona or "").upper()
+    text = " ".join([zone, label, raw_sub])
 
-    family_rank = 0
-    detail_rank = 0
+    if zone.startswith("ZEIA"):
+        if re.search(r"ZEIA\s*[123]", text) or zone in {"ZEIA1", "ZEIA2", "ZEIA3"}:
+            return 400
+        if "APP" in text or zone == "ZEIA-APP":
+            return 300
+        return 200
 
-    if zone == "ZEIP":
-        family_rank = 3
-        detail_rank = 2 if sub != "PADRAO" else 1
-    elif zone.startswith("ZEIA"):
-        family_rank = 3
-        if re.fullmatch(r"ZEIA\d+", zone):
-            detail_rank = 3
-        elif zone == "ZEIA-APP":
-            detail_rank = 2
-        else:
-            detail_rank = 1
-    elif zone.startswith("ZEIS ") or zone.startswith("ZPP ") or re.fullmatch(r"ZEPE\d+", zone):
-        family_rank = 3
-        detail_rank = 2
-    elif zone in {"ZEIS", "ZPP", "ZEPE"}:
-        family_rank = 3
-        detail_rank = 1
+    if zone == "ZEIP" and z.subzone_code and z.subzone_code != "PADRAO":
+        return 180
 
-    area = 0.0
-    try:
-        area = float(z.geom.area)
-    except Exception:
-        area = 0.0
+    if re.search(r"(ZEIS|ZPP|ZEPE)\s*[0-9]", text):
+        return 170
 
-    return (family_rank, detail_rank, -area)
+    return 100
+
+
+def _build_zone_payload(z: ZoneFeature, *, debug: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    out = {
+        "zone_sigla": z.zone_sigla,
+        "subzone_code": z.subzone_code,
+        "display_label": z.display_label,
+        "raw_sigla": z.raw_sigla,
+        "raw_subzona": z.raw_subzona,
+        "zona_sigla_text": z.zona_sigla_text,
+        "sigla_raw": z.raw_sigla,
+        "subzona_raw": z.raw_subzona,
+        "zone_display": z.display_label,
+        "zone_lookup": z.zone_sigla,
+    }
+    if debug is not None:
+        out["_debug_zone_selection"] = debug
+    return out
+
+
+def _candidate_debug(z: ZoneFeature, *, distance: Optional[float] = None, match_mode: str = "covers") -> Dict[str, Any]:
+    item = {
+        "zone_sigla": z.zone_sigla,
+        "subzone_code": z.subzone_code,
+        "display_label": z.display_label,
+        "raw_sigla": z.raw_sigla,
+        "raw_subzona": z.raw_subzona,
+        "zona_sigla_text": z.zona_sigla_text,
+        "specificity_rank": _zone_specificity_rank(z),
+        "match_mode": match_mode,
+    }
+    if distance is not None:
+        item["distance"] = distance
+    return item
 
 
 def load_zones(zone_file: Path) -> List[ZoneFeature]:
@@ -184,62 +199,62 @@ def load_zones(zone_file: Path) -> List[ZoneFeature]:
     return out
 
 
-def zone_info_from_latlon(zones: List[ZoneFeature], lat: float, lon: float) -> Optional[Dict[str, str]]:
+def zone_info_from_latlon(zones: List[ZoneFeature], lat: float, lon: float) -> Optional[Dict[str, Any]]:
     p = Point(float(lon), float(lat))
+    matches: List[ZoneFeature] = []
 
-    covering: List[ZoneFeature] = []
     for z in zones:
         try:
             if z.geom_prep.covers(p):
-                covering.append(z)
+                matches.append(z)
                 continue
         except Exception:
             pass
+
         try:
             if z.geom.covers(p):
-                covering.append(z)
+                matches.append(z)
         except Exception:
             continue
 
-    if covering:
-        best = sorted(covering, key=_zone_specificity, reverse=True)[0]
-        return {
-            "zone_sigla": best.zone_sigla,
-            "subzone_code": best.subzone_code,
-            "display_label": best.display_label,
-            "raw_sigla": best.raw_sigla,
-            "raw_subzona": best.raw_subzona,
-            "zona_sigla_text": best.zona_sigla_text,
-            "sigla_raw": best.raw_sigla,
-            "subzona_raw": best.raw_subzona,
-            "zone_display": best.display_label,
-            "zone_lookup": best.zone_sigla,
+    if matches:
+        ordered = sorted(matches, key=lambda z: (_zone_specificity_rank(z), len(z.display_label or "")), reverse=True)
+        best = ordered[0]
+        debug = {
+            "lat": float(lat),
+            "lon": float(lon),
+            "selection_mode": "covers",
+            "covers_count": len(matches),
+            "candidates": [_candidate_debug(z) for z in ordered],
+            "chosen": _candidate_debug(best),
         }
+        return _build_zone_payload(best, debug=debug)
 
     best = None
     best_dist = None
+    nearest_debug: List[Dict[str, Any]] = []
     for z in zones:
         try:
             d = float(z.geom.distance(p))
         except Exception:
             continue
+        nearest_debug.append(_candidate_debug(z, distance=d, match_mode="nearest"))
         if best_dist is None or d < best_dist:
             best_dist = d
             best = z
 
     if best is not None and best_dist is not None and best_dist <= 0.0002:
-        return {
-            "zone_sigla": best.zone_sigla,
-            "subzone_code": best.subzone_code,
-            "display_label": best.display_label,
-            "raw_sigla": best.raw_sigla,
-            "raw_subzona": best.raw_subzona,
-            "zona_sigla_text": best.zona_sigla_text,
-            "sigla_raw": best.raw_sigla,
-            "subzona_raw": best.raw_subzona,
-            "zone_display": best.display_label,
-            "zone_lookup": best.zone_sigla,
+        nearest_debug = sorted(nearest_debug, key=lambda item: (item.get("distance", 999), -item.get("specificity_rank", 0)))
+        debug = {
+            "lat": float(lat),
+            "lon": float(lon),
+            "selection_mode": "nearest_fallback",
+            "nearest_threshold": 0.0002,
+            "best_distance": float(best_dist),
+            "candidates_preview": nearest_debug[:10],
+            "chosen": _candidate_debug(best, distance=best_dist, match_mode="nearest"),
         }
+        return _build_zone_payload(best, debug=debug)
     return None
 
 
