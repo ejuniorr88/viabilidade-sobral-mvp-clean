@@ -91,80 +91,24 @@ def render_zone_description_section(calc: Dict[str, Any]) -> None:
         or ""
     )
 
-    debug_rows = []
     try:
-        candidates = build_lookup_candidates(
-            zone_sigla=str(zone_sigla or ""),
-            subzone_code=str(subzone_code or "PADRAO"),
-            zone_label=str(zone_label or ""),
+        desc = fetch_zone_description(
+            str(zone_sigla or ""),
+            str(subzone_code or "PADRAO"),
+            str(zone_label or ""),
         )
-    except Exception as e:
-        candidates = []
-        debug_rows.append({"etapa": "build_lookup_candidates", "erro": repr(e)})
-
-    desc = None
-    fetch_error = None
-    try:
-        desc = fetch_zone_description(str(zone_sigla or ""), str(subzone_code or "PADRAO"), str(zone_label or ""))
-    except Exception as e:
-        fetch_error = repr(e)
-
-    try:
-        sb = get_supabase()
-        for zone, sub in candidates:
-            try:
-                res = (
-                    sb.table("zone_description_texts")
-                    .select("zone_sigla,subzone_code,title,description_text,is_active")
-                    .eq("zone_sigla", zone)
-                    .eq("subzone_code", sub)
-                    .eq("is_active", True)
-                    .limit(1)
-                    .execute()
-                )
-                data = getattr(res, "data", None) or []
-                debug_rows.append({
-                    "zone_sigla": zone,
-                    "subzone_code": sub,
-                    "encontrou": bool(data),
-                    "title": (data[0].get("title") if data else None),
-                })
-            except Exception as e:
-                debug_rows.append({
-                    "zone_sigla": zone,
-                    "subzone_code": sub,
-                    "erro": repr(e),
-                })
-    except Exception as e:
-        debug_rows.append({"etapa": "supabase", "erro": repr(e)})
-
-    with st.expander("Debug temporário — descrição da zona", expanded=True):
-        st.caption("Use este bloco só para identificar por que a descrição da zona não apareceu.")
-        st.write({
-            "zone": calc.get("zone"),
-            "zone_lookup": calc.get("zone_lookup"),
-            "zone_sigla": calc.get("zone_sigla"),
-            "zone_label": zone_label,
-            "zone_label_raw": calc.get("zone_label_raw"),
-            "subzone_code": subzone_code,
-            "rule.zone_sigla": rule.get("zone_sigla"),
-            "rule.subzone_code": rule.get("subzone_code"),
-            "fetch_zone_description_encontrou": bool(desc),
-            "fetch_zone_description_title": (desc.get("title") if desc else None),
-            "fetch_zone_description_error": fetch_error,
-        })
-        if candidates:
-            st.write("Candidatos de busca:", candidates)
-        if debug_rows:
-            st.write("Retorno bruto da zone_description_texts:", debug_rows)
+    except Exception:
+        desc = None
 
     if not desc or not desc.get("description_text"):
         return
 
     title = desc.get("title") or "Sobre esta zona"
+    st.markdown("---")
     st.subheader("Descrição da zona")
     st.markdown(f"**{title}**")
     st.markdown(str(desc.get("description_text")))
+
 
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
     is_irregular = bool(st.session_state.get("lot_is_irregular", False))
