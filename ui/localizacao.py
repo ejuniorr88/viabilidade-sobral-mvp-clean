@@ -73,7 +73,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
             calc["zone_raw_sigla"] = info.get("raw_sigla") if info else None
             calc["zone_raw_subzona"] = info.get("raw_subzona") if info else None
             calc["zone_zona_sigla_text"] = info.get("zona_sigla_text") if info else None
-            calc["zone_debug_selection"] = info.get("_debug_zone_selection") if info else None
 
             if street_info:
                 calc["via_nome"] = street_info.get("name")
