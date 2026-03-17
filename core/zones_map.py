@@ -50,6 +50,7 @@ def _normalize_zone(props: Dict[str, Any]) -> Dict[str, str]:
             subzone_code = f"ZEIP_{n}"
             display_label = f"ZEIP {n}"
         zone_sigla = "ZEIP"
+
     elif sig == "ZEIS":
         n = _extract_num(sub or zona_sigla_upper, "ZEIS")
         if n:
@@ -58,6 +59,7 @@ def _normalize_zone(props: Dict[str, Any]) -> Dict[str, str]:
         else:
             zone_sigla = "ZEIS"
             display_label = raw_sub or raw_sigla or "ZEIS"
+
     elif sig == "ZEPE":
         n = _extract_num(sub or zona_sigla_upper, "ZEPE")
         if n:
@@ -66,6 +68,7 @@ def _normalize_zone(props: Dict[str, Any]) -> Dict[str, str]:
         else:
             zone_sigla = "ZEPE"
             display_label = raw_sub or raw_sigla or "ZEPE"
+
     elif sig == "ZPP":
         n = _extract_num(sub or zona_sigla_upper, "ZPP")
         if n:
@@ -74,18 +77,24 @@ def _normalize_zone(props: Dict[str, Any]) -> Dict[str, str]:
         else:
             zone_sigla = "ZPP"
             display_label = raw_sub or raw_sigla or "ZPP"
+
     elif sig == "ZEIA":
-        if "APP" in zona_sigla_upper or sub == "ZEIA":
+        # APP só quando houver indicação explícita de APP.
+        # ZEIA1/2/3 precisam continuar específicas.
+        zeia_text = " ".join([sig, sub, zona_sigla_upper]).upper()
+
+        if "APP" in zeia_text:
             zone_sigla = "ZEIA-APP"
             display_label = "ZEIA-APP"
         else:
-            n = _extract_num(sub or zona_sigla_upper, "ZEIA")
+            n = _extract_num(zeia_text, "ZEIA")
             if n:
                 zone_sigla = f"ZEIA{n}"
                 display_label = f"ZEIA {n}"
             else:
                 zone_sigla = "ZEIA"
                 display_label = raw_sub or raw_sigla or "ZEIA"
+
     else:
         zone_sigla = sig or raw_sigla
         display_label = raw_sub or raw_sigla or zone_sigla
@@ -149,7 +158,6 @@ def zone_info_from_latlon(zones: List[ZoneFeature], lat: float, lon: float) -> O
                     "raw_sigla": z.raw_sigla,
                     "raw_subzona": z.raw_subzona,
                     "zona_sigla_text": z.zona_sigla_text,
-                    # compatibilidade com contrato antigo
                     "sigla_raw": z.raw_sigla,
                     "subzona_raw": z.raw_subzona,
                     "zone_display": z.display_label,
@@ -173,7 +181,6 @@ def zone_info_from_latlon(zones: List[ZoneFeature], lat: float, lon: float) -> O
             except Exception:
                 continue
 
-    # fallback robusto para borda/buracos pequenos: usa polígono mais próximo
     best = None
     best_dist = None
     for z in zones:

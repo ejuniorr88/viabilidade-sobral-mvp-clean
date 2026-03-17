@@ -16,6 +16,22 @@ def _ensure_calc() -> Dict[str, Any]:
     return st.session_state.calc
 
 
+def _default_midblock(calc: Dict[str, Any]) -> bool:
+    if "lot_is_midblock" in calc:
+        return bool(calc.get("lot_is_midblock"))
+    return not bool(calc.get("lot_is_corner", False))
+
+
+def _activate_midblock() -> None:
+    st.session_state["lot_midblock_checkbox"] = True
+    st.session_state["lot_corner_checkbox"] = False
+
+
+def _activate_corner() -> None:
+    st.session_state["lot_corner_checkbox"] = True
+    st.session_state["lot_midblock_checkbox"] = False
+
+
 def render_lote_section() -> Tuple[float, float, float]:
     """
     Dados do lote
@@ -59,8 +75,13 @@ def render_lote_section() -> Tuple[float, float, float]:
     st.caption(f"Área calculada: {_fmt_ptbr(area_calc)} m²")
 
     # ======================================================
-    # Checkboxes alinhados em uma linha
+    # Checkboxes alinhados
     # ======================================================
+    if "lot_midblock_checkbox" not in st.session_state:
+        st.session_state["lot_midblock_checkbox"] = _default_midblock(calc)
+    if "lot_corner_checkbox" not in st.session_state:
+        st.session_state["lot_corner_checkbox"] = bool(calc.get("lot_is_corner", False))
+
     f1, f2 = st.columns(2, gap="small")
 
     with f1:
@@ -71,11 +92,33 @@ def render_lote_section() -> Tuple[float, float, float]:
         )
 
     with f2:
-        lote_esquina = st.checkbox(
-            "Lote de esquina",
-            value=bool(calc.get("lot_is_corner", False)),
-            key="lot_corner_checkbox",
+        st.checkbox(
+            "Lote meio de quadra",
+            key="lot_midblock_checkbox",
+            on_change=_activate_midblock,
         )
+
+    f3, f4 = st.columns(2, gap="small")
+    with f3:
+        st.checkbox(
+            "Lote de esquina",
+            key="lot_corner_checkbox",
+            on_change=_activate_corner,
+        )
+
+    lote_meio_quadra = bool(st.session_state.get("lot_midblock_checkbox", True))
+    lote_esquina = bool(st.session_state.get("lot_corner_checkbox", False))
+
+    if lote_meio_quadra and lote_esquina:
+        lote_meio_quadra = False
+        lote_esquina = True
+        st.session_state["lot_midblock_checkbox"] = False
+        st.session_state["lot_corner_checkbox"] = True
+    elif not lote_meio_quadra and not lote_esquina:
+        lote_meio_quadra = True
+        lote_esquina = False
+        st.session_state["lot_midblock_checkbox"] = True
+        st.session_state["lot_corner_checkbox"] = False
 
     # ======================================================
     # Área do lote quando irregular
@@ -113,7 +156,14 @@ def render_lote_section() -> Tuple[float, float, float]:
     calc["lot_profundidade_m"] = float(profundidade)
     calc["lot_irregular"] = bool(terreno_irregular)
     calc["lot_is_corner"] = bool(lote_esquina)
+    calc["lot_is_midblock"] = bool(lote_meio_quadra)
     calc["lot_area_m2"] = float(area_lote)
+
+    st.session_state["lot_is_corner"] = bool(lote_esquina)
+    st.session_state["lot_is_midblock"] = bool(lote_meio_quadra)
+    st.session_state["lot_is_irregular"] = bool(terreno_irregular)
+    st.session_state["lot_front_m"] = float(testada)
+    st.session_state["lot_depth_m"] = float(profundidade)
 
     # Área permeável prevista
     area_permeavel_prevista = float(calc.get("area_permeavel_prevista_m2", 0.0) or 0.0)

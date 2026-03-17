@@ -52,7 +52,7 @@ def _sample_store():
             {"zone_sigla": "ZPP 1", "subzone_code": "PADRAO", "use_type_code": "RES_UNI", "to_max_pct": 70, "tp_min_pct": 20},
             {"zone_sigla": "ZPP 2", "subzone_code": "PADRAO", "use_type_code": "RES_UNI", "to_max_pct": 60, "tp_min_pct": 30},
             {"zone_sigla": "ZPP 3", "subzone_code": "PADRAO", "use_type_code": "RES_UNI", "to_max_pct": 60, "tp_min_pct": 30},
-            {"zone_sigla": "ZEIA-APP", "subzone_code": "PADRAO", "use_type_code": "RES_UNI", "to_max_pct": 0, "tp_min_pct": 100},
+            {"zone_sigla": "ZEIA_APP", "subzone_code": "PADRAO", "use_type_code": "RES_UNI", "to_max_pct": 0, "tp_min_pct": 100},
             {"zone_sigla": "ZEIA1", "subzone_code": "PADRAO", "use_type_code": "RES_UNI", "to_max_pct": 15, "tp_min_pct": 80},
             {"zone_sigla": "ZEIA2", "subzone_code": "PADRAO", "use_type_code": "RES_UNI", "to_max_pct": 25, "tp_min_pct": 70},
             {"zone_sigla": "ZEIA3", "subzone_code": "PADRAO", "use_type_code": "RES_UNI", "to_max_pct": 15, "tp_min_pct": 80},
@@ -62,7 +62,6 @@ def _sample_store():
 
 @patch("core.supabase_rules.get_supabase")
 def test_fetch_rule_zpp_variants(mock_get_supabase):
-    fetch_rule.cache_clear()
     mock_get_supabase.return_value = _SB(_sample_store())
     rule = fetch_rule("ZPP 1", "RES_UNI", "PADRAO")
     assert rule is not None
@@ -71,7 +70,6 @@ def test_fetch_rule_zpp_variants(mock_get_supabase):
 
 @patch("core.supabase_rules.get_supabase")
 def test_fetch_rule_zeia_variants(mock_get_supabase):
-    fetch_rule.cache_clear()
     mock_get_supabase.return_value = _SB(_sample_store())
     rule = fetch_rule("ZEIA 2", "RES_UNI", "PADRAO")
     assert rule is not None
@@ -80,7 +78,6 @@ def test_fetch_rule_zeia_variants(mock_get_supabase):
 
 @patch("core.supabase_rules.get_supabase")
 def test_fetch_rule_zeia_app_variants(mock_get_supabase):
-    fetch_rule.cache_clear()
     mock_get_supabase.return_value = _SB(_sample_store())
     rule = fetch_rule("ZEIA/APP", "RES_UNI", "PADRAO")
     assert rule is not None

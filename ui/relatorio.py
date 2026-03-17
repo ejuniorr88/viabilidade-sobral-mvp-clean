@@ -132,9 +132,9 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         render_multifamiliar_guia(calc=calc, rule=rule, is_irregular=is_irregular)
 
         # Mantém blocos fixos do relatório (blindagem)
-        render_dicas_valiosas()
+        render_dicas_valiosas(is_corner=is_corner)
         render_quadro_tecnico()
-        render_figuras_anexo_v(rule)
+        render_figuras_anexo_v(rule, is_corner=is_corner)
         return
 
 
@@ -359,8 +359,8 @@ Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somand
     )
 
     render_quadro_tecnico()
-    render_dicas_valiosas()
-    render_figuras_anexo_v(rule)
+    render_dicas_valiosas(is_corner=is_corner)
+    render_figuras_anexo_v(rule, is_corner=is_corner)
 
     with st.expander("Ver regra completa (JSON)"):
 
