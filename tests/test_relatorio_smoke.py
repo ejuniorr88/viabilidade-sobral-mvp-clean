@@ -42,6 +42,7 @@ def test_relatorio_smoke_must_keep_core_blocks() -> None:
         "render_quadro_tecnico",
         "render_dicas_valiosas",
         "render_figuras_anexo_v",
+        "fetch_zone_description",
     ]
     for s in required_calls:
         assert s in txt_rel, f"ui/relatorio.py não referencia o bloco: {s}"

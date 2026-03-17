@@ -7,7 +7,8 @@ import streamlit as st
 try:
     from core.zones_map import zone_from_latlon, zone_info_from_latlon
 except Exception:
-    from core.zones_mapa import zone_from_latlon, zone_info_from_latlon  # type: ignore
+    from core.zones_mapa import zone_from_latlon  # type: ignore
+    zone_info_from_latlon = None  # type: ignore
 
 from core.streets import find_street
 
@@ -26,7 +27,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
 
     calc: Dict[str, Any] = st.session_state.calc
 
-    # IMPORTANTE: use_type_code vem do Item 2 (não editar aqui)
     use_type_code = (calc.get("use_type_code") or "RES_UNI").strip().upper()
     st.text_input("use_type_code", value=use_type_code, disabled=True, key="use_type_code_readonly")
 
@@ -38,7 +38,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
             lat = st.session_state.last_click["lat"]
             lon = st.session_state.last_click["lon"]
 
-            # guardar valores base
             calc["lat"] = lat
             calc["lon"] = lon
             calc["use_type_code"] = use_type_code
@@ -47,20 +46,37 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
             prev_zone = calc.get("zone")
             prev_sub = calc.get("subzone_code") or "PADRAO"
 
-            zone_info = zone_info_from_latlon(zones_prepared, lat, lon) if zones_prepared else None
-            zone = zone_info.get("zone_display") if zone_info else None
+            info = None
+            if zones_prepared:
+                if zone_info_from_latlon is not None:
+                    try:
+                        info = zone_info_from_latlon(zones_prepared, lat, lon)
+                    except Exception:
+                        info = None
+                if info is None:
+                    zone = zone_from_latlon(zones_prepared, lat, lon)
+                    info = {
+                        "zone_sigla": zone,
+                        "subzone_code": "PADRAO",
+                        "display_label": zone,
+                    } if zone else None
+
+            zone = info.get("zone_sigla") if info else None
+            subzone = (info.get("subzone_code") if info else None) or "PADRAO"
 
             street_info = find_street(lat=lat, lon=lon, radius_m=float(radius_m))
 
             calc["zone"] = zone
             calc["zone_sigla"] = zone
-            calc["zone_lookup"] = zone_info.get("zone_lookup") if zone_info else zone
+            calc["subzone_code"] = subzone
+            calc["zone_display_label"] = info.get("display_label") if info else zone
+            calc["zone_raw_sigla"] = info.get("raw_sigla") if info else None
+            calc["zone_raw_subzona"] = info.get("raw_subzona") if info else None
+            calc["zone_zona_sigla_text"] = info.get("zona_sigla_text") if info else None
 
-            # Via
             if street_info:
                 calc["via_nome"] = street_info.get("name")
                 calc["via_tipo"] = street_info.get("type")
-                # compat: alguns módulos usam distance_m / distance
                 calc["via_dist_m"] = street_info.get("distance_m") or street_info.get("dist_m") or street_info.get("distance")
                 calc["street_name"] = street_info.get("name")
                 calc["street_type"] = street_info.get("type")
@@ -73,14 +89,7 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                 calc["street_type"] = None
                 calc["street_dist"] = None
 
-            # Subzona vinda do próprio zoneamento_light.json
-            subzone = (zone_info.get("subzone_code") if zone_info else None) or "PADRAO"
-            calc["subzone_code"] = subzone
-
-            # Recarregar regra/cálculos quando mudar de zona ou subzona
-            zone_changed = (zone != prev_zone)
-            subzone_changed = (subzone != prev_sub)
-            if zone_changed or subzone_changed:
+            if zone != prev_zone or subzone != prev_sub:
                 calc.pop("rule", None)
                 calc["basic"] = None
                 calc["ia_utilizado"] = None
@@ -94,7 +103,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
                 calc["ok"] = True
                 calc["err"] = None
 
-    # Exibição (mantém layout original)
     zone = calc.get("zone") or calc.get("zone_sigla")
     via_nome = calc.get("via_nome") or calc.get("street_name")
     via_tipo = calc.get("via_tipo") or calc.get("street_type")
@@ -110,8 +118,7 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
         st.write("Tipo de via")
         st.write(via_tipo or "—")
 
-    # Mostrar subzona/setor quando houver
-    if (calc.get("subzone_code") or "PADRAO") != "PADRAO":
+    if str(calc.get("subzone_code") or "PADRAO") != "PADRAO":
         st.caption(f"Subzona/Setor: {calc.get('subzone_code','PADRAO')}")
 
     dist = calc.get("via_dist_m") if calc.get("via_dist_m") is not None else calc.get("street_dist")

@@ -4,6 +4,8 @@ import os
 from functools import lru_cache
 from typing import Any, Dict, Optional
 
+from .zone_resolution import build_lookup_candidates
+
 try:
     from supabase import create_client  # supabase-py
 except Exception:  # pragma: no cover
@@ -54,27 +56,6 @@ def _to_float(v: Any) -> Optional[float]:
         return None
 
 
-
-
-def _zone_sigla_candidates(zone_sigla: str) -> list[str]:
-    z = str(zone_sigla or "").strip()
-    if not z:
-        return []
-    out = [z]
-    up = z.upper()
-
-    def _add(v: str):
-        if v and v not in out:
-            out.append(v)
-
-    for base in ("ZEPE", "ZEIA", "ZEIS", "ZPP"):
-        m = __import__("re").search(rf"{base}\s*-?\s*([123])$", up)
-        if m:
-            n = m.group(1)
-            _add(f"{base}{n}")
-            _add(f"{base} {n}")
-    return out
-
 def normalize_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
     """Garante to_max_pct e tp_min_pct em % (0..100), mesmo que só exista fração (0..1)."""
     if not isinstance(rule, dict):
@@ -117,31 +98,38 @@ def normalize_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @lru_cache(maxsize=256)
-def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO") -> Optional[Dict[str, Any]]:
-    """Busca regra em zone_rules por (zone_sigla,use_type_code,subzone_code='PADRAO')."""
+def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO", zone_label: str = "") -> Optional[Dict[str, Any]]:
+    """Busca regra usando a resolução central de zona/subzona e fallback padronizado."""
     sb = get_supabase()
-    q = (
-        sb.table("zone_rules")
-        .select("*")
-        .in_("zone_sigla", _zone_sigla_candidates(zone_sigla) or [zone_sigla])
-        .eq("use_type_code", use_type_code)
-        .eq("subzone_code", subzone_code)
-        .limit(1)
-    )
-    res = q.execute()
-    data = getattr(res, "data", None)
-    if not data:
-        # compat: bancos sem subzone_code
+    for zone, sub in build_lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
+        q = (
+            sb.table("zone_rules")
+            .select("*")
+            .eq("zone_sigla", zone)
+            .eq("use_type_code", use_type_code)
+            .eq("subzone_code", sub)
+            .limit(1)
+        )
+        res = q.execute()
+        data = getattr(res, "data", None) or []
+        if data:
+            return normalize_rule(data[0])
+
+    # compat: bancos sem subzone_code ou registros antigos
+    zone_candidates = []
+    for zone, _ in build_lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
+        if zone not in zone_candidates:
+            zone_candidates.append(zone)
+    for zone in zone_candidates:
         q2 = (
             sb.table("zone_rules")
             .select("*")
-            .in_("zone_sigla", _zone_sigla_candidates(zone_sigla) or [zone_sigla])
+            .eq("zone_sigla", zone)
             .eq("use_type_code", use_type_code)
             .limit(1)
         )
         res2 = q2.execute()
-        data2 = getattr(res2, "data", None)
-        if not data2:
-            return None
-        return normalize_rule(data2[0])
-    return normalize_rule(data[0])
+        data2 = getattr(res2, "data", None) or []
+        if data2:
+            return normalize_rule(data2[0])
+    return None

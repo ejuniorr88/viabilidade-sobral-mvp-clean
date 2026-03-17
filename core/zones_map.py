@@ -12,85 +12,91 @@ from shapely.prepared import prep
 
 @dataclass(frozen=True)
 class ZoneFeature:
-    sigla_raw: str
-    subzona_raw: Optional[str]
-    zone_display: str
-    zone_lookup: str
+    zone_sigla: str
     subzone_code: str
-    geom_prep: Any  # PreparedGeometry
+    display_label: str
+    raw_sigla: str
+    raw_subzona: str
+    zona_sigla_text: str
+    geom: Any
+    geom_prep: Any
 
 
-def _clean_text(v: Any) -> str:
+def _clean(v: Any) -> str:
     return str(v or "").strip()
 
 
-def _norm_spaces(v: str) -> str:
-    return re.sub(r"\s+", " ", v).strip()
+def _extract_num(text: str, prefix: str) -> Optional[str]:
+    m = re.search(rf"{re.escape(prefix)}\D*([0-9]+)", text.upper())
+    return m.group(1) if m else None
 
 
-def _normalize_zone_fields(sigla_raw: Any, subzona_raw: Any) -> Dict[str, str]:
-    sigla = _norm_spaces(_clean_text(sigla_raw)).upper()
-    sub = _norm_spaces(_clean_text(subzona_raw)).upper()
+def _normalize_zone(props: Dict[str, Any]) -> Dict[str, str]:
+    raw_sigla = _clean(props.get("sigla") or props.get("SIGLA") or props.get("zona") or props.get("ZONA"))
+    raw_sub = _clean(props.get("subzona") or props.get("SUBZONA"))
+    zona_sigla_text = _clean(props.get("zona_sigla") or props.get("ZONA_SIGLA"))
 
-    zone_display = sigla or "—"
-    zone_lookup = sigla or "—"
+    sig = raw_sigla.upper()
+    sub = raw_sub.upper()
+    zona_sigla_upper = zona_sigla_text.upper()
+
+    zone_sigla = sig or raw_sigla
     subzone_code = "PADRAO"
+    display_label = raw_sub or raw_sigla or sig
 
-    # ZEIP: zona principal fixa + setor no subzone_code
-    m_zeip = re.search(r"ZEIP\D*([1-9])", sub)
-    if sigla == "ZEIP" and m_zeip:
-        zone_display = "ZEIP"
-        zone_lookup = "ZEIP"
-        subzone_code = f"ZEIP_{m_zeip.group(1)}"
-        return {
-            "zone_display": zone_display,
-            "zone_lookup": zone_lookup,
-            "subzone_code": subzone_code,
-        }
-
-    # ZEIS / ZPP: no banco atual tende a usar espaço no zone_sigla (ex.: ZEIS 1)
-    for base in ("ZEIS", "ZPP"):
-        m = re.search(rf"{base}\D*([123])", sub)
-        if sigla == base and m:
-            zone_display = f"{base} {m.group(1)}"
-            zone_lookup = zone_display
-            return {
-                "zone_display": zone_display,
-                "zone_lookup": zone_lookup,
-                "subzone_code": subzone_code,
-            }
-
-    # ZEPE / ZEIA: no banco atual os exemplos vieram sem espaço (ZEPE1, ZEIA1)
-    for base in ("ZEPE", "ZEIA"):
-        m = re.search(rf"{base}\D*([123])", sub)
-        if sigla == base and m:
-            zone_display = f"{base} {m.group(1)}"
-            zone_lookup = f"{base}{m.group(1)}"
-            return {
-                "zone_display": zone_display,
-                "zone_lookup": zone_lookup,
-                "subzone_code": subzone_code,
-            }
-
-    # ZEIA genérica no arquivo corresponde aos trechos ZEIA/APP
-    if sigla == "ZEIA" and sub == "ZEIA":
-        zone_display = "ZEIA-APP"
-        zone_lookup = "ZEIA-APP"
-        return {
-            "zone_display": zone_display,
-            "zone_lookup": zone_lookup,
-            "subzone_code": subzone_code,
-        }
-
-    # Zonas simples (ZCR, ZOP, ZAP, ZAM...)
-    if sigla:
-        zone_display = sigla
-        zone_lookup = sigla
+    if sig == "ZEIP":
+        n = _extract_num(sub or zona_sigla_upper, "ZEIP")
+        if n:
+            subzone_code = f"ZEIP_{n}"
+            display_label = f"ZEIP {n}"
+        zone_sigla = "ZEIP"
+    elif sig == "ZEIS":
+        n = _extract_num(sub or zona_sigla_upper, "ZEIS")
+        if n:
+            zone_sigla = f"ZEIS {n}"
+            display_label = zone_sigla
+        else:
+            zone_sigla = "ZEIS"
+            display_label = raw_sub or raw_sigla or "ZEIS"
+    elif sig == "ZEPE":
+        n = _extract_num(sub or zona_sigla_upper, "ZEPE")
+        if n:
+            zone_sigla = f"ZEPE{n}"
+            display_label = f"ZEPE {n}"
+        else:
+            zone_sigla = "ZEPE"
+            display_label = raw_sub or raw_sigla or "ZEPE"
+    elif sig == "ZPP":
+        n = _extract_num(sub or zona_sigla_upper, "ZPP")
+        if n:
+            zone_sigla = f"ZPP {n}"
+            display_label = zone_sigla
+        else:
+            zone_sigla = "ZPP"
+            display_label = raw_sub or raw_sigla or "ZPP"
+    elif sig == "ZEIA":
+        if "APP" in zona_sigla_upper or sub == "ZEIA":
+            zone_sigla = "ZEIA-APP"
+            display_label = "ZEIA-APP"
+        else:
+            n = _extract_num(sub or zona_sigla_upper, "ZEIA")
+            if n:
+                zone_sigla = f"ZEIA{n}"
+                display_label = f"ZEIA {n}"
+            else:
+                zone_sigla = "ZEIA"
+                display_label = raw_sub or raw_sigla or "ZEIA"
+    else:
+        zone_sigla = sig or raw_sigla
+        display_label = raw_sub or raw_sigla or zone_sigla
 
     return {
-        "zone_display": zone_display,
-        "zone_lookup": zone_lookup,
+        "zone_sigla": zone_sigla,
         "subzone_code": subzone_code,
+        "display_label": display_label,
+        "raw_sigla": raw_sigla,
+        "raw_subzona": raw_sub,
+        "zona_sigla_text": zona_sigla_text,
     }
 
 
@@ -104,22 +110,23 @@ def load_zones(zone_file: Path) -> List[ZoneFeature]:
     out: List[ZoneFeature] = []
     for f in feats:
         props = f.get("properties") or {}
-        sigla_raw = props.get("sigla") or props.get("SIGLA") or props.get("zona") or props.get("zona_sigla")
-        subzona_raw = props.get("subzona") or props.get("SUBZONA")
-        if not sigla_raw:
-            continue
         geom = f.get("geometry")
         if not geom:
             continue
-        norm = _normalize_zone_fields(sigla_raw, subzona_raw)
+        norm = _normalize_zone(props)
+        if not norm["zone_sigla"]:
+            continue
+        g = shape(geom)
         out.append(
             ZoneFeature(
-                sigla_raw=_clean_text(sigla_raw),
-                subzona_raw=_clean_text(subzona_raw) or None,
-                zone_display=norm["zone_display"],
-                zone_lookup=norm["zone_lookup"],
+                zone_sigla=norm["zone_sigla"],
                 subzone_code=norm["subzone_code"],
-                geom_prep=prep(shape(geom)),
+                display_label=norm["display_label"],
+                raw_sigla=norm["raw_sigla"],
+                raw_subzona=norm["raw_subzona"],
+                zona_sigla_text=norm["zona_sigla_text"],
+                geom=g,
+                geom_prep=prep(g),
             )
         )
 
@@ -131,18 +138,69 @@ def load_zones(zone_file: Path) -> List[ZoneFeature]:
 
 def zone_info_from_latlon(zones: List[ZoneFeature], lat: float, lon: float) -> Optional[Dict[str, str]]:
     p = Point(float(lon), float(lat))
+
     for z in zones:
-        if z.geom_prep.contains(p):
-            return {
-                "sigla_raw": z.sigla_raw,
-                "subzona_raw": z.subzona_raw or "",
-                "zone_display": z.zone_display,
-                "zone_lookup": z.zone_lookup,
-                "subzone_code": z.subzone_code,
-            }
+        try:
+            if z.geom_prep.covers(p):
+                return {
+                    "zone_sigla": z.zone_sigla,
+                    "subzone_code": z.subzone_code,
+                    "display_label": z.display_label,
+                    "raw_sigla": z.raw_sigla,
+                    "raw_subzona": z.raw_subzona,
+                    "zona_sigla_text": z.zona_sigla_text,
+                    # compatibilidade com contrato antigo
+                    "sigla_raw": z.raw_sigla,
+                    "subzona_raw": z.raw_subzona,
+                    "zone_display": z.display_label,
+                    "zone_lookup": z.zone_sigla,
+                }
+        except Exception:
+            try:
+                if z.geom.covers(p):
+                    return {
+                        "zone_sigla": z.zone_sigla,
+                        "subzone_code": z.subzone_code,
+                        "display_label": z.display_label,
+                        "raw_sigla": z.raw_sigla,
+                        "raw_subzona": z.raw_subzona,
+                        "zona_sigla_text": z.zona_sigla_text,
+                        "sigla_raw": z.raw_sigla,
+                        "subzona_raw": z.raw_subzona,
+                        "zone_display": z.display_label,
+                        "zone_lookup": z.zone_sigla,
+                    }
+            except Exception:
+                continue
+
+    # fallback robusto para borda/buracos pequenos: usa polígono mais próximo
+    best = None
+    best_dist = None
+    for z in zones:
+        try:
+            d = float(z.geom.distance(p))
+        except Exception:
+            continue
+        if best_dist is None or d < best_dist:
+            best_dist = d
+            best = z
+
+    if best is not None and best_dist is not None and best_dist <= 0.0002:
+        return {
+            "zone_sigla": best.zone_sigla,
+            "subzone_code": best.subzone_code,
+            "display_label": best.display_label,
+            "raw_sigla": best.raw_sigla,
+            "raw_subzona": best.raw_subzona,
+            "zona_sigla_text": best.zona_sigla_text,
+            "sigla_raw": best.raw_sigla,
+            "subzona_raw": best.raw_subzona,
+            "zone_display": best.display_label,
+            "zone_lookup": best.zone_sigla,
+        }
     return None
 
 
 def zone_from_latlon(zones: List[ZoneFeature], lat: float, lon: float) -> Optional[str]:
     info = zone_info_from_latlon(zones, lat, lon)
-    return info["zone_display"] if info else None
+    return info["zone_sigla"] if info else None

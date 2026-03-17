@@ -176,6 +176,36 @@ class StreetsIndex:
         except Exception:
             return None
 
+
+
+    def nearest_any(self, lat: float, lon: float) -> Optional[StreetHit]:
+        try:
+            if not self._built:
+                self.build()
+            if not self._tree_utm or not self._geoms_utm:
+                return None
+
+            pt_utm = shp_transform(_WGS84_TO_UTM24S, Point(float(lon), float(lat)))
+
+            best_geom = None
+            best_d = None
+            for g in self._geoms_utm:
+                try:
+                    d = float(pt_utm.distance(g))
+                    if best_d is None or d < best_d:
+                        best_d = d
+                        best_geom = g
+                except Exception:
+                    continue
+
+            if best_geom is None or best_d is None:
+                return None
+
+            m = self._meta_by_id.get(id(best_geom), {})
+            return StreetHit(name=m.get("name", ""), street_type=m.get("type", None), distance_m=best_d)
+        except Exception:
+            return None
+
     def diagnose(self, lat: float, lon: float, radius_m: float) -> Dict[str, Any]:
         out: Dict[str, Any] = {
             "ruas_file": str(self.ruas_file),
@@ -279,6 +309,16 @@ def find_street(lat: float, lon: float, radius_m: float = 150.0) -> Optional[Dic
         return None
 
 
+def find_street_any_distance(lat: float, lon: float) -> Optional[Dict[str, Any]]:
+    try:
+        hit = _get_index().nearest_any(lat=lat, lon=lon)
+        if hit is None:
+            return None
+        return {"name": hit.name, "type": hit.street_type, "distance_m": float(hit.distance_m)}
+    except Exception:
+        return None
+
+
 def diagnose(lat: float, lon: float, radius_m: float = 150.0) -> Dict[str, Any]:
     try:
         return _get_index().diagnose(lat=lat, lon=lon, radius_m=radius_m)
@@ -311,6 +351,7 @@ def find_nearest_street(lat: float, lon: float, radius_m: float = 150.0) -> Opti
 __all__ = [
     "StreetsIndex",
     "find_street",
+    "find_street_any_distance",
     "diagnose",
     "load_streets",
     "find_nearest_street",

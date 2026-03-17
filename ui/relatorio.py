@@ -5,6 +5,9 @@ from typing import Any, Dict
 import streamlit as st
 
 from .relatorio_blocks import render_quadro_tecnico, render_dicas_valiosas, render_figuras_anexo_v, render_multifamiliar_guia
+from core.zone_descriptions import fetch_zone_description
+from core.supabase_client import get_supabase
+from core.zone_resolution import build_lookup_candidates
 
 
 
@@ -59,6 +62,52 @@ def _md_table(rows: list[tuple[str, str]]) -> str:
     for a, b in rows:
         out.append(f"| {a} | {b} |")
     return "\n".join(out)
+
+
+
+
+def render_zone_description_section(calc: Dict[str, Any]) -> None:
+    if not isinstance(calc, dict) or not calc.get("ok"):
+        return
+
+    rule = calc.get("rule") or {}
+    zone_sigla = (
+        calc.get("zone_sigla")
+        or calc.get("zone_lookup")
+        or calc.get("zone")
+        or rule.get("zone_sigla")
+        or ""
+    )
+    subzone_code = (
+        calc.get("subzone_code")
+        or rule.get("subzone_code")
+        or "PADRAO"
+    )
+    zone_label = (
+        calc.get("zone")
+        or calc.get("zone_display")
+        or calc.get("zone_label_raw")
+        or rule.get("zone_sigla")
+        or ""
+    )
+
+    try:
+        desc = fetch_zone_description(
+            str(zone_sigla or ""),
+            str(subzone_code or "PADRAO"),
+            str(zone_label or ""),
+        )
+    except Exception:
+        desc = None
+
+    if not desc or not desc.get("description_text"):
+        return
+
+    title = desc.get("title") or "Sobre esta zona"
+    st.markdown("---")
+    st.subheader("Descrição da zona")
+    st.markdown(f"**{title}**")
+    st.markdown(str(desc.get("description_text")))
 
 
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
