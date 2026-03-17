@@ -94,28 +94,60 @@ def normalize_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
             pass
 
     return r
+
+
+
+
+def _expand_zone_variants(zone: str) -> list[str]:
+    """Gera variantes mínimas de zone_sigla para casar diferenças históricas do banco.
+    Ex.: ZEIA-APP / ZEIA APP / ZEIA/APP / ZEIA_APP
+    """
+    z = (zone or "").strip()
+    if not z:
+        return []
+    variants: list[str] = []
+    candidates = [
+        z,
+        z.replace("/", "-"),
+        z.replace(" ", "-"),
+        z.replace("/", "_"),
+        z.replace("-", "_"),
+        z.replace(" ", "_"),
+        z.replace("_", "-"),
+        z.replace("_", " "),
+        z.replace("-", " "),
+        z.replace("/", " "),
+    ]
+    for c in candidates:
+        c = c.strip()
+        if c and c not in variants:
+            variants.append(c)
+    return variants
+
 def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO", zone_label: str = "") -> Optional[Dict[str, Any]]:
     """Busca regra usando a resolução central de zona/subzona e fallback padronizado."""
     sb = get_supabase()
     for zone, sub in build_lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
-        q = (
-            sb.table("zone_rules")
-            .select("*")
-            .eq("zone_sigla", zone)
-            .eq("use_type_code", use_type_code)
-            .eq("subzone_code", sub)
-            .limit(1)
-        )
-        res = q.execute()
-        data = getattr(res, "data", None) or []
-        if data:
-            return normalize_rule(data[0])
+        for zone_variant in _expand_zone_variants(zone):
+            q = (
+                sb.table("zone_rules")
+                .select("*")
+                .eq("zone_sigla", zone_variant)
+                .eq("use_type_code", use_type_code)
+                .eq("subzone_code", sub)
+                .limit(1)
+            )
+            res = q.execute()
+            data = getattr(res, "data", None) or []
+            if data:
+                return normalize_rule(data[0])
 
     # compat: bancos sem subzone_code ou registros antigos
     zone_candidates = []
     for zone, _ in build_lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
-        if zone not in zone_candidates:
-            zone_candidates.append(zone)
+        for zone_variant in _expand_zone_variants(zone):
+            if zone_variant not in zone_candidates:
+                zone_candidates.append(zone_variant)
     for zone in zone_candidates:
         q2 = (
             sb.table("zone_rules")
