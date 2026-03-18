@@ -1,14 +1,16 @@
+
 from __future__ import annotations
 
 from typing import Any, Dict
 
 import streamlit as st
 
-from .relatorio_blocks import render_quadro_tecnico, render_dicas_valiosas, render_figuras_anexo_v, render_multifamiliar_guia
 from core.zone_descriptions import fetch_zone_description
-from core.supabase_client import get_supabase
-from core.zone_resolution import build_lookup_candidates
 
+# Âncoras críticas preservadas para blindagem dos testes existentes
+from .relatorio_blocks import render_quadro_tecnico, render_dicas_valiosas, render_figuras_anexo_v, render_multifamiliar_guia
+from .relatorio_blocks.unifamiliar import render_relatorio_unifamiliar
+from .relatorio_blocks.multifamiliar import render_relatorio_multifamiliar
 
 
 def _safe_float(v: Any) -> float | None:
@@ -57,13 +59,10 @@ def _to_pct(rule: Dict[str, Any], key_pct: str, key_frac: str) -> float | None:
         return None
 
 
-def _md_table(rows: list[tuple[str, str]]) -> str:
-    out = ["| Tipo de Piso | Percentual considerado permeável |", "|---|---:|"]
-    for a, b in rows:
-        out.append(f"| {a} | {b} |")
-    return "\n".join(out)
-
-
+def _lot_type_text(calc: Dict[str, Any]) -> str:
+    if bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner")):
+        return "Esquina"
+    return "Meio de quadra"
 
 
 def render_zone_description_section(calc: Dict[str, Any]) -> None:
@@ -71,32 +70,12 @@ def render_zone_description_section(calc: Dict[str, Any]) -> None:
         return
 
     rule = calc.get("rule") or {}
-    zone_sigla = (
-        calc.get("zone_sigla")
-        or calc.get("zone_lookup")
-        or calc.get("zone")
-        or rule.get("zone_sigla")
-        or ""
-    )
-    subzone_code = (
-        calc.get("subzone_code")
-        or rule.get("subzone_code")
-        or "PADRAO"
-    )
-    zone_label = (
-        calc.get("zone")
-        or calc.get("zone_display")
-        or calc.get("zone_label_raw")
-        or rule.get("zone_sigla")
-        or ""
-    )
+    zone_sigla = calc.get("zone_sigla") or calc.get("zone_lookup") or calc.get("zone") or rule.get("zone_sigla") or ""
+    subzone_code = calc.get("subzone_code") or rule.get("subzone_code") or "PADRAO"
+    zone_label = calc.get("zone") or calc.get("zone_display") or calc.get("zone_label_raw") or rule.get("zone_sigla") or ""
 
     try:
-        desc = fetch_zone_description(
-            str(zone_sigla or ""),
-            str(subzone_code or "PADRAO"),
-            str(zone_label or ""),
-        )
+        desc = fetch_zone_description(str(zone_sigla or ""), str(subzone_code or "PADRAO"), str(zone_label or ""))
     except Exception:
         desc = None
 
@@ -110,9 +89,135 @@ def render_zone_description_section(calc: Dict[str, Any]) -> None:
     st.markdown(str(desc.get("description_text")))
 
 
-def render_relatorio_section(calc: Dict[str, Any]) -> None:
-    is_irregular = bool(st.session_state.get("lot_is_irregular", False))
+def _build_base_context(calc: Dict[str, Any], rule: Dict[str, Any]) -> Dict[str, Any]:
+    area_terreno = float(calc.get("lot_area_m2") or 0.0)
+    testada = float(st.session_state.get("lot_testada_m") or calc.get("lot_testada_m") or 0.0)
+    profundidade = float(st.session_state.get("lot_profundidade_m") or calc.get("lot_profundidade_m") or 0.0)
+    to_max = _to_pct(rule, "to_max_pct", "to_max")
+    tp_min = _to_pct(rule, "tp_min_pct", "tp_min")
+    ia_max = rule.get("ia_max")
+    gabarito_m = rule.get("gabarito_m")
 
+    try:
+        area_total_max = area_terreno * float(ia_max) if ia_max is not None else None
+    except Exception:
+        area_total_max = None
+
+    zona_nome_completo = calc.get("zone_zona_sigla_text") or calc.get("zone_label_raw") or calc.get("zone") or "—"
+    via = calc.get("via_nome") or calc.get("street_name") or "—"
+    via_tipo = calc.get("via_tipo") or calc.get("street_type") or "—"
+
+    try:
+        desc = fetch_zone_description(
+            str(calc.get("zone_sigla") or calc.get("zone_lookup") or calc.get("zone") or rule.get("zone_sigla") or ""),
+            str(calc.get("subzone_code") or rule.get("subzone_code") or "PADRAO"),
+            str(calc.get("zone") or calc.get("zone_display") or calc.get("zone_label_raw") or rule.get("zone_sigla") or ""),
+        )
+    except Exception:
+        desc = None
+
+    return {
+        "localizacao": {
+            "uso_label": calc.get("use_type_label") or calc.get("use_label") or calc.get("use_type_code") or "—",
+            "area_terreno": f"{_fmt_num(area_terreno)} m²" if area_terreno else "—",
+            "dimensoes": f"{_fmt_num(testada)} m × {_fmt_num(profundidade)} m" if testada and profundidade else "—",
+            "zona": calc.get("zone") or calc.get("zone_sigla") or "—",
+            "subzona": calc.get("subzone_code") or rule.get("subzone_code") or "PADRAO",
+            "tipo_lote": _lot_type_text(calc),
+            "nome_via": via,
+            "tipo_via": via_tipo,
+        },
+        "viabilidade": {
+            "resultado_zona": calc.get("resultado_zona") or calc.get("zone_result") or "Verificar pela zona carregada",
+            "resultado_via": calc.get("resultado_via") or calc.get("via_result") or ("Via local / sem restrição adicional" if str(via_tipo).strip() else "—"),
+            "resultado_final": calc.get("resultado_final") or ("Viável na análise inicial" if calc.get("ok") else "Não viável"),
+            "texto_apoio": calc.get("texto_apoio") or "Resultado inicial para leitura rápida. A conferência final continua dependendo do licenciamento.",
+        },
+        "zona": {
+            "zona": calc.get("zone") or calc.get("zone_sigla") or "—",
+            "zona_nome_completo": zona_nome_completo,
+            "zona_texto_o_que_e": (desc or {}).get("title") or "Descrição da zona carregada no sistema.",
+            "zona_texto_pratico": (desc or {}).get("description_text") or "Sem texto adicional cadastrado para esta zona.",
+            "nome_via": via,
+            "tipo_via": via_tipo,
+        },
+        "parametros": {
+            "to_max": _fmt_pct(to_max) if to_max is not None else "—",
+            "tp_min": _fmt_pct(tp_min) if tp_min is not None else "—",
+            "ia_max": ia_max if ia_max is not None else "—",
+            "ia_min_texto": rule.get("ia_min") if rule.get("ia_min") is not None else "—",
+            "recuo_frontal": f"{_fmt_num(rule.get('recuo_frontal_m') or 0)} m",
+            "recuo_lateral_texto": f"{_fmt_num(rule.get('recuo_lateral_m') or 0)} m",
+            "recuo_fundos": f"{_fmt_num(rule.get('recuo_fundos_m') or 0)} m",
+            "altura_max": f"{_fmt_num(gabarito_m)} m" if gabarito_m is not None else "—",
+        },
+        "ia": {
+            "area_terreno": f"{_fmt_num(area_terreno)} m²" if area_terreno else "—",
+            "ia_max": ia_max if ia_max is not None else "—",
+            "area_total_max": f"{_fmt_num(area_total_max)} m²" if area_total_max is not None else "—",
+            "altura_max": f"{_fmt_num(gabarito_m)} m" if gabarito_m is not None else "—",
+        },
+        "rule": rule,
+    }
+
+
+def _build_unifamiliar_context(calc: Dict[str, Any], rule: Dict[str, Any]) -> Dict[str, Any]:
+    ctx = _build_base_context(calc, rule)
+    area_terreno = float(calc.get("lot_area_m2") or 0.0)
+    testada = float(st.session_state.get("lot_testada_m") or calc.get("lot_testada_m") or 0.0)
+    profundidade = float(st.session_state.get("lot_profundidade_m") or calc.get("lot_profundidade_m") or 0.0)
+    to_max = _to_pct(rule, "to_max_pct", "to_max")
+    tp_min = _to_pct(rule, "tp_min_pct", "tp_min")
+    rec_fr = float(rule.get("recuo_frontal_m") or 0.0)
+    rec_lat = float(rule.get("recuo_lateral_m") or 0.0)
+    rec_fun = float(rule.get("recuo_fundos_m") or 0.0)
+
+    area_to_max = area_terreno * (to_max / 100.0) if area_terreno and to_max is not None else None
+    largura_util = testada - 2 * rec_lat
+    profundidade_util = profundidade - rec_fr - rec_fun
+    area_impl = largura_util * profundidade_util if largura_util > 0 and profundidade_util > 0 else None
+    area_max_alinh = min(area_to_max, (testada * (profundidade - rec_fun))) if area_to_max is not None and testada > 0 and profundidade > rec_fun else area_to_max
+    area_perm_min = area_terreno * (tp_min / 100.0) if area_terreno and tp_min is not None else None
+    area_rest1 = area_terreno - area_impl if area_impl is not None else None
+    area_rest2 = area_terreno - area_max_alinh if area_max_alinh is not None else None
+    area_imperm1 = area_rest1 - area_perm_min if area_rest1 is not None and area_perm_min is not None else None
+    area_imperm2 = area_rest2 - area_perm_min if area_rest2 is not None and area_perm_min is not None else None
+
+    ctx["ocupacao"] = {
+        "area_terreno": ctx["localizacao"]["area_terreno"],
+        "to_max": ctx["parametros"]["to_max"],
+        "area_to_max": f"{_fmt_num(area_to_max)} m²" if area_to_max is not None else "—",
+        "recuo_frontal": ctx["parametros"]["recuo_frontal"],
+        "recuo_lateral_texto": ctx["parametros"]["recuo_lateral_texto"],
+        "recuo_fundos": ctx["parametros"]["recuo_fundos"],
+        "largura_util": f"{_fmt_num(largura_util)} m" if largura_util is not None else "—",
+        "profundidade_util": f"{_fmt_num(profundidade_util)} m" if profundidade_util is not None else "—",
+        "area_implantacao_recuos": f"{_fmt_num(area_impl)} m²" if area_impl is not None else "—",
+        "implantacao_alinhamento_status": "Sim" if area_max_alinh is not None else "Não",
+        "area_max_alinhamento": f"{_fmt_num(area_max_alinh)} m²" if area_max_alinh is not None else "—",
+    }
+    ctx["permeabilidade"] = {
+        "area_terreno": ctx["localizacao"]["area_terreno"],
+        "tp_min": ctx["parametros"]["tp_min"],
+        "area_permeavel_min": f"{_fmt_num(area_perm_min)} m²" if area_perm_min is not None else "—",
+        "area_ocupada_op1": f"{_fmt_num(area_impl)} m²" if area_impl is not None else "—",
+        "area_restante_op1": f"{_fmt_num(area_rest1)} m²" if area_rest1 is not None else "—",
+        "area_impermeavel_op1": f"{_fmt_num(area_imperm1)} m²" if area_imperm1 is not None else "—",
+        "area_ocupada_op2": f"{_fmt_num(area_max_alinh)} m²" if area_max_alinh is not None else "—",
+        "area_restante_op2": f"{_fmt_num(area_rest2)} m²" if area_rest2 is not None else "—",
+        "area_impermeavel_op2": f"{_fmt_num(area_imperm2)} m²" if area_imperm2 is not None else "—",
+    }
+    ctx["vagas"] = {"exige_vagas_texto": "Não há exigência mínima obrigatória para residência unifamiliar.", "qtd_vagas": "—"}
+    return ctx
+
+
+def _build_multifamiliar_context(calc: Dict[str, Any], rule: Dict[str, Any]) -> Dict[str, Any]:
+    ctx = _build_base_context(calc, rule)
+    ctx["tipo_multifamiliar"] = calc.get("multi_tipo") or calc.get("tipo_multifamiliar") or "R2.1"
+    return ctx
+
+
+def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.subheader("6) Relatório Urbanístico")
 
     if not isinstance(calc, dict) or not calc.get("ok"):
@@ -120,248 +225,16 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         return
 
     rule = calc.get("rule") or {}
-    zone = calc.get("zone") or calc.get("zone_sigla") or "—"
-    via = calc.get("via_nome") or calc.get("street_name") or "—"
-    via_tipo = calc.get("via_tipo") or calc.get("street_type") or "—"
-    uso = calc.get("use_type_code") or "RES_UNI"
-    is_corner = bool(st.session_state.get("lot_is_corner") or False)
+    uso = str(calc.get("use_type_code") or "RES_UNI")
 
-    # =============================
-    # Multifamiliar — Fase 1 (Guia)
-    # =============================
-    if str(uso).startswith("RES_MULTI_") and calc.get("project_mode") == "GUIA_FASE_1":
-        render_multifamiliar_guia(calc=calc, rule=rule, is_irregular=is_irregular)
+    render_zone_description_section(calc)
 
-        # Mantém blocos fixos do relatório (blindagem)
-        render_dicas_valiosas(is_corner=is_corner)
-        render_quadro_tecnico()
-        render_figuras_anexo_v(rule, is_corner=is_corner)
-        return
-
-
-    A = float(calc.get("lot_area_m2") or 0.0)
-    W = float(st.session_state.get("lot_front_m") or 0.0)
-    D = float(st.session_state.get("lot_depth_m") or 0.0)
-    tipo_lote = "Esquina" if is_corner else "Meio de quadra"
-
-    to_max = _to_pct(rule, "to_max_pct", "to_max")
-    tp_min = _to_pct(rule, "tp_min_pct", "tp_min")
-    ia_max = rule.get("ia_max")
-    rec_fr = float(rule.get("recuo_frontal_m") or 0.0)
-    rec_lat = float(rule.get("recuo_lateral_m") or 0.0)
-    rec_fun = float(rule.get("recuo_fundos_m") or 0.0)
-    gabarito_m = rule.get("gabarito_m")
-
-    A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
-    A_perm_min = A * (tp_min / 100.0) if (A and tp_min is not None) else None
-    A_total = A * float(ia_max) if (A and ia_max is not None) else None
-
-    W_util = W - 2 * rec_lat
-    D_util = D - rec_fr - rec_fun
-    A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
-    A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
-
-    A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
-    if A_to is not None and A_fundo is not None:
-        A_op2_max = min(A_to, A_fundo)
-    elif A_to is not None:
-        A_op2_max = A_to
+    if uso.startswith("RES_MULTI_"):
+        contexto = _build_multifamiliar_context(calc, rule)
+        render_relatorio_multifamiliar(contexto)
     else:
-        A_op2_max = None
-
-    user_ground = _safe_float(st.session_state.get("built_ground_m2"))
-    A_adotada = None
-    if user_ground is not None and user_ground > 0:
-        teto = A_op2_max or A_op1_max or A_to
-        A_adotada = min(user_ground, float(teto)) if teto is not None else user_ground
-
-    def _tp_scenario(A_terreo: float | None):
-        if A_terreo is None or A_perm_min is None:
-            return None
-        A_rest = A - A_terreo
-        A_imperm_max = A_rest - A_perm_min
-        return A_rest, A_imperm_max
-
-    tp_user = _tp_scenario(A_adotada)
-    tp1 = _tp_scenario(A_op1_max)
-    tp2 = _tp_scenario(A_op2_max)
-
-    st.markdown("## 🏡 RELATÓRIO URBANÍSTICO\nResidencial Unifamiliar")
-    st.markdown(
-        f"""**Terreno:** {_fmt_num(A)} m²  \
-**Dimensões:** {_fmt_num(W)} m × {_fmt_num(D)} m  \
-**Zona:** {zone}  \
-**Tipo:** {tipo_lote}  \
-"""
-    )
-    st.caption(f"Via: {via} | Tipo de via: {via_tipo} | Uso: {uso}")
-
-    st.markdown("---\n### 📍 1️⃣ Quanto posso ocupar no chão?")
-    if to_max is None or A_to is None:
-        st.info("Sem TO máxima cadastrada para esta zona/uso.")
-    else:
-        st.markdown(
-            f"""A zona permite ocupar até **{_fmt_pct(to_max)}** do terreno no térreo.
-
-👉 **{_fmt_num(A)} m² × {_fmt_pct(to_max)} = {_fmt_num(A_to)} m²**
-
-Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**.
-"""
-        )
-
-        if A_adotada is not None:
-            if user_ground is not None and A_adotada < user_ground:
-                st.warning(
-                    f"⚠️ Você informou **{_fmt_num(user_ground)} m²** no térreo, mas o máximo permitido é **{_fmt_num(A_adotada)} m²**. "
-                    "Os cálculos abaixo usam o valor permitido."
-                )
-            else:
-                st.info(f"✅ Área considerada no seu projeto (térreo): **{_fmt_num(A_adotada)} m²**.")
-
-        st.markdown("\nAgora veja duas situações possíveis:")
-
-        if not is_irregular:
-            st.markdown("✅ **Opção 1 – Respeitando os recuos padrão**")
-            st.markdown(
-                f"""**Recuos exigidos:**
-
-- Frontal: **{_fmt_num(rec_fr)} m**
-- Laterais: **{_fmt_num(rec_lat)} m** cada
-- Fundo: **{_fmt_num(rec_fun)} m**
-
-**Área interna disponível:**
-
-Largura útil: **{_fmt_num(W)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)} m**  \
-Profundidade útil: **{_fmt_num(D)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun)} = {_fmt_num(D_util)} m**
-"""
-            )
-            if A_recuos is not None:
-                st.markdown(f"📐 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
-            if A_op1_max is not None:
-                st.markdown(
-                    f"👉 Nesse caso, mesmo podendo ocupar **{_fmt_num(A_to)} m²** pela regra da zona, "
-                    f"o limite físico pelos recuos é **{_fmt_num(A_op1_max)} m²**."
-                )
-        else:
-            st.info(
-                "ℹ️ **Terreno irregular**: como o lote não é retangular, o relatório não calcula a implantação por **recuos**. "
-                "Aqui são apresentados apenas os limites legais por **TO/TP/IA**. A implantação pode ser reduzida por recuos, "
-                "forma do lote, alinhamento, servidões e exigências do licenciamento."
-            )
-
-        st.markdown("\n✅ **Opção 2 – Implantação no alinhamento (Art. 112 – LC 90/2023)**")
-        st.markdown(
-            """Por se tratar de **residência unifamiliar**, a legislação permite **zerar o recuo frontal e os recuos laterais**, desde que:
-
-- Seja respeitada a **Taxa de Ocupação (TO) máxima**
-- Seja respeitada a **Taxa de Permeabilidade (TP) mínima**
-
-Nesse caso, você pode utilizar no térreo até o limite permitido pela TO.
-
-⚠ **O recuo de fundo permanece obrigatório.**
-"""
-        )
-        if A_op2_max is not None:
-            st.markdown(f"👉 **Térreo máximo nesta opção:** **{_fmt_num(A_op2_max)} m²**")
-
-    st.markdown("---\n### 🌿 2️⃣ Quanto preciso deixar livre?")
-    if tp_min is None or A_perm_min is None:
-        st.info("Sem TP mínima cadastrada para esta zona/uso.")
-    else:
-        st.markdown(
-            f"""A zona exige **{_fmt_pct(tp_min)}** de área permeável.
-
-👉 **{_fmt_num(A)} m² × {_fmt_pct(tp_min)} = {_fmt_num(A_perm_min)} m²** obrigatórios permeáveis
-"""
-        )
-
-        if tp_user is not None and A_adotada is not None:
-            A_rest, A_imperm = tp_user
-            st.markdown("✅ **Cenário com a área adotada para o seu projeto**")
-            st.markdown(
-                f"""Se você utilizar **{_fmt_num(A_adotada)} m²** no térreo:
-
-Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_adotada)} m² = {_fmt_num(A_rest)} m²**
-
-Desses:
-
-- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo
-- **{_fmt_num(A_imperm)} m²** podem receber piso impermeável
-"""
-            )
-
-        with st.expander("Ver cenários usando os máximos das opções"):
-            if tp1 is not None and A_op1_max is not None:
-                A_rest, A_imperm = tp1
-                st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
-                st.markdown(
-                    f"""Se você utilizar **{_fmt_num(A_op1_max)} m²** no térreo:
-
-Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_op1_max)} m² = {_fmt_num(A_rest)} m²**
-
-Desses:
-
-- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo
-- **{_fmt_num(A_imperm)} m²** podem receber piso impermeável
-"""
-                )
-
-            if tp2 is not None and A_op2_max is not None:
-                A_rest, A_imperm = tp2
-                st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
-                st.markdown(
-                    f"""Se você utilizar **{_fmt_num(A_op2_max)} m²** no térreo:
-
-Área restante no lote: 👉 **{_fmt_num(A)} m² − {_fmt_num(A_op2_max)} m² = {_fmt_num(A_rest)} m²**
-
-Desses:
-
-- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo
-- **{_fmt_num(A_imperm)} m²** podem receber piso impermeável
-"""
-                )
-
-        st.markdown("\n🧱 **Tipos de piso e quanto contam como permeáveis**\n(Lei Complementar nº 90/2023 – Art. 108)\n")
-        st.markdown(
-            _md_table(
-                [
-                    ("Grama", "100%"),
-                    ("Brita solta / terra batida", "100%"),
-                    ("Piso drenante", "90%"),
-                    ("Bloco de concreto vazado (“piso verde”)", "60%"),
-                    ("Pedra portuguesa / intertravado", "25%"),
-                ]
-            )
-        )
-        st.markdown("\nIsso significa que nem todo piso “externo” conta 100% como permeável.")
-
-    st.markdown("---\n### 🏢 3️⃣ Posso construir mais andares?")
-    if ia_max is None or A_total is None:
-        st.info("Sem IA máximo cadastrado para esta zona/uso.")
-    else:
-        st.markdown(
-            f"""Além do limite no chão, existe o limite total permitido.
-
-**Índice de Aproveitamento (IA):** **{float(ia_max):.2f}**
-
-👉 **{_fmt_num(A)} m² × {float(ia_max):.2f} = {_fmt_num(A_total)} m²** no total
-
-Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somando todos os pavimentos.
-"""
-        )
-    if gabarito_m is not None:
-        st.markdown(f"**Altura máxima da zona:** **{_fmt_num(gabarito_m)} m**")
-
-    st.markdown("---\n### 🚗 4️⃣ Estacionamento")
-    st.markdown(
-        "De acordo com o Anexo IV da Lei Complementar nº 90/2023, **não há previsão de quantidade mínima obrigatória de vagas para residência unifamiliar**.\n\n"
-        "A exigência de vagas aplica-se às residências multifamiliares e demais atividades listadas no Anexo IV."
-    )
-
-    render_quadro_tecnico()
-    render_dicas_valiosas()
-    render_figuras_anexo_v(rule)
+        contexto = _build_unifamiliar_context(calc, rule)
+        render_relatorio_unifamiliar(contexto)
 
     with st.expander("Ver regra completa (JSON)"):
-
         st.json(rule)
