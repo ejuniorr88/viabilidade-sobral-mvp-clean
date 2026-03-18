@@ -21,7 +21,7 @@ def get_dicas_valiosas(is_corner: bool = False) -> List[str]:
         ),
     ]
     if is_corner:
-        dicas.append("• **Texto temporário – lote de esquina")
+        dicas.append("Texto temporário – lote de esquina")
     return dicas
 
 
