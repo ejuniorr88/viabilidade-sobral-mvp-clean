@@ -47,7 +47,6 @@ def test_relatorio_smoke_must_keep_core_blocks() -> None:
             "QUADRO TÉCNICO - PARÂMETROS DOS AMBIENTES",
             "Observações",
             "Observações gerais",
-            # Âncoras atualizadas para o texto fiel ao Anexo
             "A largura mínima do degrau será de 0,25m.",
             "A altura máxima do degrau será de 0,19m.",
         ],
@@ -60,7 +59,7 @@ def test_relatorio_smoke_must_keep_core_blocks() -> None:
         ],
         "ui/relatorio_blocks/multifamiliar_guia.py": [
             "Vagas de estacionamento",
-            "quadro máxima",
+            "quadra máxima",
         ],
     }
 
