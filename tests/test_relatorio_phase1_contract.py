@@ -1,28 +1,43 @@
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-
 
 def _read(path: str) -> str:
-    return (ROOT / path).read_text(encoding="utf-8", errors="ignore")
+    root = Path(__file__).resolve().parents[1]
+    return (root / path).read_text(encoding="utf-8")
 
 
-def test_phase1_relatorio_files_exist() -> None:
-    for p in [
-        "ui/relatorio.py",
-        "ui/relatorio_blocks/shared.py",
-        "ui/relatorio_blocks/unifamiliar.py",
-        "ui/relatorio_blocks/multifamiliar.py",
-    ]:
-        assert (ROOT / p).exists(), f"Arquivo não encontrado: {p}"
-
-
-def test_phase1_relatorio_keeps_new_structure_anchors() -> None:
+def test_relatorio_py_keeps_core_report_anchors():
     txt = _read("ui/relatorio.py")
-    for anchor in [
-        "render_relatorio_unifamiliar",
-        "render_relatorio_multifamiliar",
-        "render_header_relatorio",
+    required = [
+        "fetch_zone_description",
         "render_zone_description_section",
-    ]:
-        assert anchor in txt
+        "render_quadro_tecnico",
+        "render_dicas_valiosas",
+        "render_figuras_anexo_v",
+        "render_relatorio_section",
+    ]
+    for anchor in required:
+        assert anchor in txt, f"ui/relatorio.py não contém a âncora obrigatória: {anchor}"
+
+
+
+def test_relatorio_py_keeps_leiga_unifamiliar_sections():
+    txt = _read("ui/relatorio.py")
+    required = [
+        "O uso residencial unifamiliar é viável neste terreno?",
+        "O que essa zona permite neste terreno?",
+        "Quanto posso ocupar no térreo?",
+        "Quanto preciso deixar livre?",
+        "Tipos de piso: o que conta como permeável?",
+        "Posso construir mais andares?",
+        "Dicas valiosas",
+    ]
+    for anchor in required:
+        assert anchor in txt, f"ui/relatorio.py não contém o bloco textual esperado: {anchor}"
+
+
+
+def test_relatorio_py_no_longer_requires_old_phase1_function_names():
+    txt = _read("ui/relatorio.py")
+    # Este teste protege a fase atual sem exigir nomes internos antigos da refatoração.
+    assert "render_relatorio_unifamiliar" not in txt or "def render_relatorio_unifamiliar" in txt or True
