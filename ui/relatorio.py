@@ -221,12 +221,11 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.markdown("---\n### ✅ 2️⃣ O uso residencial unifamiliar é viável neste terreno?")
     st.markdown(f"**Sim.** Para o uso informado, o terreno é **{resultado_final.lower()}** nesta análise inicial.")
     st.markdown(texto_apoio)
-    st.markdown(
-        f"**Resumo da análise**\n\n"
-        f"- **Por zona:** {resultado_zona}\n"
-        f"- **Por via:** {resultado_via}\n"
-        f"- **Resumo final:** {resultado_final}"
-    )
+    st.markdown("**Resumo da análise**")
+    st.markdown(f"- **Por zona:** {resultado_zona}")
+    st.markdown(f"- **Por via:** {resultado_via}")
+    resumo_icon = "✅" if str(resultado_final).strip().lower().startswith("viável") else ("⚠️" if "aten" in str(resultado_final).lower() else "❌")
+    st.markdown(f"- **Resumo final:** {resumo_icon} **{resultado_final}**")
     if via not in ("—", "", None):
         st.markdown(
             f"Além da zona, a via do terreno também ajuda nesse enquadramento.\n\n"
@@ -235,7 +234,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "👉 Na prática, isso quer dizer que a via também entra na leitura do uso neste caso."
         )
 
-    st.markdown("---\n### 🧭 3️⃣ O que essa zona quer dizer?")
+    st.markdown("---\n### 🧭 3️⃣ O que essa zona permite neste terreno?")
     st.markdown(
         "Todo terreno fica dentro de uma zona, e cada zona tem suas próprias regras. "
         "É isso que ajuda a definir o que pode ser construído, quanto pode ocupar no térreo, "
@@ -331,22 +330,22 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "Isso quer dizer que parte do terreno precisa continuar ajudando na absorção da água da chuva."
         )
         st.markdown("**Ver cenários usando os máximos das opções**")
-        if tp1 is not None and A_op1_max is not None:
-            a_rest, a_imperm = tp1
-            st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
+        if tp2 is not None and A_op2_max is not None:
+            a_rest, a_imperm = tp2
+            st.markdown("✅ **Cenário pela Opção 1 (Art. 112)**")
             st.markdown(
-                f"Se você utilizar **{_fmt_num(A_op1_max)} m²** no térreo:\n\n"
-                f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op1_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
+                f"Se você utilizar **{_fmt_num(A_op2_max)} m²** no térreo:\n\n"
+                f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op2_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
                 f"Desses:\n\n"
                 f"- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo\n"
                 f"- **{_fmt_num(a_imperm)} m²** podem receber piso impermeável"
             )
-        if tp2 is not None and A_op2_max is not None:
-            a_rest, a_imperm = tp2
-            st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
+        if tp1 is not None and A_op1_max is not None:
+            a_rest, a_imperm = tp1
+            st.markdown("✅ **Cenário pela Opção 2 (recuos da zona)**")
             st.markdown(
-                f"Se você utilizar **{_fmt_num(A_op2_max)} m²** no térreo:\n\n"
-                f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op2_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
+                f"Se você utilizar **{_fmt_num(A_op1_max)} m²** no térreo:\n\n"
+                f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op1_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
                 f"Desses:\n\n"
                 f"- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo\n"
                 f"- **{_fmt_num(a_imperm)} m²** podem receber piso impermeável"
@@ -355,9 +354,8 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "**Leitura prática:** nas duas opções, o lote precisa manter a área permeável mínima. "
             "A diferença está em quanto sobra livre além desse mínimo."
         )
-
     st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
-    st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
+    st.markdown("**Nem toda área livre conta da mesma forma para a permeabilidade.** Isso acontece porque alguns pisos deixam a água infiltrar mais no solo, enquanto outros reduzem essa absorção. Por isso, mesmo que uma área esteja sem construção, ela pode contar só parcialmente como área permeável, dependendo do material usado.\n\nVeja como a lei trata isso:")
     st.markdown(
         _md_table(
             [
@@ -382,10 +380,10 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             f"Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somando todos os pavimentos."
         )
     if gabarito_m is not None:
-        st.markdown(f"**Altura máxima da zona:** {_fmt_num(gabarito_m)} m")
+        st.markdown(f"**Altura permitida máxima da zona:** {_fmt_num(gabarito_m)} m")
         if pav_est is not None:
             st.markdown(
-                f"**Exemplo simples para ter uma noção de andares:** adotando um pé-direito médio de **3,00 m por pavimento**, "
+                f"**Estimativa simples para ter noção do número de pavimentos:** adotando um pé-direito médio de **3,00 m por pavimento**, "
                 f"a altura máxima de **{_fmt_num(gabarito_m)} m** pode permitir, em média, algo próximo de **{pav_est} pavimentos**.\n\n"
                 "👉 Isso é apenas uma referência inicial. Na prática, a quantidade real de andares depende também da laje, cobertura, "
                 "platibanda, caixa d’água e da forma como o projeto será desenvolvido."
@@ -409,24 +407,33 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     )
     render_figuras_anexo_v(rule)
 
-    st.markdown("---\n### 💡 1️⃣2️⃣ Pontos importantes para não esquecer")
+    st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
+    st.markdown("**Flexibilidade de recuos no uso residencial unifamiliar**")
     st.markdown(
-        "**Flexibilidade de recuos no uso residencial unifamiliar**\n\n"
         "**Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
         "a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima "
-        "e da Taxa de Ocupação Máxima da zona em que se encontra.\n\n"
-        "👉 **Na prática:** para residência unifamiliar, a legislação admite zerar recuos frontal e laterais, desde que a proposta continue respeitando a **TP mínima** e a **TO máxima** da zona."
+        "e da Taxa de Ocupação Máxima da zona em que se encontra."
     )
-    # render_dicas_valiosas  # âncora mantida para blindagem
     st.markdown(
-        "**Calçada**\n\n"
-        "Não existe uma largura única e fixa para toda calçada no município. Quando houver padrão definido no loteamento ou na via, ele deve ser seguido. "
-        "Quando não houver, a referência costuma ser a calçada já existente no local.\n\n"
-        "**Piscina**\n\n"
-        "Piscina não entra como área construída para a Taxa de Ocupação (TO). Mas ela conta como área impermeável para a Taxa de Permeabilidade (TP). "
-        "Além disso, deve respeitar afastamento mínimo de 0,50 m das divisas."
+        "👉 **Na prática:** para residência unifamiliar, a legislação admite zerar recuos frontal e laterais, "
+        "desde que a proposta continue respeitando a **TP mínima** e a **TO máxima** da zona."
     )
 
+    st.markdown("**Calçada**")
+    st.markdown(
+        "Não existe uma largura única e fixa para toda calçada no município. Quando houver padrão definido no loteamento ou na via, ele deve ser seguido. "
+        "Quando não houver, a referência costuma ser a calçada já existente no local."
+    )
+
+    st.markdown("**Piscina, caixa d’água, cisterna e tanques**")
+    st.markdown("**Atenção: para a Taxa de Ocupação (TO), a piscina não é contada como área construída do lote.**")
+    st.markdown(
+        "**Art. 144.** As piscinas, espelhos d’água, caixas d’água, cisternas e tanques deverão observar um afastamento mínimo de **0,50 m** "
+        "de todas as divisas do terreno e devem ser computadas como **área impermeável** para o cálculo da Taxa de Permeabilidade."
+    )
+    st.markdown(
+        "👉 **Na prática:** além de respeitar esse afastamento mínimo de **50 cm**, esses elementos também entram no cálculo da **TP** como área impermeável."
+    )
     st.markdown("---\n### 📌 1️⃣3️⃣ Resumo rápido final")
     st.markdown("**Se você quiser ver só o essencial deste terreno, este é o resumo principal:**")
     st.markdown(
