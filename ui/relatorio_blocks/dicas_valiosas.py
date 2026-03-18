@@ -20,12 +20,9 @@ def get_dicas_valiosas(is_corner: bool = False) -> List[str]:
             "do terreno e sempre ser computados como área impermeável no cálculo da TP."
         ),
     ]
-
     if is_corner:
-        dicas.append("• **Texto temporário (lote de esquina):** Texto a ser escrito.")
-
+        dicas.append("• **Texto temporário – lote de esquina**")
     return dicas
-
 
 
 def render_dicas_valiosas(is_corner: bool = False) -> None:
