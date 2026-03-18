@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple, List
 
+import math
 import streamlit as st
 
 
@@ -15,6 +16,35 @@ def _get_supabase():
 
 def _norm(s: Any) -> str:
     return str(s or "").strip().upper()
+
+def _fmt_num(v: Any, dec: int = 2) -> str:
+    try:
+        if v is None:
+            return "—"
+        f = float(v)
+        return f"{f:,.{dec}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return str(v)
+
+
+def _fmt_pct(v: Any, dec: int = 1) -> str:
+    try:
+        if v is None:
+            return "—"
+        return f"{float(v):.{dec}f}%"
+    except Exception:
+        return "—"
+
+
+def _pct_rule(v: Any) -> Optional[float]:
+    try:
+        if v is None or v == "":
+            return None
+        f = float(v)
+        return f * 100 if 0 <= f <= 1 else f
+    except Exception:
+        return None
+
 
 
 def _sigla_nome(sigla: str) -> str:
@@ -66,7 +96,7 @@ def _via_tipo_norm(v: Any) -> Optional[str]:
 
 
 
-def _summarize_adequabilidade(*, zona: str, zone_class: str | None, via_norm: str | None, via_class: str | None) -> tuple[str, str]:
+def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, via_class: str | None) -> tuple[str, str, str]:
     """Resumo final (bem leigo) para a adequabilidade."""
     z = _norm(zone_class)
     v = _norm(via_class)
@@ -74,29 +104,29 @@ def _summarize_adequabilidade(*, zona: str, zone_class: str | None, via_norm: st
     # Via local / sem tabela por tipo de via
     if not via_norm:
         if z == "I":
-            return ("NÃO PERMITE", "A zona indicou I (Inadequado / não permitido). Em via local, normalmente vale a regra da zona.")
+            return ("❌", "NÃO PERMITE", "A zona indicou I (Inadequado / não permitido). Em via local, normalmente vale a regra da zona.")
         if z == "AP/AM":
-            return ("DEPENDE DO PORTE", "A zona indicou AP/AM (depende do porte). Em via local, normalmente vale a regra da zona.")
+            return ("⚠️", "DEPENDE DO PORTE", "A zona indicou AP/AM (depende do porte). Em via local, normalmente vale a regra da zona.")
         if z == "PE":
-            return ("PROJETO ESPECIAL", "A zona indicou PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
+            return ("⚠️", "PROJETO ESPECIAL", "A zona indicou PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
         if z in ("A", "AP", "AM"):
-            return ("PERMITE", "A zona permite. Ainda é obrigatório cumprir TO/TP/IA/recuos/altura e demais exigências.")
-        return ("SEM DADO", "Não foi possível determinar o resultado por zona.")
+            return ("✅", "PERMITE", "A zona permite. Ainda é obrigatório cumprir TO/TP/IA/recuos/altura e demais exigências.")
+        return ("⚠️", "SEM DADO", "Não foi possível determinar o resultado por zona.")
 
     # Via entra na tabela (arterial/coletora/paisagística)
     if v == "I":
-        return ("NÃO PERMITE", "O tipo de via indicou I (não permitido), mesmo que a zona permita.")
+        return ("❌", "NÃO PERMITE", "O tipo de via indicou I (não permitido), mesmo que a zona permita.")
     if z == "I" and v in ("A", "AP", "AM"):
-        return ("POSSÍVEL PELA VIA", "A zona deu I, mas o tipo de via permite. O licenciamento pode considerar o resultado por tipo de via.")
+        return ("⚠️", "POSSÍVEL PELA VIA", "A zona deu I, mas o tipo de via permite. O licenciamento pode considerar o resultado por tipo de via.")
     if z == "I" and v == "AP/AM":
-        return ("DEPENDE DO PORTE", "A zona deu I, mas o tipo de via deu AP/AM (depende do porte). Pode depender do licenciamento.")
+        return ("⚠️", "DEPENDE DO PORTE", "A zona deu I, mas o tipo de via deu AP/AM (depende do porte). Pode depender do licenciamento.")
     if z == "I" and v == "PE":
-        return ("PROJETO ESPECIAL", "A zona deu I, mas o tipo de via indica PE (Projeto especial). Pode exigir análise/condições extras.")
+        return ("⚠️", "PROJETO ESPECIAL", "A zona deu I, mas o tipo de via indica PE (Projeto especial). Pode exigir análise/condições extras.")
     if z == "AP/AM" or v == "AP/AM":
-        return ("DEPENDE DO PORTE", "Existe indicação AP/AM (depende do porte). Confira se o empreendimento é pequeno ou médio.")
+        return ("⚠️", "DEPENDE DO PORTE", "Existe indicação AP/AM (depende do porte). Confira se o empreendimento é pequeno ou médio.")
     if z == "PE" or v == "PE":
-        return ("PROJETO ESPECIAL", "Existe indicação PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
-    return ("PERMITE", "Zona e/ou tipo de via permitem. Ainda é obrigatório cumprir TO/TP/IA/recuos/altura e demais exigências.")
+        return ("⚠️", "PROJETO ESPECIAL", "Existe indicação PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
+    return ("✅", "PERMITE", "Zona e/ou tipo de via permitem. Ainda é obrigatório cumprir TO/TP/IA/recuos/altura e demais exigências.")
 def _fetch_adequabilidade(
     *, zone_sigla: str, via_tipo_texto: Optional[str], use_type_code: str
 ) -> Tuple[Optional[str], Optional[str], Dict[str, Any]]:
@@ -159,6 +189,16 @@ def _fetch_adequabilidade(
 
     return zone_class, via_class, debug
 
+
+
+def _tipo_multifamiliar_label(multi_tipo: str, use_type_code: str) -> str:
+    if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
+        return "R2.1 — 2 unidades no mesmo lote (justapostas ou sobrepostas)"
+    if multi_tipo in ("R22", "R2.2", "R2_2") or use_type_code.endswith("R22"):
+        return "R2.2 — condomínio horizontal"
+    if multi_tipo in ("R3", "R03") or use_type_code.endswith("R3"):
+        return "R3 — condomínio vertical"
+    return "Residência multifamiliar"
 
 
 def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, **_: Any) -> None:
