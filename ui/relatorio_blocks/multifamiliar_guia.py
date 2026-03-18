@@ -5,6 +5,9 @@ from typing import Any, Dict, Optional, Tuple, List
 import math
 import streamlit as st
 
+from .quadro_tecnico import render_quadro_tecnico
+from .figuras_anexo_v import render_figuras_anexo_v
+
 
 def _get_supabase():
     try:
@@ -193,7 +196,7 @@ def _tipo_multifamiliar_label(multi_tipo: str, use_type_code: str) -> str:
     if multi_tipo in ("R22", "R2.2", "R2_2") or use_type_code.endswith("R22"):
         return "R2.2 — condomínio horizontal"
     if multi_tipo in ("R3", "R03") or use_type_code.endswith("R3"):
-        return "R3 — condomínio vertical"
+        return "R3 — residência multifamiliar vertical"
     return "Residência multifamiliar"
 
 
@@ -255,7 +258,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     st.markdown(
         "Este relatório mostra, de forma simples, se o uso residencial multifamiliar pode ou não ser desenvolvido neste terreno, "
         "com base na zona, na via e nas regras urbanísticas do município.\n\n"
-        "A ideia aqui é facilitar a leitura: primeiro mostramos onde o terreno está, depois se o uso é viável, "
+        "A ideia aqui é facilitar a leitura: primeiro mostramos onde o terreno está **localizado**, depois se o uso é viável, "
         "em seguida explicamos os principais limites urbanísticos e, por fim, trazemos os pontos mais importantes "
         "do tipo multifamiliar escolhido.\n\n"
         "**Importante:** este relatório é uma análise inicial. A aprovação final depende da conferência completa no licenciamento."
@@ -288,34 +291,41 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             "No multifamiliar, a permissão pode depender da **zona** e, em alguns casos, também do **tipo da via**. "
             "Por isso, o resultado abaixo mostra essas duas leituras de forma separada."
         )
-        st.markdown(
-            f"- **Por zona:** {zone_class or 'não encontrado'}"
-            + (f" ({_sigla_nome(zone_class)})" if zone_class else "")
-            + "\n"
-            + (f"- **Por via:** {via_class} ({_sigla_nome(via_class)})" if via_norm and via_class else "- **Por via:** via local / sem leitura adicional por tabela de via" if not via_norm else "- **Por via:** não encontrado")
-            + f"\n- **Resumo final:** {icon} **{status_curto}**"
-        )
-        st.success(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
-        if not via_norm:
-            st.markdown(
-                f"A via foi identificada como **{via_tipo_txt or 'via local'}**. Nessa situação, normalmente vale principalmente o resultado da zona."
-            )
+        por_zona = f"{zone_class or 'não encontrado'}"
+        if zone_class:
+            por_zona += f" ({_sigla_nome(zone_class)})"
+        st.markdown(f"- **Por zona:** {por_zona}")
+        if via_norm and via_class:
+            st.markdown(f"- **Por via:** {via_class} ({_sigla_nome(via_class)})")
+        elif via_norm:
+            st.markdown("- **Por via:** não encontrado")
         else:
-            st.markdown(
-                f"Neste caso, a via foi classificada como **{via_norm}**. Em multifamiliar, essa leitura também pode influenciar o enquadramento final."
-            )
+            st.markdown(f"- **Por via:** {via_tipo_txt or 'via local'}")
+        st.markdown(f"- **Resumo final:** {icon} **{status_curto}**")
+        if status_curto == "PERMITE":
+            st.success(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
+        elif "NÃO" in status_curto:
+            st.error(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
+        else:
+            st.warning(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
 
     st.markdown("---\n### 🧭 3️⃣ O que essa zona permite neste terreno?")
     st.markdown(
         "Toda zona tem suas próprias regras. No multifamiliar, ela ajuda a definir se o uso é permitido, "
         "qual o porte mais adequado e quais limites urbanísticos vão orientar o estudo do projeto."
     )
+    if zone_class:
+        st.markdown(
+            f"**Zona identificada:** {zona}\n\n"
+            f"**Na leitura da adequabilidade, esta zona aparece como:** {zone_class} — {_sigla_nome(zone_class)}."
+        )
+    else:
+        st.markdown(f"**Zona identificada:** {zona or '—'}")
     st.markdown(
-        f"- **Zona:** {zona or '—'}\n"
-        f"- **Via do terreno:** {via}\n"
-        f"- **Tipo de via:** {via_tipo_txt or '—'}"
+        f"**Via do terreno:** {via}\n\n"
+        f"**Tipo de via:** {via_tipo_txt or '—'}"
     )
-    st.markdown("Em alguns casos, a via também influencia essa leitura, principalmente fora da via local.")
+    st.markdown("Em alguns casos, a via também influencia essa leitura, principalmente quando não se trata de via local.")
 
     st.markdown("---\n### 📘 4️⃣ Como funciona a leitura da adequabilidade no multifamiliar?")
     st.markdown(
@@ -328,12 +338,12 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.markdown(
             "| Sigla | O que significa | Como interpretar |\n"
             "|---|---|---|\n"
-            "| **A** | Adequado / permitido | Pode seguir com o projeto, respeitando as demais regras. |\n"
+            "| **A** | Adequado / permitido | Pode seguir com o projeto (respeitando TO/TP/IA/recuos). |\n"
             "| **I** | Inadequado / não permitido | Em regra, não pode nesse local/condição. |\n"
             "| **AP** | Adequado (pequeno porte) | Pode, mas normalmente limitado a porte pequeno. |\n"
             "| **AM** | Adequado (médio porte) | Pode, mas normalmente limitado a porte médio. |\n"
-            "| **AP/AM** | Depende do porte | Pode, mas depende se o caso é pequeno ou médio. |\n"
-            "| **PE** | Projeto especial | Pode exigir análise específica e condições extras no licenciamento. |"
+            "| **AP/AM** | Depende do porte | Pode, mas depende se o seu caso é pequeno ou médio. |\n"
+            "| **PE** | Projeto especial | Pode exigir análise específica/condições extras no licenciamento. |"
         )
     with col2:
         st.markdown("**O que é “porte” (pequeno / médio / grande)?**")
@@ -349,9 +359,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.caption("Se a lei ou o licenciamento adotar critério diferente para algum uso específico, prevalece a conferência final no licenciamento.")
 
     st.markdown("---\n### 📏 5️⃣ Regras principais para este terreno")
-    st.markdown(
-        "Depois de entender se o uso é permitido, o próximo passo é ver os limites básicos do lote para começar o estudo."
-    )
+    st.markdown("Depois de entender se o uso é permitido, o próximo passo é ver os limites básicos do lote para começar o estudo.")
     if not rule:
         st.warning(
             "Ainda não temos uma regra específica do multifamiliar carregada do Supabase para esta zona. "
@@ -411,14 +419,21 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
 
     st.markdown("---\n### 🔎 9️⃣ O que preciso observar no tipo multifamiliar escolhido?")
     if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
+        st.markdown("**O que é o residencial multifamiliar R2.1?**")
+        st.markdown(
+            "É o caso em que existem **2 unidades habitacionais no mesmo lote**, podendo ser:\n\n"
+            "- **justapostas** → residências lado a lado (horizontal)\n"
+            "- **sobrepostas** → uma unidade embaixo e outra em cima"
+        )
         st.markdown("**R2.1 — 2 unidades no mesmo lote (justapostas ou sobrepostas)**")
         st.markdown(
             "- ✅ **Altura/andares:** pode ter no máximo 2 pavimentos.\n"
             "- ✅ **Justapostas (lado a lado):** testada mínima 8,00 m (exceto ZEIS).\n"
-            "- ✅ **Parâmetros urbanísticos:** quando a zona permitir, pode usar os parâmetros do unifamiliar, respeitando adequabilidade."
+            "- ✅ **Parâmetros urbanísticos:** quando a zona permitir, pode usar os parâmetros do **unifamiliar**, respeitando a adequabilidade."
         )
     elif multi_tipo in ("R22", "R2.2", "R2_2") or use_type_code.endswith("R22"):
-        st.markdown("**R2.2 — Condomínio horizontal (via interna)**")
+        st.markdown("**R2.2 — condomínio horizontal**")
+        st.markdown("É a tipologia de multifamiliar com unidades organizadas por **via interna**, em formato horizontal.")
         st.markdown(
             "- ✅ **Acesso de veículos:** abertura mínima 4,00 m de largura e 4,50 m de altura livre.\n"
             "- ✅ **Via interna:** largura mínima 6,00 m.\n"
@@ -428,7 +443,8 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             "- ⚠️ **Lazer:** se passar de 10 unidades, prever área mínima conforme a lei."
         )
     elif multi_tipo in ("R3", "R03") or use_type_code.endswith("R3"):
-        st.markdown("**R3 — Condomínio vertical (edifício)**")
+        st.markdown("**R3 — residência multifamiliar vertical**")
+        st.markdown("É o caso do edifício residencial multifamiliar, com unidades organizadas em pavimentos.")
         st.markdown(
             "- ✅ **Muro frontal:** pelo menos 50% em gradil ou material vazado.\n"
             "- ✅ **Resíduos:** prever local no alinhamento com abertura para o logradouro.\n"
@@ -441,25 +457,45 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.info("Selecione o tipo de multifamiliar para exibir o checklist específico.")
 
     st.markdown("---\n### 🚗 🔟 Preciso de vagas de estacionamento?")
-    st.markdown(
-        "No multifamiliar, a quantidade de vagas depende do tamanho do apartamento (área construída da unidade)."
-    )
+    st.markdown("No multifamiliar, a quantidade de vagas depende do tamanho do apartamento (área construída da unidade).")
     st.markdown(
         "- 🚗 **Apartamento com menos de 90 m²** → 1 vaga por unidade\n"
         "- 🚗 **Apartamento com 90 m² ou mais** → 1,5 vaga por unidade"
     )
     st.success("📌 Quando aparecer 1,5, o total final deve ser arredondado para cima (não existe meia vaga).")
+    st.markdown(
+        "**Art. 121, § 4º:** “Poderá ser utilizada até 30% (trinta por cento) das vagas de estacionamento previstas para estacionamento de motocicletas.”"
+    )
     st.markdown("**Exemplos rápidos:**")
     st.markdown(
         "- 10 apartamentos com 80 m² → 10 vagas\n"
         "- 11 apartamentos com 100 m² → 11 × 1,5 = 16,5 → 17 vagas"
     )
 
-    st.markdown("---\n### 💡 1️⃣1️⃣ Dicas valiosas")
+    st.markdown("---\n### 📋 1️⃣1️⃣ Quais medidas mínimas os ambientes precisam ter?")
+    st.markdown(
+        "Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação. "
+        "Isso vale para itens como sala, quartos, cozinha, banheiro, área de serviço, garagem e escada."
+    )
+    render_quadro_tecnico()
+
+    st.markdown("---\n### 🚶 1️⃣2️⃣ O que preciso saber sobre a calçada?")
+    st.markdown(
+        "A análise não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação do lote com a rua. "
+        "As figuras abaixo ajudam a visualizar esse padrão."
+    )
+    render_figuras_anexo_v(rule)
+
+    st.markdown("---\n### 💡 1️⃣3️⃣ Dicas valiosas")
+    if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
+        st.markdown(
+            "**Parâmetros urbanísticos no caso justaposto**\n\n"
+            "Quando a zona permitir, o multifamiliar justaposto pode usar os parâmetros do **unifamiliar**, respeitando a adequabilidade."
+        )
     if multi_tipo in ("R22", "R2.2", "R2_2", "R3", "R03") or use_type_code.endswith(("R22", "R3")):
         st.markdown(
-            "**Quadra máxima em R2.2 e R3**\n\n"
-            "Para projetos multifamiliares R2.2 (condomínio horizontal) e R3 (condomínio vertical), a legislação menciona uma verificação relacionada à **quadra máxima da zona**. "
+            "\n\n**Quadra máxima em R2.2 e R3**\n\n"
+            "Para projetos multifamiliares R2.2 (condomínio horizontal) e R3 (residência multifamiliar vertical), a legislação menciona uma verificação relacionada à **quadra máxima da zona**. "
             "Em caso de dúvida, essa conferência deve ser feita no licenciamento e nos anexos da lei."
         )
     st.markdown(
@@ -467,12 +503,18 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         "Não há, na legislação municipal, uma medida única e fixa para a largura dos passeios. Quando existir, deve-se adotar o padrão definido no projeto aprovado do loteamento e/ou nas diretrizes urbanísticas da via; na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro, garantindo continuidade e alinhamento."
     )
     st.markdown(
-        "\n\n**Piscinas**\n\n"
-        "Atenção: para a Taxa de Ocupação (TO), a piscina não é contada como área construída do lote.\n\n"
+        "\n\n**Piscinas, espelhos d’água, caixas d’água, cisternas e tanques**\n\n"
+        "**Atenção:** para a Taxa de Ocupação (TO), a piscina não é contada como área construída do lote.\n\n"
         "As piscinas, espelhos d’água, caixas d’água, cisternas e tanques devem observar afastamento mínimo de 0,50 m das divisas do terreno e são computados como área impermeável para a Taxa de Permeabilidade (TP)."
     )
 
-    st.markdown("---\n### 📌 1️⃣2️⃣ Resumo rápido final")
+    st.markdown("---\n### ✅ 1️⃣4️⃣ Fechamento final")
+    st.markdown(
+        "Este relatório foi pensado para ajudar você a entender o terreno de forma mais simples.\n\n"
+        "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no licenciamento."
+    )
+
+    st.markdown("---\n### 📌 1️⃣5️⃣ Resumo rápido final")
     st.markdown("Se você quiser ver só o essencial deste terreno, este é o resumo principal:")
     st.markdown(
         f"- **Uso analisado:** {uso_label}\n"
@@ -485,10 +527,4 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         f"- **TP mínima:** {_fmt_pct(tp_min_pct)}\n"
         f"- **IA máximo:** {_fmt_num(ia_max, 2) if ia_max not in (None, '') else '—'}\n"
         f"- **Altura permitida máxima:** {_fmt_num(gabarito_f)} m"
-    )
-
-    st.markdown("---\n### ✅ 1️⃣3️⃣ Fechamento final")
-    st.markdown(
-        "Este relatório foi pensado para ajudar você a entender o terreno de forma mais simples.\n\n"
-        "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no licenciamento."
     )
