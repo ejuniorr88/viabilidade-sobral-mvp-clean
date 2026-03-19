@@ -538,7 +538,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     else:
         st.info("Selecione o tipo de multifamiliar para exibir o checklist específico.")
 
-    st.markdown("---\n### 🚗 🔟 Preciso de vagas de estacionamento?")
+    st.markdown("---\n### 🚗 🔟 Vagas de estacionamento")
     st.markdown("No multifamiliar, a quantidade de vagas depende do tamanho do apartamento (área construída da unidade).")
     st.markdown(
         "- 🚗 **Apartamento com menos de 90 m²** → 1 vaga por unidade\n"
