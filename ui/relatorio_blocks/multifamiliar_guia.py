@@ -253,8 +253,8 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ], "mesmo no **R2.1**, o **IA da zona continua importando**, e a forma de calcular a área computável também precisa ser observada."),
             ("Subsolo", [
                 "Quando a zona permitir subsolo, ele deve respeitar:",
-                "- a **TO do subsolo**;",
-                "- a **TP**;",
+                "- a **Taxa de Ocupação do subsolo**;",
+                "- a **Taxa de Permeabilidade**;",
                 "- os **recuos mínimos da zona**;",
                 "E, se houver subsolo, deve haver **recuo mínimo de 1,50 m em todas as divisas**.",
             ], "essa verificação só passa a ser relevante se o estudo realmente considerar subsolo no lote."),
@@ -294,8 +294,8 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ], "no **R2.2**, a conta do IA precisa observar não só as unidades, mas também o que entra ou não entra como área computável."),
             ("Subsolo", [
                 "Se a zona permitir subsolo, ele deve respeitar:",
-                "- a **TO do subsolo**;",
-                "- a **TP**;",
+                "- a **Taxa de Ocupação do subsolo**;",
+                "- a **Taxa de Permeabilidade**;",
                 "- os **recuos mínimos da zona**;",
                 "E, se houver subsolo, deve haver **recuo mínimo de 1,50 m em todas as divisas**.",
             ], "essa regra passa a ser relevante quando o estudo considerar subsolo no condomínio."),
@@ -340,7 +340,7 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ("Subsolo", [
                 "Se a zona permitir subsolo:",
                 "- deve respeitar a **TO do subsolo**;",
-                "- a **TP**;",
+                "- a **Taxa de Permeabilidade**;",
                 "- os **recuos mínimos da zona**;",
                 "- e, havendo subsolo, deve existir **recuo mínimo de 1,50 m em todas as divisas**.",
             ], "no **R3**, essa regra é muito relevante, especialmente quando o projeto depender de garagem em subsolo."),
