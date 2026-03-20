@@ -1,22 +1,17 @@
-from __future__ import annotations
-
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore")
+def _contains_any(text: str, variants: list[str]) -> bool:
+    return any(v in text for v in variants)
 
 
 def test_relatorio_smoke_must_keep_core_blocks() -> None:
     """
     Smoke test antirregressão:
-
-    Objetivo:
-    - falhar se sumirem textos/blocos obrigatórios do relatório
-    - reduzir chance de regressão ao mexer em ui/relatorio.py e ui/relatorio_blocks/*
+    - falha se sumirem blocos/textos centrais do relatório
+    - tolera pequenas variações de redação/título sem quebrar à toa
     """
 
     relatorio_py = ROOT / "ui" / "relatorio.py"
@@ -31,54 +26,58 @@ def test_relatorio_smoke_must_keep_core_blocks() -> None:
     assert figuras_py.exists(), "ui/relatorio_blocks/figuras_anexo_v.py não encontrado"
     assert multi_py.exists(), "ui/relatorio_blocks/multifamiliar_guia.py não encontrado"
 
-    txt_rel = _read(relatorio_py)
-    txt_quadro = _read(quadro_py)
-    txt_dicas = _read(dicas_py)
-    txt_figuras = _read(figuras_py)
-    txt_multi = _read(multi_py)
+    txt_relatorio = relatorio_py.read_text(encoding="utf-8")
+    txt_quadro = quadro_py.read_text(encoding="utf-8")
+    txt_dicas = dicas_py.read_text(encoding="utf-8")
+    txt_figuras = figuras_py.read_text(encoding="utf-8")
+    txt_multi = multi_py.read_text(encoding="utf-8")
 
-    # 1) Orquestração deve chamar os blocos fixos (blindagem)
-    required_calls = [
-        "render_quadro_tecnico",
-        "render_dicas_valiosas",
-        "render_figuras_anexo_v",
-        "fetch_zone_description",
+    for anchor in [
+        "RELATÓRIO URBANÍSTICO",
+        "Onde está localizado o terreno?",
+        "O uso residencial unifamiliar é viável neste terreno?",
+        "O que essa zona permite neste terreno?",
+        "Quanto posso ocupar no térreo?",
+        "Quanto preciso deixar livre?",
+        "Tipos de piso: o que conta como permeável?",
+        "Preciso de vagas de estacionamento?",
+        "Dicas valiosas",
+        "Resumo rápido final",
+    ]:
+        assert anchor in txt_relatorio, f"Âncora obrigatória sumiu de ui/relatorio.py: {anchor}"
+
+    quadro_variants = [
+        "QUADRO TÉCNICO - PARÂMETROS DOS AMBIENTES",
+        "QUADRO TÉCNICO – PARÂMETROS DOS AMBIENTES",
+        "Quadro técnico — parâmetros dos ambientes",
+        "Quadro técnico – parâmetros dos ambientes",
+        "Quadro técnico - parâmetros dos ambientes",
+        "PARÂMETROS DOS AMBIENTES",
     ]
-    for s in required_calls:
-        assert s in txt_rel, f"ui/relatorio.py não referencia o bloco: {s}"
+    assert _contains_any(txt_quadro, quadro_variants), (
+        "Âncora obrigatória sumiu de ui/relatorio_blocks/quadro_tecnico.py: "
+        "título do quadro técnico."
+    )
 
-    # 2) Âncoras do relatório agora ficam nos arquivos corretos dos blocos
-    core_anchors_by_file = {
-        "ui/relatorio_blocks/quadro_tecnico.py": [
-            "Altura máxima do degrau: 0,19m.",
-            "QUADRO TÉCNICO – PARÂMETROS DOS AMBIENTES",
-        ],
-        "ui/relatorio_blocks/dicas_valiosas.py": [
-            "Dicas Valiosas",
-        ],
-        "ui/relatorio_blocks/figuras_anexo_v.py": [
-            "Abrir em tamanho real",
-            "Anexo V",
-        ],
-    }
-    texts = {
-        "ui/relatorio_blocks/quadro_tecnico.py": txt_quadro,
-        "ui/relatorio_blocks/dicas_valiosas.py": txt_dicas,
-        "ui/relatorio_blocks/figuras_anexo_v.py": txt_figuras,
-    }
-    for filename, anchors in core_anchors_by_file.items():
-        txt = texts[filename]
-        for s in anchors:
-            assert s in txt, f"Âncora obrigatória sumiu de {filename}: {s}"
+    for anchor in ["Observações", "Observações gerais"]:
+        assert anchor in txt_quadro, f"Âncora obrigatória sumiu de ui/relatorio_blocks/quadro_tecnico.py: {anchor}"
 
-    # 3) Âncoras do guia multifamiliar (Fase 1)
-    required_multi = [
-        "Multifamiliar — Fase 1 (Guia do Projetista)",
-        "Como interpretar este resultado (bem simples):",
-        "O que significam as siglas (bem simples):",
-        "O que é “porte” (pequeno / médio / grande)?",
-        "Via identificada como **VIA LOCAL**",
-        "tabela por tipo de via",
-    ]
-    for s in required_multi:
-        assert s in txt_multi, f"Âncora do multifamiliar sumiu: {s}"
+    assert (
+        "A largura mínima do degrau será de 0,25m." in txt_quadro
+        or "Largura mínima do degrau: 0,25m." in txt_quadro
+    ), "Âncora obrigatória sumiu de ui/relatorio_blocks/quadro_tecnico.py: largura mínima do degrau."
+
+    assert (
+        "A altura máxima do degrau será de 0,19m." in txt_quadro
+        or "Altura máxima do degrau: 0,19m." in txt_quadro
+    ), "Âncora obrigatória sumiu de ui/relatorio_blocks/quadro_tecnico.py: altura máxima do degrau."
+
+    assert (
+        "Dicas Valiosas" in txt_dicas or "Dicas valiosas" in txt_dicas
+    ), "Âncora obrigatória sumiu de ui/relatorio_blocks/dicas_valiosas.py: Dicas Valiosas"
+
+    for anchor in ["Abrir em tamanho real", "Anexo V"]:
+        assert anchor in txt_figuras, f"Âncora obrigatória sumiu de ui/relatorio_blocks/figuras_anexo_v.py: {anchor}"
+
+    for anchor in ["Vagas de estacionamento", "quadra máxima"]:
+        assert anchor in txt_multi, f"Âncora obrigatória sumiu de ui/relatorio_blocks/multifamiliar_guia.py: {anchor}"

@@ -44,15 +44,21 @@ def render_analise_section(
     permeable_area: Any,
     pick_func: Callable[..., Any],
 ) -> None:
-    st.subheader("5) Análise Urbanística")
-
-    # Multifamiliar (Fase 1 — Guia): não rodar validações numéricas de unifamiliar
+    # O relatório novo já explica TO/TP/IA de forma didática para unifamiliar.
+    # Aqui ocultamos o bloco antigo para evitar duplicação visual antes do relatório.
     use_type_code = str(calc.get("use_type_code") or "").upper()
     project_mode = str(calc.get("project_mode") or "").upper()
+
+    # Multifamiliar (Fase 1 — Guia): mantém comportamento informativo já consolidado.
     if use_type_code.startswith("RES_MULTI_") and project_mode == "GUIA_FASE_1":
         st.info("Modo **Guia do Projetista (Multifamiliar)**: esta etapa é informativa e não faz validações numéricas de TO/TP/IA.")
         return
 
+    # Unifamiliar: ocultar o bloco antigo "Análise Urbanística" para não repetir conteúdo.
+    if use_type_code == "RES_UNI":
+        return
+
+    st.subheader("5) Análise Urbanística")
 
     if not calc.get("ok"):
         st.info("Clique em **Calcular viabilidade** para gerar a análise.")
