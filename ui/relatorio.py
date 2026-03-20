@@ -406,7 +406,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     )
     render_figuras_anexo_v(rule)
 
-    st.markdown("---\n### 💡 1️⃣2️⃣ Pontos importantes para não esquecer")
+    st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
     st.markdown(
         "**Flexibilidade de recuos no uso residencial unifamiliar**\n\n"
         "**Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
@@ -453,7 +453,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "De forma geral, esse processo pode seguir por **duas vias**:\n\n"
         "- **Alvará de Construção Simplificado** → voltado para casos mais simples e de menor porte;\n"
         "- **Alvará de Construção (Obra Nova)** → usado quando a obra exige análise técnica mais completa e documentação complementar.\n\n"
-        "Abaixo está um resumo dos dois caminhos e um checklist básico dos itens que normalmente precisam ser providenciados."
+        "Abaixo, apresentamos um resumo dos dois caminhos e um checklist básico dos itens que normalmente precisam ser providenciados."
     )
 
     st.markdown("#### 📄 Alvará de Construção Simplificado")
@@ -486,8 +486,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.markdown(
         "O **Alvará de Construção (Obra Nova)** é o caminho regular de licenciamento para obras novas que exigem análise técnica completa da Prefeitura. "
         "Ele é mais detalhado e costuma ser necessário em casos que não se enquadram no procedimento simplificado ou que exigem documentação complementar.\n\n"
-        "Esse tipo de alvará pede uma conferência mais ampla do projeto, incluindo aspectos urbanísticos, arquitetônicos, hidrossanitários, ambientais "
-        "e, em alguns casos, exigências de outros órgãos."
+        "Esse tipo de alvará pede uma conferência mais ampla do projeto, incluindo aspectos urbanísticos, arquitetônicos, hidrossanitários, ambientais e, em alguns casos, exigências de outros órgãos."
     )
     st.markdown("**✅ Checklist — documentos principais**")
     st.markdown("[ ] Requerimento único")
@@ -517,7 +516,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.markdown("[ ] Verificar se o imóvel está em área com proteção especial")
     st.markdown("[ ] Conferir se o projeto atende às exigências técnicas antes do protocolo")
 
-    st.markdown("---\n### ✅ Fechamento final")
+    st.markdown("---\n### ✅ 1️⃣5️⃣ Fechamento final")
     st.markdown(
         "Este relatório foi pensado para ajudar a entender o terreno de forma mais simples.\n\n"
         "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no licenciamento."
