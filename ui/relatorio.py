@@ -232,7 +232,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "👉 Na prática, isso quer dizer que a via também entra na leitura do uso neste caso."
         )
 
-    st.markdown("---\n### 🧭 3️⃣ O que essa zona quer dizer?")
+    st.markdown("---\n### 🧭 3️⃣ O que essa zona permite neste terreno?")
     st.markdown(
         "Todo terreno fica dentro de uma zona, e cada zona tem suas próprias regras. "
         "É isso que ajuda a definir o que pode ser construído, quanto pode ocupar no térreo, "
