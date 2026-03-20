@@ -119,9 +119,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 
     if str(uso).startswith("RES_MULTI_") and calc.get("project_mode") == "GUIA_FASE_1":
         render_multifamiliar_guia(calc=calc, rule=rule, is_irregular=is_irregular)
-        render_dicas_valiosas()
-        render_quadro_tecnico()
-        render_figuras_anexo_v(rule)
         return
 
     A = float(calc.get("lot_area_m2") or 0.0)
@@ -235,7 +232,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "👉 Na prática, isso quer dizer que a via também entra na leitura do uso neste caso."
         )
 
-    st.markdown("---\n### 🧭 3️⃣ O que essa zona permite neste terreno?")
+    st.markdown("---\n### 🧭 3️⃣ O que essa zona quer dizer?")
     st.markdown(
         "Todo terreno fica dentro de uma zona, e cada zona tem suas próprias regras. "
         "É isso que ajuda a definir o que pode ser construído, quanto pode ocupar no térreo, "
@@ -357,7 +354,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         )
 
     st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
-    st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. **Tipo de piso** faz diferença no cálculo. Veja como a lei trata isso:")
+    st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
     st.markdown(
         _md_table(
             [
@@ -385,14 +382,14 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         st.markdown(f"**Altura máxima da zona:** {_fmt_num(gabarito_m)} m")
         if pav_est is not None:
             st.markdown(
-                f"**Estimativa simples para ter noção do número de pavimentos:** adotando um pé-direito médio de **3,00 m por pavimento**, "
+                f"**Exemplo simples para ter uma noção de andares:** adotando um pé-direito médio de **3,00 m por pavimento**, "
                 f"a altura máxima de **{_fmt_num(gabarito_m)} m** pode permitir, em média, algo próximo de **{pav_est} pavimentos**.\n\n"
                 "👉 Isso é apenas uma referência inicial. Na prática, a quantidade real de andares depende também da laje, cobertura, "
                 "platibanda, caixa d’água e da forma como o projeto será desenvolvido."
             )
 
     st.markdown("---\n### 🚗 9️⃣ Preciso de vagas de estacionamento?")
-    st.success("**Neste caso, não existe exigência mínima obrigatória de vagas.**")
+    st.success("**Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento.**")
     st.markdown("Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.")
 
     st.markdown("---\n### 📋 1️⃣0️⃣ Quais medidas mínimas os ambientes precisam ter?")
@@ -409,7 +406,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     )
     render_figuras_anexo_v(rule)
 
-    st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
+    st.markdown("---\n### 💡 1️⃣2️⃣ Pontos importantes para não esquecer")
     st.markdown(
         "**Flexibilidade de recuos no uso residencial unifamiliar**\n\n"
         "**Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
