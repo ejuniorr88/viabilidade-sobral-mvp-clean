@@ -232,7 +232,6 @@ def _render_intro_tipo(multi_tipo: str, use_type_code: str) -> None:
 
 
 def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
-    st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
 
     if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
         sections = [
@@ -241,7 +240,7 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
                 "**fora da ZEIS**, se for **justaposto**, exige **testada mínima de 8,00 m**;",
                 "quando a zona permitir, pode usar os parâmetros do **unifamiliar**, respeitando a adequabilidade;",
                 "cada unidade deve atender os mínimos do **Anexo II**, como no unifamiliar;",
-                "cada unidade deve ter **acesso independente para a via pública oficial**.",
+                "cada unidade deve ter acesso independente para a via pública oficial.",
             ], "quando a zona permitir esse enquadramento, o **R2.1 justaposto** pode seguir a lógica do **unifamiliar** para parâmetros como recuos, TO, TP, IA, altura e testada mínima."),
             ("IA e área computável", [
                 "**Art. 110 da LC 91:** a área computável para o Índice de Aproveitamento (**IA**) é calculada pela soma das áreas das unidades autônomas.",
@@ -253,8 +252,8 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ], "mesmo no **R2.1**, o **IA da zona continua importando**, e a forma de calcular a área computável também precisa ser observada."),
             ("Subsolo", [
                 "Quando a zona permitir subsolo, ele deve respeitar:",
-                "- a **Taxa de Ocupação do subsolo**;",
-                "- a **Taxa de Permeabilidade**;",
+                "- a **TO do subsolo**;",
+                "- a **TP**;",
                 "- os **recuos mínimos da zona**;",
                 "E, se houver subsolo, deve haver **recuo mínimo de 1,50 m em todas as divisas**.",
             ], "essa verificação só passa a ser relevante se o estudo realmente considerar subsolo no lote."),
@@ -269,7 +268,7 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ], "o **R2.2** não funciona como “casas independentes voltadas para a rua”, e sim como um conjunto residencial horizontal com acesso e circulação internos."),
             ("Exigências específicas do condomínio horizontal", [
                 "O **art. 168 da LC 90** exige, entre outros pontos:",
-                "- **abertura mínima de acesso:** 4,00 m;",
+                "- abertura mínima de acesso: 4,00 m;",
                 "- **altura livre mínima no acesso:** 4,50 m;",
                 "- **vias internas com 6,00 m**, conforme norma do Corpo de Bombeiros;",
                 "- **acessibilidade** *(como rotas acessíveis e uso comum adequado)*;",
@@ -294,8 +293,8 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ], "no **R2.2**, a conta do IA precisa observar não só as unidades, mas também o que entra ou não entra como área computável."),
             ("Subsolo", [
                 "Se a zona permitir subsolo, ele deve respeitar:",
-                "- a **Taxa de Ocupação do subsolo**;",
-                "- a **Taxa de Permeabilidade**;",
+                "- a **TO do subsolo**;",
+                "- a **TP**;",
                 "- os **recuos mínimos da zona**;",
                 "E, se houver subsolo, deve haver **recuo mínimo de 1,50 m em todas as divisas**.",
             ], "essa regra passa a ser relevante quando o estudo considerar subsolo no condomínio."),
@@ -340,7 +339,7 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ("Subsolo", [
                 "Se a zona permitir subsolo:",
                 "- deve respeitar a **TO do subsolo**;",
-                "- a **Taxa de Permeabilidade**;",
+                "- a **TP**;",
                 "- os **recuos mínimos da zona**;",
                 "- e, havendo subsolo, deve existir **recuo mínimo de 1,50 m em todas as divisas**.",
             ], "no **R3**, essa regra é muito relevante, especialmente quando o projeto depender de garagem em subsolo."),
@@ -375,7 +374,6 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
 
 
 def _render_alvara_section() -> None:
-    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     st.markdown(
         "Após a finalização dos projetos, será necessário dar entrada na documentação junto à **Prefeitura** para obter o **alvará de construção**.\n\n"
         "De forma geral, esse processo pode seguir por **duas vias**:\n\n"
@@ -807,11 +805,14 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         f"👉 **Na prática:** como o **{_tipo_multifamiliar_label(multi_tipo, use_type_code).split(' — ')[0]}** é multifamiliar, essa lógica de vagas entra no cálculo do estudo."
     )
 
+    st.markdown("---\n### 📋 1️⃣0️⃣ Quais medidas mínimas os ambientes precisam ter?")
+    st.markdown("**Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação. Isso vale para itens como sala, quartos, cozinha, banheiro, área de serviço, garagem e escada.**")
     render_quadro_tecnico()
     st.markdown("---\n### 🚶 1️⃣1️⃣ O que preciso saber sobre a calçada?")
     st.markdown("**A análise do terreno não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação com a rua.**")
     render_figuras_anexo_v(rule or {})
 
+    st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
     _render_dicas_valiosas(multi_tipo, use_type_code)
 
     st.markdown("---\n### 📌 1️⃣3️⃣ Resumo rápido final")
@@ -843,6 +844,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         f"- e a altura deve respeitar o limite máximo permitido da zona."
     )
 
+    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     _render_alvara_section()
 
     st.markdown("---\n### ✅ 1️⃣5️⃣ Fechamento final")
