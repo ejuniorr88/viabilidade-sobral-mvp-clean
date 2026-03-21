@@ -35,15 +35,28 @@ def create_pending_payment_server_side(
     *,
     user_id: str,
     package: Dict[str, Any],
+    coupon_applied: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     supabase = get_supabase_server_client()
+    original_amount = float((coupon_applied or {}).get("original_amount") or package.get("price_brl") or 0)
+    discount_amount = float((coupon_applied or {}).get("discount_amount") or 0)
+    final_amount = float((coupon_applied or {}).get("final_amount") or original_amount)
     payload = {
         "user_id": user_id,
         "package_id": package["id"],
         "gateway": "mercadopago_pix_test",
         "external_reference": _generate_external_reference(user_id),
-        "amount_brl": float(package.get("price_brl") or 0),
+        "amount_brl": final_amount,
         "status": "pending",
+        "coupon_id": (coupon_applied or {}).get("coupon_id"),
+        "coupon_code": (coupon_applied or {}).get("coupon_code"),
+        "coupon_owner_user_id": (coupon_applied or {}).get("coupon_owner_user_id"),
+        "discount_type": (coupon_applied or {}).get("discount_type"),
+        "discount_value": (coupon_applied or {}).get("discount_value"),
+        "original_amount": original_amount,
+        "discount_amount": discount_amount,
+        "final_amount": final_amount,
+        "coupon_snapshot": (coupon_applied or {}).get("snapshot"),
     }
     response = supabase.table("payments").insert(payload).execute()
     data = _safe_data(response) or []
@@ -88,13 +101,15 @@ def create_pending_payment_and_pix(
     user_email: str,
     user_name: str,
     package: Dict[str, Any],
+    coupon_applied: Optional[Dict[str, Any]] = None,
     notification_url: Optional[str] = None,
 ) -> Dict[str, Any]:
-    pending = create_pending_payment_server_side(user_id=user_id, package=package)
+    pending = create_pending_payment_server_side(user_id=user_id, package=package, coupon_applied=coupon_applied)
 
     try:
+        amount_for_pix = float((coupon_applied or {}).get("final_amount") or package.get("price_brl") or 0)
         pix = create_pix_payment(
-            amount_brl=float(package.get("price_brl") or 0),
+            amount_brl=amount_for_pix,
             description=f"{package.get('name') or 'Pacote de créditos'}",
             payer_email=user_email,
             payer_name=user_name or user_email,
@@ -157,6 +172,76 @@ def _get_payment_credit_row(*, payment_id: str) -> Optional[Dict[str, Any]]:
     )
     data = _safe_data(response) or []
     return data[0] if data else None
+
+
+def _coerce_coupon_usage_payment_id(payment_id: Any) -> Optional[int]:
+    try:
+        if payment_id is None or payment_id == "":
+            return None
+        return int(payment_id)
+    except Exception:
+        return None
+
+
+def _get_coupon_usage_row_for_payment(*, payment_row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    supabase = get_supabase_server_client()
+    payment_id = _coerce_coupon_usage_payment_id(payment_row.get("id"))
+    external_reference = str(payment_row.get("external_reference") or "")
+
+    query = supabase.table("coupon_usages").select("*")
+    if payment_id is not None:
+        response = query.eq("payment_id", payment_id).limit(1).execute()
+        data = _safe_data(response) or []
+        if data:
+            return data[0]
+
+    if external_reference:
+        response = (
+            supabase.table("coupon_usages")
+            .select("*")
+            .eq("payment_external_reference", external_reference)
+            .limit(1)
+            .execute()
+        )
+        data = _safe_data(response) or []
+        if data:
+            return data[0]
+
+    return None
+
+
+def _record_coupon_usage_for_paid_payment(*, payment_row: Dict[str, Any]) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    coupon_id = payment_row.get("coupon_id")
+    coupon_code = str(payment_row.get("coupon_code") or "").strip()
+    if not coupon_id or not coupon_code:
+        return {"recorded": False, "reason": "no_coupon"}
+
+    existing = _get_coupon_usage_row_for_payment(payment_row=payment_row)
+    if existing:
+        return {"recorded": False, "reason": "already_recorded", "usage": existing}
+
+    original_amount = float(payment_row.get("original_amount") or payment_row.get("amount_brl") or 0)
+    discount_amount = float(payment_row.get("discount_amount") or 0)
+    final_amount = float(payment_row.get("final_amount") or payment_row.get("amount_brl") or original_amount)
+    payload = {
+        "coupon_id": coupon_id,
+        "coupon_code": coupon_code,
+        "owner_user_id": payment_row.get("coupon_owner_user_id"),
+        "used_by_user_id": payment_row.get("user_id"),
+        "used_by_email": ((payment_row.get("coupon_snapshot") or {}).get("used_by_email") if isinstance(payment_row.get("coupon_snapshot"), dict) else None),
+        "payment_id": _coerce_coupon_usage_payment_id(payment_row.get("id")),
+        "payment_external_reference": payment_row.get("external_reference"),
+        "plan_code": str(payment_row.get("package_id") or ""),
+        "original_amount": original_amount,
+        "discount_amount": discount_amount,
+        "final_amount": final_amount,
+        "payment_status": str(payment_row.get("status") or "paid"),
+        "confirmed_at": "now()",
+    }
+    response = supabase.table("coupon_usages").insert(payload).execute()
+    data = _safe_data(response) or []
+    return {"recorded": True, "usage": (data[0] if data else payload)}
 
 
 def _read_balance(*, user_id: str) -> int:
@@ -241,11 +326,13 @@ def ensure_paid_payment_is_credited(*, payment_id: str, target_user_id: Optional
         return {"ok": False, "message": "Pagamento ainda não está pago.", "payment": payment_row}
 
     credit_result = _apply_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
+    coupon_result = _record_coupon_usage_for_paid_payment(payment_row=payment_row)
     return {
         "ok": True,
         "message": "Pagamento reprocessado para crédito.",
         "payment": payment_row,
         "credit_result": credit_result,
+        "coupon_result": coupon_result,
     }
 
 def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Optional[str] = None) -> Dict[str, Any]:
@@ -268,13 +355,16 @@ def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Option
     updated_payment = data[0] if data else {**payment_row, **update_payload}
 
     credit_result = {"credited": False, "reason": "not_paid"}
+    coupon_result = {"recorded": False, "reason": "not_paid"}
     if normalized_status == "paid":
         credit_result = _apply_credit_for_payment(payment_row=updated_payment, target_user_id=target_user_id)
+        coupon_result = _record_coupon_usage_for_paid_payment(payment_row=updated_payment)
 
     return {
         "ok": True,
         "message": "Pagamento atualizado.",
         "payment": updated_payment,
         "credit_result": credit_result,
+        "coupon_result": coupon_result,
         "gateway_status": mp_status,
     }
