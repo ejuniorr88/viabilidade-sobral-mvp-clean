@@ -232,9 +232,16 @@ def _find_matching_generic_credit_row(*, payment_row: Dict[str, Any]) -> Optiona
     return None
 
 
-def _get_payment_credit_row(*, payment_row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _get_payment_credit_row(*, payment_id: Optional[str] = None, payment_row: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     supabase = get_supabase_server_client()
-    payment_id = str(payment_row.get("id") or "")
+
+    if payment_row is None and payment_id:
+        try:
+            payment_row = _fetch_payment_row(payment_id=payment_id)
+        except Exception:
+            payment_row = {"id": payment_id}
+
+    payment_id = str(payment_id or (payment_row or {}).get("id") or "")
     if not payment_id:
         return None
 
@@ -251,7 +258,9 @@ def _get_payment_credit_row(*, payment_row: Dict[str, Any]) -> Optional[Dict[str
     if data:
         return data[0]
 
-    return _find_matching_generic_credit_row(payment_row=payment_row)
+    if payment_row:
+        return _find_matching_generic_credit_row(payment_row=payment_row)
+    return None
 
 
 def _coerce_coupon_usage_payment_id(payment_id: Any) -> Optional[int]:
@@ -291,12 +300,12 @@ def _get_coupon_usage_row_for_payment(*, payment_row: Dict[str, Any]) -> Optiona
 
 
 def _record_coupon_usage_for_paid_payment(*, payment_row: Dict[str, Any]) -> Dict[str, Any]:
-    supabase = get_supabase_server_client()
     coupon_id = payment_row.get("coupon_id")
     coupon_code = str(payment_row.get("coupon_code") or "").strip()
     if not coupon_id or not coupon_code:
         return {"recorded": False, "reason": "no_coupon"}
 
+    supabase = get_supabase_server_client()
     existing = _get_coupon_usage_row_for_payment(payment_row=payment_row)
     if existing:
         return {"recorded": False, "reason": "already_recorded", "usage": existing}
@@ -365,7 +374,7 @@ def inspect_payment_credit_status(*, payment_id: str, target_user_id: Optional[s
     payment_row = _fetch_payment_row(payment_id=payment_id)
     payment_user_id = str(payment_row.get("user_id") or "")
     resolved_user_id = str(target_user_id or payment_user_id or "")
-    existing_credit = _get_payment_credit_row(payment_row=payment_row)
+    existing_credit = _get_payment_credit_row(payment_id=str(payment_row.get("id") or ""))
     if existing_credit:
         credit_user_id = str(existing_credit.get("user_id") or "")
         if resolved_user_id and credit_user_id and credit_user_id != resolved_user_id:
@@ -400,7 +409,7 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Op
     if not user_id or not payment_id or not package_id:
         return {"credited": False, "reason": "payment_missing_fields"}
 
-    existing_credit = _get_payment_credit_row(payment_row=payment_row)
+    existing_credit = _get_payment_credit_row(payment_id=str(payment_row.get("id") or ""))
     if existing_credit:
         existing_user_id = str(existing_credit.get("user_id") or "")
         if existing_user_id == user_id:
@@ -459,6 +468,7 @@ def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Option
     update_payload = {
         "status": normalized_status,
         "gateway_payload": gateway.get("gateway_payload") or {},
+        **({"paid_at": datetime.now(timezone.utc).isoformat()} if normalized_status == "paid" else {}),
     }
     response = supabase.table("payments").update(update_payload).eq("id", payment_id).execute()
     data = _safe_data(response) or []
@@ -467,7 +477,7 @@ def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Option
     credit_result = {"credited": False, "reason": "not_paid"}
     coupon_result = {"recorded": False, "reason": "not_paid"}
     if normalized_status == "paid":
-        credit_result = inspect_payment_credit_status(payment_id=str(updated_payment.get("id") or payment_id), target_user_id=target_user_id).get("credit_result") or {"credited": False, "reason": "not_credited_yet"}
+        credit_result = _apply_credit_for_payment(payment_row=updated_payment, target_user_id=target_user_id)
         coupon_result = _record_coupon_usage_for_paid_payment(payment_row=updated_payment)
 
     return {
