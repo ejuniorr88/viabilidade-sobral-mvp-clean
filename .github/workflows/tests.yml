@@ -18,7 +18,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+a
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -27,4 +27,18 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -q
+          python - <<'PY'
+          import inspect
+          import ui.payments_panel as p
+
+          print("SOURCE FILE:", inspect.getsourcefile(p))
+          print("resolve sig:", inspect.signature(p._resolve_user_profile))
+          print("create sig:", inspect.signature(p._create_pix_payment))
+          print("render sig:", inspect.signature(p.render_payments_panel))
+          print("resolve source:")
+          print(inspect.getsource(p._resolve_user_profile))
+          print("create source:")
+          print(inspect.getsource(p._create_pix_payment))
+          PY
+
+          pytest -q tests/test_payments_full_contract.py
