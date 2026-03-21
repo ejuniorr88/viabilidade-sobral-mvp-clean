@@ -443,7 +443,9 @@ def _render_buy_section(
 
             coupon_input_key = f"coupon_input_{package_id}"
             coupon_message_key = f"coupon_message_{package_id}"
-            coupon_input_value = st.text_input("Cupom", key=coupon_input_key)
+            coupon_reset_key = f"coupon_input_reset_{package_id}"
+            coupon_widget_key = f"{coupon_input_key}_{int(st.session_state.get(coupon_reset_key, 0))}"
+            coupon_input_value = st.text_input("Cupom", key=coupon_widget_key)
             current_coupon = _get_current_coupon_application(package, coupon_input_value)
 
             original_amount = _to_float(_safe_get(package, 'price_brl', 0))
@@ -479,7 +481,7 @@ def _render_buy_section(
                 ):
                     st.session_state.pop(f"coupon_applied_{package_id}", None)
                     st.session_state.pop(coupon_message_key, None)
-                    st.session_state[coupon_input_key] = ""
+                    st.session_state[coupon_reset_key] = int(st.session_state.get(coupon_reset_key, 0)) + 1
                     st.rerun()
 
             applied_result = st.session_state.get(f"coupon_applied_{package_id}")
