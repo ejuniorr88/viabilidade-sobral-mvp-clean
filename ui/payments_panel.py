@@ -8,6 +8,7 @@ import streamlit as st
 
 from core.auth import get_supabase_auth_client
 from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited
+from core.coupons import validate_coupon_for_checkout
 
 
 # =========================================================
@@ -204,6 +205,7 @@ def _create_pix_payment(
     user_email: str,
     user_name: str,
     package: Dict[str, Any],
+    coupon_applied: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     try:
         notification_url = st.secrets.get(
@@ -216,6 +218,7 @@ def _create_pix_payment(
             user_email=user_email,
             user_name=user_name or user_email,
             package=package,
+            coupon_applied=coupon_applied,
             notification_url=notification_url,
         )
 
@@ -402,6 +405,20 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
         st.caption(f"Status atual: {status}")
 
 
+def _normalize_coupon_code(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _get_current_coupon_application(package: Dict[str, Any], coupon_input_value: str) -> Optional[Dict[str, Any]]:
+    package_id = str(_safe_get(package, "id", ""))
+    applied = st.session_state.get(f"coupon_applied_{package_id}")
+    if not isinstance(applied, dict) or not applied.get("ok"):
+        return None
+    if _normalize_coupon_code(applied.get("coupon_code")) != _normalize_coupon_code(coupon_input_value):
+        return None
+    return applied
+
+
 def _render_buy_section(
     user_id: str,
     user_email: str,
@@ -419,15 +436,63 @@ def _render_buy_section(
 
     for idx, package in enumerate(packages):
         col = cols[idx % len(cols)]
+        package_id = str(_safe_get(package, 'id', idx))
         with col:
             st.markdown(f"**{_safe_get(package, 'name', 'Pacote')}**")
             st.caption(_safe_get(package, "description", "-"))
-            st.write(f"Preço: {_fmt_brl(_safe_get(package, 'price_brl', 0))}")
+
+            coupon_input_key = f"coupon_input_{package_id}"
+            coupon_message_key = f"coupon_message_{package_id}"
+            coupon_input_value = st.text_input("Cupom", key=coupon_input_key)
+            current_coupon = _get_current_coupon_application(package, coupon_input_value)
+
+            original_amount = _to_float(_safe_get(package, 'price_brl', 0))
+            if current_coupon:
+                st.write(f"Preço original: {_fmt_brl(current_coupon.get('original_amount', original_amount))}")
+                st.write(f"Desconto: {_fmt_brl(current_coupon.get('discount_amount', 0))}")
+                st.write(f"Preço final: {_fmt_brl(current_coupon.get('final_amount', original_amount))}")
+            else:
+                st.write(f"Preço: {_fmt_brl(original_amount)}")
             st.write(f"Créditos: {int(_to_float(_safe_get(package, 'credits', 0)))}")
+
+            apply_col, clear_col = st.columns(2)
+            with apply_col:
+                if st.button(
+                    "Aplicar cupom",
+                    key=f"apply_coupon_{package_id}",
+                    use_container_width=True,
+                ):
+                    result = validate_coupon_for_checkout(
+                        user_id=user_id,
+                        user_email=user_email,
+                        package=package,
+                        coupon_code=coupon_input_value,
+                    )
+                    st.session_state[f"coupon_applied_{package_id}"] = result
+                    st.session_state[coupon_message_key] = result.get("message")
+                    st.rerun()
+            with clear_col:
+                if st.button(
+                    "Limpar cupom",
+                    key=f"clear_coupon_{package_id}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pop(f"coupon_applied_{package_id}", None)
+                    st.session_state.pop(coupon_message_key, None)
+                    st.session_state[coupon_input_key] = ""
+                    st.rerun()
+
+            applied_result = st.session_state.get(f"coupon_applied_{package_id}")
+            coupon_message = st.session_state.get(coupon_message_key)
+            if coupon_message and isinstance(applied_result, dict):
+                if applied_result.get("ok") and current_coupon:
+                    st.success(coupon_message)
+                elif not applied_result.get("ok") and _normalize_coupon_code(coupon_input_value):
+                    st.error(coupon_message)
 
             if st.button(
                 f"Gerar Pix — {_safe_get(package, 'name', 'Pacote')}",
-                key=f"buy_pkg_{_safe_get(package, 'id', idx)}",
+                key=f"buy_pkg_{package_id}",
                 use_container_width=True,
             ):
                 payment = _create_pix_payment(
@@ -435,6 +500,7 @@ def _render_buy_section(
                     user_email=user_email,
                     user_name=user_name,
                     package=package,
+                    coupon_applied=current_coupon,
                 )
                 if payment:
                     st.session_state["current_payment_id"] = _safe_get(payment, "id")
