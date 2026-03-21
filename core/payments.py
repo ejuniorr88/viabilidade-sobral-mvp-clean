@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 
 import streamlit as st
 from supabase import Client, create_client
@@ -159,8 +160,84 @@ def _fetch_package_credits(*, package_id: str) -> int:
         return 0
 
 
-def _get_payment_credit_row(*, payment_id: str) -> Optional[Dict[str, Any]]:
+_GENERIC_PIX_LEDGER_DESCRIPTIONS = {
+    "Crédito gerado por pagamento Pix aprovado via Mercado Pago.",
+    "Crédito por pagamento Pix aprovado via Mercado Pago.",
+}
+
+
+def _parse_dt(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        s = str(value).strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _is_within_credit_window(*, ledger_created_at: Any, payment_row: Dict[str, Any]) -> bool:
+    ledger_dt = _parse_dt(ledger_created_at)
+    if ledger_dt is None:
+        return False
+
+    anchors = [
+        _parse_dt(payment_row.get("paid_at")),
+        _parse_dt(payment_row.get("updated_at")),
+        _parse_dt(payment_row.get("created_at")),
+    ]
+    anchors = [a for a in anchors if a is not None]
+    if not anchors:
+        return False
+
+    for anchor in anchors:
+        if anchor - timedelta(minutes=2) <= ledger_dt <= anchor + timedelta(minutes=20):
+            return True
+    return False
+
+
+def _find_matching_generic_credit_row(*, payment_row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     supabase = get_supabase_server_client()
+    payment_user_id = str(payment_row.get("user_id") or "")
+    package_id = str(payment_row.get("package_id") or "")
+    if not payment_user_id or not package_id:
+        return None
+
+    credits = _fetch_package_credits(package_id=package_id)
+    if credits <= 0:
+        return None
+
+    response = (
+        supabase.table("credit_ledger")
+        .select("*")
+        .eq("source", "pix_purchase")
+        .eq("user_id", payment_user_id)
+        .eq("amount", credits)
+        .order("created_at", desc=True)
+        .limit(20)
+        .execute()
+    )
+    data = _safe_data(response) or []
+    for row in data:
+        description = str(row.get("description") or "").strip()
+        if description in _GENERIC_PIX_LEDGER_DESCRIPTIONS and _is_within_credit_window(
+            ledger_created_at=row.get("created_at"), payment_row=payment_row
+        ):
+            return row
+    return None
+
+
+def _get_payment_credit_row(*, payment_row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    supabase = get_supabase_server_client()
+    payment_id = str(payment_row.get("id") or "")
+    if not payment_id:
+        return None
+
     description = f"Crédito por pagamento Pix {payment_id}"
     response = (
         supabase.table("credit_ledger")
@@ -171,7 +248,10 @@ def _get_payment_credit_row(*, payment_id: str) -> Optional[Dict[str, Any]]:
         .execute()
     )
     data = _safe_data(response) or []
-    return data[0] if data else None
+    if data:
+        return data[0]
+
+    return _find_matching_generic_credit_row(payment_row=payment_row)
 
 
 def _coerce_coupon_usage_payment_id(payment_id: Any) -> Optional[int]:
@@ -281,6 +361,36 @@ def _move_credit_to_user(*, payment_row: Dict[str, Any], credit_row: Dict[str, A
     return {"credited": True, "credits": credits, "new_balance": target_balance + credits, "moved": True}
 
 
+def inspect_payment_credit_status(*, payment_id: str, target_user_id: Optional[str] = None) -> Dict[str, Any]:
+    payment_row = _fetch_payment_row(payment_id=payment_id)
+    payment_user_id = str(payment_row.get("user_id") or "")
+    resolved_user_id = str(target_user_id or payment_user_id or "")
+    existing_credit = _get_payment_credit_row(payment_row=payment_row)
+    if existing_credit:
+        credit_user_id = str(existing_credit.get("user_id") or "")
+        if resolved_user_id and credit_user_id and credit_user_id != resolved_user_id:
+            reason = "credited_to_other_user"
+        else:
+            reason = "already_credited"
+        return {
+            "ok": True,
+            "payment": payment_row,
+            "credit_result": {
+                "credited": False,
+                "reason": reason,
+                "credit_row": existing_credit,
+            },
+        }
+    return {
+        "ok": True,
+        "payment": payment_row,
+        "credit_result": {
+            "credited": False,
+            "reason": "not_credited_yet",
+        },
+    }
+
+
 def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Optional[str] = None) -> Dict[str, Any]:
     supabase = get_supabase_server_client()
     payment_user_id = str(payment_row.get("user_id") or "")
@@ -290,7 +400,7 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Op
     if not user_id or not payment_id or not package_id:
         return {"credited": False, "reason": "payment_missing_fields"}
 
-    existing_credit = _get_payment_credit_row(payment_id=payment_id)
+    existing_credit = _get_payment_credit_row(payment_row=payment_row)
     if existing_credit:
         existing_user_id = str(existing_credit.get("user_id") or "")
         if existing_user_id == user_id:
@@ -357,7 +467,7 @@ def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Option
     credit_result = {"credited": False, "reason": "not_paid"}
     coupon_result = {"recorded": False, "reason": "not_paid"}
     if normalized_status == "paid":
-        credit_result = _apply_credit_for_payment(payment_row=updated_payment, target_user_id=target_user_id)
+        credit_result = inspect_payment_credit_status(payment_id=str(updated_payment.get("id") or payment_id), target_user_id=target_user_id).get("credit_result") or {"credited": False, "reason": "not_credited_yet"}
         coupon_result = _record_coupon_usage_for_paid_payment(payment_row=updated_payment)
 
     return {
