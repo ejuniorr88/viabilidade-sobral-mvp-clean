@@ -173,6 +173,10 @@ def render_indices_section(
     rl = _to_float(rule.get("recuo_lateral_m"))
     rfd = _to_float(rule.get("recuo_fundos_m"))
 
+    recuo_lateral_txt = _fmt_m(rl)
+    if str(zone).strip().upper() in {"ZEPE1", "ZEPE2"}:
+        recuo_lateral_txt = "3m - Uso Industrial / 1,5m - Outros Usos"
+
     area_min = _to_float(rule.get("area_min_lote_m2"))
     area_max = _to_float(rule.get("area_max_lote_m2"))
 
@@ -202,7 +206,7 @@ def render_indices_section(
     rows = [
         ("Zona", zone or "—", "Taxa de Permeabilidade (TP) mínima", _fmt_pct(tp_min_pct), "Taxa de Ocupação (TO) máxima", _fmt_pct(to_max_pct)),
         ("TO do Subsolo máxima", _fmt_pct(to_sub_pct), "Índice de Aproveitamento (IA) máximo", _fmt_number(ia_max, 2), "Índice de Aproveitamento (IA) mínimo", _fmt_number(ia_min, 2) if ia_min is not None else "—"),
-        ("Recuo de Frente", _fmt_m(rf), "Recuo de Fundo", _fmt_m(rfd), "Recuo Lateral", _fmt_m(rl)),
+        ("Recuo de Frente", _fmt_m(rf), "Recuo de Fundo", _fmt_m(rfd), "Recuo Lateral", recuo_lateral_txt),
         ("Área mínima do lote", _fmt_m2(area_min), "Testada mínima", testada_min_txt, "Altura máxima (gabarito)", gabarito_txt),
         ("Área máxima do lote", _fmt_m2(area_max), "Testada máxima", f"{_fmt_number(test_max,2)} m" if test_max is not None else "—", "Subzona", (rule.get("subzone_code") or "PADRAO")),
     ]
