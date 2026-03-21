@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 
 from core.auth import get_supabase_auth_client
-from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited, inspect_payment_credit_status
+from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited
 from core.coupons import validate_coupon_for_checkout
 
 
@@ -551,14 +551,14 @@ def _sync_current_payment_state(supabase, current_user_id: str) -> None:
         return
 
     try:
-        result = inspect_payment_credit_status(payment_id=payment_id, target_user_id=current_user_id)
+        result = ensure_paid_payment_is_credited(payment_id=payment_id, target_user_id=current_user_id)
         latest_payment = (result or {}).get("payment") or _fetch_payment_by_id(supabase, payment_id) or current_payment
         merged = dict(current_payment)
         merged.update(latest_payment)
         st.session_state["current_payment_snapshot"] = merged
         st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
         credit_result = (result or {}).get("credit_result") or {}
-        if credit_result.get("reason") in ("already_credited", "credited_to_other_user") and st.session_state.get("payments_focus_mode"):
+        if credit_result.get("credited") and st.session_state.get("payments_focus_mode"):
             st.session_state["payments_focus_mode"] = False
     except Exception:
         # Não interromper a renderização do painel; a área visual mostra o erro depois.
@@ -589,27 +589,25 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
     if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
     elif status == "paid":
-        credit_status = None
+        credit_reprocess = None
         try:
-            credit_status = inspect_payment_credit_status(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
+            credit_reprocess = ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
         except Exception as e:
-            st.warning(f"Pagamento confirmado, mas não foi possível verificar o status dos créditos agora: {e}")
+            st.warning(f"Pagamento confirmado, mas não foi possível reconciliar os créditos agora: {e}")
 
-        credit_result = (credit_status or {}).get("credit_result") or {}
-        if credit_result.get("reason") == "already_credited":
-            st.success("Este pagamento já foi confirmado e os créditos já estão na carteira.")
+        credit_result = (credit_reprocess or {}).get("credit_result") or {}
+        if credit_result.get("credited"):
+            if credit_result.get("moved"):
+                st.success("Este pagamento já foi confirmado e os créditos foram reconciliados para a sua carteira.")
+            else:
+                st.success("Este pagamento já foi confirmado e os créditos foram adicionados à carteira.")
             if st.session_state.get("payments_focus_mode"):
                 st.session_state["payments_focus_mode"] = False
-        elif credit_result.get("reason") == "credited_to_other_user":
-            st.warning("Este pagamento já gerou créditos, mas eles estão vinculados a outro usuário. Use o reprocessamento apenas se for necessário reconciliar a carteira.")
-            if st.button("Reprocessar crédito deste pagamento", key=f"recredit_paid_{payment_id}"):
-                try:
-                    ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
-                except Exception as e:
-                    st.error(f"Não foi possível reprocessar o crédito agora: {e}")
-                st.rerun()
+            st.rerun()
+        elif credit_result.get("reason") == "already_credited":
+            st.success("Este pagamento já foi confirmado.")
         else:
-            st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. Reprocesse somente se o saldo realmente não entrou.")
+            st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. Tentando reconciliar...")
             if st.button("Reprocessar crédito deste pagamento", key=f"recredit_paid_{payment_id}"):
                 try:
                     ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
