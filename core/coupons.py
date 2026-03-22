@@ -224,47 +224,6 @@ def _normalize_email(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
-
-def _find_owner_user_id_by_email(*, supabase: Client, owner_email: Optional[str]) -> Optional[str]:
-    normalized = _normalize_email(owner_email)
-    if not normalized:
-        return None
-
-    try:
-        response = supabase.table("profiles").select("id,email").execute()
-        rows = _safe_data(response) or []
-        for row in rows:
-            if _normalize_email(row.get("email")) == normalized:
-                found = row.get("id")
-                if found:
-                    return str(found)
-    except Exception:
-        pass
-
-    try:
-        auth_admin = getattr(supabase, "auth", None)
-        admin_api = getattr(auth_admin, "admin", None) if auth_admin is not None else None
-        list_users = getattr(admin_api, "list_users", None) if admin_api is not None else None
-        if callable(list_users):
-            response = list_users()
-            users = getattr(response, "users", None)
-            if users is None and isinstance(response, dict):
-                users = response.get("users")
-            for user in users or []:
-                email = getattr(user, "email", None)
-                if email is None and isinstance(user, dict):
-                    email = user.get("email")
-                if _normalize_email(email) == normalized:
-                    user_id = getattr(user, "id", None)
-                    if user_id is None and isinstance(user, dict):
-                        user_id = user.get("id")
-                    if user_id:
-                        return str(user_id)
-    except Exception:
-        pass
-
-    return None
-
 def user_can_manage_coupons(user_email: Optional[str]) -> bool:
     normalized = _normalize_email(user_email)
     configured = st.secrets.get("COUPONS_ADMIN_EMAILS", "")
@@ -284,6 +243,27 @@ def list_coupon_codes(limit: int = 50) -> List[Dict[str, Any]]:
     supabase = get_supabase_server_client()
     response = supabase.table("coupon_codes").select("*").order("created_at", desc=True).limit(limit).execute()
     return _safe_data(response) or []
+
+
+def list_coupon_usages(limit: int = 100) -> List[Dict[str, Any]]:
+    supabase = get_supabase_server_client()
+    usages_resp = supabase.table("coupon_usages").select("*").order("created_at", desc=True).limit(limit).execute()
+    usage_rows: List[Dict[str, Any]] = _safe_data(usages_resp) or []
+
+    codes_resp = supabase.table("coupon_codes").select("id,code,owner_email").execute()
+    code_rows: List[Dict[str, Any]] = _safe_data(codes_resp) or []
+    by_coupon_id = {str(row.get("id")): row for row in code_rows if row.get("id") is not None}
+
+    enriched: List[Dict[str, Any]] = []
+    for row in usage_rows:
+        coupon_id = row.get("coupon_id")
+        coupon_meta = by_coupon_id.get(str(coupon_id), {})
+        enriched.append({
+            **row,
+            "coupon_code": row.get("coupon_code") or coupon_meta.get("code"),
+            "owner_email": coupon_meta.get("owner_email"),
+        })
+    return enriched
 
 
 def create_coupon_code(
@@ -321,14 +301,10 @@ def create_coupon_code(
         raise ValueError("Desconto percentual não pode ser maior que 100.")
 
     allowed_plan_codes = [str(v).strip() for v in (allowed_plan_codes or []) if str(v).strip()]
-    supabase = get_supabase_server_client()
-    normalized_owner_email = _normalize_email(owner_email) or None
-    owner_user_id = _find_owner_user_id_by_email(supabase=supabase, owner_email=normalized_owner_email)
-
     payload = {
         "code": normalized_code,
-        "owner_email": normalized_owner_email,
-        "owner_user_id": owner_user_id,
+        "owner_email": _normalize_email(owner_email) or None,
+        "owner_user_id": None,
         "coupon_type": coupon_type,
         "discount_type": discount_type,
         "discount_value": discount_value,
@@ -344,6 +320,7 @@ def create_coupon_code(
         "notes": str(notes or "").strip() or None,
     }
 
+    supabase = get_supabase_server_client()
     existing = _load_coupon_by_code(normalized_code)
     if existing:
         raise ValueError("Já existe um cupom com esse código.")
@@ -352,67 +329,4 @@ def create_coupon_code(
     rows = _safe_data(response) or []
     if not rows:
         raise RuntimeError("Não foi possível criar o cupom.")
-    return rows[0]
-
-
-def update_coupon_code(
-    *,
-    coupon_id: Any,
-    owner_email: Optional[str],
-    coupon_type: str,
-    discount_type: str,
-    discount_value: float,
-    is_active: bool,
-    valid_from: Optional[datetime] = None,
-    valid_until: Optional[datetime] = None,
-    max_uses_total: Optional[int] = None,
-    max_uses_per_user: Optional[int] = None,
-    first_purchase_only: bool = False,
-    min_purchase_amount: Optional[float] = None,
-    can_be_used_by_owner: bool = False,
-    allowed_plan_codes: Optional[List[str]] = None,
-    notes: Optional[str] = None,
-) -> Dict[str, Any]:
-    if not coupon_id:
-        raise ValueError("Cupom inválido para atualização.")
-
-    if discount_type not in {"percent", "fixed"}:
-        raise ValueError("Tipo de desconto inválido.")
-
-    if coupon_type not in {"public_discount", "referral", "campaign", "manual"}:
-        raise ValueError("Tipo de cupom inválido.")
-
-    discount_value = round(_to_float(discount_value), 2)
-    if discount_value <= 0:
-        raise ValueError("O valor do desconto deve ser maior que zero.")
-    if discount_type == "percent" and discount_value > 100:
-        raise ValueError("Desconto percentual não pode ser maior que 100.")
-
-    supabase = get_supabase_server_client()
-    normalized_owner_email = _normalize_email(owner_email) or None
-    owner_user_id = _find_owner_user_id_by_email(supabase=supabase, owner_email=normalized_owner_email)
-    allowed_plan_codes = [str(v).strip() for v in (allowed_plan_codes or []) if str(v).strip()]
-
-    payload = {
-        "owner_email": normalized_owner_email,
-        "owner_user_id": owner_user_id,
-        "coupon_type": coupon_type,
-        "discount_type": discount_type,
-        "discount_value": discount_value,
-        "is_active": bool(is_active),
-        "valid_from": valid_from.isoformat() if valid_from else None,
-        "valid_until": valid_until.isoformat() if valid_until else None,
-        "max_uses_total": int(max_uses_total) if max_uses_total else None,
-        "max_uses_per_user": int(max_uses_per_user) if max_uses_per_user else None,
-        "first_purchase_only": bool(first_purchase_only),
-        "allowed_plan_codes": allowed_plan_codes or None,
-        "min_purchase_amount": round(_to_float(min_purchase_amount), 2) if min_purchase_amount not in (None, "") else None,
-        "can_be_used_by_owner": bool(can_be_used_by_owner),
-        "notes": str(notes or "").strip() or None,
-    }
-
-    response = supabase.table("coupon_codes").update(payload).eq("id", coupon_id).execute()
-    rows = _safe_data(response) or []
-    if not rows:
-        raise RuntimeError("Não foi possível atualizar o cupom.")
     return rows[0]
