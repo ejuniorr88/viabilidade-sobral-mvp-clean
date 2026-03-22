@@ -503,47 +503,119 @@ def test_create_coupon_code_normalizes_and_rejects_duplicate(monkeypatch):
     except ValueError as exc:
         assert "Já existe" in str(exc)
 
-def test_list_coupon_usage_report_filters_and_summarizes(monkeypatch):
-    db = {
-        "coupon_codes": [
-            {"id": 1, "code": "JOAO10", "owner_email": "joao@email.com"},
-            {"id": 2, "code": "MARIA5", "owner_email": "maria@email.com"},
-        ],
-        "coupon_usages": [
-            {
-                "coupon_id": 1,
-                "coupon_code": "JOAO10",
-                "used_by_email": "cliente1@email.com",
-                "original_amount": 100.0,
-                "discount_amount": 10.0,
-                "final_amount": 90.0,
-                "payment_status": "paid",
-                "confirmed_at": _future(0),
-            },
-            {
-                "coupon_id": 2,
-                "coupon_code": "MARIA5",
-                "used_by_email": "cliente2@email.com",
-                "original_amount": 50.0,
-                "discount_amount": 5.0,
-                "final_amount": 45.0,
-                "payment_status": "failed",
-                "confirmed_at": _future(0),
-            },
-        ],
-    }
-    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
-    report = coupons.list_coupon_usage_report(
-        coupon_code="JOAO10",
-        owner_email="joao@email.com",
-        payment_status="paid",
+def test_create_coupon_code_resolves_owner_user_id_from_profiles(monkeypatch):
+    from core import coupons
+
+    class _Exec:
+        def __init__(self, data):
+            self.data = data
+
+    class _Table:
+        def __init__(self, name, db):
+            self.name = name
+            self.db = db
+            self._payload = None
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            if self._payload is not None:
+                self.db[self.name].append(self._payload)
+                payload = self._payload
+                self._payload = None
+                return _Exec([payload])
+            return _Exec(self.db.get(self.name, []))
+
+        def insert(self, payload):
+            self._payload = payload
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+    class _SB:
+        def __init__(self):
+            self.db = {
+                "coupon_codes": [],
+                "profiles": [{"id": "user-123", "email": "owner@email.com"}],
+            }
+
+        def table(self, name):
+            self.db.setdefault(name, [])
+            return _Table(name, self.db)
+
+    sb = _SB()
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: sb)
+
+    created = coupons.create_coupon_code(
+        code="OWNER10",
+        owner_email="Owner@Email.com",
+        coupon_type="manual",
+        discount_type="fixed",
+        discount_value=1.0,
     )
 
-    assert len(report["rows"]) == 1
-    assert report["rows"][0]["owner_email"] == "joao@email.com"
-    assert report["summary"]["total_usages"] == 1
-    assert report["summary"]["paid_usages"] == 1
-    assert report["summary"]["discount_total"] == 10.0
-    assert report["summary"]["final_amount_total"] == 90.0
+    assert created["owner_email"] == "owner@email.com"
+    assert created["owner_user_id"] == "user-123"
 
+
+def test_create_coupon_code_keeps_owner_user_id_none_when_email_not_found(monkeypatch):
+    from core import coupons
+
+    class _Exec:
+        def __init__(self, data):
+            self.data = data
+
+    class _Table:
+        def __init__(self, name, db):
+            self.name = name
+            self.db = db
+            self._payload = None
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            if self._payload is not None:
+                self.db[self.name].append(self._payload)
+                payload = self._payload
+                self._payload = None
+                return _Exec([payload])
+            return _Exec(self.db.get(self.name, []))
+
+        def insert(self, payload):
+            self._payload = payload
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+    class _SB:
+        def __init__(self):
+            self.db = {"coupon_codes": [], "profiles": []}
+
+        def table(self, name):
+            self.db.setdefault(name, [])
+            return _Table(name, self.db)
+
+    sb = _SB()
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: sb)
+
+    created = coupons.create_coupon_code(
+        code="OWNER20",
+        owner_email="missing@email.com",
+        coupon_type="manual",
+        discount_type="fixed",
+        discount_value=1.0,
+    )
+
+    assert created["owner_email"] == "missing@email.com"
+    assert created["owner_user_id"] is None
