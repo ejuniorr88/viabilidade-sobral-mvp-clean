@@ -503,26 +503,47 @@ def test_create_coupon_code_normalizes_and_rejects_duplicate(monkeypatch):
     except ValueError as exc:
         assert "Já existe" in str(exc)
 
-
-def test_list_coupon_usages_enriches_owner_email_and_code(monkeypatch):
+def test_list_coupon_usage_report_filters_and_summarizes(monkeypatch):
     db = {
-        "coupon_codes": [{"id": 7, "code": "JOAO10", "owner_email": "joao@email.com"}],
-        "coupon_usages": [{
-            "coupon_id": 7,
-            "coupon_code": None,
-            "used_by_email": "maria@email.com",
-            "original_amount": 100,
-            "discount_amount": 10,
-            "final_amount": 90,
-            "payment_status": "paid",
-            "created_at": "2026-03-22T12:00:00+00:00",
-        }],
+        "coupon_codes": [
+            {"id": 1, "code": "JOAO10", "owner_email": "joao@email.com"},
+            {"id": 2, "code": "MARIA5", "owner_email": "maria@email.com"},
+        ],
+        "coupon_usages": [
+            {
+                "coupon_id": 1,
+                "coupon_code": "JOAO10",
+                "used_by_email": "cliente1@email.com",
+                "original_amount": 100.0,
+                "discount_amount": 10.0,
+                "final_amount": 90.0,
+                "payment_status": "paid",
+                "confirmed_at": _future(0),
+            },
+            {
+                "coupon_id": 2,
+                "coupon_code": "MARIA5",
+                "used_by_email": "cliente2@email.com",
+                "original_amount": 50.0,
+                "discount_amount": 5.0,
+                "final_amount": 45.0,
+                "payment_status": "failed",
+                "confirmed_at": _future(0),
+            },
+        ],
     }
     monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
-    rows = coupons.list_coupon_usages(limit=10)
+    report = coupons.list_coupon_usage_report(
+        coupon_code="JOAO10",
+        owner_email="joao@email.com",
+        payment_status="paid",
+    )
 
-    assert len(rows) == 1
-    assert rows[0]["coupon_code"] == "JOAO10"
-    assert rows[0]["owner_email"] == "joao@email.com"
-    assert rows[0]["payment_status"] == "paid"
+    assert len(report["rows"]) == 1
+    assert report["rows"][0]["owner_email"] == "joao@email.com"
+    assert report["summary"]["total_usages"] == 1
+    assert report["summary"]["paid_usages"] == 1
+    assert report["summary"]["discount_total"] == 10.0
+    assert report["summary"]["final_amount_total"] == 90.0
+
