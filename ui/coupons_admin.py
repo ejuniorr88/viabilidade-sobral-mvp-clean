@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
-from core.coupons import create_coupon_code, list_coupon_codes, user_can_manage_coupons
+from core.coupons import create_coupon_code, list_coupon_codes, update_coupon_code, user_can_manage_coupons
 
 
 def _fmt_dt(value: Any) -> str:
@@ -105,6 +105,7 @@ def render_coupons_admin_section(*, current_user_email: str) -> None:
         table_rows.append({
             "Código": row.get("code") or "—",
             "Dono": row.get("owner_email") or "—",
+            "Owner user id": row.get("owner_user_id") or "—",
             "Tipo": row.get("coupon_type") or "—",
             "Desconto": f"{row.get('discount_value')} ({row.get('discount_type')})",
             "Ativo": "Sim" if row.get("is_active") else "Não",
@@ -112,3 +113,69 @@ def render_coupons_admin_section(*, current_user_email: str) -> None:
         })
 
     st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+    st.markdown("#### Editar / inativar cupom")
+    options = {f"{row.get('code') or '—'} • {row.get('owner_email') or 'sem dono'}": row for row in rows}
+    selected_label = st.selectbox("Selecione o cupom", options=list(options.keys()), index=0)
+    selected = options[selected_label]
+
+    with st.form("coupon_admin_edit_form", clear_on_submit=False):
+        e1, e2 = st.columns(2)
+        with e1:
+            edit_owner_email = st.text_input("E-mail do dono", value=selected.get("owner_email") or "")
+            edit_code = st.text_input("Código do cupom", value=selected.get("code") or "", disabled=True)
+            edit_coupon_type = st.selectbox(
+                "Tipo de cupom",
+                options=["manual", "referral", "public_discount", "campaign"],
+                index=["manual", "referral", "public_discount", "campaign"].index(selected.get("coupon_type") or "manual"),
+                key="edit_coupon_type",
+            )
+            edit_discount_type = st.selectbox(
+                "Tipo de desconto",
+                options=["fixed", "percent"],
+                index=["fixed", "percent"].index(selected.get("discount_type") or "fixed"),
+                key="edit_discount_type",
+            )
+            edit_discount_value = st.number_input("Valor do desconto", min_value=0.01, step=0.01, format="%.2f", value=float(selected.get("discount_value") or 0.01))
+            edit_is_active = st.checkbox("Cupom ativo", value=bool(selected.get("is_active")), key="edit_is_active")
+        with e2:
+            edit_max_uses_total = st.number_input("Máximo de usos total", min_value=0, step=1, value=int(selected.get("max_uses_total") or 0))
+            edit_max_uses_per_user = st.number_input("Máximo de usos por usuário", min_value=0, step=1, value=int(selected.get("max_uses_per_user") or 0))
+            edit_first_purchase_only = st.checkbox("Somente primeira compra", value=bool(selected.get("first_purchase_only")), key="edit_first_purchase_only")
+            edit_can_be_used_by_owner = st.checkbox("Dono pode usar o próprio cupom", value=bool(selected.get("can_be_used_by_owner")), key="edit_can_be_used_by_owner")
+            edit_min_purchase_amount = st.number_input("Valor mínimo da compra", min_value=0.0, step=0.01, value=float(selected.get("min_purchase_amount") or 0.0), format="%.2f")
+            current_allowed = selected.get("allowed_plan_codes") or []
+            if isinstance(current_allowed, list):
+                current_allowed_text = ", ".join([str(v) for v in current_allowed])
+            else:
+                current_allowed_text = str(current_allowed or "")
+            edit_allowed_plan_codes = st.text_input("Planos permitidos (separados por vírgula)", value=current_allowed_text)
+
+        notes_value = selected.get("notes") or ""
+        edit_notes = st.text_area("Observações", value=notes_value)
+
+        submit_update = st.form_submit_button("Salvar alterações", use_container_width=True)
+
+    if submit_update:
+        try:
+            updated = update_coupon_code(
+                coupon_id=selected.get("id"),
+                owner_email=edit_owner_email,
+                coupon_type=edit_coupon_type,
+                discount_type=edit_discount_type,
+                discount_value=edit_discount_value,
+                is_active=edit_is_active,
+                valid_from=None,
+                valid_until=None,
+                max_uses_total=edit_max_uses_total or None,
+                max_uses_per_user=edit_max_uses_per_user or None,
+                first_purchase_only=edit_first_purchase_only,
+                min_purchase_amount=edit_min_purchase_amount or None,
+                can_be_used_by_owner=edit_can_be_used_by_owner,
+                allowed_plan_codes=_normalize_plan_codes(edit_allowed_plan_codes),
+                notes=edit_notes,
+            )
+            st.success(f"Cupom atualizado com sucesso: {updated.get('code')}")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Não foi possível atualizar o cupom: {exc}")
