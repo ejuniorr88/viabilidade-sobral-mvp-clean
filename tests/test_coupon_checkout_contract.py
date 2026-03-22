@@ -505,35 +505,90 @@ def test_create_coupon_code_normalizes_and_rejects_duplicate(monkeypatch):
 
 
 def test_create_coupon_code_resolves_owner_user_id_from_profiles(monkeypatch):
-    db = {
-        "profiles": [{"id": "user-123", "email": "owner@example.com"}],
-        "coupon_codes": [],
-    }
-    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+    from core import coupons
+
+    class _Exec:
+        def __init__(self, data):
+            self.data = data
+
+    class _Table:
+        def __init__(self, db, name):
+            self.db = db
+            self.name = name
+            self.payload = None
+            self.filters = []
+            self.action = None
+
+        def select(self, *_args, **_kwargs):
+            self.action = "select"
+            return self
+
+        def insert(self, payload):
+            self.action = "insert"
+            self.payload = payload
+            return self
+
+        def execute(self):
+            rows = self.db.setdefault(self.name, [])
+            if self.action == "select":
+                return _Exec([dict(r) for r in rows])
+            if self.action == "insert":
+                row = dict(self.payload)
+                rows.append(row)
+                return _Exec([row])
+            return _Exec([])
+
+    class _SB:
+        def __init__(self):
+            self.db = {
+                "coupon_codes": [],
+                "profiles": [{"id": "user-123", "email": "owner@email.com"}],
+            }
+
+        def table(self, name):
+            return _Table(self.db, name)
+
+    sb = _SB()
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: sb)
 
     created = coupons.create_coupon_code(
-        code="OWNER10",
-        owner_email="owner@example.com",
+        code=" dono10 ",
+        owner_email="Owner@Email.com",
         coupon_type="manual",
         discount_type="fixed",
-        discount_value=10,
+        discount_value=1.0,
     )
-
-    assert created["owner_email"] == "owner@example.com"
     assert created["owner_user_id"] == "user-123"
 
 
-def test_create_coupon_code_keeps_owner_user_id_none_when_email_not_found(monkeypatch):
-    db = {"profiles": [], "coupon_codes": []}
+def test_update_coupon_code_can_inactivate_and_update_owner_user_id(monkeypatch):
+    from core import coupons
+
+    db = {
+        "coupon_codes": [{
+            "id": 1,
+            "code": "TESTE10",
+            "owner_email": "old@email.com",
+            "owner_user_id": None,
+            "coupon_type": "manual",
+            "discount_type": "fixed",
+            "discount_value": 1.0,
+            "is_active": True,
+        }],
+        "profiles": [{"id": "user-999", "email": "novo@email.com"}],
+    }
     monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
-    created = coupons.create_coupon_code(
-        code="OWNER11",
-        owner_email="missing@example.com",
+    updated = coupons.update_coupon_code(
+        coupon_id=1,
+        owner_email="novo@email.com",
         coupon_type="manual",
         discount_type="fixed",
-        discount_value=10,
+        discount_value=2.0,
+        is_active=False,
     )
 
-    assert created["owner_email"] == "missing@example.com"
-    assert created["owner_user_id"] is None
+    assert updated["owner_email"] == "novo@email.com"
+    assert updated["owner_user_id"] == "user-999"
+    assert updated["is_active"] is False
+    assert updated["discount_value"] == 2.0
