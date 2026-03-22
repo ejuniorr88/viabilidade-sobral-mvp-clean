@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
-from core.coupons import create_coupon_code, list_coupon_codes, list_coupon_usages, user_can_manage_coupons
+from core.coupons import create_coupon_code, list_coupon_codes, list_coupon_usage_report, user_can_manage_coupons
 
 
 def _fmt_dt(value: Any) -> str:
@@ -20,6 +20,15 @@ def _fmt_dt(value: Any) -> str:
 
 def _normalize_plan_codes(value: str) -> List[str]:
     return [v.strip() for v in str(value or "").split(",") if v.strip()]
+
+
+
+
+def _render_metric(label: str, value: str) -> None:
+    if hasattr(st, "metric"):
+        st.metric(label, value)
+    else:
+        st.markdown(f"**{label}:** {value}")
 
 
 def render_coupons_admin_section(*, current_user_email: str) -> None:
@@ -113,11 +122,40 @@ def render_coupons_admin_section(*, current_user_email: str) -> None:
 
     st.dataframe(table_rows, use_container_width=True, hide_index=True)
 
+    st.markdown("#### Usos confirmados dos cupons")
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        filter_coupon_code = st.text_input("Filtrar por código do cupom")
+    with f2:
+        filter_owner_email = st.text_input("Filtrar por e-mail do dono")
+    with f3:
+        filter_payment_status = st.selectbox(
+            "Filtrar por status",
+            options=["todos", "paid", "pending", "failed", "cancelled", "refunded"],
+            index=0,
+        )
 
-    st.markdown("#### Uso confirmado dos cupons")
-    usage_rows = list_coupon_usages(limit=100)
+    usage_report = list_coupon_usage_report(
+        limit=200,
+        coupon_code=filter_coupon_code,
+        owner_email=filter_owner_email,
+        payment_status=filter_payment_status,
+    )
+    usage_rows = usage_report.get("rows") or []
+    summary = usage_report.get("summary") or {}
+
+    s1, s2, s3, s4 = st.columns(4)
+    with s1:
+        _render_metric("Total de usos", str(summary.get("total_usages", 0)))
+    with s2:
+        _render_metric("Usos pagos", str(summary.get("paid_usages", 0)))
+    with s3:
+        _render_metric("Desconto total", f"R$ {summary.get('discount_total', 0):.2f}")
+    with s4:
+        _render_metric("Valor final total", f"R$ {summary.get('final_amount_total', 0):.2f}")
+
     if not usage_rows:
-        st.info("Nenhum uso confirmado de cupom ainda.")
+        st.info("Nenhum uso confirmado encontrado para os filtros informados.")
         return
 
     usage_table_rows: List[Dict[str, Any]] = []
@@ -125,12 +163,12 @@ def render_coupons_admin_section(*, current_user_email: str) -> None:
         usage_table_rows.append({
             "Cupom": row.get("coupon_code") or "—",
             "Dono": row.get("owner_email") or "—",
-            "Usuário": row.get("used_by_email") or row.get("used_by_user_id") or "—",
-            "Original": row.get("original_amount") if row.get("original_amount") is not None else "—",
-            "Desconto": row.get("discount_amount") if row.get("discount_amount") is not None else "—",
-            "Final": row.get("final_amount") if row.get("final_amount") is not None else "—",
+            "Usuário que usou": row.get("used_by_email") or row.get("used_by_user_id") or "—",
+            "Valor original": row.get("original_amount"),
+            "Desconto": row.get("discount_amount"),
+            "Valor final": row.get("final_amount"),
             "Status": row.get("payment_status") or "—",
-            "Confirmado em": _fmt_dt(row.get("confirmed_at") or row.get("created_at")),
+            "Confirmado em": _fmt_dt(row.get("confirmed_at")),
         })
 
     st.dataframe(usage_table_rows, use_container_width=True, hide_index=True)
