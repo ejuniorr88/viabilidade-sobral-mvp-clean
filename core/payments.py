@@ -305,6 +305,10 @@ def _record_coupon_usage_for_paid_payment(*, payment_row: Dict[str, Any]) -> Dic
     if not coupon_id or not coupon_code:
         return {"recorded": False, "reason": "no_coupon"}
 
+    payment_status = str(payment_row.get("status") or "").strip().lower()
+    if payment_status != "paid":
+        return {"recorded": False, "reason": "payment_not_paid"}
+
     supabase = get_supabase_server_client()
     existing = _get_coupon_usage_row_for_payment(payment_row=payment_row)
     if existing:
@@ -325,8 +329,8 @@ def _record_coupon_usage_for_paid_payment(*, payment_row: Dict[str, Any]) -> Dic
         "original_amount": original_amount,
         "discount_amount": discount_amount,
         "final_amount": final_amount,
-        "payment_status": str(payment_row.get("status") or "paid"),
-        "confirmed_at": "now()",
+        "payment_status": "paid",
+        "confirmed_at": datetime.now(timezone.utc).isoformat(),
     }
     response = supabase.table("coupon_usages").insert(payload).execute()
     data = _safe_data(response) or []
