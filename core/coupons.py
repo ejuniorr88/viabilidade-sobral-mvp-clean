@@ -224,6 +224,44 @@ def _normalize_email(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+
+
+def _resolve_owner_user_id_by_email(owner_email: Optional[str]) -> Optional[str]:
+    normalized = _normalize_email(owner_email)
+    if not normalized:
+        return None
+
+    supabase = get_supabase_server_client()
+
+    # 1) tenta localizar em profiles, quando a aplicação já espelha o e-mail lá
+    try:
+        response = supabase.table("profiles").select("id,email").execute()
+        rows = _safe_data(response) or []
+        for row in rows:
+            if _normalize_email(row.get("email")) == normalized and row.get("id"):
+                return str(row.get("id"))
+    except Exception:
+        pass
+
+    # 2) fallback: tenta localizar direto no auth admin, quando disponível com service role
+    try:
+        auth = getattr(supabase, "auth", None)
+        admin = getattr(auth, "admin", None) if auth is not None else None
+        if admin is not None and hasattr(admin, "list_users"):
+            response = admin.list_users()
+            users = getattr(response, "users", None)
+            if users is None and isinstance(response, dict):
+                users = response.get("users")
+            for user in users or []:
+                email = _normalize_email(getattr(user, "email", None) or (user.get("email") if isinstance(user, dict) else None))
+                user_id = getattr(user, "id", None) or (user.get("id") if isinstance(user, dict) else None)
+                if email == normalized and user_id:
+                    return str(user_id)
+    except Exception:
+        pass
+
+    return None
+
 def user_can_manage_coupons(user_email: Optional[str]) -> bool:
     normalized = _normalize_email(user_email)
     configured = st.secrets.get("COUPONS_ADMIN_EMAILS", "")
@@ -283,7 +321,7 @@ def create_coupon_code(
     payload = {
         "code": normalized_code,
         "owner_email": _normalize_email(owner_email) or None,
-        "owner_user_id": None,
+        "owner_user_id": _resolve_owner_user_id_by_email(owner_email),
         "coupon_type": coupon_type,
         "discount_type": discount_type,
         "discount_value": discount_value,
