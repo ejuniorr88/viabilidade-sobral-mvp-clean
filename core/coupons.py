@@ -224,50 +224,6 @@ def _normalize_email(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
-
-
-def _resolve_owner_user_id_by_email(owner_email: Optional[str]) -> Optional[str]:
-    normalized = _normalize_email(owner_email)
-    if not normalized:
-        return None
-
-    supabase = get_supabase_server_client()
-
-    # 1) tenta primeiro pela tabela profiles
-    try:
-        response = supabase.table("profiles").select("id,email").execute()
-        rows = _safe_data(response) or []
-        for row in rows:
-            if _normalize_email(row.get("email")) == normalized:
-                owner_id = str(row.get("id") or "").strip()
-                if owner_id:
-                    return owner_id
-    except Exception:
-        pass
-
-    # 2) fallback opcional via auth admin, quando disponível com service role
-    auth = getattr(supabase, "auth", None)
-    admin = getattr(auth, "admin", None) if auth is not None else None
-    list_users = getattr(admin, "list_users", None) if admin is not None else None
-    if callable(list_users):
-        try:
-            result = list_users()
-            users = getattr(result, "users", None)
-            if users is None and isinstance(result, dict):
-                users = result.get("users")
-            users = users or []
-            for user in users:
-                email = _normalize_email(getattr(user, "email", None) if not isinstance(user, dict) else user.get("email"))
-                if email == normalized:
-                    user_id = getattr(user, "id", None) if not isinstance(user, dict) else user.get("id")
-                    user_id = str(user_id or "").strip()
-                    if user_id:
-                        return user_id
-        except Exception:
-            pass
-
-    return None
-
 def user_can_manage_coupons(user_email: Optional[str]) -> bool:
     normalized = _normalize_email(user_email)
     configured = st.secrets.get("COUPONS_ADMIN_EMAILS", "")
@@ -288,6 +244,52 @@ def list_coupon_codes(limit: int = 50) -> List[Dict[str, Any]]:
     response = supabase.table("coupon_codes").select("*").order("created_at", desc=True).limit(limit).execute()
     return _safe_data(response) or []
 
+
+
+
+def list_coupon_usage_report(
+    *,
+    limit: int = 200,
+    coupon_code: Optional[str] = None,
+    owner_email: Optional[str] = None,
+    payment_status: Optional[str] = None,
+) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    usage_rows = _safe_data(supabase.table("coupon_usages").select("*").order("confirmed_at", desc=True).limit(limit).execute()) or []
+    coupon_rows = _safe_data(supabase.table("coupon_codes").select("id,code,owner_email").execute()) or []
+
+    coupons_by_id = {str(r.get("id")): r for r in coupon_rows}
+    coupons_by_code = {_normalize_coupon_code(r.get("code")): r for r in coupon_rows if _normalize_coupon_code(r.get("code"))}
+
+    enriched: List[Dict[str, Any]] = []
+    normalized_coupon = _normalize_coupon_code(coupon_code) if coupon_code else ""
+    normalized_owner = _normalize_email(owner_email) if owner_email else ""
+    normalized_status = str(payment_status or "").strip().lower()
+
+    for row in usage_rows:
+        coupon_id_key = str(row.get("coupon_id") or "")
+        coupon_code_key = _normalize_coupon_code(row.get("coupon_code"))
+        coupon_row = coupons_by_id.get(coupon_id_key) or coupons_by_code.get(coupon_code_key) or {}
+        enriched_row = dict(row)
+        enriched_row["coupon_code"] = coupon_row.get("code") or row.get("coupon_code")
+        enriched_row["owner_email"] = coupon_row.get("owner_email") or row.get("owner_email")
+
+        if normalized_coupon and _normalize_coupon_code(enriched_row.get("coupon_code")) != normalized_coupon:
+            continue
+        if normalized_owner and _normalize_email(enriched_row.get("owner_email")) != normalized_owner:
+            continue
+        if normalized_status and str(enriched_row.get("payment_status") or "").strip().lower() != normalized_status:
+            continue
+
+        enriched.append(enriched_row)
+
+    summary = {
+        "total_usos": len(enriched),
+        "usos_pagos": sum(1 for r in enriched if str(r.get("payment_status") or "").strip().lower() == "paid"),
+        "desconto_total": round(sum(_to_float(r.get("discount_amount"), 0.0) for r in enriched), 2),
+        "valor_final_total": round(sum(_to_float(r.get("final_amount"), 0.0) for r in enriched), 2),
+    }
+    return {"rows": enriched, "summary": summary}
 
 def create_coupon_code(
     *,
@@ -327,7 +329,7 @@ def create_coupon_code(
     payload = {
         "code": normalized_code,
         "owner_email": _normalize_email(owner_email) or None,
-        "owner_user_id": _resolve_owner_user_id_by_email(owner_email),
+        "owner_user_id": None,
         "coupon_type": coupon_type,
         "discount_type": discount_type,
         "discount_value": discount_value,
