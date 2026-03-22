@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.client_reports import build_download_signed_url, list_client_reports
+from ui.coupons_admin import render_coupons_admin_section
 
 _TZ = ZoneInfo("America/Fortaleza")
 
