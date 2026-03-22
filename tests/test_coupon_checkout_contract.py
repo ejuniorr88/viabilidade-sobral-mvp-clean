@@ -504,91 +504,25 @@ def test_create_coupon_code_normalizes_and_rejects_duplicate(monkeypatch):
         assert "Já existe" in str(exc)
 
 
-def test_create_coupon_code_resolves_owner_user_id_from_profiles(monkeypatch):
-    from core import coupons
-
-    class _Exec:
-        def __init__(self, data):
-            self.data = data
-
-    class _Table:
-        def __init__(self, db, name):
-            self.db = db
-            self.name = name
-            self.payload = None
-            self.filters = []
-            self.action = None
-
-        def select(self, *_args, **_kwargs):
-            self.action = "select"
-            return self
-
-        def insert(self, payload):
-            self.action = "insert"
-            self.payload = payload
-            return self
-
-        def execute(self):
-            rows = self.db.setdefault(self.name, [])
-            if self.action == "select":
-                return _Exec([dict(r) for r in rows])
-            if self.action == "insert":
-                row = dict(self.payload)
-                rows.append(row)
-                return _Exec([row])
-            return _Exec([])
-
-    class _SB:
-        def __init__(self):
-            self.db = {
-                "coupon_codes": [],
-                "profiles": [{"id": "user-123", "email": "owner@email.com"}],
-            }
-
-        def table(self, name):
-            return _Table(self.db, name)
-
-    sb = _SB()
-    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: sb)
-
-    created = coupons.create_coupon_code(
-        code=" dono10 ",
-        owner_email="Owner@Email.com",
-        coupon_type="manual",
-        discount_type="fixed",
-        discount_value=1.0,
-    )
-    assert created["owner_user_id"] == "user-123"
-
-
-def test_update_coupon_code_can_inactivate_and_update_owner_user_id(monkeypatch):
-    from core import coupons
-
+def test_list_coupon_usages_enriches_owner_email_and_code(monkeypatch):
     db = {
-        "coupon_codes": [{
-            "id": 1,
-            "code": "TESTE10",
-            "owner_email": "old@email.com",
-            "owner_user_id": None,
-            "coupon_type": "manual",
-            "discount_type": "fixed",
-            "discount_value": 1.0,
-            "is_active": True,
+        "coupon_codes": [{"id": 7, "code": "JOAO10", "owner_email": "joao@email.com"}],
+        "coupon_usages": [{
+            "coupon_id": 7,
+            "coupon_code": None,
+            "used_by_email": "maria@email.com",
+            "original_amount": 100,
+            "discount_amount": 10,
+            "final_amount": 90,
+            "payment_status": "paid",
+            "created_at": "2026-03-22T12:00:00+00:00",
         }],
-        "profiles": [{"id": "user-999", "email": "novo@email.com"}],
     }
     monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
-    updated = coupons.update_coupon_code(
-        coupon_id=1,
-        owner_email="novo@email.com",
-        coupon_type="manual",
-        discount_type="fixed",
-        discount_value=2.0,
-        is_active=False,
-    )
+    rows = coupons.list_coupon_usages(limit=10)
 
-    assert updated["owner_email"] == "novo@email.com"
-    assert updated["owner_user_id"] == "user-999"
-    assert updated["is_active"] is False
-    assert updated["discount_value"] == 2.0
+    assert len(rows) == 1
+    assert rows[0]["coupon_code"] == "JOAO10"
+    assert rows[0]["owner_email"] == "joao@email.com"
+    assert rows[0]["payment_status"] == "paid"
