@@ -432,3 +432,29 @@ def test_payments_panel_create_pix_payment_passes_coupon_applied(monkeypatch):
     assert payment["id"] == "p1"
     assert captured["coupon_applied"]["coupon_code"] == "LANCAMENTO10"
     assert captured["coupon_applied"]["final_amount"] == 90
+
+
+def test_record_coupon_usage_for_paid_payment_does_not_record_pending(monkeypatch):
+    db = {"coupon_usages": []}
+    monkeypatch.setattr(payments, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    payment_row = {
+        "id": "uuid-payment-1",
+        "coupon_id": 10,
+        "coupon_code": "LANCAMENTO10",
+        "coupon_owner_user_id": "owner-1",
+        "user_id": "u1",
+        "external_reference": "pkg_ref_123",
+        "package_id": "pkg1",
+        "original_amount": 100,
+        "discount_amount": 10,
+        "final_amount": 90,
+        "status": "pending",
+        "coupon_snapshot": {"used_by_email": "user@example.com"},
+    }
+
+    result = payments._record_coupon_usage_for_paid_payment(payment_row=payment_row)
+
+    assert result["recorded"] is False
+    assert result["reason"] == "payment_not_paid"
+    assert db["coupon_usages"] == []
