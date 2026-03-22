@@ -37,52 +37,128 @@ def _fmt_brl(v: Any) -> str:
 def _fmt_dt(v: Any) -> str:
     if not v:
         return "-"
-    try:
-        s = str(v)
-        return s.replace("T", " ")[:19]
-    except Exception:
-        return str(v)
+    s = str(v)
+    return s.replace("T", " ")[:19]
+
+
+def _get_user_id(user_profile: Dict[str, Any]) -> Optional[str]:
+    return (
+        _safe_get(user_profile, "id")
+        or _safe_get(user_profile, "user_id")
+        or _safe_get(user_profile, "sub")
+        or _safe_get(user_profile, "auth_user_id")
+    )
+
+
+def _get_user_name(user_profile: Dict[str, Any]) -> str:
+    return (
+        _safe_get(user_profile, "full_name")
+        or _safe_get(user_profile, "name")
+        or _safe_get(user_profile, "display_name")
+        or _safe_get(user_profile, "auth_user_name")
+        or "Usuário"
+    )
+
+
+def _get_user_email(user_profile: Dict[str, Any]) -> str:
+    return _safe_get(user_profile, "email") or _safe_get(user_profile, "auth_user_email") or "-"
 
 
 # =========================================================
-# Data fetch
+# Context discovery
 # =========================================================
-def _fetch_user_profile(supabase, user_id: str) -> Optional[Dict[str, Any]]:
+def _resolve_supabase(explicit_supabase=None):
+    if explicit_supabase is not None:
+        return explicit_supabase
+
+    for key in ["supabase", "sb", "supabase_client", "client"]:
+        if key in st.session_state and st.session_state[key] is not None:
+            return st.session_state[key]
+
     try:
-        resp = supabase.table("profiles").select("*").eq("id", user_id).limit(1).execute()
-        rows = _safe_get(resp, "data", []) or []
-        return rows[0] if rows else None
+        return get_supabase_auth_client()
     except Exception:
         return None
 
 
-def _fetch_credit_balance(supabase, user_id: str) -> int:
+def _resolve_user_profile(supabase=None, user_profile=None) -> Dict[str, Any]:
+    if user_profile is None and isinstance(supabase, dict):
+        user_profile = supabase
+        supabase = None
+
+    if user_profile is not None:
+        return user_profile
+
+    for key in ["user_profile", "profile", "google_user", "user"]:
+        if key in st.session_state and st.session_state[key]:
+            val = st.session_state[key]
+            if isinstance(val, dict):
+                return val
+
+    if st.session_state.get("auth_logged_in"):
+        profile = {
+            "id": st.session_state.get("auth_user_id"),
+            "email": st.session_state.get("auth_user_email"),
+            "full_name": st.session_state.get("auth_user_name"),
+            "auth_user_id": st.session_state.get("auth_user_id"),
+            "auth_user_email": st.session_state.get("auth_user_email"),
+            "auth_user_name": st.session_state.get("auth_user_name"),
+        }
+        if profile.get("id"):
+            return profile
+
+    return {}
+
+
+# =========================================================
+# Supabase reads
+# =========================================================
+def _fetch_credit_balance(supabase, user_id: str) -> float:
     try:
-        resp = supabase.table("credit_balance").select("balance").eq("user_id", user_id).limit(1).execute()
-        rows = _safe_get(resp, "data", []) or []
-        if not rows:
-            return 0
-        return int(_to_float(_safe_get(rows[0], "balance", 0)))
+        resp = (
+            supabase.table("credit_balance")
+            .select("balance")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if rows:
+            return _to_float(rows[0].get("balance"), 0.0)
     except Exception:
-        return 0
+        pass
+    return 0.0
 
 
-def _fetch_packages(supabase) -> List[Dict[str, Any]]:
+def _fetch_credit_packages(supabase) -> List[Dict[str, Any]]:
     try:
         resp = (
             supabase.table("credit_packages")
             .select("*")
             .eq("is_active", True)
-            .order("sort_order", desc=False)
+            .order("price_brl", desc=False)
             .execute()
         )
-        rows = _safe_get(resp, "data", []) or []
-        return rows
+        rows = resp.data or []
+        if rows:
+            return rows
+    except Exception:
+        pass
+
+    try:
+        resp = (
+            supabase.table("credit_packages")
+            .select("*")
+            .eq("active", True)
+            .order("price_brl", desc=False)
+            .execute()
+        )
+        return resp.data or []
     except Exception:
         return []
 
 
-def _fetch_recent_ledger(supabase, user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+def _fetch_recent_ledger(supabase, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     try:
         resp = (
             supabase.table("credit_ledger")
@@ -92,12 +168,12 @@ def _fetch_recent_ledger(supabase, user_id: str, limit: int = 20) -> List[Dict[s
             .limit(limit)
             .execute()
         )
-        return _safe_get(resp, "data", []) or []
+        return resp.data or []
     except Exception:
         return []
 
 
-def _fetch_recent_payments(supabase, user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+def _fetch_recent_payments(supabase, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     try:
         resp = (
             supabase.table("payments")
@@ -107,106 +183,30 @@ def _fetch_recent_payments(supabase, user_id: str, limit: int = 20) -> List[Dict
             .limit(limit)
             .execute()
         )
-        return _safe_get(resp, "data", []) or []
+        return resp.data or []
     except Exception:
         return []
 
 
 def _fetch_payment_by_id(supabase, payment_id: str) -> Optional[Dict[str, Any]]:
     try:
-        resp = supabase.table("payments").select("*").eq("id", payment_id).limit(1).execute()
-        rows = _safe_get(resp, "data", []) or []
+        resp = (
+            supabase.table("payments")
+            .select("*")
+            .eq("id", payment_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
         return rows[0] if rows else None
     except Exception:
         return None
 
 
 # =========================================================
-# Session helpers
-# =========================================================
-def _resolve_user_profile(supabase, user_profile: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if isinstance(user_profile, dict) and user_profile.get("id"):
-        return user_profile
-
-    auth_user_id = st.session_state.get("auth_user_id")
-    auth_user_email = st.session_state.get("auth_user_email")
-    auth_user_name = st.session_state.get("auth_user_name") or ""
-
-    if auth_user_id:
-        db_profile = _fetch_user_profile(supabase, auth_user_id)
-        if db_profile:
-            return db_profile
-
-        return {
-            "id": auth_user_id,
-            "email": auth_user_email,
-            "username": auth_user_name,
-        }
-
-    return None
-
-
-def _close_current_payment() -> None:
-    st.session_state.pop("current_payment_id", None)
-    st.session_state.pop("current_payment_snapshot", None)
-    st.session_state.pop("pix_created_success", None)
-    st.session_state.pop("payments_focus_mode", None)
-
-
-# =========================================================
-# Payment state sync
-# =========================================================
-def _resolve_current_payment(supabase) -> Optional[Dict[str, Any]]:
-    payment_id = st.session_state.get("current_payment_id")
-    if not payment_id:
-        return None
-
-    snapshot = st.session_state.get("current_payment_snapshot") or {}
-    current_payment = _fetch_payment_by_id(supabase, payment_id)
-
-    if not current_payment:
-        return snapshot if snapshot else None
-
-    # preserva campos de pix do snapshot quando o banco ainda não devolveu
-    for field in ("pix_qr_code", "pix_copy_paste", "external_payment_id", "gateway_payload"):
-        if not current_payment.get(field) and snapshot.get(field):
-            current_payment[field] = snapshot.get(field)
-
-    st.session_state["current_payment_snapshot"] = current_payment
-    return current_payment
-
-
-def _sync_current_payment_state(
-    supabase,
-    current_payment: Optional[Dict[str, Any]],
-    current_user_id: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
-    if not current_payment:
-        return None
-
-    payment_id = _safe_get(current_payment, "id")
-    status = str(_safe_get(current_payment, "status", "") or "").lower().strip()
-
-    if status == "paid":
-        inspect = ensure_paid_payment_is_credited(
-            payment_id=payment_id,
-            target_user_id=current_user_id,
-        )
-        payment = _safe_get(inspect, "payment", current_payment) or current_payment
-        credit_result = _safe_get(inspect, "credit_result", {}) or {}
-        if credit_result.get("credited") or credit_result.get("reason") == "already_credited":
-            st.session_state["payments_focus_mode"] = False
-        st.session_state["current_payment_snapshot"] = payment
-        return payment
-
-    return current_payment
-
-
-# =========================================================
 # Payment actions
 # =========================================================
 def _create_pix_payment(
-    *,
     user_id: str,
     user_email: str,
     user_name: str,
@@ -214,85 +214,68 @@ def _create_pix_payment(
     coupon_applied: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     try:
+        notification_url = st.secrets.get(
+            "MERCADOPAGO_WEBHOOK_URL",
+            "https://dvaskwtqrohfyzndtjwv.supabase.co/functions/v1/mercadopago-webhook",
+        )
+
         result = create_pending_payment_and_pix(
             user_id=user_id,
             user_email=user_email,
-            user_name=user_name,
+            user_name=user_name or user_email,
             package=package,
             coupon_applied=coupon_applied,
+            notification_url=notification_url,
         )
+
+        updated = result.get("updated") or {}
+        pending = result.get("pending") or {}
+
+        return {**pending, **updated}
     except Exception as e:
-        st.error(f"Erro ao gerar Pix: {e}")
+        st.error(f"Não foi possível criar o pagamento Pix: {e}")
         return None
-
-    pending = _safe_get(result, "pending", {}) or {}
-    updated = _safe_get(result, "updated", {}) or {}
-    pix = _safe_get(result, "pix", {}) or {}
-
-    payment = {**pending, **updated}
-
-    if not payment.get("pix_qr_code") and pix.get("qr_code_base64"):
-        payment["pix_qr_code"] = pix.get("qr_code_base64")
-
-    if not payment.get("pix_copy_paste") and pix.get("qr_code"):
-        payment["pix_copy_paste"] = pix.get("qr_code")
-
-    return payment
 
 
 # =========================================================
 # UI blocks
 # =========================================================
-def _render_wallet_header(user_profile: Dict[str, Any], balance: int) -> None:
-    st.markdown("### Minha carteira")
+def _render_wallet_header(user_profile: Dict[str, Any], balance: float) -> None:
+    st.subheader("Minha carteira")
+
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.text_input("Usuário", value=str(_safe_get(user_profile, "username", "")), disabled=True)
+        st.text_input("Usuário", value=_get_user_name(user_profile), disabled=True)
     with c2:
-        st.text_input("E-mail", value=str(_safe_get(user_profile, "email", "")), disabled=True)
+        st.text_input("E-mail", value=_get_user_email(user_profile), disabled=True)
     with c3:
-        st.text_input("Saldo de créditos", value=str(balance), disabled=True)
+        st.text_input("Saldo de créditos", value=str(int(balance)), disabled=True)
 
 
-def _render_user_banner(user_profile: Dict[str, Any]) -> None:
-    username = _safe_get(user_profile, "username", "-")
-    email = _safe_get(user_profile, "email", "-")
-    st.success(f"{username} • {email}")
+def _render_packages_table(packages: List[Dict[str, Any]], expanded: bool) -> None:
+    with st.expander("Pacotes de créditos", expanded=expanded):
+        if not packages:
+            st.warning("Nenhum pacote ativo encontrado.")
+            return
 
+        rows = []
+        for p in packages:
+            rows.append(
+                {
+                    "Pacote": _safe_get(p, "name", "-"),
+                    "Descrição": _safe_get(p, "description", "-"),
+                    "Preço": _fmt_brl(_safe_get(p, "price_brl", 0)),
+                    "Créditos": int(_to_float(_safe_get(p, "credits", 0))),
+                }
+            )
 
-def _render_user_actions() -> None:
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Sair", use_container_width=True):
-            for key in [
-                "auth_logged_in",
-                "auth_user_id",
-                "auth_user_email",
-                "auth_user_name",
-                "login_checked",
-            ]:
-                st.session_state.pop(key, None)
-            _close_current_payment()
-            st.rerun()
-
-    with c2:
-        if st.button("Trocar usuário", use_container_width=True):
-            for key in [
-                "auth_logged_in",
-                "auth_user_id",
-                "auth_user_email",
-                "auth_user_name",
-                "login_checked",
-            ]:
-                st.session_state.pop(key, None)
-            _close_current_payment()
-            st.rerun()
+        st.dataframe(rows, use_container_width=True, hide_index=True)
 
 
 def _render_recent_ledger(ledger_rows: List[Dict[str, Any]]) -> None:
     with st.expander("Extrato recente de créditos", expanded=False):
         if not ledger_rows:
-            st.info("Ainda não há movimentações.")
+            st.info("Ainda não há movimentações de créditos.")
             return
 
         rows = []
@@ -459,7 +442,7 @@ def _render_buy_section(
 
     for idx, package in enumerate(packages):
         col = cols[idx % len(cols)]
-        package_id = str(_safe_get(package, "id", idx))
+        package_id = str(_safe_get(package, 'id', idx))
         with col:
             st.markdown(f"**{_safe_get(package, 'name', 'Pacote')}**")
             st.caption(_safe_get(package, "description", "-"))
@@ -471,7 +454,7 @@ def _render_buy_section(
             coupon_input_value = st.text_input("Cupom", key=coupon_widget_key)
             current_coupon = _get_current_coupon_application(package, coupon_input_value)
 
-            original_amount = _to_float(_safe_get(package, "price_brl", 0))
+            original_amount = _to_float(_safe_get(package, 'price_brl', 0))
             if current_coupon:
                 st.write(f"Preço original: {_fmt_brl(current_coupon.get('original_amount', original_amount))}")
                 st.write(f"Desconto: {_fmt_brl(current_coupon.get('discount_amount', 0))}")
@@ -496,7 +479,6 @@ def _render_buy_section(
                     st.session_state[f"coupon_applied_{package_id}"] = result
                     st.session_state[coupon_message_key] = result.get("message")
                     st.rerun()
-
             with clear_col:
                 if st.button(
                     "Limpar cupom",
@@ -535,49 +517,158 @@ def _render_buy_section(
                     st.rerun()
 
 
-def render_payments_panel(supabase=None, user_profile: Optional[Dict[str, Any]] = None) -> None:
-    if supabase is None:
-        supabase = get_supabase_auth_client()
+def _resolve_current_payment(supabase) -> Optional[Dict[str, Any]]:
+    payment_id = st.session_state.get("current_payment_id")
+    if not payment_id:
+        return None
 
-    resolved_profile = _resolve_user_profile(supabase, user_profile)
-    if not resolved_profile or not _safe_get(resolved_profile, "id"):
-        st.info("Entre com Google para acessar a carteira e comprar créditos.")
+    snapshot = st.session_state.get("current_payment_snapshot") or {}
+    current_payment = _fetch_payment_by_id(supabase, payment_id)
+
+    if current_payment and snapshot:
+        merged = dict(snapshot)
+        merged.update(current_payment)
+        if not merged.get("pix_qr_code"):
+            merged["pix_qr_code"] = snapshot.get("pix_qr_code")
+        if not merged.get("pix_copy_paste"):
+            merged["pix_copy_paste"] = snapshot.get("pix_copy_paste")
+        current_payment = merged
+    elif not current_payment and snapshot and str(_safe_get(snapshot, "id")) == str(payment_id):
+        current_payment = snapshot
+    elif not current_payment:
+        st.session_state.pop("current_payment_id", None)
+        st.session_state.pop("current_payment_snapshot", None)
+        return None
+
+    return current_payment
+
+
+def _sync_current_payment_state(supabase, current_user_id: str) -> None:
+    current_payment = _resolve_current_payment(supabase)
+    if not current_payment:
         return
 
-    user_id = str(_safe_get(resolved_profile, "id"))
-    user_email = str(_safe_get(resolved_profile, "email", "") or "")
-    user_name = str(_safe_get(resolved_profile, "username", "") or "")
+    payment_id = str(_safe_get(current_payment, "id", ""))
+    if not payment_id:
+        return
 
-    balance = _fetch_credit_balance(supabase, user_id)
-    packages = _fetch_packages(supabase)
-    ledger_rows = _fetch_recent_ledger(supabase, user_id)
-    payments_rows = _fetch_recent_payments(supabase, user_id)
+    status = str(_safe_get(current_payment, "status", "")).strip().lower()
+    if status != "paid":
+        return
 
-    _render_wallet_header(resolved_profile, balance)
-    _render_user_banner(resolved_profile)
-    _render_user_actions()
+    try:
+        result = ensure_paid_payment_is_credited(payment_id=payment_id, target_user_id=current_user_id)
+        latest_payment = (result or {}).get("payment") or _fetch_payment_by_id(supabase, payment_id) or current_payment
+        merged = dict(current_payment)
+        merged.update(latest_payment)
+        st.session_state["current_payment_snapshot"] = merged
+        st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
+        credit_result = (result or {}).get("credit_result") or {}
+        if credit_result.get("credited") or credit_result.get("reason") == "already_credited":
+            st.session_state["payments_focus_mode"] = False
+    except Exception:
+        # Não interromper a renderização do painel; a área visual mostra o erro depois.
+        return
+
+
+def _render_current_payment_area(supabase, current_user_id: str) -> None:
+    payment_id = st.session_state.get("current_payment_id")
+    if not payment_id:
+        return
 
     current_payment = _resolve_current_payment(supabase)
-    current_payment = _sync_current_payment_state(supabase, current_payment, current_user_id=user_id)
+    if not current_payment:
+        return
 
-    if current_payment:
-        _render_pix_block(current_payment)
-        payment_id = str(_safe_get(current_payment, "id"))
-        status = str(_safe_get(current_payment, "status", "") or "").lower().strip()
+    if not _fetch_payment_by_id(supabase, payment_id) and st.session_state.get("current_payment_snapshot"):
+        st.warning(
+            "O Pix foi criado, mas não foi possível recarregar os dados do pagamento nesta execução. "
+            "Exibindo os dados retornados na criação."
+        )
 
-        if status == "pending":
-            _render_pending_payment_status(supabase, payment_id, current_user_id=user_id)
-        elif status == "paid":
+    st.markdown("---")
+    st.markdown("## Pagamento atual")
+    _render_pix_block(current_payment)
+
+    status = _safe_get(current_payment, "status")
+
+    if status == "pending":
+        _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
+    elif status == "paid":
+        credit_reprocess = None
+        try:
+            credit_reprocess = ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
+        except Exception as e:
+            st.warning(f"Pagamento confirmado, mas não foi possível reconciliar os créditos agora: {e}")
+
+        credit_result = (credit_reprocess or {}).get("credit_result") or {}
+        if credit_result.get("credited"):
+            if credit_result.get("moved"):
+                st.success("Este pagamento já foi confirmado e os créditos foram reconciliados para a sua carteira.")
+            else:
+                st.success("Este pagamento já foi confirmado e os créditos foram adicionados à carteira.")
+            if st.session_state.get("payments_focus_mode"):
+                st.session_state["payments_focus_mode"] = False
+            st.rerun()
+        elif credit_result.get("reason") == "already_credited":
             st.success("Este pagamento já foi confirmado.")
-        elif status in ("failed", "cancelled", "refunded"):
-            st.error(f"Pagamento com status: {status}")
         else:
-            st.caption(f"Status atual: {status}")
+            st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. Tentando reconciliar...")
+            if st.button("Reprocessar crédito deste pagamento", key=f"recredit_paid_{payment_id}"):
+                try:
+                    ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
+                except Exception as e:
+                    st.error(f"Não foi possível reprocessar o crédito agora: {e}")
+                st.rerun()
 
-        if st.button("Fechar pagamento atual"):
-            _close_current_payment()
+        if st.button("Fechar pagamento atual", key=f"close_current_paid_{payment_id}"):
+            st.session_state.pop("current_payment_id", None)
+            st.session_state.pop("current_payment_snapshot", None)
+            st.rerun()
+    else:
+        if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
+            st.session_state.pop("current_payment_id", None)
+            st.session_state.pop("current_payment_snapshot", None)
             st.rerun()
 
+
+# =========================================================
+# Entry point
+# =========================================================
+def render_payments_panel(supabase=None, user_profile=None) -> None:
+    supabase_client = _resolve_supabase(supabase)
+    profile = _resolve_user_profile(supabase_client, user_profile)
+
+    user_id = _get_user_id(profile) if profile else None
+    user_email = _get_user_email(profile) if profile else "-"
+    user_name = _get_user_name(profile) if profile else "Usuário"
+
+    if not user_id:
+        st.info("Entre com Google para acessar carteira e pagamentos.")
+        return
+
+    if supabase_client is None:
+        st.warning("Cliente Supabase ainda não disponível nesta execução. Atualize a página uma vez.")
+        return
+
+    focus_mode = bool(st.session_state.get("payments_focus_mode"))
+
+    # Primeiro, sincroniza o pagamento atual com o usuário resolvido do painel.
+    # Só depois buscamos saldo/extrato/pagamentos para refletir o estado persistido.
+    _sync_current_payment_state(supabase_client, user_id)
+
+    balance = _fetch_credit_balance(supabase_client, user_id)
+    packages = _fetch_credit_packages(supabase_client)
+    ledger_rows = _fetch_recent_ledger(supabase_client, user_id)
+    payments_rows = _fetch_recent_payments(supabase_client, user_id)
+
+    if focus_mode:
+        st.warning("Saldo insuficiente para gerar o relatório. Escolha um plano e conclua o pagamento.")
+    _render_wallet_header(profile, balance)
+    _render_packages_table(packages, expanded=focus_mode)
     _render_buy_section(user_id, user_email, user_name, packages)
-    _render_recent_ledger(ledger_rows)
-    _render_recent_payments(payments_rows)
+    _render_current_payment_area(supabase_client, current_user_id=user_id)
+
+    if not focus_mode:
+        _render_recent_ledger(ledger_rows)
+        _render_recent_payments(payments_rows)
