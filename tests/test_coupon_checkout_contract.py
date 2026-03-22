@@ -502,3 +502,38 @@ def test_create_coupon_code_normalizes_and_rejects_duplicate(monkeypatch):
         assert False, "expected duplicate coupon to raise"
     except ValueError as exc:
         assert "Já existe" in str(exc)
+
+
+def test_create_coupon_code_resolves_owner_user_id_from_profiles(monkeypatch):
+    db = {
+        "profiles": [{"id": "user-123", "email": "owner@example.com"}],
+        "coupon_codes": [],
+    }
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    created = coupons.create_coupon_code(
+        code="OWNER10",
+        owner_email="owner@example.com",
+        coupon_type="manual",
+        discount_type="fixed",
+        discount_value=10,
+    )
+
+    assert created["owner_email"] == "owner@example.com"
+    assert created["owner_user_id"] == "user-123"
+
+
+def test_create_coupon_code_keeps_owner_user_id_none_when_email_not_found(monkeypatch):
+    db = {"profiles": [], "coupon_codes": []}
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    created = coupons.create_coupon_code(
+        code="OWNER11",
+        owner_email="missing@example.com",
+        coupon_type="manual",
+        discount_type="fixed",
+        discount_value=10,
+    )
+
+    assert created["owner_email"] == "missing@example.com"
+    assert created["owner_user_id"] is None
