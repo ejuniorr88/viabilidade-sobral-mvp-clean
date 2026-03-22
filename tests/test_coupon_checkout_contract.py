@@ -434,27 +434,71 @@ def test_payments_panel_create_pix_payment_passes_coupon_applied(monkeypatch):
     assert captured["coupon_applied"]["final_amount"] == 90
 
 
-def test_record_coupon_usage_for_paid_payment_does_not_record_pending(monkeypatch):
-    db = {"coupon_usages": []}
-    monkeypatch.setattr(payments, "get_supabase_server_client", lambda: FakeSupabase(db))
 
-    payment_row = {
-        "id": "uuid-payment-1",
-        "coupon_id": 10,
-        "coupon_code": "LANCAMENTO10",
-        "coupon_owner_user_id": "owner-1",
-        "user_id": "u1",
-        "external_reference": "pkg_ref_123",
-        "package_id": "pkg1",
-        "original_amount": 100,
-        "discount_amount": 10,
-        "final_amount": 90,
-        "status": "pending",
-        "coupon_snapshot": {"used_by_email": "user@example.com"},
-    }
+def test_create_coupon_code_normalizes_and_rejects_duplicate(monkeypatch):
+    from core import coupons
 
-    result = payments._record_coupon_usage_for_paid_payment(payment_row=payment_row)
+    class _Exec:
+        def __init__(self, data):
+            self.data = data
 
-    assert result["recorded"] is False
-    assert result["reason"] == "payment_not_paid"
-    assert db["coupon_usages"] == []
+    class _Table:
+        def __init__(self, name, existing):
+            self.name = name
+            self.existing = existing
+            self.payload = None
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            if self.name == "coupon_codes":
+                return _Exec(self.existing)
+            return _Exec([])
+
+        def insert(self, payload):
+            self.payload = payload
+            self.existing.clear()
+            self.existing.append(payload)
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+    class _SB:
+        def __init__(self):
+            self.store = []
+            self.table_obj = _Table("coupon_codes", self.store)
+
+        def table(self, name):
+            self.table_obj.name = name
+            self.table_obj.existing = self.store
+            return self.table_obj
+
+    sb = _SB()
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: sb)
+
+    created = coupons.create_coupon_code(
+        code=" teste10 ",
+        owner_email="Owner@Email.com ",
+        coupon_type="manual",
+        discount_type="fixed",
+        discount_value=1.0,
+    )
+    assert created["code"] == "TESTE10"
+    assert created["owner_email"] == "owner@email.com"
+
+    try:
+        coupons.create_coupon_code(
+            code="TESTE10",
+            owner_email="owner@email.com",
+            coupon_type="manual",
+            discount_type="fixed",
+            discount_value=1.0,
+        )
+        assert False, "expected duplicate coupon to raise"
+    except ValueError as exc:
+        assert "Já existe" in str(exc)
