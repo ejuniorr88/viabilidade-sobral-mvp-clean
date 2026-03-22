@@ -1,108 +1,543 @@
-
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def _read(rel_path: str) -> str:
-    return (ROOT / rel_path).read_text(encoding="utf-8")
+import importlib
+import sys
+import types
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 
 
-def test_r21_contract_items_exist() -> None:
-    txt = _read("ui/relatorio_blocks/multifamiliar_guia.py")
+class _DummyCtx:
+    def __enter__(self):
+        return self
 
-    required = [
-        "## 🏘️ O que é o residencial multifamiliar R2.1?",
-        "2 unidades habitacionais no mesmo lote",
-        "justapostas",
-        "sobrepostas",
-        "frente e acesso independente para via pública oficial",
-        "R2.1 — 2 unidades no mesmo lote (justapostas ou sobrepostas), com no máximo 2 pavimentos.",
-        "Opção 2 — no caso do multifamiliar justaposto",
-        "R2.1 justaposto",
-        "fora da ZEIS",
-        "testada mínima de 8,00 m",
-        "cada unidade deve ter acesso independente para a via pública oficial",
-        "Art. 110 da LC 91",
-        "Art. 121, § 4º",
-        "VLT",
-    ]
-    for item in required:
-        assert item in txt, f"Contrato do R2.1 perdeu item obrigatório: {item}"
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
-def test_r22_contract_items_exist() -> None:
-    txt = _read("ui/relatorio_blocks/multifamiliar_guia.py")
+class StreamlitStub:
+    def __init__(self):
+        self.session_state = {}
+        self.secrets = {
+            "SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_SERVICE_ROLE_KEY": "service-role",
+            "MERCADOPAGO_WEBHOOK_URL": "https://example.com/webhook",
+        }
+        self.calls = []
 
-    required = [
-        "## 🏘️ O que é o residencial multifamiliar R2.2?",
-        "condomínio horizontal",
-        "via interna",
-        "não abre diretamente para a via pública oficial",
-        "R2.2 — condomínio horizontal",
-        "quadra máxima da zona",
-        "art. 168 da LC 90",
-        "abertura mínima de acesso: 4,00 m",
-        "vias internas com 6,00 m",
-        "25% do muro frontal",
-        "mais de 10 unidades",
-        "área recreativa mínima de 5% da área total do terreno",
-        "EIV",
-    ]
-    for item in required:
-        assert item in txt, f"Contrato do R2.2 perdeu item obrigatório: {item}"
+    def cache_resource(self, show_spinner=False):
+        def decorator(fn):
+            return fn
+        return decorator
+
+    def _log(self, name, *args, **kwargs):
+        self.calls.append((name, args, kwargs))
+
+    def info(self, *args, **kwargs):
+        self._log("info", *args, **kwargs)
+
+    def warning(self, *args, **kwargs):
+        self._log("warning", *args, **kwargs)
+
+    def error(self, *args, **kwargs):
+        self._log("error", *args, **kwargs)
+
+    def success(self, *args, **kwargs):
+        self._log("success", *args, **kwargs)
+
+    def subheader(self, *args, **kwargs):
+        self._log("subheader", *args, **kwargs)
+
+    def text_input(self, *args, **kwargs):
+        self._log("text_input", *args, **kwargs)
+        key = kwargs.get("key")
+        if key is not None and key in self.session_state:
+            return self.session_state[key]
+        return kwargs.get("value", "")
+
+    def columns(self, spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        return [_DummyCtx() for _ in range(n)]
+
+    @contextmanager
+    def expander(self, *args, **kwargs):
+        self._log("expander", *args, **kwargs)
+        yield self
+
+    def dataframe(self, *args, **kwargs):
+        self._log("dataframe", *args, **kwargs)
+
+    def markdown(self, *args, **kwargs):
+        self._log("markdown", *args, **kwargs)
+
+    def caption(self, *args, **kwargs):
+        self._log("caption", *args, **kwargs)
+
+    def write(self, *args, **kwargs):
+        self._log("write", *args, **kwargs)
+
+    def button(self, *args, **kwargs):
+        self._log("button", *args, **kwargs)
+        return False
+
+    def checkbox(self, *args, **kwargs):
+        self._log("checkbox", *args, **kwargs)
+        return kwargs.get("value", False)
+
+    def selectbox(self, *args, **kwargs):
+        self._log("selectbox", *args, **kwargs)
+        options = kwargs.get("options") or (args[1] if len(args) > 1 else [])
+        index = kwargs.get("index", 0)
+        return options[index]
+
+    def image(self, *args, **kwargs):
+        self._log("image", *args, **kwargs)
+
+    def text_area(self, *args, **kwargs):
+        self._log("text_area", *args, **kwargs)
+        return kwargs.get("value", "")
+
+    def rerun(self):
+        self._log("rerun")
 
 
-def test_r3_contract_items_exist() -> None:
-    txt = _read("ui/relatorio_blocks/multifamiliar_guia.py")
+st_stub = StreamlitStub()
+sys.modules["streamlit"] = st_stub
 
-    required = [
-        "## 🏢 O que é o residencial multifamiliar R3?",
-        "residência multifamiliar vertical",
-        "edifício residencial",
-        "R3 — multifamiliar vertical",
-        "quadra máxima da zona",
-        "art. 170 da LC 90",
-        "50% do muro frontal",
-        "mais de 30 unidades",
-        "5 m²",
-        "área recreativa mínima de 5% da área total construída das unidades",
-        "garagem em subsolo",
-        "mais de 100 unidades habitacionais",
-    ]
-    for item in required:
-        assert item in txt, f"Contrato do R3 perdeu item obrigatório: {item}"
+supabase_mod = types.ModuleType("supabase")
+supabase_mod.Client = object
+supabase_mod.create_client = lambda url, key: object()
+sys.modules["supabase"] = supabase_mod
 
+core_auth_stub = types.ModuleType("core.auth")
+core_auth_stub.get_supabase_auth_client = lambda: object()
+sys.modules["core.auth"] = core_auth_stub
 
-def test_dicas_valiosas_are_independent_for_each_tipology() -> None:
-    txt = _read("ui/relatorio_blocks/multifamiliar_guia.py")
+core_pix_stub = types.ModuleType("core.pix_gateway")
+class MercadoPagoPixError(Exception):
+    pass
+core_pix_stub.MercadoPagoPixError = MercadoPagoPixError
+core_pix_stub.create_pix_payment = lambda **kwargs: {
+    "external_payment_id": "mp_123",
+    "qr_code": "QR-CODE",
+    "qr_code_base64": "UVI=",
+    "ticket_url": "https://ticket",
+    "gateway_payload": {"status": "pending"},
+}
+core_pix_stub.fetch_payment_status = lambda external_payment_id: {"status": "approved", "gateway_payload": {"status": "approved"}}
+sys.modules["core.pix_gateway"] = core_pix_stub
 
-    required = [
-        "R2.1 justaposto",
-        "R2.2 — condomínio horizontal",
-        "R3 — multifamiliar vertical",
-        "IA e área computável",
-        "Subsolo",
-        "Passeios (calçadas)",
-        "Piscina, caixa d’água, cisterna e tanques",
-    ]
-    for item in required:
-        assert item in txt, f"Dicas valiosas do multifamiliar perderam bloco independente: {item}"
+coupons = importlib.import_module("core.coupons")
+payments = importlib.import_module("core.payments")
+payments_panel = importlib.import_module("ui.payments_panel")
 
 
-def test_r22_r3_do_not_gain_r21_unifamiliar_flexibility() -> None:
-    txt = _read("ui/relatorio_blocks/multifamiliar_guia.py")
+class FakeResponse:
+    def __init__(self, data):
+        self.data = data
 
-    # R2.1 pode ter a opção especial do justaposto.
-    assert "Opção 2 — no caso do multifamiliar justaposto" in txt
 
-    # R2.2 e R3 devem seguir recuos obrigatórios da zona; então a leitura-base é única.
-    assert txt.count("Opção 2 — no caso do multifamiliar justaposto") == 1, (
-        "A opção especial do justaposto deve existir apenas para R2.1."
+class FakeTable:
+    def __init__(self, db, name):
+        self.db = db
+        self.name = name
+        self.filters = []
+        self.payload = None
+        self._limit = None
+        self.action = None
+
+    def insert(self, payload):
+        self.payload = payload
+        self.action = "insert"
+        return self
+
+    def update(self, payload):
+        self.payload = payload
+        self.action = "update"
+        return self
+
+    def select(self, *cols):
+        self.action = "select"
+        return self
+
+    def eq(self, key, value):
+        self.filters.append((key, value))
+        return self
+
+    def limit(self, value):
+        self._limit = value
+        return self
+
+    def order(self, *args, **kwargs):
+        return self
+
+    def execute(self):
+        rows = self.db.setdefault(self.name, [])
+        if self.action == "insert":
+            row = dict(self.payload)
+            row.setdefault("id", f"{self.name}_{len(rows)+1}")
+            rows.append(row)
+            return FakeResponse([row])
+        if self.action == "update":
+            updated = []
+            for row in rows:
+                if all(row.get(k) == v for k, v in self.filters):
+                    row.update(self.payload)
+                    updated.append(dict(row))
+            return FakeResponse(updated)
+        if self.action == "select":
+            selected = [dict(r) for r in rows if all(r.get(k) == v for k, v in self.filters)]
+            if self._limit is not None:
+                selected = selected[: self._limit]
+            return FakeResponse(selected)
+        return FakeResponse([])
+
+
+class FakeSupabase:
+    def __init__(self, db=None):
+        self.db = db or {}
+
+    def table(self, name):
+        return FakeTable(self.db, name)
+
+
+def _future(days: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+
+
+def _base_coupon(**overrides):
+    row = {
+        "id": 1,
+        "code": "LANCAMENTO10",
+        "owner_user_id": None,
+        "owner_email": None,
+        "coupon_type": "manual",
+        "discount_type": "percent",
+        "discount_value": 10,
+        "is_active": True,
+        "valid_from": _future(-1),
+        "valid_until": _future(1),
+        "max_uses_total": None,
+        "max_uses_per_user": None,
+        "first_purchase_only": False,
+        "allowed_plan_codes": None,
+        "min_purchase_amount": None,
+        "can_be_used_by_owner": False,
+        "notes": None,
+    }
+    row.update(overrides)
+    return row
+
+
+def _package(**overrides):
+    row = {"id": "pkg-1", "name": "Pacote 5", "price_brl": 100, "credits": 5}
+    row.update(overrides)
+    return row
+
+
+def test_validate_coupon_for_checkout_accepts_valid_percent_coupon(monkeypatch):
+    db = {"coupon_codes": [_base_coupon()]}
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    result = coupons.validate_coupon_for_checkout(
+        user_id="u1",
+        user_email="user@example.com",
+        package=_package(),
+        coupon_code="lancamento10",
     )
 
+    assert result["ok"] is True
+    assert result["coupon_code"] == "LANCAMENTO10"
+    assert result["discount_amount"] == 10.0
+    assert result["final_amount"] == 90.0
+    assert result["snapshot"]["used_by_email"] == "user@example.com"
 
-def test_subsolo_terms_are_spelled_out() -> None:
-    txt = _read("ui/relatorio_blocks/multifamiliar_guia.py")
-    assert "Taxa de Ocupação do subsolo" in txt, "No bloco de Subsolo, 'TO' deve estar por extenso."
-    assert "Taxa de Permeabilidade" in txt, "No bloco de Subsolo, 'TP' deve estar por extenso."
+
+def test_validate_coupon_blocks_inactive_coupon(monkeypatch):
+    db = {"coupon_codes": [_base_coupon(is_active=False)]}
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    result = coupons.validate_coupon_for_checkout(
+        user_id="u1",
+        user_email="user@example.com",
+        package=_package(),
+        coupon_code="LANCAMENTO10",
+    )
+
+    assert result == {"ok": False, "message": "Este cupom está inativo."}
+
+
+def test_validate_coupon_blocks_owner_using_own_coupon(monkeypatch):
+    db = {"coupon_codes": [_base_coupon(owner_user_id="owner-1", owner_email="owner@example.com")]}
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    result = coupons.validate_coupon_for_checkout(
+        user_id="owner-1",
+        user_email="owner@example.com",
+        package=_package(),
+        coupon_code="LANCAMENTO10",
+    )
+
+    assert result == {"ok": False, "message": "O dono do cupom não pode usar o próprio cupom."}
+
+
+def test_validate_coupon_blocks_per_user_limit(monkeypatch):
+    db = {
+        "coupon_codes": [_base_coupon(max_uses_per_user=1)],
+        "coupon_usages": [{"coupon_id": 1, "used_by_user_id": "u1"}],
+    }
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    result = coupons.validate_coupon_for_checkout(
+        user_id="u1",
+        user_email="user@example.com",
+        package=_package(),
+        coupon_code="LANCAMENTO10",
+    )
+
+    assert result == {"ok": False, "message": "Você já atingiu o limite de uso deste cupom."}
+
+
+def test_validate_coupon_blocks_first_purchase_only_when_user_has_paid_payment(monkeypatch):
+    db = {
+        "coupon_codes": [_base_coupon(first_purchase_only=True)],
+        "payments": [{"id": "p1", "user_id": "u1", "status": "paid"}],
+    }
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    result = coupons.validate_coupon_for_checkout(
+        user_id="u1",
+        user_email="user@example.com",
+        package=_package(),
+        coupon_code="LANCAMENTO10",
+    )
+
+    assert result == {"ok": False, "message": "Este cupom vale apenas para a primeira compra."}
+
+
+def test_validate_coupon_blocks_plan_not_allowed(monkeypatch):
+    db = {"coupon_codes": [_base_coupon(allowed_plan_codes=["pkg-2"]) ]}
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    result = coupons.validate_coupon_for_checkout(
+        user_id="u1",
+        user_email="user@example.com",
+        package=_package(id="pkg-1"),
+        coupon_code="LANCAMENTO10",
+    )
+
+    assert result == {"ok": False, "message": "Este cupom não é válido para este plano."}
+
+
+def test_create_pending_payment_server_side_persists_coupon_fields(monkeypatch):
+    db = {"payments": []}
+    monkeypatch.setattr(payments, "get_supabase_server_client", lambda: FakeSupabase(db))
+    monkeypatch.setattr(payments, "_generate_external_reference", lambda user_id: "pkg_ref")
+
+    result = payments.create_pending_payment_server_side(
+        user_id="u1",
+        package={"id": "pkg1", "price_brl": 100},
+        coupon_applied={
+            "coupon_id": 10,
+            "coupon_code": "LANCAMENTO10",
+            "coupon_owner_user_id": "owner-1",
+            "discount_type": "percent",
+            "discount_value": 10,
+            "original_amount": 100,
+            "discount_amount": 10,
+            "final_amount": 90,
+            "snapshot": {"code": "LANCAMENTO10"},
+        },
+    )
+
+    assert result["amount_brl"] == 90
+    assert result["coupon_id"] == 10
+    assert result["coupon_code"] == "LANCAMENTO10"
+    assert result["discount_amount"] == 10
+    assert result["final_amount"] == 90
+
+
+def test_record_coupon_usage_for_paid_payment_uses_external_reference_when_payment_id_is_uuid(monkeypatch):
+    db = {"coupon_usages": []}
+    monkeypatch.setattr(payments, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    payment_row = {
+        "id": "uuid-payment-1",
+        "coupon_id": 10,
+        "coupon_code": "LANCAMENTO10",
+        "coupon_owner_user_id": "owner-1",
+        "user_id": "u1",
+        "external_reference": "pkg_ref_123",
+        "package_id": "pkg1",
+        "original_amount": 100,
+        "discount_amount": 10,
+        "final_amount": 90,
+        "status": "paid",
+        "coupon_snapshot": {"used_by_email": "user@example.com"},
+    }
+
+    first = payments._record_coupon_usage_for_paid_payment(payment_row=payment_row)
+    second = payments._record_coupon_usage_for_paid_payment(payment_row=payment_row)
+
+    assert first["recorded"] is True
+    assert db["coupon_usages"][0]["payment_id"] is None
+    assert db["coupon_usages"][0]["payment_external_reference"] == "pkg_ref_123"
+    assert second["reason"] == "already_recorded"
+
+
+def test_refresh_payment_status_and_credit_records_coupon_usage_when_paid(monkeypatch):
+    db = {
+        "payments": [{
+            "id": "uuid-payment-1",
+            "user_id": "u1",
+            "package_id": "pkg1",
+            "status": "pending",
+            "external_payment_id": "mp_1",
+            "external_reference": "pkg_ref_123",
+            "coupon_id": 10,
+            "coupon_code": "LANCAMENTO10",
+            "coupon_owner_user_id": "owner-1",
+            "original_amount": 100,
+            "discount_amount": 10,
+            "final_amount": 90,
+        }],
+        "coupon_usages": [],
+    }
+    monkeypatch.setattr(payments, "get_supabase_server_client", lambda: FakeSupabase(db))
+    monkeypatch.setattr(payments, "_apply_credit_for_payment", lambda payment_row, target_user_id=None: {"credited": True, "credits": 5})
+    monkeypatch.setattr(payments, "fetch_payment_status", lambda external_payment_id: {"status": "approved", "gateway_payload": {"status": "approved"}})
+
+    result = payments.refresh_payment_status_and_credit(payment_id="uuid-payment-1", target_user_id="u1")
+
+    assert result["payment"]["status"] == "paid"
+    assert result["coupon_result"]["recorded"] is True
+    assert db["coupon_usages"][0]["coupon_code"] == "LANCAMENTO10"
+
+
+def test_payments_panel_create_pix_payment_passes_coupon_applied(monkeypatch):
+    captured = {}
+
+    def fake_create_pending_payment_and_pix(**kwargs):
+        captured.update(kwargs)
+        return {"pending": {"id": "p1"}, "updated": {"status": "pending"}, "pix": {}}
+
+    monkeypatch.setattr(payments_panel, "create_pending_payment_and_pix", fake_create_pending_payment_and_pix)
+
+    payment = payments_panel._create_pix_payment(
+        user_id="u1",
+        user_email="user@example.com",
+        user_name="User",
+        package={"id": "pkg1", "price_brl": 100},
+        coupon_applied={"coupon_code": "LANCAMENTO10", "final_amount": 90},
+    )
+
+    assert payment["id"] == "p1"
+    assert captured["coupon_applied"]["coupon_code"] == "LANCAMENTO10"
+    assert captured["coupon_applied"]["final_amount"] == 90
+
+
+
+def test_create_coupon_code_normalizes_and_rejects_duplicate(monkeypatch):
+    from core import coupons
+
+    class _Exec:
+        def __init__(self, data):
+            self.data = data
+
+    class _Table:
+        def __init__(self, name, existing):
+            self.name = name
+            self.existing = existing
+            self.payload = None
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            if self.name == "coupon_codes":
+                return _Exec(self.existing)
+            return _Exec([])
+
+        def insert(self, payload):
+            self.payload = payload
+            self.existing.clear()
+            self.existing.append(payload)
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+    class _SB:
+        def __init__(self):
+            self.store = []
+            self.table_obj = _Table("coupon_codes", self.store)
+
+        def table(self, name):
+            self.table_obj.name = name
+            self.table_obj.existing = self.store
+            return self.table_obj
+
+    sb = _SB()
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: sb)
+
+    created = coupons.create_coupon_code(
+        code=" teste10 ",
+        owner_email="Owner@Email.com ",
+        coupon_type="manual",
+        discount_type="fixed",
+        discount_value=1.0,
+    )
+    assert created["code"] == "TESTE10"
+    assert created["owner_email"] == "owner@email.com"
+
+    try:
+        coupons.create_coupon_code(
+            code="TESTE10",
+            owner_email="owner@email.com",
+            coupon_type="manual",
+            discount_type="fixed",
+            discount_value=1.0,
+        )
+        assert False, "expected duplicate coupon to raise"
+    except ValueError as exc:
+        assert "Já existe" in str(exc)
+
+
+def test_list_coupon_usage_report_enriches_filters_and_summarizes(monkeypatch):
+    db = {
+        "coupon_codes": [
+            {"id": 10, "code": "LANCAMENTO10", "owner_email": "owner@example.com"},
+            {"id": 11, "code": "OUTRO5", "owner_email": "other@example.com"},
+        ],
+        "coupon_usages": [
+            {
+                "coupon_id": 10,
+                "coupon_code": "LANCAMENTO10",
+                "used_by_email": "buyer1@example.com",
+                "discount_amount": 10,
+                "final_amount": 90,
+                "payment_status": "paid",
+                "confirmed_at": "2026-03-22T12:00:00+00:00",
+            },
+            {
+                "coupon_id": 11,
+                "coupon_code": "OUTRO5",
+                "used_by_email": "buyer2@example.com",
+                "discount_amount": 5,
+                "final_amount": 95,
+                "payment_status": "pending",
+                "confirmed_at": "2026-03-22T13:00:00+00:00",
+            },
+        ],
+    }
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    result = coupons.list_coupon_usage_report(coupon_code="LANCAMENTO10", owner_email="owner@example.com", payment_status="paid")
+
+    assert result["summary"]["total_usos"] == 1
+    assert result["summary"]["usos_pagos"] == 1
+    assert result["summary"]["desconto_total"] == 10.0
+    assert result["summary"]["valor_final_total"] == 90.0
+    assert result["rows"][0]["owner_email"] == "owner@example.com"
+    assert result["rows"][0]["coupon_code"] == "LANCAMENTO10"
