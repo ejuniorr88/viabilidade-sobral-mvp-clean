@@ -245,27 +245,6 @@ def list_coupon_codes(limit: int = 50) -> List[Dict[str, Any]]:
     return _safe_data(response) or []
 
 
-def list_coupon_usages(limit: int = 100) -> List[Dict[str, Any]]:
-    supabase = get_supabase_server_client()
-    usages_resp = supabase.table("coupon_usages").select("*").order("created_at", desc=True).limit(limit).execute()
-    usage_rows: List[Dict[str, Any]] = _safe_data(usages_resp) or []
-
-    codes_resp = supabase.table("coupon_codes").select("id,code,owner_email").execute()
-    code_rows: List[Dict[str, Any]] = _safe_data(codes_resp) or []
-    by_coupon_id = {str(row.get("id")): row for row in code_rows if row.get("id") is not None}
-
-    enriched: List[Dict[str, Any]] = []
-    for row in usage_rows:
-        coupon_id = row.get("coupon_id")
-        coupon_meta = by_coupon_id.get(str(coupon_id), {})
-        enriched.append({
-            **row,
-            "coupon_code": row.get("coupon_code") or coupon_meta.get("code"),
-            "owner_email": coupon_meta.get("owner_email"),
-        })
-    return enriched
-
-
 def create_coupon_code(
     *,
     code: str,
@@ -330,3 +309,69 @@ def create_coupon_code(
     if not rows:
         raise RuntimeError("Não foi possível criar o cupom.")
     return rows[0]
+
+def list_coupon_usage_report(
+    *,
+    limit: int = 200,
+    coupon_code: Optional[str] = None,
+    owner_email: Optional[str] = None,
+    payment_status: Optional[str] = None,
+) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    usages_response = (
+        supabase.table("coupon_usages")
+        .select("*")
+        .order("confirmed_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    usage_rows = _safe_data(usages_response) or []
+
+    coupon_rows = list_coupon_codes(limit=500)
+    coupon_by_id = {str(row.get("id")): row for row in coupon_rows if row.get("id") is not None}
+    coupon_by_code = {
+        _normalize_coupon_code(row.get("code")): row
+        for row in coupon_rows
+        if _normalize_coupon_code(row.get("code"))
+    }
+
+    normalized_coupon_code = _normalize_coupon_code(coupon_code)
+    normalized_owner_email = _normalize_email(owner_email)
+    normalized_payment_status = str(payment_status or "").strip().lower()
+
+    enriched_rows: List[Dict[str, Any]] = []
+    for row in usage_rows:
+        coupon_id = row.get("coupon_id")
+        raw_code = row.get("coupon_code")
+        normalized_row_code = _normalize_coupon_code(raw_code)
+        coupon_ref = coupon_by_id.get(str(coupon_id)) or coupon_by_code.get(normalized_row_code)
+
+        enriched = dict(row)
+        enriched["coupon_code"] = raw_code or (coupon_ref or {}).get("code")
+        enriched["owner_email"] = (
+            row.get("owner_email")
+            or row.get("used_by_owner_email")
+            or row.get("coupon_owner_email")
+            or (coupon_ref or {}).get("owner_email")
+        )
+
+        row_status = str(enriched.get("payment_status") or "").strip().lower()
+
+        if normalized_coupon_code and _normalize_coupon_code(enriched.get("coupon_code")) != normalized_coupon_code:
+            continue
+        if normalized_owner_email and _normalize_email(enriched.get("owner_email")) != normalized_owner_email:
+            continue
+        if normalized_payment_status and normalized_payment_status != "todos" and row_status != normalized_payment_status:
+            continue
+
+        enriched_rows.append(enriched)
+
+    summary = {
+        "total_usages": len(enriched_rows),
+        "paid_usages": sum(1 for row in enriched_rows if str(row.get("payment_status") or "").strip().lower() == "paid"),
+        "discount_total": round(sum(_to_float(row.get("discount_amount"), 0.0) for row in enriched_rows), 2),
+        "final_amount_total": round(sum(_to_float(row.get("final_amount"), 0.0) for row in enriched_rows), 2),
+    }
+
+    return {"rows": enriched_rows, "summary": summary}
+
