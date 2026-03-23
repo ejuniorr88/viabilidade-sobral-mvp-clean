@@ -8,7 +8,7 @@ import streamlit as st
 from core.coupons import (
     create_coupon_code,
     filter_coupon_usages,
-    list_coupon_codes,
+    list_coupon_codes_enriched,
     list_coupon_usages_enriched,
     set_coupon_active,
     summarize_coupon_usages,
@@ -31,6 +31,29 @@ def _normalize_plan_codes(value: str) -> List[str]:
     return [v.strip() for v in str(value or "").split(",") if v.strip()]
 
 
+def _badge(label: str, kind: str = "info") -> str:
+    colors = {
+        "success": "#0f766e",
+        "warning": "#b45309",
+        "danger": "#b91c1c",
+        "muted": "#475569",
+        "info": "#1d4ed8",
+    }
+    color = colors.get(kind, colors["info"])
+    return f"<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:{color};color:white;font-size:0.8rem;margin-right:6px;">{label}</span>"
+
+
+def _coupon_status_badges(row: Dict[str, Any]) -> str:
+    badges = []
+    badges.append(_badge("Ativo" if row.get("is_active") else "Inativo", "success" if row.get("is_active") else "muted"))
+    if row.get("is_expired"):
+        badges.append(_badge("Expirado", "danger"))
+    badges.append(_badge("Owner resolvido" if row.get("owner_resolved") else "Owner pendente", "info" if row.get("owner_resolved") else "warning"))
+    if int(row.get("paid_uses") or 0) > 0:
+        badges.append(_badge(f"Uso pago: {int(row.get('paid_uses') or 0)}", "success"))
+    return "".join(badges)
+
+
 def _coupon_form_defaults(row: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     row = row or {}
     return {
@@ -48,38 +71,27 @@ def _coupon_form_defaults(row: Optional[Dict[str, Any]] = None) -> Dict[str, Any
         "min_purchase_amount": float(row.get("min_purchase_amount") or 0.0),
         "allowed_plan_codes": ", ".join(row.get("allowed_plan_codes") or []),
         "notes": row.get("notes") or "",
-        "has_paid_usage": bool(row.get("has_paid_usage", False)),
-        "paid_usage_count": int(row.get("paid_usage_count") or 0),
     }
 
 
 def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> None:
     defaults = _coupon_form_defaults(row)
     form_key = f"coupon_admin_form_{mode}_{defaults['id'] or 'new'}"
-    locked_critical = mode == "edit" and bool(defaults.get("has_paid_usage"))
-
-    if locked_critical:
-        st.warning(
-            f"Este cupom já possui {defaults.get('paid_usage_count', 0)} uso(s) pago(s) confirmado(s). "
-            "Campos críticos ficam travados para preservar o histórico."
-        )
 
     with st.form(form_key, clear_on_submit=False):
         c1, c2 = st.columns(2)
         with c1:
-            owner_email = st.text_input("E-mail do dono do cupom", value=defaults["owner_email"], disabled=locked_critical)
-            code = st.text_input("Código do cupom", value=defaults["code"], disabled=locked_critical).upper()
+            owner_email = st.text_input("E-mail do dono do cupom", value=defaults["owner_email"])
+            code = st.text_input("Código do cupom", value=defaults["code"]).upper()
             coupon_type = st.selectbox(
                 "Tipo de cupom",
                 options=["manual", "referral", "public_discount", "campaign"],
                 index=["manual", "referral", "public_discount", "campaign"].index(defaults["coupon_type"]),
-                disabled=locked_critical,
             )
             discount_type = st.selectbox(
                 "Tipo de desconto",
                 options=["fixed", "percent"],
                 index=["fixed", "percent"].index(defaults["discount_type"]),
-                disabled=locked_critical,
             )
             discount_value = st.number_input(
                 "Valor do desconto",
@@ -87,7 +99,6 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
                 step=0.01,
                 format="%.2f",
                 value=float(defaults["discount_value"]),
-                disabled=locked_critical,
             )
             is_active = st.checkbox("Cupom ativo", value=defaults["is_active"])
         with c2:
@@ -200,8 +211,7 @@ def _render_coupon_actions(row: Dict[str, Any]) -> None:
 
     with c3:
         owner_status = "Resolvido" if row.get("owner_user_id") else "Pendente"
-        paid_status = "Com uso pago" if row.get("has_paid_usage") else "Sem uso pago"
-        st.caption(f"owner_user_id: {owner_status} • {paid_status}")
+        st.caption(f"owner_user_id: {owner_status}")
 
 
 def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:
@@ -214,13 +224,15 @@ def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:
 
     for row in rows:
         with st.container(border=True):
-            st.markdown(f"**{row.get('code') or '—'}**")
+            st.markdown(f"**{row.get('code') or '—'}**", unsafe_allow_html=True)
+            st.markdown(_coupon_status_badges(row), unsafe_allow_html=True)
             st.caption(
                 f"Dono: {row.get('owner_email') or '—'} | "
                 f"Tipo: {row.get('coupon_type') or '—'} | "
                 f"Desconto: {row.get('discount_value')} ({row.get('discount_type')}) | "
-                f"Ativo: {'Sim' if row.get('is_active') else 'Não'} | "
-                f"Usos pagos: {int(row.get('paid_usage_count') or 0)} | "
+                f"Usos: {int(row.get('total_uses') or 0)} | "
+                f"Usos pagos: {int(row.get('paid_uses') or 0)} | "
+                f"Último uso pago: {_fmt_dt(row.get('last_confirmed_at'))} | "
                 f"Criado em: {_fmt_dt(row.get('created_at'))}"
             )
 
@@ -297,6 +309,6 @@ def render_coupons_admin_section(*, current_user_email: str) -> None:
     st.markdown("#### Criar novo cupom")
     _render_coupon_form(mode="create")
 
-    rows = list_coupon_codes(limit=100)
+    rows = list_coupon_codes_enriched(limit=100)
     _render_coupon_list(rows)
     _render_coupon_usage_report()

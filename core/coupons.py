@@ -166,20 +166,6 @@ def _resolve_owner_user_id_by_email(owner_email: Optional[str]) -> Optional[str]
     return None
 
 
-def _load_coupon_by_id(coupon_id: Any) -> Optional[Dict[str, Any]]:
-    supabase = get_supabase_server_client()
-    response = supabase.table("coupon_codes").select("*").eq("id", coupon_id).limit(1).execute()
-    rows = _safe_data(response) or []
-    return rows[0] if rows else None
-
-
-def coupon_has_paid_usage(*, coupon_id: Any) -> bool:
-    supabase = get_supabase_server_client()
-    response = supabase.table("coupon_usages").select("payment_status").eq("coupon_id", coupon_id).execute()
-    rows = _safe_data(response) or []
-    return any(str(r.get("payment_status") or "").strip().lower() == "paid" for r in rows)
-
-
 def validate_coupon_for_checkout(
     *,
     user_id: Optional[str],
@@ -377,36 +363,10 @@ def update_coupon_code(
     supabase = get_supabase_server_client()
     existing = supabase.table("coupon_codes").select("*").execute()
     rows = _safe_data(existing) or []
-    current_row = None
 
     for row in rows:
-        if str(row.get("id")) == str(coupon_id):
-            current_row = row
-        elif _normalize_coupon_code(row.get("code")) == normalized_code:
+        if str(row.get("id")) != str(coupon_id) and _normalize_coupon_code(row.get("code")) == normalized_code:
             raise ValueError("Já existe um cupom com esse código.")
-
-    if current_row is None:
-        raise ValueError("Cupom não encontrado.")
-
-    if coupon_has_paid_usage(coupon_id=coupon_id):
-        critical_changes = []
-        if _normalize_coupon_code(current_row.get("code")) != normalized_code:
-            critical_changes.append("code")
-        if _normalize_email(current_row.get("owner_email")) != normalized_owner_email:
-            critical_changes.append("owner_email")
-        if str(current_row.get("owner_user_id") or "") != str(owner_user_id or ""):
-            critical_changes.append("owner_user_id")
-        if str(current_row.get("coupon_type") or "") != str(coupon_type or ""):
-            critical_changes.append("coupon_type")
-        if str(current_row.get("discount_type") or "") != str(discount_type or ""):
-            critical_changes.append("discount_type")
-        if round(_to_float(current_row.get("discount_value"), 0.0), 2) != round(float(discount_value), 2):
-            critical_changes.append("discount_value")
-        if critical_changes:
-            raise ValueError(
-                "Este cupom já possui uso pago confirmado. Não é permitido alterar campos críticos: "
-                + ", ".join(critical_changes)
-            )
 
     payload = {
         "code": normalized_code,
@@ -458,21 +418,7 @@ def list_coupon_codes(*, limit: int = 100) -> List[Dict[str, Any]]:
         .limit(limit)
         .execute()
     )
-    rows = _safe_data(response) or []
-
-    usages_resp = supabase.table("coupon_usages").select("coupon_id,payment_status").execute()
-    usage_rows = _safe_data(usages_resp) or []
-    paid_counts: Dict[str, int] = {}
-    for usage in usage_rows:
-        if str(usage.get("payment_status") or "").strip().lower() == "paid":
-            key = str(usage.get("coupon_id"))
-            paid_counts[key] = paid_counts.get(key, 0) + 1
-
-    enriched = []
-    for row in rows:
-        paid_usage_count = paid_counts.get(str(row.get("id")), 0)
-        enriched.append({**row, "has_paid_usage": paid_usage_count > 0, "paid_usage_count": paid_usage_count})
-    return enriched
+    return _safe_data(response) or []
 
 
 def list_coupon_usages_enriched(*, limit: int = 200) -> List[Dict[str, Any]]:
@@ -537,3 +483,38 @@ def summarize_coupon_usages(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "total_discount": total_discount,
         "total_final_amount": total_final_amount,
     }
+
+
+def list_coupon_codes_enriched(*, limit: int = 100) -> List[Dict[str, Any]]:
+    rows = list_coupon_codes(limit=limit)
+    usage_rows = list_coupon_usages_enriched(limit=1000)
+
+    by_coupon: Dict[str, Dict[str, Any]] = {}
+    for usage in usage_rows:
+        code = _normalize_coupon_code(usage.get("coupon_code"))
+        if not code:
+            continue
+        bucket = by_coupon.setdefault(code, {"paid_uses": 0, "total_uses": 0, "last_confirmed_at": None})
+        bucket["total_uses"] += 1
+        if str(usage.get("payment_status") or "").strip().lower() == "paid":
+            bucket["paid_uses"] += 1
+        confirmed = usage.get("confirmed_at") or usage.get("created_at")
+        if confirmed and (bucket["last_confirmed_at"] is None or str(confirmed) > str(bucket["last_confirmed_at"])):
+            bucket["last_confirmed_at"] = confirmed
+
+    enriched: List[Dict[str, Any]] = []
+    now = _utc_now()
+    for row in rows:
+        current = dict(row)
+        stats = by_coupon.get(_normalize_coupon_code(row.get("code")), {})
+        current["paid_uses"] = stats.get("paid_uses", 0)
+        current["total_uses"] = stats.get("total_uses", 0)
+        current["last_confirmed_at"] = stats.get("last_confirmed_at")
+
+        valid_until = _parse_dt(row.get("valid_until"))
+        is_expired = bool(valid_until and now > valid_until)
+        current["is_expired"] = is_expired
+        current["owner_resolved"] = bool(row.get("owner_user_id"))
+        enriched.append(current)
+
+    return enriched
