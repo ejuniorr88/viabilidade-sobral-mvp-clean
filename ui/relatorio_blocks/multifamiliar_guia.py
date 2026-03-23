@@ -810,7 +810,10 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     render_quadro_tecnico()
     st.markdown("---\n### 🚶 1️⃣1️⃣ O que preciso saber sobre a calçada?")
     st.markdown("**A análise do terreno não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação com a rua.**")
-    render_figuras_anexo_v(rule or {})
+    render_figuras_anexo_v(
+        rule or {},
+        is_corner=bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner")),
+    )
 
     st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
     _render_dicas_valiosas(multi_tipo, use_type_code)

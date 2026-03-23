@@ -404,7 +404,10 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "A análise não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação do lote com a rua. "
         "As figuras abaixo ajudam a visualizar esse padrão."
     )
-    render_figuras_anexo_v(rule)
+    render_figuras_anexo_v(
+        rule,
+        is_corner=bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner")),
+    )
 
     st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
     st.markdown(
