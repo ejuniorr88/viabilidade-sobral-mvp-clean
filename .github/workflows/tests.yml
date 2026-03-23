@@ -27,8 +27,8 @@ jobs:
 
       - name: Compile critical modules
         run: |
-          python -m py_compile app.py core/coupons.py core/payments.py ui/client_area.py ui/coupons_admin.py ui/payments_panel.py
+          python -m py_compile             app.py             core/coupons.py             core/payments.py             ui/client_area.py             ui/coupons_admin.py             ui/payments_panel.py             ui/relatorio.py             ui/relatorio_blocks/multifamiliar_guia.py             ui/relatorio_blocks/figuras_anexo_v.py
 
-      - name: Run tests
+      - name: Run contract and smoke tests
         run: |
-          pytest -q tests/test_payments_full_contract.py tests/test_coupon_checkout_contract.py tests/test_coupon_admin_contract.py
+          pytest -q             tests/test_payments_full_contract.py             tests/test_coupon_checkout_contract.py             tests/test_coupon_admin_contract.py             tests/test_app_relatorio_contract.py             tests/test_report_contract.py             tests/test_relatorio_phase1_contract.py             tests/test_relatorio_smoke.py             tests/test_unifamiliar_full_contract.py             tests/test_multifamiliar_full_contract.py             tests/test_unifamiliar_render_order_contract.py             tests/test_multifamiliar_render_order_contract.py             tests/test_lot_type_contract.py             tests/test_github_workflow_contract.py             tests/test_relatorio_area_pretendida_contract.py
