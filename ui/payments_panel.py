@@ -7,7 +7,8 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 
 from core.auth import get_supabase_auth_client
-from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited
+from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited, inspect_payment_credit_status
+from core.coupons import validate_coupon_for_checkout
 
 
 # =========================================================
@@ -80,9 +81,13 @@ def _resolve_supabase(explicit_supabase=None):
         return None
 
 
-def _resolve_user_profile(explicit_user_profile=None) -> Dict[str, Any]:
-    if explicit_user_profile is not None:
-        return explicit_user_profile
+def _resolve_user_profile(supabase=None, user_profile=None) -> Dict[str, Any]:
+    if user_profile is None and isinstance(supabase, dict):
+        user_profile = supabase
+        supabase = None
+
+    if user_profile is not None:
+        return user_profile
 
     for key in ["user_profile", "profile", "google_user", "user"]:
         if key in st.session_state and st.session_state[key]:
@@ -91,7 +96,7 @@ def _resolve_user_profile(explicit_user_profile=None) -> Dict[str, Any]:
                 return val
 
     if st.session_state.get("auth_logged_in"):
-        return {
+        profile = {
             "id": st.session_state.get("auth_user_id"),
             "email": st.session_state.get("auth_user_email"),
             "full_name": st.session_state.get("auth_user_name"),
@@ -99,6 +104,8 @@ def _resolve_user_profile(explicit_user_profile=None) -> Dict[str, Any]:
             "auth_user_email": st.session_state.get("auth_user_email"),
             "auth_user_name": st.session_state.get("auth_user_name"),
         }
+        if profile.get("id"):
+            return profile
 
     return {}
 
@@ -204,6 +211,7 @@ def _create_pix_payment(
     user_email: str,
     user_name: str,
     package: Dict[str, Any],
+    coupon_applied: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     try:
         notification_url = st.secrets.get(
@@ -216,6 +224,7 @@ def _create_pix_payment(
             user_email=user_email,
             user_name=user_name or user_email,
             package=package,
+            coupon_applied=coupon_applied,
             notification_url=notification_url,
         )
 
@@ -402,6 +411,20 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
         st.caption(f"Status atual: {status}")
 
 
+def _normalize_coupon_code(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _get_current_coupon_application(package: Dict[str, Any], coupon_input_value: str) -> Optional[Dict[str, Any]]:
+    package_id = str(_safe_get(package, "id", ""))
+    applied = st.session_state.get(f"coupon_applied_{package_id}")
+    if not isinstance(applied, dict) or not applied.get("ok"):
+        return None
+    if _normalize_coupon_code(applied.get("coupon_code")) != _normalize_coupon_code(coupon_input_value):
+        return None
+    return applied
+
+
 def _render_buy_section(
     user_id: str,
     user_email: str,
@@ -419,15 +442,65 @@ def _render_buy_section(
 
     for idx, package in enumerate(packages):
         col = cols[idx % len(cols)]
+        package_id = str(_safe_get(package, 'id', idx))
         with col:
             st.markdown(f"**{_safe_get(package, 'name', 'Pacote')}**")
             st.caption(_safe_get(package, "description", "-"))
-            st.write(f"Preço: {_fmt_brl(_safe_get(package, 'price_brl', 0))}")
+
+            coupon_input_key = f"coupon_input_{package_id}"
+            coupon_message_key = f"coupon_message_{package_id}"
+            coupon_reset_key = f"coupon_input_reset_{package_id}"
+            coupon_widget_key = f"{coupon_input_key}_{int(st.session_state.get(coupon_reset_key, 0))}"
+            coupon_input_value = st.text_input("Cupom", key=coupon_widget_key)
+            current_coupon = _get_current_coupon_application(package, coupon_input_value)
+
+            original_amount = _to_float(_safe_get(package, 'price_brl', 0))
+            if current_coupon:
+                st.write(f"Preço original: {_fmt_brl(current_coupon.get('original_amount', original_amount))}")
+                st.write(f"Desconto: {_fmt_brl(current_coupon.get('discount_amount', 0))}")
+                st.write(f"Preço final: {_fmt_brl(current_coupon.get('final_amount', original_amount))}")
+            else:
+                st.write(f"Preço: {_fmt_brl(original_amount)}")
             st.write(f"Créditos: {int(_to_float(_safe_get(package, 'credits', 0)))}")
+
+            apply_col, clear_col = st.columns(2)
+            with apply_col:
+                if st.button(
+                    "Aplicar cupom",
+                    key=f"apply_coupon_{package_id}",
+                    use_container_width=True,
+                ):
+                    result = validate_coupon_for_checkout(
+                        user_id=user_id,
+                        user_email=user_email,
+                        package=package,
+                        coupon_code=coupon_input_value,
+                    )
+                    st.session_state[f"coupon_applied_{package_id}"] = result
+                    st.session_state[coupon_message_key] = result.get("message")
+                    st.rerun()
+            with clear_col:
+                if st.button(
+                    "Limpar cupom",
+                    key=f"clear_coupon_{package_id}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pop(f"coupon_applied_{package_id}", None)
+                    st.session_state.pop(coupon_message_key, None)
+                    st.session_state[coupon_reset_key] = int(st.session_state.get(coupon_reset_key, 0)) + 1
+                    st.rerun()
+
+            applied_result = st.session_state.get(f"coupon_applied_{package_id}")
+            coupon_message = st.session_state.get(coupon_message_key)
+            if coupon_message and isinstance(applied_result, dict):
+                if applied_result.get("ok") and current_coupon:
+                    st.success(coupon_message)
+                elif not applied_result.get("ok") and _normalize_coupon_code(coupon_input_value):
+                    st.error(coupon_message)
 
             if st.button(
                 f"Gerar Pix — {_safe_get(package, 'name', 'Pacote')}",
-                key=f"buy_pkg_{_safe_get(package, 'id', idx)}",
+                key=f"buy_pkg_{package_id}",
                 use_container_width=True,
             ):
                 payment = _create_pix_payment(
@@ -435,6 +508,7 @@ def _render_buy_section(
                     user_email=user_email,
                     user_name=user_name,
                     package=package,
+                    coupon_applied=current_coupon,
                 )
                 if payment:
                     st.session_state["current_payment_id"] = _safe_get(payment, "id")
@@ -490,7 +564,7 @@ def _sync_current_payment_state(supabase, current_user_id: str) -> None:
         st.session_state["current_payment_snapshot"] = merged
         st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
         credit_result = (result or {}).get("credit_result") or {}
-        if credit_result.get("credited") and st.session_state.get("payments_focus_mode"):
+        if credit_result.get("credited") or credit_result.get("reason") == "already_credited":
             st.session_state["payments_focus_mode"] = False
     except Exception:
         # Não interromper a renderização do painel; a área visual mostra o erro depois.
@@ -521,23 +595,21 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
     if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
     elif status == "paid":
-        credit_reprocess = None
+        inspect = None
         try:
-            credit_reprocess = ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
+            inspect = inspect_payment_credit_status(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
         except Exception as e:
-            st.warning(f"Pagamento confirmado, mas não foi possível reconciliar os créditos agora: {e}")
+            st.warning(f"Pagamento confirmado, mas não foi possível inspecionar os créditos agora: {e}")
 
-        credit_result = (credit_reprocess or {}).get("credit_result") or {}
-        if credit_result.get("credited"):
-            if credit_result.get("moved"):
-                st.success("Este pagamento já foi confirmado e os créditos foram reconciliados para a sua carteira.")
-            else:
-                st.success("Este pagamento já foi confirmado e os créditos foram adicionados à carteira.")
+        credit_result = (inspect or {}).get("credit_result") or {}
+        if credit_result.get("reason") == "already_credited":
+            st.success("Este pagamento já foi confirmado e os créditos já estão na carteira.")
             if st.session_state.get("payments_focus_mode"):
                 st.session_state["payments_focus_mode"] = False
-            st.rerun()
-        elif credit_result.get("reason") == "already_credited":
-            st.success("Este pagamento já foi confirmado.")
+        elif credit_result.get("reason") == "credited_to_other_user":
+            st.success("Este pagamento já foi confirmado e os créditos já foram reconciliados para a sua carteira.")
+            if st.session_state.get("payments_focus_mode"):
+                st.session_state["payments_focus_mode"] = False
         else:
             st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. Tentando reconciliar...")
             if st.button("Reprocessar crédito deste pagamento", key=f"recredit_paid_{payment_id}"):
@@ -563,7 +635,7 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
 # =========================================================
 def render_payments_panel(supabase=None, user_profile=None) -> None:
     supabase_client = _resolve_supabase(supabase)
-    profile = _resolve_user_profile(user_profile)
+    profile = _resolve_user_profile(supabase_client, user_profile)
 
     user_id = _get_user_id(profile) if profile else None
     user_email = _get_user_email(profile) if profile else "-"

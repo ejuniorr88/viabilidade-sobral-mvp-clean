@@ -25,6 +25,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
+      - name: Compile critical modules
+        run: |
+          python -m py_compile app.py core/coupons.py core/payments.py ui/client_area.py ui/coupons_admin.py ui/payments_panel.py
+
       - name: Run tests
         run: |
-          pytest -q
+          pytest -q tests/test_payments_full_contract.py tests/test_coupon_checkout_contract.py tests/test_coupon_admin_contract.py

@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.client_reports import build_download_signed_url, list_client_reports
+from core.coupons import user_can_manage_coupons
+from ui.coupons_admin import render_coupons_admin_section
 
 _TZ = ZoneInfo("America/Fortaleza")
 
@@ -52,18 +54,7 @@ def _info_card(label: str, value: str) -> None:
     )
 
 
-def render_client_area_page(user_id: str, user_name: str, user_email: str, credit_balance: Any) -> None:
-    st.markdown("## Área do cliente")
-    st.caption("Aqui ficam seus relatórios gerados, com histórico e download a qualquer momento.")
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        _info_card("Nome", user_name or "—")
-    with c2:
-        _info_card("E-mail", user_email or "—")
-    with c3:
-        _info_card("Créditos", str(credit_balance if credit_balance is not None else "—"))
-
+def _render_reports_tab(user_id: str) -> None:
     st.markdown("### Relatórios salvos")
     try:
         reports = list_client_reports(user_id)
@@ -110,3 +101,40 @@ def render_client_area_page(user_id: str, user_name: str, user_email: str, credi
                 st.link_button("⬇️ Fazer download", signed_url, use_container_width=True)
             else:
                 st.button("⬇️ Fazer download", disabled=True, use_container_width=True, key=f"download_disabled_{item.get('id')}")
+
+
+
+
+def _client_area_tabs_for_user(user_email: str) -> list[str]:
+    tabs = ["Relatórios"]
+    if user_can_manage_coupons(user_email):
+        tabs.append("Cupons")
+    return tabs
+
+def _render_coupons_tab(user_email: str) -> None:
+    st.markdown("### Cupons")
+    st.caption("Área interna para criar, editar e acompanhar cupons. Visível só para usuários autorizados.")
+    render_coupons_admin_section(current_user_email=user_email)
+
+
+def render_client_area_page(user_id: str, user_name: str, user_email: str, credit_balance: Any) -> None:
+    st.markdown("## Área do cliente")
+    st.caption("Aqui ficam seus relatórios gerados, histórico de uso e ferramentas internas quando liberadas para o seu usuário.")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        _info_card("Nome", user_name or "—")
+    with c2:
+        _info_card("E-mail", user_email or "—")
+    with c3:
+        _info_card("Créditos", str(credit_balance if credit_balance is not None else "—"))
+
+    tab_labels = _client_area_tabs_for_user(user_email)
+    tabs = st.tabs(tab_labels)
+
+    with tabs[0]:
+        _render_reports_tab(user_id)
+
+    if len(tabs) > 1:
+        with tabs[1]:
+            _render_coupons_tab(user_email)
