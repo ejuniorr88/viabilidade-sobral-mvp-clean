@@ -338,6 +338,7 @@ def test_refresh_payment_status_and_credit_records_coupon_usage_when_paid(monkey
 
 def test_payments_panel_create_pix_payment_passes_coupon_applied(monkeypatch):
     captured = {}
+    monkeypatch.setattr(payments_panel.st, "secrets", {})
 
     def fake_create_pending_payment_and_pix(**kwargs):
         captured.update(kwargs)
@@ -599,6 +600,7 @@ def test_list_coupon_usages_enriched_filters_and_summary(monkeypatch):
                 "final_amount": 9.0,
                 "payment_status": "paid",
                 "confirmed_at": "2026-03-22T10:00:00+00:00",
+                "created_at": "2026-03-22T10:00:00+00:00",
             },
             {
                 "coupon_id": 11,
@@ -608,6 +610,7 @@ def test_list_coupon_usages_enriched_filters_and_summary(monkeypatch):
                 "final_amount": 18.0,
                 "payment_status": "pending",
                 "confirmed_at": "2026-03-22T11:00:00+00:00",
+                "created_at": "2026-03-22T11:00:00+00:00",
             },
         ],
     }
@@ -634,3 +637,84 @@ def test_list_coupon_usages_enriched_filters_and_summary(monkeypatch):
     assert summary["total_paid_uses"] == 1
     assert summary["total_discount"] == 3.0
     assert summary["total_final_amount"] == 27.0
+
+
+def test_update_coupon_code_blocks_critical_changes_after_paid_usage(monkeypatch):
+    db = {
+        "coupon_codes": [_base_coupon(id=10, code="LOCK10", owner_email="old@email.com", owner_user_id="old-user", discount_value=1.0)],
+        "profiles": [{"id": "new-user", "email": "new@email.com"}],
+        "coupon_usages": [{"coupon_id": 10, "payment_status": "paid"}],
+    }
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    try:
+        coupons.update_coupon_code(
+            coupon_id=10,
+            code="NEW10",
+            owner_email="new@email.com",
+            coupon_type="manual",
+            discount_type="fixed",
+            discount_value=2.0,
+            is_active=True,
+            max_uses_total=5,
+            max_uses_per_user=1,
+            first_purchase_only=True,
+            allowed_plan_codes=["pkg-1"],
+            min_purchase_amount=10.0,
+            can_be_used_by_owner=False,
+            notes="editado",
+        )
+        assert False, "expected critical fields lock to raise"
+    except ValueError as exc:
+        assert "campos críticos" in str(exc)
+
+
+def test_update_coupon_code_allows_noncritical_changes_after_paid_usage(monkeypatch):
+    db = {
+        "coupon_codes": [_base_coupon(id=10, code="LOCK10", owner_email="old@email.com", owner_user_id="old-user", discount_value=1.0, is_active=True, notes="old")],
+        "profiles": [{"id": "old-user", "email": "old@email.com"}],
+        "coupon_usages": [{"coupon_id": 10, "payment_status": "paid"}],
+    }
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    updated = coupons.update_coupon_code(
+        coupon_id=10,
+        code="LOCK10",
+        owner_email="old@email.com",
+        coupon_type="manual",
+        discount_type="fixed",
+        discount_value=1.0,
+        is_active=False,
+        max_uses_total=10,
+        max_uses_per_user=2,
+        first_purchase_only=False,
+        allowed_plan_codes=["pkg-1", "pkg-2"],
+        min_purchase_amount=20.0,
+        can_be_used_by_owner=True,
+        notes="updated",
+    )
+
+    assert updated["is_active"] is False
+    assert updated["max_uses_total"] == 10
+    assert updated["notes"] == "updated"
+
+
+def test_list_coupon_codes_enriches_paid_usage_flags(monkeypatch):
+    db = {
+        "coupon_codes": [
+            _base_coupon(id=10, code="CUPOM10"),
+            _base_coupon(id=11, code="CUPOM20"),
+        ],
+        "coupon_usages": [
+            {"coupon_id": 10, "payment_status": "paid"},
+            {"coupon_id": 10, "payment_status": "pending"},
+        ],
+    }
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    rows = coupons.list_coupon_codes(limit=10)
+    by_id = {str(r["id"]): r for r in rows}
+    assert by_id["10"]["has_paid_usage"] is True
+    assert by_id["10"]["paid_usage_count"] == 1
+    assert by_id["11"]["has_paid_usage"] is False
+    assert by_id["11"]["paid_usage_count"] == 0
