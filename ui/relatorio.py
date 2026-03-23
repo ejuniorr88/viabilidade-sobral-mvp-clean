@@ -153,15 +153,22 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     else:
         A_op2_max = None
 
-    built_ground = _safe_float(st.session_state.get("built_ground_m2"))
-    if built_ground is None:
-        built_ground = _safe_float(calc.get("built_ground_m2"))
-    if built_ground is None:
-        built_ground = _safe_float(st.session_state.get("built_ground_input_m2"))
+    built_ground = _safe_float(
+        st.session_state.get("built_ground_m2")
+        or calc.get("built_ground_m2")
+        or st.session_state.get("built_ground_input_m2")
+        or calc.get("built_ground_input_m2")
+    )
+    teto_pratico = A_op2_max or A_op1_max or A_to
     A_adotada = None
     if built_ground is not None and built_ground > 0:
-        teto = A_op2_max or A_op1_max or A_to
-        A_adotada = min(built_ground, teto) if teto is not None else built_ground
+        A_adotada = min(built_ground, teto_pratico) if teto_pratico is not None else built_ground
+
+    TO_projeto = ((A_adotada / A) * 100.0) if (A_adotada is not None and A > 0) else None
+    A_livre_projeto = (A - A_adotada) if (A_adotada is not None and A > 0) else None
+    A_impermavel_pos_tp = (A_livre_projeto - A_perm_min) if (A_livre_projeto is not None and A_perm_min is not None) else None
+    IA_utilizado_terreo = (A_adotada / A) if (A_adotada is not None and A > 0) else None
+    IA_saldo = (A_total - A_adotada) if (A_total is not None and A_adotada is not None) else None
 
     def _tp_scenario(a_terreo: float | None):
         if a_terreo is None or A_perm_min is None:
@@ -288,13 +295,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "Mas aqui tem um ponto importante: uma coisa é o limite da zona no papel, e outra é o que realmente cabe dentro do lote depois de respeitar os recuos.\n\n"
             "Por isso, além do percentual permitido, também vale olhar a área que sobra de forma prática dentro do terreno."
         )
-        if A_adotada is not None:
-            if built_ground is not None and A_adotada < built_ground:
-                st.warning(
-                    f"Você informou **{_fmt_num(built_ground)} m²** no térreo, mas o máximo permitido para os cálculos exibidos é **{_fmt_num(A_adotada)} m²**. O relatório abaixo usa o valor permitido."
-                )
-            else:
-                st.success(f"Área considerada no seu projeto (térreo): **{_fmt_num(A_adotada)} m²**.")
         st.markdown(
             "> **Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
             "a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima "
@@ -344,43 +344,30 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             f"👉 **{_fmt_num(A)} m² × {_fmt_pct(tp_min)} = {_fmt_num(A_perm_min)} m²** obrigatórios permeáveis\n\n"
             "Isso quer dizer que parte do terreno precisa continuar ajudando na absorção da água da chuva."
         )
-        if A_adotada is not None:
-            tp_adotada = _tp_scenario(A_adotada)
-            if tp_adotada is not None:
-                a_rest, a_imperm = tp_adotada
-                st.markdown("**Cenário considerando a área construída pretendida informada**")
-                st.markdown(
-                    f"Se você utilizar **{_fmt_num(A_adotada)} m²** no térreo:\n\n"
-                    f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_adotada)} m² = {_fmt_num(a_rest)} m²**\n\n"
-                    f"Desses:\n\n"
-                    f"- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo\n"
-                    f"- **{_fmt_num(a_imperm)} m²** podem receber piso impermeável"
-                )
-        else:
-            st.markdown("**Ver cenários usando os máximos das opções**")
-            if tp1 is not None and A_op1_max is not None:
-                a_rest, a_imperm = tp1
-                st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
-                st.markdown(
-                    f"Se você utilizar **{_fmt_num(A_op1_max)} m²** no térreo:\n\n"
-                    f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op1_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
-                    f"Desses:\n\n"
-                    f"- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo\n"
-                    f"- **{_fmt_num(a_imperm)} m²** podem receber piso impermeável"
-                )
-            if tp2 is not None and A_op2_max is not None:
-                a_rest, a_imperm = tp2
-                st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
-                st.markdown(
-                    f"Se você utilizar **{_fmt_num(A_op2_max)} m²** no térreo:\n\n"
-                    f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op2_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
-                    f"Desses:\n\n"
-                    f"- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo\n"
-                    f"- **{_fmt_num(a_imperm)} m²** podem receber piso impermeável"
-                )
+        st.markdown("**Ver cenários usando os máximos das opções**")
+        if tp1 is not None and A_op1_max is not None:
+            a_rest, a_imperm = tp1
+            st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
+            st.markdown(
+                f"Se você utilizar **{_fmt_num(A_op1_max)} m²** no térreo:\n\n"
+                f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op1_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
+                f"Desses:\n\n"
+                f"- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo\n"
+                f"- **{_fmt_num(a_imperm)} m²** podem receber piso impermeável"
+            )
+        if tp2 is not None and A_op2_max is not None:
+            a_rest, a_imperm = tp2
+            st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
+            st.markdown(
+                f"Se você utilizar **{_fmt_num(A_op2_max)} m²** no térreo:\n\n"
+                f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op2_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
+                f"Desses:\n\n"
+                f"- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo\n"
+                f"- **{_fmt_num(a_imperm)} m²** podem receber piso impermeável"
+            )
         st.markdown(
-            "**Leitura prática:** o lote precisa manter a área permeável mínima. "
-            "Quando você informa uma área pretendida, o relatório usa essa área como base dos cálculos exibidos; sem essa informação, ele mostra cenários de referência."
+            "**Leitura prática:** nas duas opções, o lote precisa manter a área permeável mínima. "
+            "A diferença está em quanto sobra livre além desse mínimo."
         )
 
     st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")

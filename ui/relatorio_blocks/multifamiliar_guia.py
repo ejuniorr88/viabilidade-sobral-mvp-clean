@@ -541,37 +541,34 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             if W_util > 0 and D_util > 0:
                 A_recuos = W_util * D_util
 
-        built_ground = calc.get("built_ground_m2")
-        if built_ground in (None, ""):
-            built_ground = st.session_state.get("built_ground_m2")
-        if built_ground in (None, ""):
-            built_ground = calc.get("built_ground_input_m2")
-        try:
-            built_ground_f = float(built_ground) if built_ground not in (None, "") else None
-        except Exception:
-            built_ground_f = None
-
-        if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
-            teto_adotado = to_m2
-        else:
-            teto_adotado = min(to_m2, A_recuos) if (to_m2 is not None and A_recuos is not None) else (A_recuos if A_recuos is not None else to_m2)
-        built_ground_adopted = None
-        if built_ground_f is not None and built_ground_f > 0:
-            built_ground_adopted = min(built_ground_f, teto_adotado) if teto_adotado is not None else built_ground_f
-
         tp_rest_recuos = (lot_area_f - A_recuos) if (lot_area_f is not None and A_recuos is not None) else None
         tp_imperm_recuos = (tp_rest_recuos - tp_m2) if (tp_rest_recuos is not None and tp_m2 is not None) else None
         tp_rest_to = (lot_area_f - to_m2) if (lot_area_f is not None and to_m2 is not None) else None
         tp_imperm_to = (tp_rest_to - tp_m2) if (tp_rest_to is not None and tp_m2 is not None) else None
-        tp_rest_adotado = (lot_area_f - built_ground_adopted) if (lot_area_f is not None and built_ground_adopted is not None) else None
-        tp_imperm_adotado = (tp_rest_adotado - tp_m2) if (tp_rest_adotado is not None and tp_m2 is not None) else None
+
+        built_ground = _num(
+            st.session_state.get("built_ground_m2")
+            or calc.get("built_ground_m2")
+            or st.session_state.get("built_ground_input_m2")
+            or calc.get("built_ground_input_m2")
+        )
+        teto_pratico = A_recuos if A_recuos is not None else to_m2
+        if to_m2 is not None and teto_pratico is not None:
+            teto_pratico = min(to_m2, teto_pratico)
+        elif teto_pratico is None:
+            teto_pratico = to_m2
+        a_adotada = min(built_ground, teto_pratico) if (built_ground is not None and built_ground > 0 and teto_pratico is not None) else (built_ground if (built_ground is not None and built_ground > 0) else None)
+        to_utilizada_pct = ((a_adotada / lot_area_f) * 100.0) if (a_adotada is not None and lot_area_f not in (None, 0)) else None
+        ia_consumido_terreo = (a_adotada / lot_area_f) if (a_adotada is not None and lot_area_f not in (None, 0)) else None
+        area_livre_projeto = (lot_area_f - a_adotada) if (a_adotada is not None and lot_area_f is not None) else None
+        area_impermavel_pos_tp = (area_livre_projeto - tp_m2) if (area_livre_projeto is not None and tp_m2 is not None) else None
+        ia_saldo = (ia_m2 - a_adotada) if (ia_m2 is not None and a_adotada is not None) else None
     else:
         to_max_pct = tp_min_pct = ia_max = ia_min = to_m2 = tp_m2 = ia_m2 = gabarito_f = pav_est = None
         rec_fr = rec_lat = rec_fun = area_min = testada_min = None
         W_util = D_util = A_recuos = None
-        built_ground_f = built_ground_adopted = None
         tp_rest_recuos = tp_imperm_recuos = tp_rest_to = tp_imperm_to = None
-        tp_rest_adotado = tp_imperm_adotado = None
+        built_ground = teto_pratico = a_adotada = to_utilizada_pct = ia_consumido_terreo = area_livre_projeto = area_impermavel_pos_tp = ia_saldo = None
 
     st.markdown("## 🏢 RELATÓRIO URBANÍSTICO")
     st.markdown(
@@ -696,13 +693,6 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.markdown(f"**A zona permite ocupar até {_fmt_pct(to_max_pct)} do terreno no térreo.**")
         _formula_box(f"{_fmt_num(lot_area_f)} × {_fmt_pct(to_max_pct)} = {_fmt_num(to_m2)}")
         st.markdown("**Esse é o limite máximo permitido pela Taxa de Ocupação (TO).**")
-        if built_ground_adopted is not None:
-            if built_ground_f is not None and built_ground_adopted < built_ground_f:
-                st.warning(
-                    f"Você informou **{_fmt_num(built_ground_f)} m²** no térreo, mas o máximo usado nos cálculos exibidos é **{_fmt_num(built_ground_adopted)} m²**."
-                )
-            else:
-                st.success(f"Área considerada no seu projeto (térreo): **{_fmt_num(built_ground_adopted)} m²**.")
         if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
             st.markdown(f"**Na prática, isso significa que a edificação não pode ultrapassar {_fmt_num(to_m2)} no chão, considerando a ocupação máxima permitida pela zona.**")
             if A_recuos is not None and W_util is not None and D_util is not None:
@@ -773,14 +763,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.markdown(f"**A zona exige {_fmt_pct(tp_min_pct)} de área permeável.**")
         _formula_box(f"{_fmt_num(lot_area_f)} × {_fmt_pct(tp_min_pct)} = {_fmt_num(tp_m2)} obrigatórios permeáveis")
         st.markdown("Isso quer dizer que parte do terreno precisa continuar permitindo a infiltração da água da chuva no solo.")
-        if built_ground_adopted is not None and tp_rest_adotado is not None and tp_imperm_adotado is not None:
-            st.markdown("### Cenário considerando a área construída pretendida informada")
-            st.markdown(
-                f"Se você utilizar **{_fmt_num(built_ground_adopted)}** no térreo:\n\n"
-                f"👉 **Área restante no lote: {_fmt_num(lot_area_f)} − {_fmt_num(built_ground_adopted)} = {_fmt_num(tp_rest_adotado)}**\n\n"
-                f"Desses:\n- **{_fmt_num(tp_m2)}** devem permitir infiltração no solo\n- **{_fmt_num(tp_imperm_adotado)}** podem receber piso impermeável"
-            )
-        elif multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
+        if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
             if A_recuos is not None and tp_rest_recuos is not None and tp_imperm_recuos is not None:
                 st.markdown("### Cenário 1 — usando a implantação pelos recuos da zona")
                 st.markdown(
@@ -795,6 +778,10 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
                     f"👉 **Área restante no lote: {_fmt_num(lot_area_f)} − {_fmt_num(to_m2)} = {_fmt_num(tp_rest_to)}**\n\n"
                     f"Desses:\n- **{_fmt_num(tp_m2)}** devem permitir infiltração no solo\n- **{_fmt_num(tp_imperm_to)}** podem receber piso impermeável"
                 )
+            st.markdown(
+                "👉 **Leitura prática:** no multifamiliar, quando a implantação aumenta, a área livre diminui. "
+                "Por isso, quanto maior a ocupação do térreo, menor fica a sobra disponível além do mínimo exigido para a permeabilidade."
+            )
         else:
             if A_recuos is not None and tp_rest_recuos is not None and tp_imperm_recuos is not None:
                 st.markdown("### Cenário considerando os recuos obrigatórios da zona")
@@ -803,9 +790,10 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
                     f"👉 **Área restante no lote: {_fmt_num(lot_area_f)} − {_fmt_num(A_recuos)} = {_fmt_num(tp_rest_recuos)}**\n\n"
                     f"Desses:\n- **{_fmt_num(tp_m2)}** devem permitir infiltração no solo\n- **{_fmt_num(tp_imperm_recuos)}** podem receber piso impermeável"
                 )
-        st.markdown(
-            f"👉 **Leitura prática:** quando você informa uma área construída pretendida, o relatório usa essa área como base dos cálculos exibidos. Sem essa informação, a leitura continua por cenários de referência da zona para o **{_tipo_multifamiliar_label(multi_tipo, use_type_code).split(' — ')[0]}**."
-        )
+            st.markdown(
+                f"👉 **Leitura prática:** como o **{_tipo_multifamiliar_label(multi_tipo, use_type_code).split(' — ')[0]}** deve respeitar os recuos obrigatórios da zona, "
+                "a análise da permeabilidade parte dessa implantação. Assim, a sobra livre do lote precisa continuar atendendo a área permeável mínima exigida."
+            )
 
     st.markdown("---\n### 🏢 8️⃣ Posso construir mais andares?")
     if ia_max in (None, "") or ia_m2 is None:
@@ -864,7 +852,6 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         f"- **TP mínima:** {_fmt_pct(tp_min_pct)}\n"
         f"- **IA máximo:** {_fmt_num(ia_max, 2) if ia_max not in (None, '') else '—'}\n"
         f"- **Altura permitida máxima:** {_fmt_num(gabarito_f)} m"
-        + (f"\n- **Área considerada no térreo para os cálculos:** {_fmt_num(built_ground_adopted)} m²" if built_ground_adopted is not None else "")
     )
     tipo_sigla = "R2.1" if (multi_tipo in ("R21","R2.1","R2_1") or use_type_code.endswith("R21")) else ("R2.2" if (multi_tipo in ("R22","R2.2","R2_2") or use_type_code.endswith("R22")) else "R3")
     st.markdown(
