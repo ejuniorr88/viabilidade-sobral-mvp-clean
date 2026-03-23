@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 
 from core.coupons import (
+    coupon_has_paid_usage,
     create_coupon_code,
     filter_coupon_usages,
     list_coupon_codes_enriched,
@@ -71,6 +72,7 @@ def _coupon_form_defaults(row: Optional[Dict[str, Any]] = None) -> Dict[str, Any
         "min_purchase_amount": float(row.get("min_purchase_amount") or 0.0),
         "allowed_plan_codes": ", ".join(row.get("allowed_plan_codes") or []),
         "notes": row.get("notes") or "",
+        "paid_usage_locked": bool(row.get("paid_usage_locked", False)),
     }
 
 
@@ -78,20 +80,27 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
     defaults = _coupon_form_defaults(row)
     form_key = f"coupon_admin_form_{mode}_{defaults['id'] or 'new'}"
 
+    critical_locked = mode == "edit" and bool(defaults["paid_usage_locked"])
+
     with st.form(form_key, clear_on_submit=False):
+        if critical_locked:
+            st.warning("Este cupom já teve uso pago confirmado. Campos críticos ficam travados para preservar o histórico.")
+
         c1, c2 = st.columns(2)
         with c1:
-            owner_email = st.text_input("E-mail do dono do cupom", value=defaults["owner_email"])
-            code = st.text_input("Código do cupom", value=defaults["code"]).upper()
+            owner_email = st.text_input("E-mail do dono do cupom", value=defaults["owner_email"], disabled=critical_locked)
+            code = st.text_input("Código do cupom", value=defaults["code"], disabled=critical_locked).upper()
             coupon_type = st.selectbox(
                 "Tipo de cupom",
                 options=["manual", "referral", "public_discount", "campaign"],
                 index=["manual", "referral", "public_discount", "campaign"].index(defaults["coupon_type"]),
+                disabled=critical_locked,
             )
             discount_type = st.selectbox(
                 "Tipo de desconto",
                 options=["fixed", "percent"],
                 index=["fixed", "percent"].index(defaults["discount_type"]),
+                disabled=critical_locked,
             )
             discount_value = st.number_input(
                 "Valor do desconto",
@@ -99,6 +108,7 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
                 step=0.01,
                 format="%.2f",
                 value=float(defaults["discount_value"]),
+                disabled=critical_locked,
             )
             is_active = st.checkbox("Cupom ativo", value=defaults["is_active"])
         with c2:
@@ -211,7 +221,8 @@ def _render_coupon_actions(row: Dict[str, Any]) -> None:
 
     with c3:
         owner_status = "Resolvido" if row.get("owner_user_id") else "Pendente"
-        st.caption(f"owner_user_id: {owner_status}")
+        lock_status = " | Uso pago: Sim" if row.get("paid_usage_locked") else " | Uso pago: Não"
+        st.caption(f"owner_user_id: {owner_status}{lock_status}")
 
 
 def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:

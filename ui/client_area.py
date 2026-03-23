@@ -103,6 +103,14 @@ def _render_reports_tab(user_id: str) -> None:
                 st.button("⬇️ Fazer download", disabled=True, use_container_width=True, key=f"download_disabled_{item.get('id')}")
 
 
+
+
+def _client_area_tabs_for_user(user_email: str) -> list[str]:
+    tabs = ["Relatórios"]
+    if user_can_manage_coupons(user_email):
+        tabs.append("Cupons")
+    return tabs
+
 def _render_coupons_tab(user_email: str) -> None:
     st.markdown("### Cupons")
     st.caption("Área interna para criar, editar e acompanhar cupons. Visível só para usuários autorizados.")
@@ -121,13 +129,12 @@ def render_client_area_page(user_id: str, user_name: str, user_email: str, credi
     with c3:
         _info_card("Créditos", str(credit_balance if credit_balance is not None else "—"))
 
-    show_coupons = user_can_manage_coupons(user_email)
+    tab_labels = _client_area_tabs_for_user(user_email)
+    tabs = st.tabs(tab_labels)
 
-    if show_coupons:
-        tab_reports, tab_coupons = st.tabs(["Relatórios", "Cupons"])
-        with tab_reports:
-            _render_reports_tab(user_id)
-        with tab_coupons:
-            _render_coupons_tab(user_email)
-    else:
+    with tabs[0]:
         _render_reports_tab(user_id)
+
+    if len(tabs) > 1:
+        with tabs[1]:
+            _render_coupons_tab(user_email)

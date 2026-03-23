@@ -274,10 +274,39 @@ def user_can_manage_coupons(user_email: Optional[str]) -> bool:
     elif isinstance(configured, list):
         emails = [_normalize_email(v) for v in configured if _normalize_email(v)]
 
-    # Sem lista de admins configurada, ninguém entra.
+    # Sem admins configurados, ninguém pode acessar a área.
     if not emails:
         return False
     return normalized in emails
+
+
+def _paid_coupon_usage_count(*, coupon_id: Any) -> int:
+    supabase = get_supabase_server_client()
+    response = supabase.table("coupon_usages").select("*").eq("coupon_id", coupon_id).execute()
+    rows: List[Dict[str, Any]] = _safe_data(response) or []
+    return sum(1 for r in rows if str(r.get("payment_status") or "").strip().lower() == "paid")
+
+
+def coupon_has_paid_usage(*, coupon_id: Any) -> bool:
+    return _paid_coupon_usage_count(coupon_id=coupon_id) > 0
+
+
+def _locked_coupon_payload_if_paid_usage(*, existing_row: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not coupon_has_paid_usage(coupon_id=existing_row.get("id")):
+        return payload
+
+    locked_fields = [
+        "code",
+        "owner_email",
+        "owner_user_id",
+        "coupon_type",
+        "discount_type",
+        "discount_value",
+    ]
+    protected = dict(payload)
+    for field in locked_fields:
+        protected[field] = existing_row.get(field)
+    return protected
 
 
 def create_coupon_code(
@@ -387,6 +416,9 @@ def update_coupon_code(
         "can_be_used_by_owner": bool(can_be_used_by_owner),
         "notes": notes or None,
     }
+
+    existing_row = next((row for row in rows if str(row.get("id")) == str(coupon_id)), None) or {}
+    payload = _locked_coupon_payload_if_paid_usage(existing_row=existing_row, payload=payload)
 
     response = (
         supabase.table("coupon_codes")
@@ -516,6 +548,7 @@ def list_coupon_codes_enriched(*, limit: int = 100) -> List[Dict[str, Any]]:
         is_expired = bool(valid_until and now > valid_until)
         current["is_expired"] = is_expired
         current["owner_resolved"] = bool(row.get("owner_user_id"))
+        current["paid_usage_locked"] = bool(stats.get("paid_uses", 0) > 0)
         enriched.append(current)
 
     return enriched
