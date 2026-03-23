@@ -29,6 +29,21 @@ def _fmt_num(v: Any, dec: int = 2) -> str:
         return str(v)
 
 
+
+
+def _num(v: Any) -> Optional[float]:
+    try:
+        if v is None or v == "":
+            return None
+        if isinstance(v, str):
+            s = v.strip().replace(".", "").replace(",", ".")
+            if s == "":
+                return None
+            return float(s)
+        return float(v)
+    except Exception:
+        return None
+
 def _fmt_pct(v: Any, dec: int = 1) -> str:
     try:
         if v is None:
