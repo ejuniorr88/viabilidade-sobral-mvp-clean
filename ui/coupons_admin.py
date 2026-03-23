@@ -40,7 +40,7 @@ def _badge(label: str, kind: str = "info") -> str:
         "info": "#1d4ed8",
     }
     color = colors.get(kind, colors["info"])
-    return f"<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:{color};color:white;font-size:0.8rem;margin-right:6px;">{label}</span>"
+    return f'<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:{color};color:white;font-size:0.8rem;margin-right:6px;">{label}</span>'
 
 
 def _coupon_status_badges(row: Dict[str, Any]) -> str:
