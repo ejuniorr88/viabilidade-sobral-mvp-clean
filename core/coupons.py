@@ -289,57 +289,6 @@ def list_coupon_codes(limit: int = 50) -> List[Dict[str, Any]]:
     return _safe_data(response) or []
 
 
-def list_coupon_usage_rows(*, coupon_code: str = "", owner_email: str = "", payment_status: str = "", limit: int = 200) -> List[Dict[str, Any]]:
-    supabase = get_supabase_server_client()
-    usage_resp = supabase.table("coupon_usages").select("*").execute()
-    usage_rows = _safe_data(usage_resp) or []
-
-    coupons_by_id: Dict[str, Dict[str, Any]] = {}
-    coupon_resp = supabase.table("coupon_codes").select("id,code,owner_email").execute()
-    coupon_rows = _safe_data(coupon_resp) or []
-    for row in coupon_rows:
-        coupons_by_id[str(row.get("id"))] = row
-
-    wanted_code = _normalize_coupon_code(coupon_code)
-    wanted_owner = _normalize_email(owner_email)
-    wanted_status = str(payment_status or "").strip().lower()
-
-    enriched: List[Dict[str, Any]] = []
-    for row in usage_rows:
-        coupon_row = coupons_by_id.get(str(row.get("coupon_id"))) or {}
-        merged = dict(row)
-        merged["coupon_code"] = row.get("coupon_code") or coupon_row.get("code")
-        merged["owner_email"] = row.get("owner_email") or coupon_row.get("owner_email")
-
-        code_ok = not wanted_code or _normalize_coupon_code(merged.get("coupon_code")) == wanted_code
-        owner_ok = not wanted_owner or _normalize_email(merged.get("owner_email")) == wanted_owner
-        status_ok = not wanted_status or str(merged.get("payment_status") or "").strip().lower() == wanted_status
-        if code_ok and owner_ok and status_ok:
-            enriched.append(merged)
-
-    enriched.sort(key=lambda r: str(r.get("confirmed_at") or r.get("created_at") or ""), reverse=True)
-    return enriched[:limit]
-
-
-def summarize_coupon_usage_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-    total_usages = len(rows)
-    paid_usages = 0
-    total_discount = 0.0
-    total_final_amount = 0.0
-    for row in rows:
-        status = str(row.get("payment_status") or "").strip().lower()
-        if status == "paid":
-            paid_usages += 1
-        total_discount += _to_float(row.get("discount_amount"), 0.0)
-        total_final_amount += _to_float(row.get("final_amount"), 0.0)
-    return {
-        "total_usages": total_usages,
-        "paid_usages": paid_usages,
-        "total_discount": round(total_discount, 2),
-        "total_final_amount": round(total_final_amount, 2),
-    }
-
-
 def create_coupon_code(
     *,
     code: str,
@@ -499,3 +448,52 @@ def set_coupon_active(*, coupon_id: Any, is_active: bool) -> Dict[str, Any]:
     merged = dict(existing)
     merged["is_active"] = bool(is_active)
     return merged
+
+
+
+def list_coupon_usages(*, limit: int = 100, coupon_code: Optional[str] = None, owner_email: Optional[str] = None, payment_status: Optional[str] = None) -> List[Dict[str, Any]]:
+    supabase = get_supabase_server_client()
+    response = (
+        supabase.table("coupon_usages")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    usage_rows: List[Dict[str, Any]] = _safe_data(response) or []
+
+    codes = list_coupon_codes(limit=500)
+    by_id = {row.get("id"): row for row in codes}
+
+    enriched: List[Dict[str, Any]] = []
+    for row in usage_rows:
+        coupon = by_id.get(row.get("coupon_id")) or {}
+        merged = dict(row)
+        merged.setdefault("coupon_code", coupon.get("code"))
+        merged["owner_email"] = coupon.get("owner_email")
+        enriched.append(merged)
+
+    if coupon_code:
+        wanted = _normalize_coupon_code(coupon_code)
+        enriched = [r for r in enriched if _normalize_coupon_code(r.get("coupon_code")) == wanted]
+
+    if owner_email:
+        wanted_email = _normalize_email(owner_email)
+        enriched = [r for r in enriched if _normalize_email(r.get("owner_email")) == wanted_email]
+
+    if payment_status:
+        wanted_status = str(payment_status).strip().lower()
+        enriched = [r for r in enriched if str(r.get("payment_status") or "").strip().lower() == wanted_status]
+
+    return enriched
+
+
+def summarize_coupon_usages(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    total_usages = len(rows)
+    paid_rows = [r for r in rows if str(r.get("payment_status") or "").strip().lower() == "paid"]
+    return {
+        "total_usages": total_usages,
+        "paid_usages": len(paid_rows),
+        "discount_total": round(sum(_to_float(r.get("discount_amount"), 0.0) for r in rows), 2),
+        "final_amount_total": round(sum(_to_float(r.get("final_amount"), 0.0) for r in rows), 2),
+    }
