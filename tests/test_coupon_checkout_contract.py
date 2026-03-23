@@ -765,3 +765,68 @@ def test_set_coupon_active_toggles_status(monkeypatch):
 
     updated = coupons.set_coupon_active(coupon_id=1, is_active=False)
     assert updated["is_active"] is False
+
+
+def test_list_coupon_usage_rows_enriches_filters_and_summarizes(monkeypatch):
+    from core import coupons
+
+    class _Exec:
+        def __init__(self, data):
+            self.data = data
+
+    class _Table:
+        def __init__(self, name, db):
+            self.name = name
+            self.db = db
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            return _Exec(self.db.get(self.name, []))
+
+    class _SB:
+        def __init__(self):
+            self.db = {
+                "coupon_codes": [
+                    {"id": 1, "code": "JOAO10", "owner_email": "joao@email.com"},
+                    {"id": 2, "code": "MARIA5", "owner_email": "maria@email.com"},
+                ],
+                "coupon_usages": [
+                    {
+                        "coupon_id": 1,
+                        "used_by_email": "cliente1@email.com",
+                        "original_amount": 10.0,
+                        "discount_amount": 1.0,
+                        "final_amount": 9.0,
+                        "payment_status": "paid",
+                        "confirmed_at": "2026-03-21T10:00:00+00:00",
+                    },
+                    {
+                        "coupon_id": 2,
+                        "used_by_email": "cliente2@email.com",
+                        "original_amount": 20.0,
+                        "discount_amount": 2.0,
+                        "final_amount": 18.0,
+                        "payment_status": "pending",
+                        "confirmed_at": "2026-03-21T09:00:00+00:00",
+                    },
+                ],
+            }
+
+        def table(self, name):
+            self.db.setdefault(name, [])
+            return _Table(name, self.db)
+
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: _SB())
+
+    rows = coupons.list_coupon_usage_rows(coupon_code="JOAO10", owner_email="joao@email.com", payment_status="paid")
+    assert len(rows) == 1
+    assert rows[0]["coupon_code"] == "JOAO10"
+    assert rows[0]["owner_email"] == "joao@email.com"
+
+    summary = coupons.summarize_coupon_usage_rows(rows)
+    assert summary["total_usages"] == 1
+    assert summary["paid_usages"] == 1
+    assert summary["total_discount"] == 1.0
+    assert summary["total_final_amount"] == 9.0
