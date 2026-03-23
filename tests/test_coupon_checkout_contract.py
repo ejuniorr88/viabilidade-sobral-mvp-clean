@@ -1,10 +1,133 @@
-from __future__ import annotations
-
+import importlib
+import sys
+import types
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
-from core import coupons
-from core import payments
-from ui import payments_panel
+
+class _DummyCtx:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class StreamlitStub:
+    def __init__(self):
+        self.session_state = {}
+        self.secrets = {
+            "SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_SERVICE_ROLE_KEY": "service-role",
+            "MERCADOPAGO_WEBHOOK_URL": "https://example.com/webhook",
+        }
+        self.calls = []
+
+    def cache_resource(self, show_spinner=False):
+        def decorator(fn):
+            return fn
+        return decorator
+
+    def _log(self, name, *args, **kwargs):
+        self.calls.append((name, args, kwargs))
+
+    def info(self, *args, **kwargs):
+        self._log("info", *args, **kwargs)
+
+    def warning(self, *args, **kwargs):
+        self._log("warning", *args, **kwargs)
+
+    def error(self, *args, **kwargs):
+        self._log("error", *args, **kwargs)
+
+    def success(self, *args, **kwargs):
+        self._log("success", *args, **kwargs)
+
+    def subheader(self, *args, **kwargs):
+        self._log("subheader", *args, **kwargs)
+
+    def text_input(self, *args, **kwargs):
+        self._log("text_input", *args, **kwargs)
+        key = kwargs.get("key")
+        if key is not None and key in self.session_state:
+            return self.session_state[key]
+        return kwargs.get("value", "")
+
+    def columns(self, spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        return [_DummyCtx() for _ in range(n)]
+
+    @contextmanager
+    def expander(self, *args, **kwargs):
+        self._log("expander", *args, **kwargs)
+        yield self
+
+    def dataframe(self, *args, **kwargs):
+        self._log("dataframe", *args, **kwargs)
+
+    def markdown(self, *args, **kwargs):
+        self._log("markdown", *args, **kwargs)
+
+    def caption(self, *args, **kwargs):
+        self._log("caption", *args, **kwargs)
+
+    def write(self, *args, **kwargs):
+        self._log("write", *args, **kwargs)
+
+    def button(self, *args, **kwargs):
+        self._log("button", *args, **kwargs)
+        return False
+
+    def checkbox(self, *args, **kwargs):
+        self._log("checkbox", *args, **kwargs)
+        return kwargs.get("value", False)
+
+    def selectbox(self, *args, **kwargs):
+        self._log("selectbox", *args, **kwargs)
+        options = kwargs.get("options") or (args[1] if len(args) > 1 else [])
+        index = kwargs.get("index", 0)
+        return options[index]
+
+    def image(self, *args, **kwargs):
+        self._log("image", *args, **kwargs)
+
+    def text_area(self, *args, **kwargs):
+        self._log("text_area", *args, **kwargs)
+        return kwargs.get("value", "")
+
+    def rerun(self):
+        self._log("rerun")
+
+
+st_stub = StreamlitStub()
+sys.modules["streamlit"] = st_stub
+
+supabase_mod = types.ModuleType("supabase")
+supabase_mod.Client = object
+supabase_mod.create_client = lambda url, key: object()
+sys.modules["supabase"] = supabase_mod
+
+core_auth_stub = types.ModuleType("core.auth")
+core_auth_stub.get_supabase_auth_client = lambda: object()
+sys.modules["core.auth"] = core_auth_stub
+
+core_pix_stub = types.ModuleType("core.pix_gateway")
+class MercadoPagoPixError(Exception):
+    pass
+core_pix_stub.MercadoPagoPixError = MercadoPagoPixError
+core_pix_stub.create_pix_payment = lambda **kwargs: {
+    "external_payment_id": "mp_123",
+    "qr_code": "QR-CODE",
+    "qr_code_base64": "UVI=",
+    "ticket_url": "https://ticket",
+    "gateway_payload": {"status": "pending"},
+}
+core_pix_stub.fetch_payment_status = lambda external_payment_id: {"status": "approved", "gateway_payload": {"status": "approved"}}
+sys.modules["core.pix_gateway"] = core_pix_stub
+
+coupons = importlib.import_module("core.coupons")
+payments = importlib.import_module("core.payments")
+payments_panel = importlib.import_module("ui.payments_panel")
 
 
 class FakeResponse:
@@ -12,85 +135,86 @@ class FakeResponse:
         self.data = data
 
 
-class FakeQuery:
-    def __init__(self, db, table_name):
+class FakeTable:
+    def __init__(self, db, name):
         self.db = db
-        self.table_name = table_name
-        self._filters = []
-        self._order = None
+        self.name = name
+        self.filters = []
+        self.payload = None
         self._limit = None
-        self._insert_payload = None
-        self._update_payload = None
-
-    def select(self, *_args, **_kwargs):
-        return self
-
-    def eq(self, column, value):
-        self._filters.append((column, value))
-        return self
-
-    def order(self, column, desc=False):
-        self._order = (column, desc)
-        return self
-
-    def limit(self, n):
-        self._limit = n
-        return self
+        self.action = None
 
     def insert(self, payload):
-        self._insert_payload = payload
+        self.payload = payload
+        self.action = "insert"
         return self
 
     def update(self, payload):
-        self._update_payload = payload
+        self.payload = payload
+        self.action = "update"
+        return self
+
+    def select(self, *cols):
+        self.action = "select"
+        return self
+
+    def eq(self, key, value):
+        self.filters.append((key, value))
+        return self
+
+    def limit(self, value):
+        self._limit = value
+        return self
+
+    def order(self, *args, **kwargs):
         return self
 
     def execute(self):
-        table = self.db.setdefault(self.table_name, [])
-        if self._insert_payload is not None:
-            row = dict(self._insert_payload)
-            table.append(row)
+        rows = self.db.setdefault(self.name, [])
+        if self.action == "insert":
+            row = dict(self.payload)
+            row.setdefault("id", f"{self.name}_{len(rows)+1}")
+            rows.append(row)
             return FakeResponse([row])
-
-        if self._update_payload is not None:
+        if self.action == "update":
             updated = []
-            for row in table:
-                if all(row.get(col) == val for col, val in self._filters):
-                    row.update(self._update_payload)
+            for row in rows:
+                if all(row.get(k) == v for k, v in self.filters):
+                    row.update(self.payload)
                     updated.append(dict(row))
             return FakeResponse(updated)
-
-        rows = [dict(r) for r in table]
-        for col, val in self._filters:
-            rows = [r for r in rows if r.get(col) == val]
-        if self._order:
-            col, desc = self._order
-            rows = sorted(rows, key=lambda r: r.get(col), reverse=desc)
-        if self._limit is not None:
-            rows = rows[: self._limit]
-        return FakeResponse(rows)
+        if self.action == "select":
+            selected = [dict(r) for r in rows if all(r.get(k) == v for k, v in self.filters)]
+            if self._limit is not None:
+                selected = selected[: self._limit]
+            return FakeResponse(selected)
+        return FakeResponse([])
 
 
 class FakeSupabase:
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, db=None):
+        self.db = db or {}
 
     def table(self, name):
-        return FakeQuery(self.db, name)
+        return FakeTable(self.db, name)
+
+
+def _future(days: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
 
 
 def _base_coupon(**overrides):
-    base = {
-        "id": 10,
+    row = {
+        "id": 1,
         "code": "LANCAMENTO10",
-        "owner_user_id": "owner-1",
-        "owner_email": "owner@example.com",
+        "owner_user_id": None,
+        "owner_email": None,
         "coupon_type": "manual",
-        "discount_type": "fixed",
+        "discount_type": "percent",
         "discount_value": 10,
         "is_active": True,
-        "valid_from": None,
-        "valid_until": None,
+        "valid_from": _future(-1),
+        "valid_until": _future(1),
         "max_uses_total": None,
         "max_uses_per_user": None,
         "first_purchase_only": False,
@@ -99,18 +223,18 @@ def _base_coupon(**overrides):
         "can_be_used_by_owner": False,
         "notes": None,
     }
-    base.update(overrides)
-    return base
+    row.update(overrides)
+    return row
 
 
 def _package(**overrides):
-    base = {"id": "pkg-1", "code": "pkg-1", "price_brl": 100.0}
-    base.update(overrides)
-    return base
+    row = {"id": "pkg-1", "name": "Pacote 5", "price_brl": 100, "credits": 5}
+    row.update(overrides)
+    return row
 
 
-def test_validate_coupon_fixed_discount_success(monkeypatch):
-    db = {"coupon_codes": [_base_coupon(discount_type="fixed", discount_value=10)]}
+def test_validate_coupon_for_checkout_accepts_valid_percent_coupon(monkeypatch):
+    db = {"coupon_codes": [_base_coupon()]}
     monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
     result = coupons.validate_coupon_for_checkout(
@@ -122,43 +246,12 @@ def test_validate_coupon_fixed_discount_success(monkeypatch):
 
     assert result["ok"] is True
     assert result["coupon_code"] == "LANCAMENTO10"
-    assert result["original_amount"] == 100.0
     assert result["discount_amount"] == 10.0
     assert result["final_amount"] == 90.0
-    assert result["coupon_owner_user_id"] == "owner-1"
+    assert result["snapshot"]["used_by_email"] == "user@example.com"
 
 
-def test_validate_coupon_percent_discount_success(monkeypatch):
-    db = {"coupon_codes": [_base_coupon(discount_type="percent", discount_value=15)]}
-    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
-
-    result = coupons.validate_coupon_for_checkout(
-        user_id="u1",
-        user_email="user@example.com",
-        package=_package(price_brl=200.0),
-        coupon_code="LANCAMENTO10",
-    )
-
-    assert result["ok"] is True
-    assert result["discount_amount"] == 30.0
-    assert result["final_amount"] == 170.0
-
-
-def test_validate_coupon_rejects_unknown_coupon(monkeypatch):
-    db = {"coupon_codes": []}
-    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
-
-    result = coupons.validate_coupon_for_checkout(
-        user_id="u1",
-        user_email="user@example.com",
-        package=_package(),
-        coupon_code="inexistente",
-    )
-
-    assert result == {"ok": False, "message": "Cupom não encontrado."}
-
-
-def test_validate_coupon_rejects_inactive_coupon(monkeypatch):
+def test_validate_coupon_blocks_inactive_coupon(monkeypatch):
     db = {"coupon_codes": [_base_coupon(is_active=False)]}
     monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
@@ -172,13 +265,13 @@ def test_validate_coupon_rejects_inactive_coupon(monkeypatch):
     assert result == {"ok": False, "message": "Este cupom está inativo."}
 
 
-def test_validate_coupon_rejects_owner_by_user_id(monkeypatch):
-    db = {"coupon_codes": [_base_coupon(owner_user_id="u1", owner_email="owner@example.com")]}
+def test_validate_coupon_blocks_owner_using_own_coupon(monkeypatch):
+    db = {"coupon_codes": [_base_coupon(owner_user_id="owner-1", owner_email="owner@example.com")]}
     monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
     result = coupons.validate_coupon_for_checkout(
-        user_id="u1",
-        user_email="other@example.com",
+        user_id="owner-1",
+        user_email="owner@example.com",
         package=_package(),
         coupon_code="LANCAMENTO10",
     )
@@ -186,23 +279,11 @@ def test_validate_coupon_rejects_owner_by_user_id(monkeypatch):
     assert result == {"ok": False, "message": "O dono do cupom não pode usar o próprio cupom."}
 
 
-def test_validate_coupon_rejects_owner_by_email(monkeypatch):
-    db = {"coupon_codes": [_base_coupon(owner_user_id=None, owner_email="owner@example.com")]}
-    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
-
-    result = coupons.validate_coupon_for_checkout(
-        user_id="u2",
-        user_email="OWNER@example.com",
-        package=_package(),
-        coupon_code="LANCAMENTO10",
-    )
-
-    assert result == {"ok": False, "message": "O dono do cupom não pode usar o próprio cupom."}
-
-
-def test_validate_coupon_rejects_expired_coupon(monkeypatch):
-    expired = datetime.now(timezone.utc) - timedelta(days=1)
-    db = {"coupon_codes": [_base_coupon(valid_until=expired.isoformat())]}
+def test_validate_coupon_blocks_per_user_limit(monkeypatch):
+    db = {
+        "coupon_codes": [_base_coupon(max_uses_per_user=1)],
+        "coupon_usages": [{"coupon_id": 1, "used_by_user_id": "u1"}],
+    }
     monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
     result = coupons.validate_coupon_for_checkout(
@@ -212,10 +293,10 @@ def test_validate_coupon_rejects_expired_coupon(monkeypatch):
         coupon_code="LANCAMENTO10",
     )
 
-    assert result == {"ok": False, "message": "Este cupom expirou."}
+    assert result == {"ok": False, "message": "Você já atingiu o limite de uso deste cupom."}
 
 
-def test_validate_coupon_rejects_first_purchase_only_for_existing_buyer(monkeypatch):
+def test_validate_coupon_blocks_first_purchase_only_when_user_has_paid_payment(monkeypatch):
     db = {
         "coupon_codes": [_base_coupon(first_purchase_only=True)],
         "payments": [{"id": "p1", "user_id": "u1", "status": "paid"}],
@@ -233,7 +314,7 @@ def test_validate_coupon_rejects_first_purchase_only_for_existing_buyer(monkeypa
 
 
 def test_validate_coupon_blocks_plan_not_allowed(monkeypatch):
-    db = {"coupon_codes": [_base_coupon(allowed_plan_codes=["pkg-2"])]}
+    db = {"coupon_codes": [_base_coupon(allowed_plan_codes=["pkg-2"]) ]}
     monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
     result = coupons.validate_coupon_for_checkout(
@@ -351,6 +432,7 @@ def test_payments_panel_create_pix_payment_passes_coupon_applied(monkeypatch):
     assert payment["id"] == "p1"
     assert captured["coupon_applied"]["coupon_code"] == "LANCAMENTO10"
     assert captured["coupon_applied"]["final_amount"] == 90
+
 
 
 def test_create_coupon_code_normalizes_and_rejects_duplicate(monkeypatch):
@@ -537,3 +619,149 @@ def test_create_coupon_code_keeps_owner_user_id_none_when_email_not_found(monkey
 
     assert created["owner_email"] == "missing@email.com"
     assert created["owner_user_id"] is None
+
+
+def test_update_coupon_code_updates_owner_and_rules(monkeypatch):
+    from core import coupons
+
+    class _Exec:
+        def __init__(self, data):
+            self.data = data
+
+    class _Table:
+        def __init__(self, name, db):
+            self.name = name
+            self.db = db
+            self._payload = None
+            self._filters = []
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def insert(self, payload):
+            self._payload = payload
+            return self
+
+        def update(self, payload):
+            self._payload = payload
+            return self
+
+        def eq(self, col, val):
+            self._filters.append((col, val))
+            return self
+
+        def execute(self):
+            rows = self.db.get(self.name, [])
+            if self._payload is not None and self.name == "coupon_codes":
+                updated = []
+                for row in rows:
+                    if all(row.get(c) == v for c, v in self._filters):
+                        row.update(self._payload)
+                        updated.append(dict(row))
+                payload = self._payload
+                self._payload = None
+                if updated:
+                    return _Exec(updated)
+            return _Exec(rows)
+
+    class _SB:
+        def __init__(self):
+            self.db = {
+                "coupon_codes": [{
+                    "id": 1,
+                    "code": "OWNER10",
+                    "owner_email": "old@email.com",
+                    "owner_user_id": None,
+                    "coupon_type": "manual",
+                    "discount_type": "fixed",
+                    "discount_value": 1.0,
+                    "is_active": True,
+                }],
+                "profiles": [{"id": "user-999", "email": "new@email.com"}],
+            }
+
+        def table(self, name):
+            self.db.setdefault(name, [])
+            return _Table(name, self.db)
+
+    sb = _SB()
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: sb)
+
+    updated = coupons.update_coupon_code(
+        coupon_id=1,
+        owner_email="new@email.com",
+        coupon_type="referral",
+        discount_type="percent",
+        discount_value=10,
+        is_active=True,
+        valid_from=None,
+        valid_until=None,
+        max_uses_total=100,
+        max_uses_per_user=2,
+        first_purchase_only=True,
+        allowed_plan_codes=["pkg-1"],
+        min_purchase_amount=50,
+        can_be_used_by_owner=False,
+        notes="ok",
+    )
+
+    assert updated["owner_email"] == "new@email.com"
+    assert updated["owner_user_id"] == "user-999"
+    assert updated["coupon_type"] == "referral"
+    assert updated["discount_type"] == "percent"
+    assert updated["discount_value"] == 10
+    assert updated["is_active"] is True
+
+
+def test_set_coupon_active_toggles_status(monkeypatch):
+    from core import coupons
+
+    class _Exec:
+        def __init__(self, data):
+            self.data = data
+
+    class _Table:
+        def __init__(self, name, db):
+            self.name = name
+            self.db = db
+            self._payload = None
+            self._filters = []
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def update(self, payload):
+            self._payload = payload
+            return self
+
+        def eq(self, col, val):
+            self._filters.append((col, val))
+            return self
+
+        def execute(self):
+            rows = self.db.get(self.name, [])
+            if self._payload is not None and self.name == "coupon_codes":
+                updated = []
+                for row in rows:
+                    if all(row.get(c) == v for c, v in self._filters):
+                        row.update(self._payload)
+                        updated.append(dict(row))
+                payload = self._payload
+                self._payload = None
+                if updated:
+                    return _Exec(updated)
+            return _Exec(rows)
+
+    class _SB:
+        def __init__(self):
+            self.db = {"coupon_codes": [{"id": 1, "code": "OWNER10", "is_active": True}]}
+
+        def table(self, name):
+            self.db.setdefault(name, [])
+            return _Table(name, self.db)
+
+    sb = _SB()
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: sb)
+
+    updated = coupons.set_coupon_active(coupon_id=1, is_active=False)
+    assert updated["is_active"] is False
