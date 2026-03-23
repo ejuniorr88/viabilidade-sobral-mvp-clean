@@ -5,15 +5,7 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
-from core.coupons import (
-    create_coupon_code,
-    list_coupon_codes,
-    list_coupon_usage_rows,
-    set_coupon_active,
-    summarize_coupon_usage_rows,
-    update_coupon_code,
-    user_can_manage_coupons,
-)
+from core.coupons import create_coupon_code, list_coupon_codes, set_coupon_active, update_coupon_code, user_can_manage_coupons
 
 
 def _fmt_dt(value: Any) -> str:
@@ -220,48 +212,3 @@ def render_coupons_admin_section(*, current_user_email: str) -> None:
                     st.rerun()
                 except Exception as exc:
                     st.error(f"Não foi possível atualizar o status do cupom: {exc}")
-
-
-    st.markdown("#### Usos confirmados de cupons")
-    f1, f2, f3 = st.columns(3)
-    with f1:
-        coupon_filter = st.text_input("Filtrar por código do cupom").upper().strip()
-    with f2:
-        owner_filter = st.text_input("Filtrar por e-mail do dono").strip().lower()
-    with f3:
-        status_filter = st.selectbox("Filtrar por status", options=["", "paid", "pending", "failed", "cancelled", "refunded"], index=0)
-
-    usage_rows = list_coupon_usage_rows(
-        limit=200,
-        coupon_code_filter=coupon_filter or None,
-        owner_email_filter=owner_filter or None,
-        payment_status_filter=status_filter or None,
-    )
-    summary = summarize_coupon_usage_rows(usage_rows)
-
-    s1, s2, s3, s4 = st.columns(4)
-    with s1:
-        st.metric("Total de usos", int(summary["total_usos"]))
-    with s2:
-        st.metric("Usos pagos", int(summary["usos_pagos"]))
-    with s3:
-        st.metric("Desconto total", f"R$ {summary['desconto_total']:.2f}".replace('.', ','))
-    with s4:
-        st.metric("Valor final total", f"R$ {summary['valor_final_total']:.2f}".replace('.', ','))
-
-    if usage_rows:
-        usage_table = []
-        for row in usage_rows:
-            usage_table.append({
-                "Cupom": row.get("coupon_code") or "—",
-                "Dono": row.get("owner_email") or "—",
-                "Usado por": row.get("used_by_email") or row.get("used_by_user_id") or "—",
-                "Original": row.get("original_amount") or 0,
-                "Desconto": row.get("discount_amount") or 0,
-                "Final": row.get("final_amount") or 0,
-                "Status": row.get("payment_status") or "—",
-                "Confirmado em": _fmt_dt(row.get("confirmed_at") or row.get("created_at")),
-            })
-        st.dataframe(usage_table, use_container_width=True, hide_index=True)
-    else:
-        st.info("Nenhum uso confirmado encontrado com os filtros informados.")
