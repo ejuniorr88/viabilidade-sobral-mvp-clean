@@ -181,6 +181,42 @@ def _parse_dt(value: Any) -> Optional[datetime]:
         return None
 
 
+def _parse_json_like(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _coerce_uuid_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _payment_credit_identity_matches(*, ledger_row: Dict[str, Any], payment_row: Optional[Dict[str, Any]], payment_id: str) -> bool:
+    if not payment_id:
+        return False
+
+    if _coerce_uuid_text(ledger_row.get("reference_id")) == payment_id:
+        return True
+
+    idem = str(ledger_row.get("idempotency_key") or "").strip()
+    if idem in {f"mp_paid_{payment_id}", f"ui_paid_{payment_id}", f"pix_credit_{payment_id}"}:
+        return True
+
+    metadata = _parse_json_like(ledger_row.get("metadata"))
+    if _coerce_uuid_text(metadata.get("payment_id")) == payment_id:
+        return True
+
+    if str(ledger_row.get("description") or "").strip() == f"Crédito por pagamento Pix {payment_id}":
+        return True
+
+    if payment_row:
+        external_reference = str(payment_row.get("external_reference") or "").strip()
+        if external_reference and str(metadata.get("external_reference") or "").strip() == external_reference:
+            return True
+
+    return False
+
+
 def _is_within_credit_window(*, ledger_created_at: Any, payment_row: Dict[str, Any]) -> bool:
     ledger_dt = _parse_dt(ledger_created_at)
     if ledger_dt is None:
@@ -245,21 +281,17 @@ def _get_payment_credit_row(*, payment_id: Optional[str] = None, payment_row: Op
     if not payment_id:
         return None
 
-    description = f"Crédito por pagamento Pix {payment_id}"
-    response = (
-        supabase.table("credit_ledger")
-        .select("*")
-        .eq("source", "pix_purchase")
-        .eq("description", description)
-        .limit(1)
-        .execute()
-    )
-    data = _safe_data(response) or []
-    if data:
-        return data[0]
+    user_id = str((payment_row or {}).get("user_id") or "")
+    query = supabase.table("credit_ledger").select("*").eq("source", "pix_purchase")
+    if user_id:
+        query = query.eq("user_id", user_id)
 
-    if payment_row:
-        return _find_matching_generic_credit_row(payment_row=payment_row)
+    response = query.execute()
+    rows = _safe_data(response) or []
+    for row in rows:
+        if _payment_credit_identity_matches(ledger_row=row, payment_row=payment_row, payment_id=payment_id):
+            return row
+
     return None
 
 
@@ -428,13 +460,31 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Op
     new_balance = current_balance + credits
     _write_balance(user_id=user_id, balance=new_balance)
 
-    supabase.table("credit_ledger").insert({
+    ledger_payload = {
         "user_id": user_id,
         "amount": credits,
         "entry_type": "credit",
         "source": "pix_purchase",
+        "reference_id": payment_id,
+        "idempotency_key": f"pix_credit_{payment_id}",
         "description": f"Crédito por pagamento Pix {payment_id}",
-    }).execute()
+        "metadata": {
+            "payment_id": payment_id,
+            "external_reference": payment_row.get("external_reference"),
+            "package_id": package_id,
+            "credits": credits,
+        },
+    }
+    try:
+        supabase.table("credit_ledger").insert(ledger_payload).execute()
+    except Exception:
+        existing_credit = _get_payment_credit_row(payment_id=str(payment_row.get("id") or ""), payment_row=payment_row)
+        if existing_credit:
+            existing_user_id = str(existing_credit.get("user_id") or "")
+            if existing_user_id == user_id:
+                return {"credited": False, "reason": "already_credited"}
+            return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
+        raise
     if payment_user_id != user_id:
         supabase.table("payments").update({"user_id": user_id}).eq("id", payment_id).execute()
 

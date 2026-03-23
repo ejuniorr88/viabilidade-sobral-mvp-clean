@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 
 from core.auth import get_supabase_auth_client
-from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited
+from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited, inspect_payment_credit_status
 from core.coupons import validate_coupon_for_checkout
 
 
@@ -595,23 +595,21 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
     if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
     elif status == "paid":
-        credit_reprocess = None
+        inspect = None
         try:
-            credit_reprocess = ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
+            inspect = inspect_payment_credit_status(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
         except Exception as e:
-            st.warning(f"Pagamento confirmado, mas não foi possível reconciliar os créditos agora: {e}")
+            st.warning(f"Pagamento confirmado, mas não foi possível inspecionar os créditos agora: {e}")
 
-        credit_result = (credit_reprocess or {}).get("credit_result") or {}
-        if credit_result.get("credited"):
-            if credit_result.get("moved"):
-                st.success("Este pagamento já foi confirmado e os créditos foram reconciliados para a sua carteira.")
-            else:
-                st.success("Este pagamento já foi confirmado e os créditos foram adicionados à carteira.")
+        credit_result = (inspect or {}).get("credit_result") or {}
+        if credit_result.get("reason") == "already_credited":
+            st.success("Este pagamento já foi confirmado e os créditos já estão na carteira.")
             if st.session_state.get("payments_focus_mode"):
                 st.session_state["payments_focus_mode"] = False
-            st.rerun()
-        elif credit_result.get("reason") == "already_credited":
-            st.success("Este pagamento já foi confirmado.")
+        elif credit_result.get("reason") == "credited_to_other_user":
+            st.success("Este pagamento já foi confirmado e os créditos já foram reconciliados para a sua carteira.")
+            if st.session_state.get("payments_focus_mode"):
+                st.session_state["payments_focus_mode"] = False
         else:
             st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. Tentando reconciliar...")
             if st.button("Reprocessar crédito deste pagamento", key=f"recredit_paid_{payment_id}"):

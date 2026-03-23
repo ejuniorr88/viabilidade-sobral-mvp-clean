@@ -413,3 +413,57 @@ def test_render_payments_panel_requires_login_message():
     payments_panel.render_payments_panel(supabase=object(), user_profile={})
 
     assert any(name == "info" and "Entre com Google" in args[0] for name, args, _ in st_stub.calls)
+
+
+def test_get_payment_credit_row_matches_reference_id_and_idempotency(monkeypatch):
+    db = {
+        "credit_ledger": [
+            {
+                "id": "l1",
+                "user_id": "u1",
+                "source": "pix_purchase",
+                "reference_id": "p1",
+                "idempotency_key": "mp_paid_p1",
+                "metadata": {"payment_id": "p1"},
+                "description": "Crédito gerado por pagamento Pix aprovado via Mercado Pago.",
+            }
+        ]
+    }
+    fake_sb = FakeSupabase(db)
+    monkeypatch.setattr(payments, "get_supabase_server_client", lambda: fake_sb)
+
+    row = payments._get_payment_credit_row(payment_id="p1", payment_row={"id": "p1", "user_id": "u1"})
+
+    assert row["id"] == "l1"
+
+
+def test_apply_credit_for_payment_does_not_duplicate_when_gateway_credit_exists(monkeypatch):
+    db = {
+        "credit_balance": [{"user_id": "u1", "balance": 2}],
+        "credit_ledger": [
+            {
+                "id": "l1",
+                "user_id": "u1",
+                "amount": 4,
+                "entry_type": "credit",
+                "source": "pix_purchase",
+                "reference_id": "p1",
+                "idempotency_key": "mp_paid_p1",
+                "metadata": {"payment_id": "p1", "external_reference": "ref1"},
+                "description": "Crédito gerado por pagamento Pix aprovado via Mercado Pago.",
+            }
+        ],
+        "payments": [{"id": "p1", "user_id": "u1", "package_id": "pkg1", "external_reference": "ref1"}],
+        "credit_packages": [{"id": "pkg1", "credits": 4}],
+    }
+    fake_sb = FakeSupabase(db)
+    monkeypatch.setattr(payments, "get_supabase_server_client", lambda: fake_sb)
+
+    result = payments._apply_credit_for_payment(
+        payment_row={"id": "p1", "user_id": "u1", "package_id": "pkg1", "external_reference": "ref1"},
+        target_user_id="u1",
+    )
+
+    assert result == {"credited": False, "reason": "already_credited"}
+    assert db["credit_balance"][0]["balance"] == 2
+    assert len(db["credit_ledger"]) == 1
