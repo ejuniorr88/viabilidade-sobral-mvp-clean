@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.client_reports import build_download_signed_url, list_client_reports
+from core.coupons import user_can_manage_coupons
 from ui.coupons_admin import render_coupons_admin_section
 
 _TZ = ZoneInfo("America/Fortaleza")
@@ -120,10 +121,13 @@ def render_client_area_page(user_id: str, user_name: str, user_email: str, credi
     with c3:
         _info_card("Créditos", str(credit_balance if credit_balance is not None else "—"))
 
-    tab_reports, tab_coupons = st.tabs(["Relatórios", "Cupons"])
+    show_coupons = user_can_manage_coupons(user_email)
 
-    with tab_reports:
+    if show_coupons:
+        tab_reports, tab_coupons = st.tabs(["Relatórios", "Cupons"])
+        with tab_reports:
+            _render_reports_tab(user_id)
+        with tab_coupons:
+            _render_coupons_tab(user_email)
+    else:
         _render_reports_tab(user_id)
-
-    with tab_coupons:
-        _render_coupons_tab(user_email)

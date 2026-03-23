@@ -304,7 +304,8 @@ def render_coupons_admin_section(*, current_user_email: str) -> None:
 
     configured = st.secrets.get("COUPONS_ADMIN_EMAILS", "")
     if not configured:
-        st.warning("COUPONS_ADMIN_EMAILS não está configurado nos secrets. Em modo provisório, o usuário logado atual pode acessar esta área.")
+        st.error("COUPONS_ADMIN_EMAILS não está configurado nos secrets. A área de cupons está bloqueada.")
+        return
 
     st.markdown("#### Criar novo cupom")
     _render_coupon_form(mode="create")

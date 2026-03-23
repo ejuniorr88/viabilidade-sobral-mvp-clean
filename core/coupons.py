@@ -274,8 +274,9 @@ def user_can_manage_coupons(user_email: Optional[str]) -> bool:
     elif isinstance(configured, list):
         emails = [_normalize_email(v) for v in configured if _normalize_email(v)]
 
+    # Sem lista de admins configurada, ninguém entra.
     if not emails:
-        return bool(normalized)
+        return False
     return normalized in emails
 
 
