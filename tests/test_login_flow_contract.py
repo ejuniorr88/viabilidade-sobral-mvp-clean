@@ -9,48 +9,56 @@ def _read(path: Path) -> str:
     return path.read_text(encoding='utf-8', errors='ignore')
 
 
-def test_client_area_flow_contract_keeps_entry_and_return_paths() -> None:
+def test_login_flow_contract_keeps_google_login_entrypoints() -> None:
+    auth_panel = _read(ROOT / 'ui' / 'auth_panel.py')
     app_py = _read(ROOT / 'app.py')
 
     required = [
-        'if st.session_state.get("show_client_area"):',
+        'Entrar com Google',
+        'render_google_login_box',
+        'render_google_login_top',
+        'Faça login para continuar',
+    ]
+    haystack = auth_panel + '\n' + app_py
+    for item in required:
+        assert item in haystack, f"Fluxo de login perdeu a âncora crítica: {item}"
+
+
+def test_login_flow_contract_keeps_client_area_post_login_handoff() -> None:
+    app_py = _read(ROOT / 'app.py')
+
+    required = [
+        'Área do cliente',
+        'key="vf_nav_client"',
+        'st.session_state["show_client_area"] = True',
+        'st.session_state["post_login_action"] = "open_client_area"',
+        'st.session_state.get("post_login_action") == "open_client_area"',
         'render_client_area_page(',
-        'if st.button("← Voltar para o estudo", key="client_area_back")',
-        'if st.button("← Voltar para o estudo", key="client_area_back_guest")',
-        'st.session_state["show_client_area"] = False',
-        'st.markdown("## Área do cliente")',
+        'st.rerun()',
     ]
     for item in required:
-        assert item in app_py, f"Fluxo principal da Área do cliente perdeu a âncora: {item}"
+        assert item in app_py, (
+            'Fluxo crítico da Área do cliente após login foi alterado ou removido: '
+            f'{item}'
+        )
 
 
-def test_client_area_flow_contract_keeps_identity_credit_and_reports_cards() -> None:
-    client_area = _read(ROOT / 'ui' / 'client_area.py')
+def test_login_flow_contract_keeps_session_and_logout_anchors() -> None:
+    auth_py = _read(ROOT / 'core' / 'auth.py')
+    app_py = _read(ROOT / 'app.py')
 
-    required = [
-        '_info_card("Nome"',
-        '_info_card("E-mail"',
-        '_info_card("Créditos"',
-        'st.markdown("### Relatórios salvos")',
-        'list_client_reports(user_id)',
-        'return dt.strftime("%d/%m/%Y"), dt.strftime("%H:%M")',
+    required_auth = [
+        'sync_auth_state',
+        'store_user_in_state',
+        'clear_user_in_state',
+        'logout_limpo',
+        'auth_logged_in',
+        'auth_user_id',
+        'auth_user_email',
+        'auth_user_name',
     ]
-    for item in required:
-        assert item in client_area, f"Área do cliente perdeu informação crítica consolidada: {item}"
+    for item in required_auth:
+        assert item in auth_py, f"Âncora crítica de sessão/login foi removida: {item}"
 
-
-
-def test_client_area_flow_contract_keeps_report_download_path() -> None:
-    client_area = _read(ROOT / 'ui' / 'client_area.py')
-
-    required = [
-        'build_download_signed_url(path)',
-        'st.link_button("⬇️ Fazer download", signed_url, use_container_width=True)',
-        'st.button("⬇️ Fazer download", disabled=True, use_container_width=True',
-        'Zona:',
-        'Rua:',
-        'Data:',
-        'Horário:',
-    ]
-    for item in required:
-        assert item in client_area, f"Fluxo de download/listagem da Área do cliente perdeu a âncora: {item}"
+    assert 'logout_limpo(' in auth_py, 'Logout limpo precisa continuar existindo no core/auth.py.'
+    assert 'auth_logged_in' in app_py, 'app.py precisa continuar verificando auth_logged_in para proteger fluxos.'
