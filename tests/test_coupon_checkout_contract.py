@@ -765,3 +765,60 @@ def test_set_coupon_active_toggles_status(monkeypatch):
 
     updated = coupons.set_coupon_active(coupon_id=1, is_active=False)
     assert updated["is_active"] is False
+
+
+
+def test_list_coupon_usage_rows_enriches_and_filters(monkeypatch):
+    db = {
+        "coupon_codes": [
+            {"id": 1, "code": "ALFA10", "owner_email": "owner1@email.com"},
+            {"id": 2, "code": "BETA20", "owner_email": "owner2@email.com"},
+        ],
+        "coupon_usages": [
+            {
+                "coupon_id": 1,
+                "coupon_code": "ALFA10",
+                "used_by_email": "u1@email.com",
+                "original_amount": 100,
+                "discount_amount": 10,
+                "final_amount": 90,
+                "payment_status": "paid",
+                "confirmed_at": "2026-03-22T10:00:00+00:00",
+            },
+            {
+                "coupon_id": 2,
+                "coupon_code": "BETA20",
+                "used_by_email": "u2@email.com",
+                "original_amount": 200,
+                "discount_amount": 20,
+                "final_amount": 180,
+                "payment_status": "pending",
+                "confirmed_at": None,
+            },
+        ],
+    }
+    monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
+
+    rows = coupons.list_coupon_usage_rows(
+        coupon_code_filter="alfa10",
+        owner_email_filter="owner1@email.com",
+        payment_status_filter="paid",
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["coupon_code"] == "ALFA10"
+    assert rows[0]["owner_email"] == "owner1@email.com"
+
+
+def test_summarize_coupon_usage_rows_returns_totals():
+    rows = [
+        {"payment_status": "paid", "discount_amount": 10, "final_amount": 90},
+        {"payment_status": "pending", "discount_amount": 20, "final_amount": 180},
+    ]
+
+    summary = coupons.summarize_coupon_usage_rows(rows)
+
+    assert summary["total_usos"] == 2
+    assert summary["usos_pagos"] == 1
+    assert summary["desconto_total"] == 30
+    assert summary["valor_final_total"] == 270
