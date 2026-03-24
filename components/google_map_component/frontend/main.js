@@ -1,196 +1,246 @@
-const statusEl = document.getElementById("status");
-const mapEl = document.getElementById("map");
+(function () {
+  const rootEl = document.getElementById("root");
+  const mapEl = document.getElementById("map");
+  const statusEl = document.getElementById("status");
 
-let map;
-let marker;
-let circle;
-let infoWindow;
-let googleMapsPromise;
-let dataLayerInitialized = false;
-let currentZonesSignature = "";
-let clickListenerBound = false;
-let featureClickBound = false;
+  let map = null;
+  let marker = null;
+  let circle = null;
+  let currentGeoJsonHash = null;
+  let currentArgs = {};
+  let googleMapsPromise = null;
+  let pendingRenderAfterGoogleLoad = false;
 
-function showStatus(message, isError = false) {
-  statusEl.textContent = message || "";
-  statusEl.className = isError ? "error" : "";
-  statusEl.style.display = message ? "block" : "none";
-}
-
-function setFrameHeight(height) {
-  const h = Math.max(height || 420, 320);
-  mapEl.style.minHeight = `${h}px`;
-  Streamlit.setFrameHeight(h + (statusEl.style.display === "none" ? 0 : 44));
-}
-
-function loadGoogleMaps(apiKey) {
-  if (window.google && window.google.maps) return Promise.resolve();
-  if (googleMapsPromise) return googleMapsPromise;
-
-  googleMapsPromise = new Promise((resolve, reject) => {
-    const existing = document.getElementById("google-maps-js");
-    if (existing) {
-      existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("Falha ao carregar Google Maps.")));
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = "google-maps-js";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Falha ao carregar Google Maps."));
-    document.head.appendChild(script);
-  });
-
-  return googleMapsPromise;
-}
-
-function updateMarkerAndCircle(data, lat, lng) {
-  if (!window.google || !map) return;
-  const position = { lat, lng };
-
-  if (!marker) {
-    marker = new google.maps.Marker({
-      map,
-      position,
-      title: "Ponto selecionado",
-    });
-  } else {
-    marker.setPosition(position);
-    marker.setMap(map);
+  function sendMessageToStreamlitClient(type, data) {
+    const outData = Object.assign(
+      {
+        isStreamlitMessage: true,
+        type: type,
+      },
+      data || {}
+    );
+    window.parent.postMessage(outData, "*");
   }
 
-  if (data.showRadius) {
+  function init() {
+    sendMessageToStreamlitClient("streamlit:componentReady", { apiVersion: 1 });
+  }
+
+  function setFrameHeight(height) {
+    sendMessageToStreamlitClient("streamlit:setFrameHeight", { height: height });
+  }
+
+  function sendDataToPython(data) {
+    sendMessageToStreamlitClient("streamlit:setComponentValue", data);
+  }
+
+  function resizeFrame(extra) {
+    const rootHeight = Math.max(rootEl.scrollHeight, document.documentElement.clientHeight || 0);
+    setFrameHeight(Math.max(rootHeight + (extra || 0), 440));
+  }
+
+  function showStatus(message, type) {
+    statusEl.className = type || "info";
+    statusEl.textContent = message;
+    statusEl.style.display = "block";
+    resizeFrame(16);
+  }
+
+  function hideStatus() {
+    statusEl.textContent = "";
+    statusEl.style.display = "none";
+    resizeFrame(4);
+  }
+
+  function safeHash(value) {
+    try {
+      return JSON.stringify(value);
+    } catch (e) {
+      return String(Date.now());
+    }
+  }
+
+  function loadGoogleMaps(apiKey) {
+    if (window.google && window.google.maps) {
+      return Promise.resolve();
+    }
+
+    if (googleMapsPromise) {
+      return googleMapsPromise;
+    }
+
+    googleMapsPromise = new Promise((resolve, reject) => {
+      const callbackName = "__streamlitGoogleMapInit";
+      window[callbackName] = function () {
+        resolve();
+        try { delete window[callbackName]; } catch (e) {}
+      };
+
+      const script = document.createElement("script");
+      script.src =
+        "https://maps.googleapis.com/maps/api/js?key=" +
+        encodeURIComponent(apiKey) +
+        "&v=weekly&callback=" +
+        callbackName;
+      script.async = true;
+      script.defer = true;
+      script.onerror = function () {
+        reject(new Error("Falha ao carregar Google Maps JavaScript API."));
+      };
+      document.head.appendChild(script);
+    });
+
+    return googleMapsPromise;
+  }
+
+  function clearDataLayer() {
+    if (!map || !map.data) return;
+    const features = [];
+    map.data.forEach((feature) => features.push(feature));
+    features.forEach((feature) => map.data.remove(feature));
+  }
+
+  function applyGeoJson(zonesGeojson) {
+    if (!map || !map.data) return;
+
+    const nextHash = safeHash(zonesGeojson);
+    if (nextHash === currentGeoJsonHash) return;
+
+    clearDataLayer();
+    currentGeoJsonHash = nextHash;
+
+    if (!zonesGeojson) return;
+
+    try {
+      map.data.addGeoJson(zonesGeojson);
+      map.data.setStyle(function () {
+        return {
+          fillColor: "#3367d6",
+          fillOpacity: 0.08,
+          strokeColor: "#3355aa",
+          strokeWeight: 1,
+        };
+      });
+    } catch (err) {
+      console.error("Erro ao carregar GeoJSON no Google Maps:", err);
+    }
+  }
+
+  function setMarkerAndCircle(lat, lng, radiusM) {
+    if (!map || !window.google || !window.google.maps) return;
+
+    const position = { lat: Number(lat), lng: Number(lng) };
+
+    if (!marker) {
+      marker = new google.maps.Marker({
+        map: map,
+        position: position,
+        title: "Ponto selecionado",
+      });
+    } else {
+      marker.setPosition(position);
+    }
+
     if (!circle) {
       circle = new google.maps.Circle({
-        map,
+        map: map,
         center: position,
-        radius: Number(data.radiusM || 0),
-        strokeColor: "#2563eb",
-        strokeOpacity: 0.9,
+        radius: Number(radiusM || 100),
+        strokeColor: "#3367d6",
+        strokeOpacity: 0.8,
         strokeWeight: 1,
-        fillColor: "#60a5fa",
-        fillOpacity: 0.12,
+        fillColor: "#3367d6",
+        fillOpacity: 0.08,
       });
     } else {
       circle.setCenter(position);
-      circle.setRadius(Number(data.radiusM || 0));
-      circle.setMap(map);
+      circle.setRadius(Number(radiusM || 100));
     }
-  } else if (circle) {
-    circle.setMap(null);
   }
-}
 
-function clearMapData() {
-  if (map && map.data) {
-    map.data.forEach((feature) => map.data.remove(feature));
+  function buildClickPayload(lat, lng) {
+    return {
+      clicked_lat: Number(lat),
+      clicked_lng: Number(lng),
+      click_hash: Number(lat).toFixed(8) + "_" + Number(lng).toFixed(8),
+      source: "google",
+    };
   }
-}
 
-function ensureZones(data) {
-  if (!map || !data.showZones || !data.zonesGeoJson) return;
+  function ensureMap(args) {
+    const center = {
+      lat: Number(args.click_lat != null ? args.click_lat : args.center_lat),
+      lng: Number(args.click_lng != null ? args.click_lng : args.center_lng),
+    };
 
-  const signature = JSON.stringify({
-    count: data.zonesGeoJson.features ? data.zonesGeoJson.features.length : 0,
-    hasClick: !!data.clickLat,
+    const zoom = Number(args.zoom || 12);
+
+    if (!map) {
+      map = new google.maps.Map(mapEl, {
+        center: center,
+        zoom: zoom,
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: true,
+        clickableIcons: false,
+      });
+
+      map.addListener("click", function (event) {
+        const lat = event.latLng.lat();
+        const lng = event.latLng.lng();
+        setMarkerAndCircle(lat, lng, Number(currentArgs.radius_m || 100));
+        sendDataToPython(buildClickPayload(lat, lng));
+      });
+    } else {
+      map.setCenter(center);
+      map.setZoom(zoom);
+    }
+
+    applyGeoJson(args.zones_geojson);
+
+    if (args.click_lat != null && args.click_lng != null) {
+      setMarkerAndCircle(Number(args.click_lat), Number(args.click_lng), Number(args.radius_m || 100));
+    }
+
+    hideStatus();
+    resizeFrame(4);
+  }
+
+  function renderFromArgs(args) {
+    currentArgs = args || {};
+    mapEl.style.height = String(Number(currentArgs.height || 420)) + "px";
+
+    if (!currentArgs.api_key) {
+      showStatus(
+        "GOOGLE_MAPS_API_KEY não configurada. O app deve cair em fallback para o mapa atual.",
+        "info"
+      );
+      return;
+    }
+
+    loadGoogleMaps(currentArgs.api_key)
+      .then(function () {
+        ensureMap(currentArgs);
+      })
+      .catch(function (err) {
+        console.error(err);
+        showStatus(
+          "Falha ao carregar Google Maps. Verifique a chave da API, o billing do projeto e as restrições do domínio.",
+          "error"
+        );
+      });
+  }
+
+  function onDataFromPython(event) {
+    if (!event || !event.data || event.data.type !== "streamlit:render") return;
+    renderFromArgs(event.data.args || {});
+  }
+
+  window.addEventListener("message", onDataFromPython);
+  window.addEventListener("load", function () {
+    init();
+    window.setTimeout(function () {
+      resizeFrame(4);
+    }, 0);
   });
-
-  if (signature === currentZonesSignature) return;
-  currentZonesSignature = signature;
-
-  clearMapData();
-  map.data.addGeoJson(data.zonesGeoJson);
-  map.data.setStyle(() => ({
-    fillColor: "#2563eb",
-    fillOpacity: 0.08,
-    strokeColor: "#1d4ed8",
-    strokeWeight: 1,
-  }));
-
-  if (!featureClickBound) {
-    map.data.addListener("click", (event) => {
-      const sigla = event.feature.getProperty("sigla") || "Zona";
-      if (!infoWindow) infoWindow = new google.maps.InfoWindow();
-      infoWindow.setContent(`<div><strong>${sigla}</strong></div>`);
-      infoWindow.setPosition(event.latLng);
-      infoWindow.open({ map });
-    });
-    featureClickBound = true;
-  }
-}
-
-function sendClick(lat, lng) {
-  Streamlit.setComponentValue({
-    clicked_lat: lat,
-    clicked_lng: lng,
-    click_hash: `${lat.toFixed(8)}_${lng.toFixed(8)}`,
-  });
-}
-
-function renderMap(data) {
-  showStatus("");
-  setFrameHeight(data.height || 420);
-
-  const center = {
-    lat: Number(data.clickLat ?? data.centerLat ?? -3.689),
-    lng: Number(data.clickLng ?? data.centerLng ?? -40.349),
-  };
-
-  if (!map) {
-    map = new google.maps.Map(mapEl, {
-      center,
-      zoom: Number(data.zoom || 12),
-      mapTypeControl: true,
-      streetViewControl: false,
-      fullscreenControl: true,
-      clickableIcons: false,
-      gestureHandling: "greedy",
-    });
-  } else {
-    map.setCenter(center);
-    map.setZoom(Number(data.zoom || 12));
-  }
-
-  if (!clickListenerBound) {
-    map.addListener("click", (event) => {
-      const lat = event.latLng.lat();
-      const lng = event.latLng.lng();
-      updateMarkerAndCircle(data, lat, lng);
-      sendClick(lat, lng);
-    });
-    clickListenerBound = true;
-  }
-
-  if (data.clickLat != null && data.clickLng != null) {
-    updateMarkerAndCircle(data, Number(data.clickLat), Number(data.clickLng));
-  }
-
-  ensureZones(data);
-  Streamlit.setFrameHeight((data.height || 420) + (statusEl.style.display === "none" ? 0 : 44));
-}
-
-function onRender(event) {
-  const data = event.detail.args.data || {};
-  if (!data.apiKey) {
-    showStatus("GOOGLE_MAPS_API_KEY não configurada.", true);
-    Streamlit.setComponentValue({ error: "missing_api_key" });
-    setFrameHeight(data.height || 420);
-    return;
-  }
-
-  loadGoogleMaps(data.apiKey)
-    .then(() => renderMap(data))
-    .catch((err) => {
-      showStatus(err.message || "Falha ao carregar mapa.", true);
-      Streamlit.setComponentValue({ error: err.message || "google_maps_load_failed" });
-      setFrameHeight(data.height || 420);
-    });
-}
-
-Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
-Streamlit.setComponentReady();
-Streamlit.setFrameHeight(460);
+})();
