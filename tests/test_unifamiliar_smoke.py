@@ -20,7 +20,7 @@ def test_unifamiliar_final_sections_exist_and_keep_order() -> None:
     positions = []
     for anchor in ordered:
         count = txt.count(anchor)
-        assert count >= 1, f"Âncora final obrigatória sumiu do unifamiliar: {anchor}"
+        assert count == 1, f"Âncora final obrigatória do unifamiliar deve aparecer 1x. Encontrado {count}x: {anchor}"
         idx = txt.find(anchor)
         positions.append(idx)
 
@@ -43,3 +43,14 @@ def test_unifamiliar_nothing_reappears_after_fechamento_final() -> None:
     ]
     for item in forbidden:
         assert item not in tail, f"Nada deve reaparecer depois do Fechamento final do unifamiliar. Encontrado: {item}"
+
+
+def test_unifamiliar_mid_sections_are_not_duplicated() -> None:
+    txt = _read("ui/relatorio.py")
+    anchors = [
+        "### 🧱 7️⃣ Tipos de piso: o que conta como permeável?",
+        "### 🚗 9️⃣ Preciso de vagas de estacionamento?",
+        "### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?",
+    ]
+    for anchor in anchors:
+        assert txt.count(anchor) == 1, f"Seção do unifamiliar duplicada: {anchor}"
