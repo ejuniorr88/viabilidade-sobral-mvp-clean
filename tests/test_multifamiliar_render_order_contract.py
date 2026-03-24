@@ -46,3 +46,22 @@ def test_calculation_formulas_are_highlighted_in_text_contract() -> None:
     assert any(all(item in txt for item in option) for option in options), (
         "Explicação didática dos cálculos do multifamiliar perdeu os marcadores contratuais esperados."
     )
+
+
+
+def test_multifamiliar_final_anchors_are_unique() -> None:
+    txt = _read("ui/relatorio_blocks/multifamiliar_guia.py")
+
+    unique_anchors = [
+        "### 📋 1️⃣0️⃣ Quais medidas mínimas os ambientes precisam ter?",
+        "### 🚶 1️⃣1️⃣ O que preciso saber sobre a calçada?",
+        "### 💡 1️⃣2️⃣ Dicas valiosas",
+        "### 📌 1️⃣3️⃣ Resumo rápido final",
+        "### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?",
+        "### ✅ 1️⃣5️⃣ Fechamento final",
+    ]
+
+    for anchor in unique_anchors:
+        assert txt.count(anchor) == 1, (
+            f"Âncora do multifamiliar deve aparecer uma única vez no arquivo: {anchor}"
+        )
