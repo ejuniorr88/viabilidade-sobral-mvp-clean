@@ -402,6 +402,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             )
 
     st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
+    st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
     st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
     st.markdown(
         _md_table(
@@ -448,6 +449,11 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.success("**Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento.**")
     st.markdown("Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.")
 
+    st.markdown("---\n### 📋 1️⃣0️⃣ Quais medidas mínimas os ambientes precisam ter?")
+    st.markdown(
+        "Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação. "
+        "Isso vale para itens como sala, quartos, cozinha, banheiro, área de serviço, garagem e escada."
+    )
     render_quadro_tecnico()
 
     st.markdown("---\n### 🚶 1️⃣1️⃣ O que preciso saber sobre a calçada?")
@@ -529,6 +535,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "- **Alvará de Construção (Obra Nova)** → usado quando a obra exige análise técnica mais completa e documentação complementar.\n\n"
         "Abaixo, apresentamos um resumo dos dois caminhos e um checklist básico dos itens que normalmente precisam ser providenciados."
     )
+
     st.markdown("#### 📄 Alvará de Construção Simplificado")
     st.markdown(
         "O **Alvará de Construção Simplificado** é uma forma mais rápida de licenciamento, voltada para casos mais simples. "
