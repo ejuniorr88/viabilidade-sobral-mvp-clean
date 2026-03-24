@@ -124,9 +124,6 @@ def _render_google_map_section(
         click_lng=click_lon,
         radius_m=radius_m,
         zones_geojson=zones_gj,
-        show_radius=True,
-        show_zones=True,
-        key="google_map_section_main",
         height=420,
     ) or {}
 
