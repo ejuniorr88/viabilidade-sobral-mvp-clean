@@ -22,7 +22,7 @@ def test_multifamiliar_shared_sections_exist_and_keep_order() -> None:
     positions = []
     for anchor in ordered:
         count = txt.count(anchor)
-        assert count >= 1, f"Âncora compartilhada obrigatória sumiu do multifamiliar: {anchor}"
+        assert count == 1, f"Âncora compartilhada do multifamiliar deve aparecer 1x. Encontrado {count}x: {anchor}"
         idx = txt.find(anchor)
         positions.append(idx)
 
@@ -63,3 +63,10 @@ def test_multifamiliar_alvara_block_exists_before_fechamento() -> None:
     assert idx_alvara != -1, "Bloco do alvará não encontrado no multifamiliar."
     assert idx_fech != -1, "Fechamento final não encontrado no multifamiliar."
     assert idx_alvara < idx_fech, "O bloco do alvará precisa ficar antes do Fechamento final."
+
+
+def test_multifamiliar_alvara_is_not_duplicated() -> None:
+    txt = _read("ui/relatorio_blocks/multifamiliar_guia.py")
+    assert txt.count("### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?") == 1, (
+        "Bloco do alvará do multifamiliar não pode se repetir."
+    )
