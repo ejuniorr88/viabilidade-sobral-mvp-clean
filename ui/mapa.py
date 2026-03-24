@@ -132,7 +132,7 @@ def _render_google_map_section(
     if clicked_lat is None or clicked_lng is None:
         return True
 
-    _apply_click_update(
+    changed = _apply_click_update(
         float(clicked_lat),
         float(clicked_lng),
         state_key_last_click=state_key_last_click,
@@ -141,8 +141,10 @@ def _render_google_map_section(
         radius_m=radius_m,
     )
 
-    # Aqui o rerun é intencional para garantir que o item 3 reconheça o ponto clicado.
-    st.rerun()
+    # Só rerun quando o ponto mudou de verdade.
+    if changed:
+        st.rerun()
+
     return True
 
 
