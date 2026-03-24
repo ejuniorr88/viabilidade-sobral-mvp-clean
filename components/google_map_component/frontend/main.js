@@ -31,7 +31,8 @@
   }
 
   function sendDataToPython(data) {
-    sendMessageToStreamlitClient("streamlit:setComponentValue", data);
+    // Ponto crítico: o Streamlit espera o valor dentro da chave "value".
+    sendMessageToStreamlitClient("streamlit:setComponentValue", { value: data });
   }
 
   function getMapHeight() {
