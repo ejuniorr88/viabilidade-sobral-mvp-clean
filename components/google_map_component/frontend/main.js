@@ -5,11 +5,13 @@
   let map = null;
   let marker = null;
   let circle = null;
+  let hoverInfoWindow = null;
   let currentGeoJsonHash = null;
   let currentArgs = {};
   let googleMapsPromise = null;
   let mapClickListenerAttached = false;
   let dataLayerClickListenerAttached = false;
+  let dataLayerHoverListenersAttached = false;
 
   function sendMessageToStreamlitClient(type, data) {
     const outData = Object.assign(
@@ -31,7 +33,6 @@
   }
 
   function sendDataToPython(data) {
-    // O Streamlit espera o valor dentro de "value".
     sendMessageToStreamlitClient("streamlit:setComponentValue", { value: data });
   }
 
@@ -104,6 +105,9 @@
     const features = [];
     map.data.forEach((feature) => features.push(feature));
     features.forEach((feature) => map.data.remove(feature));
+    if (hoverInfoWindow) {
+      hoverInfoWindow.close();
+    }
   }
 
   function setMarkerAndCircle(lat, lng, radiusM) {
@@ -153,6 +157,25 @@
     sendDataToPython(buildClickPayload(lat, lng));
   }
 
+  function getFeatureLabel(feature) {
+    if (!feature) return "";
+    return (
+      feature.getProperty("sigla") ||
+      feature.getProperty("zone_sigla") ||
+      feature.getProperty("label") ||
+      feature.getProperty("name") ||
+      ""
+    );
+  }
+
+  function ensureHoverInfoWindow() {
+    if (!hoverInfoWindow && window.google && window.google.maps) {
+      hoverInfoWindow = new google.maps.InfoWindow({
+        disableAutoPan: true,
+      });
+    }
+  }
+
   function attachListeners() {
     if (!map || !window.google || !window.google.maps) return;
 
@@ -170,6 +193,37 @@
         handlePointSelection(event.latLng.lat(), event.latLng.lng());
       });
       dataLayerClickListenerAttached = true;
+    }
+
+    if (map.data && !dataLayerHoverListenersAttached) {
+      ensureHoverInfoWindow();
+
+      map.data.addListener("mouseover", function (event) {
+        const label = getFeatureLabel(event.feature);
+        if (!label || !hoverInfoWindow || !event.latLng) return;
+
+        hoverInfoWindow.setContent(
+          '<div style="font-size:12px;font-weight:600;padding:2px 4px;">Zona: ' +
+            String(label) +
+            "</div>"
+        );
+        hoverInfoWindow.setPosition(event.latLng);
+        hoverInfoWindow.open(map);
+      });
+
+      map.data.addListener("mousemove", function (event) {
+        const label = getFeatureLabel(event.feature);
+        if (!label || !hoverInfoWindow || !event.latLng) return;
+        hoverInfoWindow.setPosition(event.latLng);
+      });
+
+      map.data.addListener("mouseout", function () {
+        if (hoverInfoWindow) {
+          hoverInfoWindow.close();
+        }
+      });
+
+      dataLayerHoverListenersAttached = true;
     }
   }
 
@@ -206,7 +260,6 @@
       lng: Number(args.click_lng != null ? args.click_lng : args.center_lng),
     };
 
-    // Macro da cidade na primeira carga; aproxima quando já existe ponto.
     const zoom = Number(args.click_lat != null && args.click_lng != null ? 19 : (args.zoom || 12));
 
     if (!map) {
