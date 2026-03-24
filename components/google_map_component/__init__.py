@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional
 import streamlit.components.v1 as components
 
 _FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
-_component_func = components.declare_component(
+
+_google_map_component = components.declare_component(
     "google_map_component",
     path=str(_FRONTEND_DIR),
 )
@@ -18,26 +19,21 @@ def render_google_map(
     center_lat: float,
     center_lng: float,
     zoom: int = 12,
-    click_lat: Optional[float] = None,
-    click_lng: Optional[float] = None,
+    click_lat: float | None = None,
+    click_lng: float | None = None,
     radius_m: int = 100,
-    zones_geojson: Optional[Dict[str, Any]] = None,
-    show_radius: bool = True,
-    show_zones: bool = True,
+    zones_geojson: Dict[str, Any] | None = None,
     height: int = 420,
-    key: Optional[str] = None,
-) -> Dict[str, Any] | None:
-    payload = {
-        "apiKey": api_key,
-        "centerLat": center_lat,
-        "centerLng": center_lng,
-        "zoom": int(zoom),
-        "clickLat": click_lat,
-        "clickLng": click_lng,
-        "radiusM": int(radius_m),
-        "zonesGeoJson": zones_geojson,
-        "showRadius": bool(show_radius),
-        "showZones": bool(show_zones),
-        "height": int(height),
-    }
-    return _component_func(data=payload, default=None, key=key)
+) -> Optional[Dict[str, Any]]:
+    return _google_map_component(
+        api_key=api_key,
+        center_lat=float(center_lat),
+        center_lng=float(center_lng),
+        zoom=int(zoom),
+        click_lat=None if click_lat is None else float(click_lat),
+        click_lng=None if click_lng is None else float(click_lng),
+        radius_m=int(radius_m),
+        zones_geojson=zones_geojson,
+        height=int(height),
+        default=None,
+    )
