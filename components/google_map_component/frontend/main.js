@@ -11,7 +11,10 @@
   let googleMapsPromise = null;
   let mapClickListenerAttached = false;
   let dataLayerClickListenerAttached = false;
+  let persistenceListenersAttached = false;
   let hasUserInteracted = false;
+
+  const STORAGE_KEY = "google_map_component_view_state_v1";
 
   function sendMessageToStreamlitClient(type, data) {
     const outData = Object.assign(
@@ -64,6 +67,45 @@
     } catch (e) {
       return String(Date.now());
     }
+  }
+
+  function saveViewState() {
+    if (!map) return;
+    try {
+      const center = map.getCenter();
+      if (!center) return;
+      const payload = {
+        lat: center.lat(),
+        lng: center.lng(),
+        zoom: map.getZoom(),
+      };
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      // ignora
+    }
+  }
+
+  function loadViewState() {
+    try {
+      const raw = window.sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (
+        parsed &&
+        Number.isFinite(Number(parsed.lat)) &&
+        Number.isFinite(Number(parsed.lng)) &&
+        Number.isFinite(Number(parsed.zoom))
+      ) {
+        return {
+          lat: Number(parsed.lat),
+          lng: Number(parsed.lng),
+          zoom: Number(parsed.zoom),
+        };
+      }
+    } catch (e) {
+      // ignora
+    }
+    return null;
   }
 
   function loadGoogleMaps(apiKey) {
@@ -153,6 +195,7 @@
   function handlePointSelection(lat, lng) {
     hasUserInteracted = true;
     setMarkerAndCircle(lat, lng, Number(currentArgs.radius_m || 100));
+    saveViewState();
     sendDataToPython(buildClickPayload(lat, lng));
   }
 
@@ -173,6 +216,21 @@
         handlePointSelection(event.latLng.lat(), event.latLng.lng());
       });
       dataLayerClickListenerAttached = true;
+    }
+
+    if (!persistenceListenersAttached) {
+      map.addListener("zoom_changed", function () {
+        hasUserInteracted = true;
+        saveViewState();
+      });
+      map.addListener("dragend", function () {
+        hasUserInteracted = true;
+        saveViewState();
+      });
+      map.addListener("idle", function () {
+        saveViewState();
+      });
+      persistenceListenersAttached = true;
     }
   }
 
@@ -204,17 +262,24 @@
   }
 
   function ensureMap(args) {
-    const center = {
+    const savedView = loadViewState();
+    const fallbackCenter = {
       lat: Number(args.click_lat != null ? args.click_lat : args.center_lat),
       lng: Number(args.click_lng != null ? args.click_lng : args.center_lng),
     };
 
-    const zoom = Number(args.zoom || 12);
+    const initialCenter = savedView
+      ? { lat: savedView.lat, lng: savedView.lng }
+      : fallbackCenter;
+
+    const initialZoom = savedView
+      ? Number(savedView.zoom)
+      : Number(args.zoom || 12);
 
     if (!map) {
       map = new google.maps.Map(mapEl, {
-        center: center,
-        zoom: zoom,
+        center: initialCenter,
+        zoom: initialZoom,
         mapTypeControl: true,
         streetViewControl: false,
         fullscreenControl: true,
@@ -222,18 +287,17 @@
         gestureHandling: "greedy",
         scrollwheel: true,
         disableDoubleClickZoom: false,
+        keyboardShortcuts: true,
       });
     } else {
-      // Recentraliza apenas quando ainda não houve interação do usuário
-      // ou quando existe ponto clicado vindo do Python.
-      if (!hasUserInteracted || (args.click_lat != null && args.click_lng != null)) {
-        map.setCenter(center);
+      // Só recentraliza por argumento quando existe ponto clicado vindo do Python.
+      if (args.click_lat != null && args.click_lng != null) {
+        map.setCenter({
+          lat: Number(args.click_lat),
+          lng: Number(args.click_lng),
+        });
       }
-
-      // Evita resetar o zoom em toda renderização; só aplica se ainda não houve interação.
-      if (!hasUserInteracted && Number.isFinite(zoom)) {
-        map.setZoom(zoom);
-      }
+      // Não força zoom em rerender normal.
     }
 
     applyGeoJson(args.zones_geojson);
