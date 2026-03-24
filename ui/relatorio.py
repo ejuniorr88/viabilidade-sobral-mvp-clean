@@ -402,7 +402,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             )
 
     st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
-    st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
     st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
     st.markdown(
         _md_table(
