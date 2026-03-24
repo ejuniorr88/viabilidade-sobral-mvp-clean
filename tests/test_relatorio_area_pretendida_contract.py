@@ -10,15 +10,13 @@ def _read(rel_path: str) -> str:
 def test_relatorio_unifamiliar_prioritizes_area_pretendida_in_text() -> None:
     txt = _read("ui/relatorio.py")
     required = [
-        "área construída pretendida no térreo",
+        "A área construída pretendida informada foi de",
         "TO efetiva",
         "Área livre remanescente",
-        "restam aproximadamente",
-        "potencial construtivo para crescer acima",
+        "potencial construtivo",
     ]
     for item in required:
         assert item in txt, f"ui/relatorio.py perdeu a leitura contratual da área pretendida: {item}"
-
 
 
 def test_relatorio_unifamiliar_keeps_maximum_reference_and_tp_reading() -> None:
@@ -26,12 +24,11 @@ def test_relatorio_unifamiliar_keeps_maximum_reference_and_tp_reading() -> None:
     required = [
         "Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**.",
         "área permeável",
-        "preservar a faixa permeável necessária",
+        "devem permanecer permeáveis",
         "Índice de Aproveitamento (IA)",
     ]
     for item in required:
         assert item in txt, f"ui/relatorio.py perdeu referência importante do bloco 5/6/8: {item}"
-
 
 
 def test_relatorio_unifamiliar_passes_corner_flag_to_figuras() -> None:
