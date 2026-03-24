@@ -180,6 +180,7 @@
         strokeWeight: 1,
         fillColor: "#3367d6",
         fillOpacity: 0.06,
+        clickable: false,
       });
     } else {
       circle.setCenter(position);
