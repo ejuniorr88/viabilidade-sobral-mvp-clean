@@ -7,9 +7,7 @@ import streamlit as st
 
 
 def render_quadro_tecnico() -> None:
-    # O heading e a introdução desta seção pertencem ao fluxo chamador
-    # (unifamiliar ou multifamiliar). Aqui renderizamos apenas o conteúdo
-    # do quadro técnico para evitar duplicação no relatório final.
+    # Âncora literal blindada
     st.markdown("**Quadro técnico — parâmetros dos ambientes**")
     st.caption("Lei Complementar nº 90/2023 — Anexo II")
 
