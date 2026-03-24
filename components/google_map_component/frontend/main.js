@@ -14,7 +14,7 @@
   let persistenceListenersAttached = false;
   let hasUserInteracted = false;
 
-  const STORAGE_KEY = "google_map_component_view_state_v1";
+  const STORAGE_KEY = "google_map_component_view_state_v2";
 
   function sendMessageToStreamlitClient(type, data) {
     const outData = Object.assign(
@@ -39,11 +39,13 @@
     sendMessageToStreamlitClient("streamlit:setComponentValue", data);
   }
 
-  function resizeFrame(extra) {
-    const rootHeight = rootEl
-      ? Math.max(rootEl.scrollHeight, document.documentElement.clientHeight || 0)
-      : Math.max(document.body.scrollHeight, document.documentElement.clientHeight || 0);
-    setFrameHeight(Math.max(rootHeight + (extra || 0), 440));
+  function getMapHeight() {
+    return Math.max(Number(currentArgs.height || 420), 420);
+  }
+
+  function resizeFrame() {
+    // altura fixa para não "empurrar" o botão a cada rerender
+    setFrameHeight(getMapHeight() + 4);
   }
 
   function showStatus(message, type) {
@@ -51,14 +53,14 @@
     statusEl.className = type || "info";
     statusEl.textContent = message;
     statusEl.style.display = "block";
-    resizeFrame(16);
+    resizeFrame();
   }
 
   function hideStatus() {
     if (!statusEl) return;
     statusEl.textContent = "";
     statusEl.style.display = "none";
-    resizeFrame(4);
+    resizeFrame();
   }
 
   function safeHash(value) {
@@ -80,9 +82,7 @@
         zoom: map.getZoom(),
       };
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch (e) {
-      // ignora
-    }
+    } catch (e) {}
   }
 
   function loadViewState() {
@@ -102,9 +102,7 @@
           zoom: Number(parsed.zoom),
         };
       }
-    } catch (e) {
-      // ignora
-    }
+    } catch (e) {}
     return null;
   }
 
@@ -274,30 +272,39 @@
 
     const initialZoom = savedView
       ? Number(savedView.zoom)
-      : Number(args.zoom || 12);
+      : Number(args.zoom || 19);
 
     if (!map) {
       map = new google.maps.Map(mapEl, {
         center: initialCenter,
         zoom: initialZoom,
+        mapTypeId: google.maps.MapTypeId.SATELLITE,
         mapTypeControl: true,
+        mapTypeControlOptions: {
+          style: google.maps.MapTypeControlStyle.DEFAULT,
+          mapTypeIds: ["roadmap", "satellite"],
+        },
         streetViewControl: false,
         fullscreenControl: true,
         clickableIcons: false,
-        gestureHandling: "greedy",
+        // cooperative: permite scroll da página sem "prender" no mapa.
+        gestureHandling: "cooperative",
         scrollwheel: true,
         disableDoubleClickZoom: false,
         keyboardShortcuts: true,
       });
     } else {
-      // Só recentraliza por argumento quando existe ponto clicado vindo do Python.
+      // força satélite também nos rerenders
+      if (map.getMapTypeId() !== google.maps.MapTypeId.SATELLITE) {
+        map.setMapTypeId(google.maps.MapTypeId.SATELLITE);
+      }
+
       if (args.click_lat != null && args.click_lng != null) {
         map.setCenter({
           lat: Number(args.click_lat),
           lng: Number(args.click_lng),
         });
       }
-      // Não força zoom em rerender normal.
     }
 
     applyGeoJson(args.zones_geojson);
@@ -312,13 +319,13 @@
     }
 
     hideStatus();
-    resizeFrame(4);
+    resizeFrame();
   }
 
   function renderFromArgs(args) {
     currentArgs = args || {};
     if (mapEl) {
-      mapEl.style.height = String(Number(currentArgs.height || 420)) + "px";
+      mapEl.style.height = String(getMapHeight()) + "px";
     }
 
     if (!currentArgs.api_key) {
@@ -351,7 +358,7 @@
   window.addEventListener("load", function () {
     init();
     window.setTimeout(function () {
-      resizeFrame(4);
+      resizeFrame();
     }, 0);
   });
 })();
