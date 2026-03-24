@@ -708,68 +708,97 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.markdown(f"**A zona permite ocupar até {_fmt_pct(to_max_pct)} do terreno no térreo.**")
         _formula_box(f"{_fmt_num(lot_area_f)} × {_fmt_pct(to_max_pct)} = {_fmt_num(to_m2)}")
         st.markdown("**Esse é o limite máximo permitido pela Taxa de Ocupação (TO).**")
-        if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
-            st.markdown(f"**Na prática, isso significa que a edificação não pode ultrapassar {_fmt_num(to_m2)} no chão, considerando a ocupação máxima permitida pela zona.**")
-            if A_recuos is not None and W_util is not None and D_util is not None:
-                st.markdown("### Opção 1 — usando os recuos da zona")
-                st.markdown("**No caso de usar todos os recuos conforme a zona, a área útil de implantação fica assim:**")
-                st.markdown("#### 1. Cálculo da largura útil")
-                st.markdown(f"A largura original do lote é de **{_fmt_num(lot_front)} m**.")
-                st.markdown(
-                    f"Como a zona exige:\n"
-                    f"- **{_fmt_num(rec_lat)}** de recuo lateral de um lado\n"
-                    f"- **{_fmt_num(rec_lat)}** de recuo lateral do outro lado\n\n"
-                    f"fazemos:"
+
+        if a_adotada is not None and a_adotada > 0:
+            if built_ground is not None and teto_pratico is not None and built_ground > teto_pratico:
+                st.warning(
+                    f"A área construída pretendida informada foi de **{_fmt_num(built_ground)} m²**, mas para os cálculos do relatório foi adotado o limite prático de **{_fmt_num(a_adotada)} m²**."
                 )
-                _formula_box(f"{_fmt_num(lot_front)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)}")
-                st.markdown(f"**Largura útil: {_fmt_num(W_util)}**")
-                st.markdown("#### 2. Cálculo da profundidade útil")
-                st.markdown(f"A profundidade original do lote é de **{_fmt_num(lot_depth)} m**.")
+            else:
+                st.markdown(f"**Área considerada no seu projeto (térreo): {_fmt_num(a_adotada)} m².**")
+
+            if to_utilizada_pct is not None:
+                st.markdown("### TO efetiva do projeto")
+                _formula_box(f"{_fmt_num(a_adotada)} ÷ {_fmt_num(lot_area_f)} = {_fmt_pct(to_utilizada_pct)}")
+                st.markdown(f"**TO do projeto: {_fmt_pct(to_utilizada_pct)}**")
+
+            if A_recuos is not None:
                 st.markdown(
-                    f"Como a zona exige:\n"
-                    f"- **{_fmt_num(rec_fr)}** de recuo frontal\n"
-                    f"- **{_fmt_num(rec_fun)}** de recuo de fundo\n\n"
-                    f"fazemos:"
+                    f"**Leitura prática:** pela TO, o lote pode ocupar até **{_fmt_num(to_m2)} m²** no térreo. "
+                    f"No seu caso, o relatório está considerando **{_fmt_num(a_adotada)} m²**. "
+                    f"Se você aplicar todos os recuos da zona, a implantação teórica no térreo fica em **{_fmt_num(A_recuos)} m²**."
                 )
-                _formula_box(f"{_fmt_num(lot_depth)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun)} = {_fmt_num(D_util)}")
-                st.markdown(f"**Profundidade útil: {_fmt_num(D_util)}**")
-                st.markdown("#### 3. Cálculo da área útil de implantação")
-                _formula_box(f"{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)}")
+            else:
                 st.markdown(
-                    f"**Leitura prática:** isso significa que, mesmo que a zona permita ocupar até **{_fmt_num(to_m2)}** pela TO, "
-                    f"ao aplicar todos os recuos da zona o espaço que realmente sobra para implantar a edificação no térreo fica em **{_fmt_num(A_recuos)}**."
+                    f"**Leitura prática:** pela TO, o lote pode ocupar até **{_fmt_num(to_m2)} m²** no térreo. "
+                    f"No seu caso, o relatório está considerando **{_fmt_num(a_adotada)} m²**, que é a base usada para os cálculos a seguir."
                 )
-            st.markdown("### Opção 2 — no caso do multifamiliar justaposto")
-            st.markdown("**Quando a zona permitir usar os parâmetros do unifamiliar, o projeto pode encostar nas laterais e zerar o recuo frontal.**")
-            st.markdown(
-                f"👉 **Nesse cenário, o aproveitamento do térreo pode chegar ao limite da TO máxima da zona, que neste caso é de {_fmt_num(to_m2)}, "
-                "desde que sejam respeitadas a adequabilidade, a Taxa de Ocupação (TO) e a Taxa de Permeabilidade (TP).**"
-            )
         else:
             st.markdown(
-                "**Mas o que isso significa na prática?**\n"
-                "A **TO** mostra o limite percentual permitido pela zona. Só que, no projeto real, a implantação também precisa respeitar os **recuos obrigatórios da zona**."
+                "Quando a área pretendida no térreo não é informada, o relatório usa os limites máximos da zona como referência inicial."
             )
-            st.markdown(
-                f"### Recuos da zona\n"
-                f"- **Frontal:** {_fmt_num(rec_fr)}\n"
-                f"- **Laterais:** {_fmt_num(rec_lat)}\n"
-                f"- **Fundo:** {_fmt_num(rec_fun)}"
-            )
-            if W_util is not None and D_util is not None and A_recuos is not None:
-                st.markdown(f"### Cálculo da largura útil\nA largura original do lote é de **{_fmt_num(lot_front)} m**.")
-                _formula_box(f"{_fmt_num(lot_front)} − recuos laterais = {_fmt_num(W_util)}")
-                st.markdown(f"**Largura útil: {_fmt_num(W_util)}**")
-                st.markdown(f"### Cálculo da profundidade útil\nA profundidade original do lote é de **{_fmt_num(lot_depth)} m**.")
-                _formula_box(f"{_fmt_num(lot_depth)} − recuo frontal − recuo de fundo = {_fmt_num(D_util)}")
-                st.markdown(f"**Profundidade útil: {_fmt_num(D_util)}**")
-                st.markdown("### Cálculo da área útil de implantação")
-                _formula_box(f"{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)}")
+            if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
+                st.markdown(f"**Na prática, isso significa que a edificação não pode ultrapassar {_fmt_num(to_m2)} m² no chão, considerando a ocupação máxima permitida pela zona.**")
+                if A_recuos is not None and W_util is not None and D_util is not None:
+                    st.markdown("### Opção 1 — usando os recuos da zona")
+                    st.markdown("**No caso de usar todos os recuos conforme a zona, a área útil de implantação fica assim:**")
+                    st.markdown("#### 1. Cálculo da largura útil")
+                    st.markdown(f"A largura original do lote é de **{_fmt_num(lot_front)} m**.")
+                    st.markdown(
+                        f"Como a zona exige:\n"
+                        f"- **{_fmt_num(rec_lat)}** de recuo lateral de um lado\n"
+                        f"- **{_fmt_num(rec_lat)}** de recuo lateral do outro lado\n\n"
+                        f"fazemos:"
+                    )
+                    _formula_box(f"{_fmt_num(lot_front)} − {_fmt_num(rec_lat)} − {_fmt_num(rec_lat)} = {_fmt_num(W_util)}")
+                    st.markdown(f"**Largura útil: {_fmt_num(W_util)}**")
+                    st.markdown("#### 2. Cálculo da profundidade útil")
+                    st.markdown(f"A profundidade original do lote é de **{_fmt_num(lot_depth)} m**.")
+                    st.markdown(
+                        f"Como a zona exige:\n"
+                        f"- **{_fmt_num(rec_fr)}** de recuo frontal\n"
+                        f"- **{_fmt_num(rec_fun)}** de recuo de fundo\n\n"
+                        f"fazemos:"
+                    )
+                    _formula_box(f"{_fmt_num(lot_depth)} − {_fmt_num(rec_fr)} − {_fmt_num(rec_fun)} = {_fmt_num(D_util)}")
+                    st.markdown(f"**Profundidade útil: {_fmt_num(D_util)}**")
+                    st.markdown("#### 3. Cálculo da área útil de implantação")
+                    _formula_box(f"{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)}")
+                    st.markdown(
+                        f"**Leitura prática:** isso significa que, mesmo que a zona permita ocupar até **{_fmt_num(to_m2)} m²** pela TO, "
+                        f"ao aplicar todos os recuos da zona o espaço que realmente sobra para implantar a edificação no térreo fica em **{_fmt_num(A_recuos)} m²**."
+                    )
+                st.markdown("### Opção 2 — no caso do multifamiliar justaposto")
+                st.markdown("**Quando a zona permitir usar os parâmetros do unifamiliar, o projeto pode encostar nas laterais e zerar o recuo frontal.**")
                 st.markdown(
-                    f"### Leitura prática\n👉 **Pela Taxa de Ocupação, o lote poderia ocupar até {_fmt_num(to_m2)} no térreo.**  \n"
-                    f"👉 **Mas, aplicando os recuos obrigatórios da zona, a área que realmente consegue ser implantada no chão fica em {_fmt_num(A_recuos)}.**\n\n"
-                    "Ou seja:\n- a **TO** mostra o limite máximo teórico da zona;\n- os **recuos** mostram o que realmente cabe no lote."
+                    f"👉 **Nesse cenário, o aproveitamento do térreo pode chegar ao limite da TO máxima da zona, que neste caso é de {_fmt_num(to_m2)} m², "
+                    "desde que sejam respeitadas a adequabilidade, a Taxa de Ocupação (TO) e a Taxa de Permeabilidade (TP).**"
                 )
+            else:
+                st.markdown(
+                    "**Mas o que isso significa na prática?**\n"
+                    "A **TO** mostra o limite percentual permitido pela zona. Só que, no projeto real, a implantação também precisa respeitar os **recuos obrigatórios da zona**."
+                )
+                st.markdown(
+                    f"### Recuos da zona\n"
+                    f"- **Frontal:** {_fmt_num(rec_fr)}\n"
+                    f"- **Laterais:** {_fmt_num(rec_lat)}\n"
+                    f"- **Fundo:** {_fmt_num(rec_fun)}"
+                )
+                if W_util is not None and D_util is not None and A_recuos is not None:
+                    st.markdown(f"### Cálculo da largura útil\nA largura original do lote é de **{_fmt_num(lot_front)} m**.")
+                    _formula_box(f"{_fmt_num(lot_front)} − recuos laterais = {_fmt_num(W_util)}")
+                    st.markdown(f"**Largura útil: {_fmt_num(W_util)}**")
+                    st.markdown(f"### Cálculo da profundidade útil\nA profundidade original do lote é de **{_fmt_num(lot_depth)} m**.")
+                    _formula_box(f"{_fmt_num(lot_depth)} − recuo frontal − recuo de fundo = {_fmt_num(D_util)}")
+                    st.markdown(f"**Profundidade útil: {_fmt_num(D_util)}**")
+                    st.markdown("### Cálculo da área útil de implantação")
+                    _formula_box(f"{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)}")
+                    st.markdown(
+                        f"### Leitura prática\n👉 **Pela Taxa de Ocupação, o lote poderia ocupar até {_fmt_num(to_m2)} m² no térreo.**  \n"
+                        f"👉 **Mas, aplicando os recuos obrigatórios da zona, a área que realmente consegue ser implantada no chão fica em {_fmt_num(A_recuos)} m².**\n\n"
+                        "Ou seja:\n- a **TO** mostra o limite máximo teórico da zona;\n- os **recuos** mostram o que realmente cabe no lote."
+                    )
 
     st.markdown("---\n### 🌿 7️⃣ Quanto preciso deixar livre?")
     if tp_min_pct is None or tp_m2 is None:
@@ -778,7 +807,19 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.markdown(f"**A zona exige {_fmt_pct(tp_min_pct)} de área permeável.**")
         _formula_box(f"{_fmt_num(lot_area_f)} × {_fmt_pct(tp_min_pct)} = {_fmt_num(tp_m2)} obrigatórios permeáveis")
         st.markdown("Isso quer dizer que parte do terreno precisa continuar permitindo a infiltração da água da chuva no solo.")
-        if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
+        if a_adotada is not None and area_livre_projeto is not None:
+            st.markdown("### Área livre considerando o seu projeto")
+            st.markdown(f"Considerando **{_fmt_num(a_adotada)} m²** no térreo:")
+            _formula_box(f"{_fmt_num(lot_area_f)} − {_fmt_num(a_adotada)} = {_fmt_num(area_livre_projeto)}")
+            st.markdown(f"**Área livre remanescente no lote: {_fmt_num(area_livre_projeto)} m²**")
+            st.markdown(f"Desses, **{_fmt_num(tp_m2)} m²** precisam permanecer permeáveis.")
+            if area_impermavel_pos_tp is not None:
+                st.markdown(f"Assim, **{_fmt_num(area_impermavel_pos_tp)} m²** ainda podem receber piso impermeável, desde que o restante seja mantido como área permeável.")
+            st.markdown(
+                "👉 **Leitura prática:** a área livre remanescente não é automaticamente toda permeável, "
+                "mas ela mostra se existe espaço suficiente no lote para atender a **TP mínima** exigida."
+            )
+        elif multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
             if A_recuos is not None and tp_rest_recuos is not None and tp_imperm_recuos is not None:
                 st.markdown("### Cenário 1 — usando a implantação pelos recuos da zona")
                 st.markdown(
@@ -817,15 +858,21 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         st.markdown("**Além do limite no térreo, existe o limite total permitido.**")
         st.markdown(f"**Índice de Aproveitamento (IA): {_fmt_num(ia_max, 2)}**")
         _formula_box(f"{_fmt_num(lot_area_f)} × {_fmt_num(ia_max, 2)} = {_fmt_num(ia_m2)} no total")
-        st.markdown(f"Isso significa que você pode distribuir até **{_fmt_num(ia_m2)}** somando todos os pavimentos.")
-        st.markdown(f"**Altura permitida máxima da zona: {_fmt_num(gabarito_f)}**")
+        st.markdown(f"Isso significa que você pode distribuir até **{_fmt_num(ia_m2)} m²** somando todos os pavimentos.")
+        if a_adotada is not None:
+            st.markdown(f"Considerando **{_fmt_num(a_adotada)} m²** já adotados no térreo:")
+            if ia_saldo is not None:
+                _formula_box(f"{_fmt_num(ia_m2)} − {_fmt_num(a_adotada)} = {_fmt_num(ia_saldo)}")
+                st.markdown(f"**Saldo estimado para crescer acima do térreo: {_fmt_num(ia_saldo)} m²**")
+            if ia_consumido_terreo is not None:
+                st.markdown(f"A área adotada no térreo já consome aproximadamente **{_fmt_pct(ia_consumido_terreo * 100.0)}** da área do lote em índice equivalente no primeiro pavimento de ocupação.")
+        st.markdown(f"**Altura permitida máxima da zona: {_fmt_num(gabarito_f)} m**")
         if pav_est:
             st.markdown(
                 "**Estimativa simples para ter noção do número de pavimentos:**  \n"
                 "essa leitura serve apenas como referência inicial. O número real de andares depende do projeto, do pé-direito adotado, "
                 "da estrutura, da circulação vertical e das demais exigências aplicáveis."
             )
-
     st.markdown("---\n### 🚗 9️⃣ Vagas de estacionamento")
     st.markdown(
         "**A quantidade de vagas depende do tamanho da unidade habitacional.**\n\n"
@@ -844,7 +891,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     render_quadro_tecnico()
     st.markdown("---\n### 🚶 1️⃣1️⃣ O que preciso saber sobre a calçada?")
     st.markdown("**A análise do terreno não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação com a rua.**")
-    render_figuras_anexo_v(rule or {})
+    render_figuras_anexo_v(rule or {}, is_corner=is_corner)
 
     st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
     _render_dicas_valiosas(multi_tipo, use_type_code)
@@ -866,6 +913,10 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         f"- **TO máxima:** {_fmt_pct(to_max_pct)}\n"
         f"- **TP mínima:** {_fmt_pct(tp_min_pct)}\n"
         f"- **IA máximo:** {_fmt_num(ia_max, 2) if ia_max not in (None, '') else '—'}\n"
+        f"- **Área considerada no térreo:** {_fmt_num(a_adotada) if a_adotada is not None else '—'} m²\n"
+        f"- **TO efetiva do projeto:** {_fmt_pct(to_utilizada_pct) if to_utilizada_pct is not None else '—'}\n"
+        f"- **Área livre remanescente:** {_fmt_num(area_livre_projeto) if area_livre_projeto is not None else '—'} m²\n"
+        f"- **Saldo estimado pelo IA para crescer acima:** {_fmt_num(ia_saldo) if ia_saldo is not None else '—'} m²\n"
         f"- **Altura permitida máxima:** {_fmt_num(gabarito_f)} m"
     )
     tipo_sigla = "R2.1" if (multi_tipo in ("R21","R2.1","R2_1") or use_type_code.endswith("R21")) else ("R2.2" if (multi_tipo in ("R22","R2.2","R2_2") or use_type_code.endswith("R22")) else "R3")
@@ -873,8 +924,9 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         "👉 **Em resumo:**\n"
         f"- o uso residencial multifamiliar **{tipo_sigla}** foi considerado **{status_curto.lower()}** neste terreno;\n"
         f"- a zona permite ocupar até **{_fmt_pct(to_max_pct)}** do lote no térreo;\n"
-        f"- pelo menos **{_fmt_pct(tp_min_pct)}** do terreno precisa continuar permeável;\n"
-        f"- a construção pode chegar até **{_fmt_num(ia_max, 2) if ia_max not in (None, '') else '—'}** vezes a área do lote no total;\n"
+        f"- o relatório está considerando **{_fmt_num(a_adotada) if a_adotada is not None else '—'} m²** no térreo, com **TO efetiva de {_fmt_pct(to_utilizada_pct) if to_utilizada_pct is not None else '—'}**;\n"
+        f"- pelo menos **{_fmt_pct(tp_min_pct)}** do terreno precisa continuar permeável, e a área livre remanescente estimada é de **{_fmt_num(area_livre_projeto) if area_livre_projeto is not None else '—'} m²**;\n"
+        f"- a construção pode chegar até **{_fmt_num(ia_max, 2) if ia_max not in (None, '') else '—'}** vezes a área do lote no total, com saldo estimado de **{_fmt_num(ia_saldo) if ia_saldo is not None else '—'} m²** para crescer acima;\n"
         f"- e a altura deve respeitar o limite máximo permitido da zona."
     )
 
