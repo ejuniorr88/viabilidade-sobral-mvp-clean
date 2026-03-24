@@ -64,3 +64,19 @@ def test_unifamiliar_checklist_is_textual_not_disabled_checkbox() -> None:
     )
     assert "[ ] Documento de identidade do requerente ou representante legal" in txt
     assert "[ ] Requerimento único" in txt
+
+
+
+def test_unifamiliar_key_sections_do_not_repeat() -> None:
+    txt = _read("ui/relatorio.py")
+
+    unique_anchors = [
+        "### 🧱 7️⃣ Tipos de piso: o que conta como permeável?",
+        "### 🚗 9️⃣ Preciso de vagas de estacionamento?",
+        "### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?",
+    ]
+
+    for anchor in unique_anchors:
+        assert txt.count(anchor) == 1, (
+            f"Seção crítica do unifamiliar apareceu duplicada: {anchor}"
+        )
