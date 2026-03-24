@@ -1,3 +1,4 @@
+import pytest
 import importlib
 import sys
 import types
@@ -128,6 +129,12 @@ sys.modules["core.pix_gateway"] = core_pix_stub
 coupons = importlib.import_module("core.coupons")
 payments = importlib.import_module("core.payments")
 payments_panel = importlib.import_module("ui.payments_panel")
+
+
+@pytest.fixture(autouse=True)
+def _bind_streamlit_stub(monkeypatch):
+    monkeypatch.setattr(payments_panel, "st", st_stub, raising=False)
+    monkeypatch.setattr(payments, "st", st_stub, raising=False)
 
 
 class FakeResponse:
@@ -533,11 +540,18 @@ def test_list_coupon_usage_report_enriches_filters_and_summarizes(monkeypatch):
     }
     monkeypatch.setattr(coupons, "get_supabase_server_client", lambda: FakeSupabase(db))
 
-    result = coupons.list_coupon_usage_report(coupon_code="LANCAMENTO10", owner_email="owner@example.com", payment_status="paid")
+    enriched = coupons.list_coupon_usages_enriched(limit=50)
+    filtered = coupons.filter_coupon_usages(
+        enriched,
+        coupon_code="LANCAMENTO10",
+        owner_email="owner@example.com",
+        payment_status="paid",
+    )
+    summary = coupons.summarize_coupon_usages(filtered)
 
-    assert result["summary"]["total_usos"] == 1
-    assert result["summary"]["usos_pagos"] == 1
-    assert result["summary"]["desconto_total"] == 10.0
-    assert result["summary"]["valor_final_total"] == 90.0
-    assert result["rows"][0]["owner_email"] == "owner@example.com"
-    assert result["rows"][0]["coupon_code"] == "LANCAMENTO10"
+    assert summary["total_uses"] == 1
+    assert summary["total_paid_uses"] == 1
+    assert summary["total_discount"] == 10.0
+    assert summary["total_final_amount"] == 90.0
+    assert filtered[0]["owner_email"] == "owner@example.com"
+    assert filtered[0]["coupon_code"] == "LANCAMENTO10"

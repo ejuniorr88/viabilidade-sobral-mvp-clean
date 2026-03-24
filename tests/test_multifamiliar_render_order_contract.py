@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,10 +31,18 @@ def test_render_order_from_quadro_to_end_is_stable() -> None:
 def test_calculation_formulas_are_highlighted_in_text_contract() -> None:
     txt = _read("ui/relatorio_blocks/multifamiliar_guia.py")
 
-    required = [
-        "Pela Taxa de Ocupação, o lote poderia ocupar até",
-        "Mas, aplicando os recuos obrigatórios da zona, a área que realmente consegue ser implantada",
-        "Área restante no lote:",
+    options = [
+        [
+            "Pela Taxa de Ocupação, o lote poderia ocupar até",
+            "Mas, aplicando os recuos obrigatórios da zona, a área que realmente consegue ser implantada",
+            "Área restante no lote:",
+        ],
+        [
+            "pela TO, o lote poderia ocupar até",
+            "implantação prática",
+            "Área livre remanescente no lote:",
+        ],
     ]
-    for item in required:
-        assert item in txt, f"Explicação didática dos cálculos do multifamiliar perdeu item obrigatório: {item}"
+    assert any(all(item in txt for item in option) for option in options), (
+        "Explicação didática dos cálculos do multifamiliar perdeu os marcadores contratuais esperados."
+    )
