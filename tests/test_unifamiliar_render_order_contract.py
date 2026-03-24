@@ -37,3 +37,22 @@ def test_unifamiliar_json_block_stays_after_fechamento_header_only() -> None:
     assert 'with st.expander("Ver regra completa (JSON)")' in after, (
         "O expander de JSON pode existir no fluxo do unifamiliar, mas o fechamento final precisa continuar presente."
     )
+
+
+
+def test_unifamiliar_final_anchors_are_unique() -> None:
+    txt = _read("ui/relatorio.py")
+
+    unique_anchors = [
+        "### 🧱 7️⃣ Tipos de piso: o que conta como permeável?",
+        "### 🚗 9️⃣ Preciso de vagas de estacionamento?",
+        "### 💡 1️⃣2️⃣ Dicas valiosas",
+        "### 📌 1️⃣3️⃣ Resumo rápido final",
+        "### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?",
+        "### ✅ 1️⃣5️⃣ Fechamento final",
+    ]
+
+    for anchor in unique_anchors:
+        assert txt.count(anchor) == 1, (
+            f"Âncora do unifamiliar deve aparecer uma única vez no arquivo: {anchor}"
+        )
