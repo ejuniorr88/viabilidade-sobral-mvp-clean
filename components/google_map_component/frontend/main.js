@@ -1,5 +1,4 @@
 (function () {
-  const rootEl = document.getElementById("root");
   const mapEl = document.getElementById("map");
   const statusEl = document.getElementById("status");
 
