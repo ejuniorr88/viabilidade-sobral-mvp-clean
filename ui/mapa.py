@@ -114,7 +114,7 @@ def _render_google_map_section(
         api_key=api_key,
         center_lat=-3.689,
         center_lng=-40.349,
-        zoom=12,
+        zoom=13,
         click_lat=click_lat,
         click_lng=click_lon,
         radius_m=radius_m,
