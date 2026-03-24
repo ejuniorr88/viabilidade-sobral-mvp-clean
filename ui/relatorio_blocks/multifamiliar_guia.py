@@ -840,7 +840,6 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             )
 
     st.markdown("---\n### 🚗 9️⃣ Vagas de estacionamento")
-    st.markdown("---\n### 🚗 9️⃣ Vagas de estacionamento")
     st.markdown(
         "**A quantidade de vagas depende do tamanho da unidade habitacional.**\n\n"
         "Regras:\n"
