@@ -402,7 +402,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             )
 
     st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
-    st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
     st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
     st.markdown(
         _md_table(
@@ -445,7 +444,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
                 "👉 Isso é apenas uma referência inicial. Na prática, a quantidade real de andares depende também da laje, cobertura, "
                 "platibanda, caixa d’água e da forma como o projeto será desenvolvido."
             )
-    st.markdown("---\n### 🚗 9️⃣ Preciso de vagas de estacionamento?")
     st.markdown("---\n### 🚗 9️⃣ Preciso de vagas de estacionamento?")
     st.success("**Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento.**")
     st.markdown("Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.")
@@ -528,7 +526,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "e a altura deve respeitar o limite da zona."
         )
 
-    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     st.markdown(
         "Após a finalização dos projetos, será necessário dar entrada na documentação junto à **Prefeitura** para obter o **alvará de construção**.\n\n"
