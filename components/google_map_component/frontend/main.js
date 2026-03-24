@@ -5,7 +5,7 @@
   let map = null;
   let marker = null;
   let circle = null;
-  let zoneBadge = null;
+  let zoneHoverLabel = null;
   let currentGeoJsonHash = null;
   let currentArgs = {};
   let googleMapsPromise = null;
@@ -67,41 +67,49 @@
     }
   }
 
-  function ensureZoneBadge() {
-    if (zoneBadge) return;
-    zoneBadge = document.createElement("div");
-    zoneBadge.style.position = "absolute";
-    zoneBadge.style.top = "12px";
-    zoneBadge.style.right = "64px";
-    zoneBadge.style.zIndex = "5";
-    zoneBadge.style.padding = "6px 10px";
-    zoneBadge.style.borderRadius = "999px";
-    zoneBadge.style.background = "rgba(255,255,255,0.92)";
-    zoneBadge.style.border = "1px solid rgba(0,0,0,0.10)";
-    zoneBadge.style.boxShadow = "0 1px 4px rgba(0,0,0,0.10)";
-    zoneBadge.style.fontSize = "12px";
-    zoneBadge.style.fontWeight = "600";
-    zoneBadge.style.color = "#334155";
-    zoneBadge.style.pointerEvents = "none";
-    zoneBadge.style.display = "none";
-    zoneBadge.style.backdropFilter = "blur(2px)";
+  function ensureZoneHoverLabel() {
+    if (zoneHoverLabel) return;
+    zoneHoverLabel = document.createElement("div");
+    zoneHoverLabel.style.position = "absolute";
+    zoneHoverLabel.style.zIndex = "10";
+    zoneHoverLabel.style.padding = "4px 8px";
+    zoneHoverLabel.style.borderRadius = "6px";
+    zoneHoverLabel.style.background = "rgba(255,255,255,0.94)";
+    zoneHoverLabel.style.border = "1px solid rgba(37,99,235,0.18)";
+    zoneHoverLabel.style.boxShadow = "0 1px 4px rgba(0,0,0,0.12)";
+    zoneHoverLabel.style.fontSize = "12px";
+    zoneHoverLabel.style.fontWeight = "600";
+    zoneHoverLabel.style.color = "#1e3a8a";
+    zoneHoverLabel.style.pointerEvents = "none";
+    zoneHoverLabel.style.whiteSpace = "nowrap";
+    zoneHoverLabel.style.display = "none";
+    zoneHoverLabel.style.backdropFilter = "blur(2px)";
     mapEl.parentElement.style.position = "relative";
-    mapEl.parentElement.appendChild(zoneBadge);
+    mapEl.parentElement.appendChild(zoneHoverLabel);
   }
 
-  function showZoneBadge(label) {
-    ensureZoneBadge();
-    if (!label) {
-      zoneBadge.style.display = "none";
+  function showZoneHoverLabel(label, domEvent) {
+    ensureZoneHoverLabel();
+    if (!label || !domEvent) {
+      zoneHoverLabel.style.display = "none";
       return;
     }
-    zoneBadge.textContent = "Zona: " + String(label);
-    zoneBadge.style.display = "block";
+
+    const rect = mapEl.getBoundingClientRect();
+    const clientX = Number(domEvent.clientX || 0);
+    const clientY = Number(domEvent.clientY || 0);
+    const left = Math.max(8, clientX - rect.left + 12);
+    const top = Math.max(8, clientY - rect.top + 12);
+
+    zoneHoverLabel.textContent = String(label);
+    zoneHoverLabel.style.left = left + "px";
+    zoneHoverLabel.style.top = top + "px";
+    zoneHoverLabel.style.display = "block";
   }
 
-  function hideZoneBadge() {
-    if (zoneBadge) {
-      zoneBadge.style.display = "none";
+  function hideZoneHoverLabel() {
+    if (zoneHoverLabel) {
+      zoneHoverLabel.style.display = "none";
     }
   }
 
@@ -143,7 +151,7 @@
     const features = [];
     map.data.forEach((feature) => features.push(feature));
     features.forEach((feature) => map.data.remove(feature));
-    hideZoneBadge();
+    hideZoneHoverLabel();
   }
 
   function setMarkerAndCircle(lat, lng, radiusM) {
@@ -226,11 +234,16 @@
     if (map.data && !dataLayerHoverListenersAttached) {
       map.data.addListener("mouseover", function (event) {
         const label = getFeatureLabel(event.feature);
-        showZoneBadge(label);
+        showZoneHoverLabel(label, event.domEvent);
+      });
+
+      map.data.addListener("mousemove", function (event) {
+        const label = getFeatureLabel(event.feature);
+        showZoneHoverLabel(label, event.domEvent);
       });
 
       map.data.addListener("mouseout", function () {
-        hideZoneBadge();
+        hideZoneHoverLabel();
       });
 
       dataLayerHoverListenersAttached = true;
@@ -285,7 +298,6 @@
         streetViewControl: false,
         fullscreenControl: true,
         clickableIcons: false,
-        // greedy faz o zoom/pinch responder dentro do mapa sem misturar com o scroll da página
         gestureHandling: "greedy",
         scrollwheel: true,
         disableDoubleClickZoom: false,
