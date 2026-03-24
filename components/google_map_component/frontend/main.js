@@ -283,7 +283,8 @@
       lng: Number(args.click_lng != null ? args.click_lng : args.center_lng),
     };
 
-    const zoom = Number(args.click_lat != null && args.click_lng != null ? 19 : (args.zoom || 12));
+    // Ajuste fino: carga inicial um pouco mais próxima da cidade.
+    const zoom = Number(args.click_lat != null && args.click_lng != null ? 19 : (args.zoom || 13));
 
     if (!map) {
       map = new google.maps.Map(mapEl, {
