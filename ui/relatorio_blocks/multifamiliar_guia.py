@@ -852,8 +852,6 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         f"👉 **Na prática:** como o **{_tipo_multifamiliar_label(multi_tipo, use_type_code).split(' — ')[0]}** é multifamiliar, essa lógica de vagas entra no cálculo do estudo."
     )
 
-    st.markdown("---\n### 📋 1️⃣0️⃣ Quais medidas mínimas os ambientes precisam ter?")
-    st.markdown("**Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação. Isso vale para itens como sala, quartos, cozinha, banheiro, área de serviço, garagem e escada.**")
     render_quadro_tecnico()
     st.markdown("---\n### 🚶 1️⃣1️⃣ O que preciso saber sobre a calçada?")
     st.markdown("**A análise do terreno não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação com a rua.**")
