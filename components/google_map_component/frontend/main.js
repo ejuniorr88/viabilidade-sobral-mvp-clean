@@ -9,7 +9,9 @@
   let currentGeoJsonHash = null;
   let currentArgs = {};
   let googleMapsPromise = null;
-  let pendingRenderAfterGoogleLoad = false;
+  let mapClickListenerAttached = false;
+  let dataLayerClickListenerAttached = false;
+  let hasUserInteracted = false;
 
   function sendMessageToStreamlitClient(type, data) {
     const outData = Object.assign(
@@ -35,11 +37,14 @@
   }
 
   function resizeFrame(extra) {
-    const rootHeight = Math.max(rootEl.scrollHeight, document.documentElement.clientHeight || 0);
+    const rootHeight = rootEl
+      ? Math.max(rootEl.scrollHeight, document.documentElement.clientHeight || 0)
+      : Math.max(document.body.scrollHeight, document.documentElement.clientHeight || 0);
     setFrameHeight(Math.max(rootHeight + (extra || 0), 440));
   }
 
   function showStatus(message, type) {
+    if (!statusEl) return;
     statusEl.className = type || "info";
     statusEl.textContent = message;
     statusEl.style.display = "block";
@@ -47,6 +52,7 @@
   }
 
   function hideStatus() {
+    if (!statusEl) return;
     statusEl.textContent = "";
     statusEl.style.display = "none";
     resizeFrame(4);
@@ -73,7 +79,9 @@
       const callbackName = "__streamlitGoogleMapInit";
       window[callbackName] = function () {
         resolve();
-        try { delete window[callbackName]; } catch (e) {}
+        try {
+          delete window[callbackName];
+        } catch (e) {}
       };
 
       const script = document.createElement("script");
@@ -100,6 +108,74 @@
     features.forEach((feature) => map.data.remove(feature));
   }
 
+  function setMarkerAndCircle(lat, lng, radiusM) {
+    if (!map || !window.google || !window.google.maps) return;
+
+    const position = { lat: Number(lat), lng: Number(lng) };
+    const radius = Number(radiusM || 100);
+
+    if (!marker) {
+      marker = new google.maps.Marker({
+        map: map,
+        position: position,
+        title: "Ponto selecionado",
+      });
+    } else {
+      marker.setPosition(position);
+    }
+
+    if (!circle) {
+      circle = new google.maps.Circle({
+        map: map,
+        center: position,
+        radius: radius,
+        strokeColor: "#3367d6",
+        strokeOpacity: 0.8,
+        strokeWeight: 1,
+        fillColor: "#3367d6",
+        fillOpacity: 0.08,
+      });
+    } else {
+      circle.setCenter(position);
+      circle.setRadius(radius);
+    }
+  }
+
+  function buildClickPayload(lat, lng) {
+    return {
+      clicked_lat: Number(lat),
+      clicked_lng: Number(lng),
+      click_hash: Number(lat).toFixed(8) + "_" + Number(lng).toFixed(8),
+      source: "google",
+    };
+  }
+
+  function handlePointSelection(lat, lng) {
+    hasUserInteracted = true;
+    setMarkerAndCircle(lat, lng, Number(currentArgs.radius_m || 100));
+    sendDataToPython(buildClickPayload(lat, lng));
+  }
+
+  function attachListeners() {
+    if (!map || !window.google || !window.google.maps) return;
+
+    if (!mapClickListenerAttached) {
+      map.addListener("click", function (event) {
+        if (!event || !event.latLng) return;
+        handlePointSelection(event.latLng.lat(), event.latLng.lng());
+      });
+      mapClickListenerAttached = true;
+    }
+
+    if (map.data && !dataLayerClickListenerAttached) {
+      map.data.addListener("click", function (event) {
+        if (!event || !event.latLng) return;
+        handlePointSelection(event.latLng.lat(), event.latLng.lng());
+      });
+      dataLayerClickListenerAttached = true;
+    }
+  }
+
   function applyGeoJson(zonesGeojson) {
     if (!map || !map.data) return;
 
@@ -119,52 +195,12 @@
           fillOpacity: 0.08,
           strokeColor: "#3355aa",
           strokeWeight: 1,
+          clickable: true,
         };
       });
     } catch (err) {
       console.error("Erro ao carregar GeoJSON no Google Maps:", err);
     }
-  }
-
-  function setMarkerAndCircle(lat, lng, radiusM) {
-    if (!map || !window.google || !window.google.maps) return;
-
-    const position = { lat: Number(lat), lng: Number(lng) };
-
-    if (!marker) {
-      marker = new google.maps.Marker({
-        map: map,
-        position: position,
-        title: "Ponto selecionado",
-      });
-    } else {
-      marker.setPosition(position);
-    }
-
-    if (!circle) {
-      circle = new google.maps.Circle({
-        map: map,
-        center: position,
-        radius: Number(radiusM || 100),
-        strokeColor: "#3367d6",
-        strokeOpacity: 0.8,
-        strokeWeight: 1,
-        fillColor: "#3367d6",
-        fillOpacity: 0.08,
-      });
-    } else {
-      circle.setCenter(position);
-      circle.setRadius(Number(radiusM || 100));
-    }
-  }
-
-  function buildClickPayload(lat, lng) {
-    return {
-      clicked_lat: Number(lat),
-      clicked_lng: Number(lng),
-      click_hash: Number(lat).toFixed(8) + "_" + Number(lng).toFixed(8),
-      source: "google",
-    };
   }
 
   function ensureMap(args) {
@@ -183,23 +219,32 @@
         streetViewControl: false,
         fullscreenControl: true,
         clickableIcons: false,
-      });
-
-      map.addListener("click", function (event) {
-        const lat = event.latLng.lat();
-        const lng = event.latLng.lng();
-        setMarkerAndCircle(lat, lng, Number(currentArgs.radius_m || 100));
-        sendDataToPython(buildClickPayload(lat, lng));
+        gestureHandling: "greedy",
+        scrollwheel: true,
+        disableDoubleClickZoom: false,
       });
     } else {
-      map.setCenter(center);
-      map.setZoom(zoom);
+      // Recentraliza apenas quando ainda não houve interação do usuário
+      // ou quando existe ponto clicado vindo do Python.
+      if (!hasUserInteracted || (args.click_lat != null && args.click_lng != null)) {
+        map.setCenter(center);
+      }
+
+      // Evita resetar o zoom em toda renderização; só aplica se ainda não houve interação.
+      if (!hasUserInteracted && Number.isFinite(zoom)) {
+        map.setZoom(zoom);
+      }
     }
 
     applyGeoJson(args.zones_geojson);
+    attachListeners();
 
     if (args.click_lat != null && args.click_lng != null) {
-      setMarkerAndCircle(Number(args.click_lat), Number(args.click_lng), Number(args.radius_m || 100));
+      setMarkerAndCircle(
+        Number(args.click_lat),
+        Number(args.click_lng),
+        Number(args.radius_m || 100)
+      );
     }
 
     hideStatus();
@@ -208,7 +253,9 @@
 
   function renderFromArgs(args) {
     currentArgs = args || {};
-    mapEl.style.height = String(Number(currentArgs.height || 420)) + "px";
+    if (mapEl) {
+      mapEl.style.height = String(Number(currentArgs.height || 420)) + "px";
+    }
 
     if (!currentArgs.api_key) {
       showStatus(
