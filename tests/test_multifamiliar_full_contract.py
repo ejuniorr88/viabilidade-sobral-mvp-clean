@@ -1,3 +1,4 @@
+import pytest
 import importlib
 import sys
 import types
@@ -128,6 +129,12 @@ sys.modules["core.pix_gateway"] = core_pix_stub
 coupons = importlib.import_module("core.coupons")
 payments = importlib.import_module("core.payments")
 payments_panel = importlib.import_module("ui.payments_panel")
+
+
+@pytest.fixture(autouse=True)
+def _bind_streamlit_stub(monkeypatch):
+    monkeypatch.setattr(payments_panel, "st", st_stub, raising=False)
+    monkeypatch.setattr(payments, "st", st_stub, raising=False)
 
 
 class FakeResponse:
