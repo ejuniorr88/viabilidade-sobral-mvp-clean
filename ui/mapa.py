@@ -65,7 +65,7 @@ def _apply_click_update(
 ) -> bool:
     """Aplica atualização de clique no session_state.
 
-    Retorna True quando houve mudança de ponto e é necessário rerun.
+    Retorna True quando houve mudança de ponto.
     """
     new_hash = f"{new_lat:.8f}_{new_lon:.8f}"
     if new_hash == st.session_state.get(state_key_click_hash):
@@ -119,7 +119,7 @@ def _render_google_map_section(
         api_key=api_key,
         center_lat=click_lat if click_lat is not None else -3.689,
         center_lng=click_lon if click_lon is not None else -40.349,
-        zoom=12,
+        zoom=19,
         click_lat=click_lat,
         click_lng=click_lon,
         radius_m=radius_m,
@@ -136,15 +136,16 @@ def _render_google_map_section(
     if clicked_lat is None or clicked_lng is None:
         return True
 
-    if _apply_click_update(
+    # Importante: NÃO usar st.rerun() aqui.
+    # O componente customizado já provoca rerender no Streamlit ao enviar setComponentValue.
+    _apply_click_update(
         float(clicked_lat),
         float(clicked_lng),
         state_key_last_click=state_key_last_click,
         state_key_click_hash=state_key_click_hash,
         state_key_calc=state_key_calc,
         radius_m=radius_m,
-    ):
-        st.rerun()
+    )
     return True
 
 
@@ -197,15 +198,14 @@ def render_mapa_section(
         if out and out.get("last_clicked"):
             new_lat = float(out["last_clicked"]["lat"])
             new_lon = float(out["last_clicked"]["lng"])
-            if _apply_click_update(
+            _apply_click_update(
                 new_lat,
                 new_lon,
                 state_key_last_click=state_key_last_click,
                 state_key_click_hash=state_key_click_hash,
                 state_key_calc=state_key_calc,
                 radius_m=int(radius_m),
-            ):
-                st.rerun()
+            )
 
     if st.session_state.get(state_key_last_click):
         st.caption(
