@@ -24,6 +24,7 @@ def render_google_map(
     radius_m: int = 100,
     zones_geojson: Dict[str, Any] | None = None,
     height: int = 420,
+    key: str | None = None,
 ) -> Optional[Dict[str, Any]]:
     return _google_map_component(
         api_key=api_key,
@@ -36,4 +37,5 @@ def render_google_map(
         zones_geojson=zones_geojson,
         height=int(height),
         default=None,
+        key=key,
     )
