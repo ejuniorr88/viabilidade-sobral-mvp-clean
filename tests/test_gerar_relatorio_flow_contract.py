@@ -60,3 +60,19 @@ def test_gerar_relatorio_flow_contract_keeps_zone_description_and_figures_hooks(
     ]
     for item in required:
         assert item in relatorio, f"ui/relatorio.py perdeu hook crítico do fluxo de relatório: {item}"
+
+
+def test_gerar_relatorio_flow_contract_keeps_signature_lock_and_pre_generation_guard() -> None:
+    app_py = _read(ROOT / 'app.py')
+
+    required = [
+        'report_unlocked_signature',
+        'report_unlocked_for_current_signature',
+        'current_report_signature = build_report_signature(',
+        'preview_pdf_bytes = generate_report_pdf_bytes(',
+        'st.session_state["last_generated_pdf_bytes"] = preview_pdf_bytes',
+        'st.session_state.report_unlocked_signature = current_report_signature',
+        'Não foi possível preparar o relatório antes de descontar o crédito',
+    ]
+    for item in required:
+        assert item in app_py, f"Fluxo de geração do relatório perdeu a proteção crítica contra consumo indevido: {item}"
