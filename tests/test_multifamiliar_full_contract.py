@@ -555,3 +555,12 @@ def test_list_coupon_usage_report_enriches_filters_and_summarizes(monkeypatch):
     assert summary["total_final_amount"] == 90.0
     assert filtered[0]["owner_email"] == "owner@example.com"
     assert filtered[0]["coupon_code"] == "LANCAMENTO10"
+
+
+
+def test_multifamiliar_alvara_block_does_not_repeat() -> None:
+    from pathlib import Path
+
+    txt = (Path(__file__).resolve().parents[1] / "ui" / "relatorio_blocks" / "multifamiliar_guia.py").read_text(encoding="utf-8")
+    anchor = "### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?"
+    assert txt.count(anchor) == 1, "Bloco final do alvará do multifamiliar apareceu duplicado."
