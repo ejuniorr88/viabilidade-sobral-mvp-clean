@@ -28,7 +28,6 @@ def _get_google_maps_api_key() -> str:
 
 
 def _render_folium_map(zones_gj, lat0=-3.689, lon0=-40.349, click_lat=None, click_lon=None):
-    """Renderiza mapa Folium + GeoJson de zonas e marcador do clique."""
     m = folium.Map(
         location=[lat0, lon0],
         zoom_start=12,
@@ -63,10 +62,6 @@ def _apply_click_update(
     state_key_calc: str,
     radius_m: int,
 ) -> bool:
-    """Aplica atualização de clique no session_state.
-
-    Retorna True quando houve mudança de ponto.
-    """
     new_hash = f"{new_lat:.8f}_{new_lon:.8f}"
     if new_hash == st.session_state.get(state_key_click_hash):
         return False
@@ -117,14 +112,15 @@ def _render_google_map_section(
 
     result = render_google_map(
         api_key=api_key,
-        center_lat=click_lat if click_lat is not None else -3.689,
-        center_lng=click_lon if click_lon is not None else -40.349,
-        zoom=19,
+        center_lat=-3.689,
+        center_lng=-40.349,
+        zoom=12,
         click_lat=click_lat,
         click_lng=click_lon,
         radius_m=radius_m,
         zones_geojson=zones_gj,
         height=420,
+        key="google_map_section_main",
     ) or {}
 
     if result.get("error"):
@@ -136,8 +132,6 @@ def _render_google_map_section(
     if clicked_lat is None or clicked_lng is None:
         return True
 
-    # Importante: NÃO usar st.rerun() aqui.
-    # O componente customizado já provoca rerender no Streamlit ao enviar setComponentValue.
     _apply_click_update(
         float(clicked_lat),
         float(clicked_lng),
@@ -157,10 +151,6 @@ def render_mapa_section(
     state_key_calc: str = "calc",
     default_radius_m: int = 100,
 ) -> int:
-    """Seção 1) Mapa + raio.
-
-    Mantém o contrato atual do app e permite trocar apenas o provedor visual do mapa.
-    """
     st.subheader("1) Selecione o ponto no mapa")
 
     radius_m = st.number_input(
