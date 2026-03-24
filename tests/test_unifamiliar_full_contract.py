@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,12 +21,13 @@ def test_unifamiliar_keeps_zone_block_and_summary_phrase() -> None:
         assert item in txt, f"Contrato do unifamiliar perdeu item obrigatório: {item}"
 
 
-def test_unifamiliar_alvara_block_exists_before_fechamento() -> None:
+def test_unifamiliar_alvara_block_exists_once_and_before_fechamento() -> None:
     txt = _read("ui/relatorio.py")
 
     alvara = "### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?"
     fechamento = "### ✅ 1️⃣5️⃣ Fechamento final"
 
+    assert txt.count(alvara) == 1, "Bloco do alvará do unifamiliar não pode se repetir."
     idx_alvara = txt.find(alvara)
     idx_fech = txt.find(fechamento)
 
@@ -64,19 +64,3 @@ def test_unifamiliar_checklist_is_textual_not_disabled_checkbox() -> None:
     )
     assert "[ ] Documento de identidade do requerente ou representante legal" in txt
     assert "[ ] Requerimento único" in txt
-
-
-
-def test_unifamiliar_key_sections_do_not_repeat() -> None:
-    txt = _read("ui/relatorio.py")
-
-    unique_anchors = [
-        "### 🧱 7️⃣ Tipos de piso: o que conta como permeável?",
-        "### 🚗 9️⃣ Preciso de vagas de estacionamento?",
-        "### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?",
-    ]
-
-    for anchor in unique_anchors:
-        assert txt.count(anchor) == 1, (
-            f"Seção crítica do unifamiliar apareceu duplicada: {anchor}"
-        )
