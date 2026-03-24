@@ -352,11 +352,18 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
                 f"o limite físico pelos recuos fica em **{_fmt_num(A_op1_max)} m²**."
             )
         if A_considerada is not None and to_projeto_pct is not None:
-            st.markdown(
-                f"**Leitura prática:** a zona permite chegar até **{_fmt_num(A_to)} m²** no térreo, "
-                f"mas o seu projeto está considerando **{_fmt_num(A_considerada)} m²**, "
-                f"o que corresponde a uma **TO efetiva de {_fmt_pct(to_projeto_pct)}**."
-            )
+            if built_ground is not None and built_ground > A_considerada:
+                st.markdown(
+                    f"**Leitura prática:** a área pretendida de **{_fmt_num(built_ground)} m²** excedeu o limite admissível neste caso. "
+                    f"Por isso, o relatório adotou **{_fmt_num(A_considerada)} m²** como base dos cálculos, "
+                    f"o que corresponde a uma **TO efetiva de {_fmt_pct(to_projeto_pct)}**."
+                )
+            else:
+                st.markdown(
+                    f"**Leitura prática:** a zona permite chegar até **{_fmt_num(A_to)} m²** no térreo, "
+                    f"e o seu projeto está considerando **{_fmt_num(A_considerada)} m²**, "
+                    f"o que corresponde a uma **TO efetiva de {_fmt_pct(to_projeto_pct)}**."
+                )
         else:
             st.markdown(
                 f"**Leitura prática:** pela TO, o lote pode ocupar até **{_fmt_num(A_to)} m²** no térreo. "
@@ -373,9 +380,14 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "Isso quer dizer que parte do terreno precisa continuar ajudando na absorção da água da chuva."
         )
         if A_considerada is not None and A_livre is not None:
-            st.markdown(
-                f"Com a área considerada de **{_fmt_num(A_considerada)} m²** no térreo, a **Área livre remanescente** no lote é de **{_fmt_num(A_livre)} m²**."
-            )
+            if built_ground is not None and built_ground > A_considerada:
+                st.markdown(
+                    f"Como a área pretendida de **{_fmt_num(built_ground)} m²** ultrapassou o limite admissível, a conta da área livre foi feita com a área adotada de **{_fmt_num(A_considerada)} m²** no térreo."
+                )
+            else:
+                st.markdown(
+                    f"Com a área considerada de **{_fmt_num(A_considerada)} m²** no térreo, a **Área livre remanescente** no lote é de **{_fmt_num(A_livre)} m²**."
+                )
             if A_impermeavel_possivel is not None:
                 st.markdown(
                     f"Desses, pelo menos **{_fmt_num(A_perm_min)} m²** devem permanecer permeáveis, e até **{_fmt_num(A_impermeavel_possivel)} m²** podem receber piso impermeável, desde que o projeto consiga preservar a faixa permeável necessária."
@@ -437,9 +449,14 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             f"Isso significa que você pode distribuir até **{_fmt_num(A_total)} m²** somando todos os pavimentos."
         )
         if A_considerada is not None:
-            st.markdown(
-                f"Considerando **{_fmt_num(A_considerada)} m²** já ocupados no térreo, restam aproximadamente **{_fmt_num(A_ia_saldo)} m²** de potencial construtivo para crescer acima, distribuídos nos pavimentos superiores, desde que o projeto continue respeitando a altura, os recuos e as demais exigências aplicáveis."
-            )
+            if built_ground is not None and built_ground > A_considerada:
+                st.markdown(
+                    f"Como a área pretendida de **{_fmt_num(built_ground)} m²** precisou ser ajustada para **{_fmt_num(A_considerada)} m²** no térreo, ainda restam aproximadamente **{_fmt_num(A_ia_saldo)} m²** de potencial construtivo para crescer acima, distribuídos nos pavimentos superiores, desde que o projeto continue respeitando a altura, os recuos e as demais exigências aplicáveis."
+                )
+            else:
+                st.markdown(
+                    f"Considerando **{_fmt_num(A_considerada)} m²** já ocupados no térreo, restam aproximadamente **{_fmt_num(A_ia_saldo)} m²** de potencial construtivo para crescer acima, distribuídos nos pavimentos superiores, desde que o projeto continue respeitando a altura, os recuos e as demais exigências aplicáveis."
+                )
     if gabarito_m is not None:
         st.markdown(f"**Altura máxima da zona:** {_fmt_num(gabarito_m)} m")
         if pav_est is not None:
