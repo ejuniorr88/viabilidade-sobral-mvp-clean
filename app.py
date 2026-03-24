@@ -259,6 +259,9 @@ st.session_state.calc.setdefault("use_type_code", "RES_UNI")
 if "report_unlocked" not in st.session_state:
     st.session_state.report_unlocked = False
 
+if "report_unlocked_signature" not in st.session_state:
+    st.session_state.report_unlocked_signature = None
+
 if "free_calc_done" not in st.session_state:
     st.session_state.free_calc_done = False
 
@@ -458,6 +461,7 @@ with btn_col2:
         st.session_state.selected_lon = None
         st.session_state.calc = {"use_type_code": st.session_state.calc.get("use_type_code", "RES_UNI")}
         st.session_state.report_unlocked = False
+        st.session_state.report_unlocked_signature = None
         st.session_state.free_calc_done = False
         st.session_state.last_calc_signature = None
         st.session_state.show_login_gate = False
@@ -491,6 +495,7 @@ current_signature = json.dumps(
 
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
     st.session_state.report_unlocked = False
+    st.session_state.report_unlocked_signature = None
     st.session_state.free_calc_done = False
     st.session_state.show_inline_payments = False
     st.session_state.calc.pop("err", None)
@@ -550,6 +555,7 @@ show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
 
 if run_free_calc_now:
     st.session_state.report_unlocked = False
+    st.session_state.report_unlocked_signature = None
     st.session_state.free_calc_done = False
     st.session_state.last_calc_signature = current_signature
     st.session_state.show_inline_payments = False
@@ -633,6 +639,33 @@ if section4_can_try:
 
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
+current_report_signature = None
+if can_offer_report:
+    try:
+        current_report_signature = build_report_signature(
+            calc={
+                **calc,
+                "selected_use_label": selected_use_label,
+                "categoria_label": categoria_label,
+            },
+            session_state={
+                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+                "lot_front_m": st.session_state.calc.get("lot_front_m"),
+                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+                "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
+                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+            },
+        )
+    except Exception:
+        current_report_signature = None
+
+report_unlocked_for_current_signature = bool(
+    can_offer_report
+    and current_report_signature
+    and st.session_state.get("report_unlocked_signature") == current_report_signature
+)
+
 if can_offer_report:
     st.markdown("---")
     st.subheader("Relatório completo")
@@ -670,12 +703,29 @@ if can_offer_report:
     if gerar_relatorio:
         if not user_logged_in or not user_id:
             st.error("Faça login com Google para gerar o relatório completo.")
+        elif report_unlocked_for_current_signature:
+            st.info("Este relatório atual já está liberado nesta sessão.")
         elif saldo_atual is not None and int(saldo_atual) <= 0:
             st.session_state.show_inline_payments = True
             st.session_state.report_unlocked = False
+            st.session_state.report_unlocked_signature = None
             st.error("Você não possui créditos suficientes para gerar o relatório.")
         else:
             try:
+                preview_pdf_bytes = generate_report_pdf_bytes(
+                    calc=calc,
+                    session_state={
+                        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+                        "built_ground_m2": built_ground,
+                        "permeable_area_m2": permeable_area,
+                        "lot_front_m": st.session_state.calc.get("lot_front_m"),
+                        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+                        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+                        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
+                        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+                    },
+                )
+
                 debit_result = consume_viability_credit(
                     user_id=user_id,
                     amount=1,
@@ -685,6 +735,7 @@ if can_offer_report:
                 if not debit_result.get("ok"):
                     st.session_state.show_inline_payments = True
                     st.session_state.report_unlocked = False
+                    st.session_state.report_unlocked_signature = None
                     st.error(
                         debit_result.get("message")
                         or "Saldo insuficiente para gerar o relatório."
@@ -692,6 +743,9 @@ if can_offer_report:
                 else:
                     st.session_state.show_inline_payments = False
                     st.session_state.report_unlocked = True
+                    st.session_state.report_unlocked_signature = current_report_signature
+                    st.session_state["last_generated_pdf_bytes"] = preview_pdf_bytes
+                    st.session_state["last_generated_pdf_signature"] = current_report_signature
                     novo_saldo = debit_result.get("new_balance")
                     st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                     st.rerun()
@@ -699,13 +753,14 @@ if can_offer_report:
             except Exception as e:
                 st.session_state.show_inline_payments = True
                 st.session_state.report_unlocked = False
-                st.error(f"Não foi possível descontar o crédito: {e}")
+                st.session_state.report_unlocked_signature = None
+                st.error(f"Não foi possível preparar o relatório antes de descontar o crédito: {e}")
 
     if st.session_state.get("show_inline_payments"):
         st.markdown("### Comprar créditos")
         render_payments_panel()
 
-if st.session_state.get("report_unlocked") and can_offer_report:
+if report_unlocked_for_current_signature and can_offer_report:
     st.markdown("---")
 
     render_analise_section(
@@ -736,17 +791,22 @@ if st.session_state.get("report_unlocked") and can_offer_report:
         )
 
         st.session_state["last_generated_pdf_bytes"] = pdf_bytes
-        current_report_signature = build_report_signature(
-            calc=calc,
-            session_state={
-                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-                "lot_front_m": st.session_state.calc.get("lot_front_m"),
-                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
-                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-            },
-        )
+        if not current_report_signature:
+            current_report_signature = build_report_signature(
+                calc={
+                    **calc,
+                    "selected_use_label": selected_use_label,
+                    "categoria_label": categoria_label,
+                },
+                session_state={
+                    "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+                    "lot_front_m": st.session_state.calc.get("lot_front_m"),
+                    "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+                    "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+                    "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
+                    "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+                },
+            )
         st.session_state["last_generated_pdf_signature"] = current_report_signature
 
         st.download_button(
