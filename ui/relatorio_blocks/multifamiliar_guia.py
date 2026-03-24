@@ -918,8 +918,6 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         )
 
     st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
-    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
-    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     _render_alvara_section()
 
     st.markdown("---\n### ✅ 1️⃣5️⃣ Fechamento final")
