@@ -769,8 +769,57 @@ if can_offer_report:
             else:
                 st.info("Não foi possível consultar o saldo neste momento.")
 
-    if has_snapshot and needs_confirmation:
+    if has_snapshot and (needs_confirmation or st.session_state.get("confirm_new_report")):
         st.warning("Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, confirme antes. Isso gastará outro crédito.")
+
+
+    def _prepare_and_consume_pending_report() -> None:
+        st.session_state["report_flow_logs"].append("BRANCH prepare_and_consume")
+
+        try:
+            pdf_bytes = generate_report_pdf_bytes(
+                calc=st.session_state.get("pending_report_calc") or deepcopy(current_report_calc),
+                session_state=st.session_state.get("pending_report_session") or deepcopy(current_report_session),
+            )
+        except Exception as e:
+            st.error(f"Não foi possível preparar o relatório antes de descontar o crédito: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+            pdf_bytes = None
+
+        if pdf_bytes is not None:
+            try:
+                debit_result = consume_viability_credit(
+                    user_id=user_id,
+                    amount=1,
+                    description="Geração de relatório de viabilidade",
+                )
+                if not debit_result.get("ok"):
+                    st.session_state.show_inline_payments = True
+                    st.error(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
+                else:
+                    st.session_state.show_inline_payments = False
+                    st.session_state.report_unlocked = True
+                    st.session_state.report_snapshot_calc = deepcopy(st.session_state.get("pending_report_calc") or current_report_calc)
+                    st.session_state.report_snapshot_session = deepcopy(st.session_state.get("pending_report_session") or current_report_session)
+                    st.session_state.report_snapshot_signature = st.session_state.get("pending_report_signature") or current_report_signature
+                    st.session_state.last_generated_pdf_bytes = pdf_bytes
+                    st.session_state.last_generated_pdf_signature = st.session_state.get("pending_report_signature") or current_report_signature
+                    st.session_state.last_saved_report_signature = None
+                    st.session_state.pending_report_calc = None
+                    st.session_state.pending_report_session = None
+                    st.session_state.pending_report_signature = None
+                    st.session_state.confirm_new_report = False
+                    st.session_state.confirmed_new_report_once = False
+                    st.session_state.proceed_with_pending_report = False
+                    novo_saldo = debit_result.get("new_balance")
+                    st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+                    st.rerun()
+            except Exception as e:
+                st.session_state.show_inline_payments = True
+                st.error(f"Não foi possível descontar o crédito: {e}")
+                import traceback
+                st.code(traceback.format_exc())
 
     if gerar_relatorio:
         st.session_state.setdefault("report_flow_logs", [])
@@ -798,68 +847,31 @@ if can_offer_report:
             st.session_state.pending_report_signature = current_report_signature
             st.session_state.confirm_new_report = False
             st.session_state.confirmed_new_report_once = False
-            st.session_state["report_flow_logs"].append("BRANCH prepare_and_consume")
+            st.session_state.proceed_with_pending_report = True
+            _prepare_and_consume_pending_report()
 
-            try:
-                pdf_bytes = generate_report_pdf_bytes(
-                    calc=st.session_state.pending_report_calc,
-                    session_state=st.session_state.pending_report_session,
-                )
-            except Exception as e:
-                st.error(f"Não foi possível preparar o relatório antes de descontar o crédito: {e}")
-                import traceback
-                st.code(traceback.format_exc())
-                pdf_bytes = None
-
-            if pdf_bytes is not None:
-                try:
-                    debit_result = consume_viability_credit(
-                        user_id=user_id,
-                        amount=1,
-                        description="Geração de relatório de viabilidade",
-                    )
-                    if not debit_result.get("ok"):
-                        st.session_state.show_inline_payments = True
-                        st.error(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
-                    else:
-                        st.session_state.show_inline_payments = False
-                        st.session_state.report_unlocked = True
-                        st.session_state.report_snapshot_calc = deepcopy(st.session_state.pending_report_calc)
-                        st.session_state.report_snapshot_session = deepcopy(st.session_state.pending_report_session)
-                        st.session_state.report_snapshot_signature = st.session_state.pending_report_signature
-                        st.session_state.last_generated_pdf_bytes = pdf_bytes
-                        st.session_state.last_generated_pdf_signature = st.session_state.pending_report_signature
-                        st.session_state.last_saved_report_signature = None
-                        st.session_state.pending_report_calc = None
-                        st.session_state.pending_report_session = None
-                        st.session_state.pending_report_signature = None
-                        st.session_state.confirm_new_report = False
-                        novo_saldo = debit_result.get("new_balance")
-                        st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-                        st.rerun()
-                except Exception as e:
-                    st.session_state.show_inline_payments = True
-                    st.error(f"Não foi possível descontar o crédito: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
-
-    if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature") == current_report_signature:
+    if st.session_state.get("confirm_new_report"):
         q1, q2 = st.columns(2)
         with q1:
             if st.button("Sim, gerar outro relatório", key="btn_confirm_new_report", use_container_width=True):
                 st.session_state.setdefault("report_flow_logs", []).append("BRANCH confirm_yes")
                 st.session_state.confirm_new_report = False
                 st.session_state.confirmed_new_report_once = True
+                st.session_state.proceed_with_pending_report = True
                 st.rerun()
         with q2:
             if st.button("Não", key="btn_cancel_new_report", use_container_width=True):
                 st.session_state.setdefault("report_flow_logs", []).append("BRANCH confirm_no")
                 st.session_state.confirm_new_report = False
                 st.session_state.confirmed_new_report_once = False
+                st.session_state.proceed_with_pending_report = False
                 st.session_state.pending_report_calc = None
                 st.session_state.pending_report_session = None
                 st.session_state.pending_report_signature = None
                 st.rerun()
+
+    if st.session_state.get("proceed_with_pending_report") and not st.session_state.get("confirm_new_report"):
+        _prepare_and_consume_pending_report()
 
     if st.session_state.get("show_inline_payments"):
         st.markdown("### Comprar créditos")
