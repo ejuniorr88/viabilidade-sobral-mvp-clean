@@ -18,16 +18,13 @@ def test_gerar_relatorio_flow_contract_keeps_generate_button_and_credit_gate() -
         'key="btn_generate_report"',
         'disabled=(not user_logged_in)',
         'get_credit_balance(user_id)',
+        '_prepare_report_pdf(',
         'consume_viability_credit(',
+        'Você tem certeza que deseja gerar outro relatório?',
+        'st.session_state.pending_new_report_signature',
         'st.session_state.show_inline_payments = True',
         'st.session_state.report_unlocked = True',
         'render_payments_panel()',
-        'report_unlocked_signature',
-        'pending_report_generation_signature',
-        'Você tem certeza que deseja gerar outro relatório?',
-        'Isso vai gastar outro crédito.',
-        'btn_confirm_generate_other_report',
-        'btn_cancel_generate_other_report',
     ]
     for item in required:
         assert item in app_py, f"Fluxo de geração do relatório perdeu a âncora crítica: {item}"
@@ -66,19 +63,3 @@ def test_gerar_relatorio_flow_contract_keeps_zone_description_and_figures_hooks(
     ]
     for item in required:
         assert item in relatorio, f"ui/relatorio.py perdeu hook crítico do fluxo de relatório: {item}"
-
-
-def test_gerar_relatorio_flow_contract_keeps_signature_lock_and_pre_generation_guard() -> None:
-    app_py = _read(ROOT / 'app.py')
-
-    required = [
-        'current_report_signature = build_report_signature(',
-        'report_unlocked_for_current_signature',
-        'cached_pdf_matches_current_signature',
-        'preview_pdf_bytes = generate_report_pdf_bytes(',
-        'st.session_state["last_generated_pdf_bytes"] = preview_pdf_bytes',
-        'st.session_state["last_generated_pdf_signature"] = current_report_signature',
-        'Não foi possível preparar o relatório antes de descontar o crédito',
-    ]
-    for item in required:
-        assert item in app_py, f"Fluxo de geração do relatório perdeu a proteção crítica: {item}"
