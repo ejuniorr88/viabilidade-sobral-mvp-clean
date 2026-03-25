@@ -102,27 +102,58 @@ def _use_label(uso: str) -> str:
 
 
 
-def _fetch_adequabilidade_unifamiliar(*, zone_sigla: str, via_tipo_texto: str | None) -> tuple[str | None, str | None, dict[str, Any]]:
-    """Reaproveita o resolvedor consolidado do multifamiliar.
-
-    Primeiro tenta a leitura específica do unifamiliar. Se a base de adequabilidade
-    ainda não tiver esse uso cadastrado, faz fallback controlado para as tipologias
-    residenciais multifamiliares, preservando a mesma lógica consolidada de zona/via.
-    """
-    tried: list[dict[str, Any]] = []
-    for use_code in ("RES_UNI", "RES_MULTI_R21", "RES_MULTI_R22", "RES_MULTI_R3"):
-        zc, vc, dbg = _mf_fetch_adequabilidade(
-            zone_sigla=str(zone_sigla or ""),
-            via_tipo_texto=via_tipo_texto,
-            use_type_code=use_code,
-        )
-        tried.append({"use_type_code": use_code, "zone_class": zc, "via_class": vc, "debug": dbg})
+def _fetch_adequabilidade(*, zone_sigla: str, via_tipo_texto: str | None, use_type_code: str = "RES_UNI") -> tuple[str | None, str | None, dict[str, Any]]:
+    tried: list[str] = []
+    zone_class = None
+    via_class = None
+    dbg: dict[str, Any] = {}
+    fallback_codes = [str(use_type_code or "RES_UNI").upper().strip(), "RES_MULTI_R21", "RES_MULTI_R22", "RES_MULTI_R3"]
+    ordered: list[str] = []
+    for code in fallback_codes:
+        if code and code not in ordered:
+            ordered.append(code)
+    for code in ordered:
+        tried.append(code)
+        zc, vc, dbg = _mf_fetch_adequabilidade(zone_sigla=zone_sigla, via_tipo_texto=via_tipo_texto, use_type_code=code)
+        zone_class = zone_class or zc
+        via_class = via_class or vc
         if zc or vc:
-            out_dbg = dict(dbg or {})
-            out_dbg["resolved_use_type_code"] = use_code
-            out_dbg["fallback_chain"] = [t["use_type_code"] for t in tried]
-            return zc, vc, out_dbg
-    return None, None, {"fallback_chain": [t["use_type_code"] for t in tried], "attempts": tried}
+            dbg = dict(dbg or {})
+            dbg["use_type_code_effective"] = code
+            dbg["use_type_codes_tried"] = tried
+            return zc, vc, dbg
+    dbg = dict(dbg or {})
+    dbg["use_type_codes_tried"] = tried
+    return zone_class, via_class, dbg
+
+
+def _summarize_adequabilidade_unifamiliar(*, zone_class: str | None, via_norm: str | None, via_class: str | None) -> tuple[str, str, str]:
+    z = str(zone_class or "").strip().upper()
+    v = str(via_class or "").strip().upper()
+
+    if z == "I":
+        return (
+            "❌",
+            "NÃO PERMITE",
+            "A zona indicou I (Inadequado / não permitido). Em regra, a via não libera um uso residencial que a zona já proibiu.",
+        )
+    if z == "PE":
+        return ("⚠️", "PROJETO ESPECIAL", "A zona indicou PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
+    if z == "AP/AM" or v == "AP/AM":
+        return ("⚠️", "DEPENDE DO PORTE", "Existe indicação AP/AM (depende do porte). Confira se o caso é pequeno ou médio.")
+    if z in ("AP", "AM"):
+        return ("⚠️", "DEPENDE DO PORTE", f"A zona indicou {z}. A leitura depende do porte admitido para o caso.")
+    if v == "I":
+        return ("❌", "NÃO PERMITE", "O tipo de via indicou I (não permitido) para esta leitura.")
+    if z in ("A",) and v in ("A", "AP", "AM", ""):
+        return ("✅", "PERMITE", "A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.")
+    if z in ("A",) and v == "PE":
+        return ("⚠️", "PROJETO ESPECIAL", "A zona permite, mas a via indicou PE (Projeto especial). Pode exigir análise/condições extras.")
+    if z in ("A",) and not via_norm:
+        return ("✅", "PERMITE", "A zona permite. Em via local, normalmente prevalece a leitura da zona.")
+    if not z and v in ("A", "AP", "AM"):
+        return ("⚠️", "SEM DADO", "A via trouxe indicação favorável, mas a adequabilidade por zona ainda não foi localizada no banco.")
+    return ("⚠️", "SEM DADO", "Ainda não foi possível localizar a adequabilidade automática completa para este caso no banco.")
 
 def render_zone_description_section(calc: Dict[str, Any]) -> None:
     # Compatibilidade mantida: o app principal chama esta função antes do relatório.
@@ -231,9 +262,10 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     if not zona_texto_pratico:
         zona_texto_pratico = "Essa zona ajuda a definir o uso permitido, o quanto pode ocupar no térreo, a área que precisa ficar livre e o porte da edificação."
 
-    zone_class, via_class, adeq_dbg = _fetch_adequabilidade_unifamiliar(
+    zone_class, via_class, adeq_dbg = _mf_fetch_adequabilidade(
         zone_sigla=str(zone_sigla or zone or ""),
         via_tipo_texto=via_tipo,
+        use_type_code=str(uso or "RES_UNI"),
     )
     via_norm = _mf_via_tipo_norm(via_tipo)
     icon, status_curto, explicacao = _mf_summarize_adequabilidade(
@@ -273,60 +305,42 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 
     st.markdown("---\n### ✅ 2️⃣ O uso residencial unifamiliar é viável neste terreno?")
     st.markdown("**Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.**")
-    if not zone_class and not via_class:
-        st.warning(
-            "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. "
-            "Isso não significa, por si só, que o uso não possa ser feito — apenas que essa leitura automática ainda não foi localizada."
-        )
+
+    zone_class, via_class, dbg = _fetch_adequabilidade(
+        zone_sigla=str(zone_sigla or zone or ""),
+        via_tipo_texto=via_tipo,
+        use_type_code=str(uso or "RES_UNI"),
+    )
+    via_norm = _mf_via_tipo_norm(via_tipo)
+    icon, status_curto, explicacao = _summarize_adequabilidade_unifamiliar(
+        zone_class=zone_class,
+        via_norm=via_norm,
+        via_class=via_class,
+    )
+
+    via_line = (
+        f"- **Por via:** {via_class} ({_mf_sigla_nome(via_class)})"
+        if via_norm and via_class
+        else f"- **Por via:** {via_tipo or 'via local'}"
+    )
+    st.markdown(
+        f"- **Por zona:** {zone_class or 'não encontrado'}"
+        + (f" ({_mf_sigla_nome(zone_class)})" if zone_class else "")
+        + "\n"
+        + via_line
+        + f"\n- **Resumo final:** {icon} **{status_curto}**"
+    )
+    if status_curto == "PERMITE":
+        st.success(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
+    elif status_curto == "NÃO PERMITE":
+        st.error(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
+    elif status_curto in ("SEM DADO", "DEPENDE DO PORTE", "PROJETO ESPECIAL"):
+        st.warning(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
     else:
-        via_line = (
-            f"- **Por via:** {via_class} ({_mf_sigla_nome(via_class)})"
-            if via_norm and via_class
-            else f"- **Por via:** {via_tipo or 'via local'}"
-        )
-        st.markdown(
-            f"- **Por zona:** {zone_class or 'não encontrado'}"
-            + (f" ({_mf_sigla_nome(zone_class)})" if zone_class else "")
-            + "\n"
-            + via_line
-            + f"\n- **Resumo final:** {icon} **{status_curto}**"
-        )
-        if status_curto == "PERMITE":
-            st.success(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
-        elif status_curto in ("DEPENDE DO PORTE", "PROJETO ESPECIAL", "POSSÍVEL PELA VIA", "SEM DADO"):
-            st.warning(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
-        else:
-            st.error(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
+        st.warning(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
     st.markdown("**Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.**")
 
-    st.markdown("---\n### 📘 3️⃣ Como funciona a leitura da adequabilidade no unifamiliar?")
-    st.markdown(
-        "**No unifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o tipo da via. "
-        "Por isso, estas siglas ajudam a interpretar corretamente a viabilidade mostrada acima.**"
-    )
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(
-            "| Sigla | O que significa | Como interpretar |\n"
-            "|---|---|---|\n"
-            "| **A** | Adequado / permitido | Pode seguir com o projeto, respeitando as demais regras. |\n"
-            "| **I** | Inadequado / não permitido | Em regra, não pode nesse local/condição. |\n"
-            "| **AP** | Adequado (pequeno porte) | Pode, mas normalmente limitado a porte pequeno. |\n"
-            "| **AM** | Adequado (médio porte) | Pode, mas normalmente limitado a porte médio. |\n"
-            "| **AP/AM** | Depende do porte | Pode, mas depende se o caso é pequeno ou médio. |\n"
-            "| **PE** | Projeto especial | Pode exigir análise específica e condições extras no licenciamento. |"
-        )
-    with col2:
-        st.markdown(
-            "| Porte | Faixa (área construída total) |\n"
-            "|---|---|\n"
-            "| **Pequeno** | até **250 m²** |\n"
-            "| **Médio** | de **250,01 m²** até **1.000 m²** |\n"
-            "| **Grande** | de **1.000,01 m²** até **5.000 m²** |\n"
-            "| **Projeto especial** | acima de **5.000 m²** |"
-        )
-
-    st.markdown("---\n### 🧭 4️⃣ O que essa zona permite neste terreno?")
+    st.markdown("---\n### 🧭 3️⃣ O que essa zona permite neste terreno?")
     if desc and desc.get("description_text"):
         st.markdown(f"**{zone_title}**")
         st.markdown(str(desc.get("description_text")))
@@ -338,7 +352,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         )
     st.markdown("**É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.**")
 
-    st.markdown("---\n### 📏 5️⃣ Regras principais para este terreno")
+    st.markdown("---\n### 📏 4️⃣ Regras principais para este terreno")
     st.markdown(
         "Depois de entender a zona, o próximo passo é ver as regras básicas do lote.\n\n"
         "Para este terreno, vale olhar principalmente:\n\n"
@@ -359,7 +373,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     )
     st.markdown("Essas são as regras que mais impactam o projeto.")
 
-    st.markdown("---\n### 📐 6️⃣ Quanto posso ocupar no térreo?")
+    st.markdown("---\n### 📐 5️⃣ Quanto posso ocupar no térreo?")
     if to_max is None or A_to is None:
         st.info("Sem TO máxima cadastrada para esta zona/uso.")
     else:
@@ -415,7 +429,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
                     + (f"Caso sejam aplicados integralmente os recuos da zona, a implantação prática continua condicionada ao limite físico de **{_fmt_num(A_recuos)} m²**." if A_recuos is not None else "")
                 )
 
-    st.markdown("---\n### 🌿 7️⃣ Quanto preciso deixar livre?")
+    st.markdown("---\n### 🌿 6️⃣ Quanto preciso deixar livre?")
     if tp_min is None or A_perm_min is None:
         st.info("Sem TP mínima cadastrada para esta zona/uso.")
     else:
@@ -473,8 +487,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
                 "A diferença está em quanto sobra livre além desse mínimo."
             )
 
-    st.markdown("---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?")
-    st.markdown("---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?")
+    st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
     st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
     st.markdown(
         _md_table(
@@ -489,7 +502,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     )
     st.markdown("Isso ajuda a entender que nem toda área “livre” do lote conta 100% como permeável.")
 
-    st.markdown("---\n### 🏢 9️⃣ Posso construir mais andares?")
+    st.markdown("---\n### 🏢 8️⃣ Posso construir mais andares?")
     if ia_max is None or A_total is None:
         st.info("Sem IA máximo cadastrado para esta zona/uso.")
     else:
@@ -517,26 +530,26 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
                 "👉 Isso é apenas uma referência inicial. Na prática, a quantidade real de andares depende também da laje, cobertura, "
                 "platibanda, caixa d’água e da forma como o projeto será desenvolvido."
             )
-    st.markdown("---\n### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?")
-    st.markdown("---\n### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?")
+
+    st.markdown("---\n### 🚗 9️⃣ Preciso de vagas de estacionamento?")
     st.success("**Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento.**")
     st.markdown("Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.")
 
-    st.markdown("---\n### 📋 1️⃣1️⃣ Quais medidas mínimas os ambientes precisam ter?")
+    st.markdown("---\n### 📋 1️⃣0️⃣ Quais medidas mínimas os ambientes precisam ter?")
     st.markdown(
         "Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação. "
         "Isso vale para itens como sala, quartos, cozinha, banheiro, área de serviço, garagem e escada."
     )
     render_quadro_tecnico()
 
-    st.markdown("---\n### 🚶 1️⃣2️⃣ O que preciso saber sobre a calçada?")
+    st.markdown("---\n### 🚶 1️⃣1️⃣ O que preciso saber sobre a calçada?")
     st.markdown(
         "A análise não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação do lote com a rua. "
         "As figuras abaixo ajudam a visualizar esse padrão."
     )
     render_figuras_anexo_v(rule, is_corner=is_corner)
 
-    st.markdown("---\n### 💡 1️⃣3️⃣ Dicas valiosas")
+    st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
     st.markdown(
         "**Flexibilidade de recuos no uso residencial unifamiliar**\n\n"
         "**Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
@@ -554,7 +567,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "Além disso, deve respeitar afastamento mínimo de 0,50 m das divisas."
     )
 
-    st.markdown("---\n### 📌 1️⃣4️⃣ Resumo rápido final")
+    st.markdown("---\n### 📌 1️⃣3️⃣ Resumo rápido final")
     st.markdown("**Se você quiser ver só o essencial deste terreno, este é o resumo principal:**")
     resumo_extra = ""
     if area_pedida is not None and A_considerada is not None:
@@ -600,8 +613,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "e a altura deve respeitar o limite da zona."
         )
 
-    st.markdown("---\n### 🏛️ 1️⃣5️⃣ O que acontece depois desta etapa?")
-    st.markdown("---\n### 🏛️ 1️⃣5️⃣ O que acontece depois desta etapa?")
+    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     st.markdown(
         "Após a finalização dos projetos, será necessário dar entrada na documentação junto à **Prefeitura** para obter o **alvará de construção**.\n\n"
         "De forma geral, esse processo pode seguir por **duas vias**:\n\n"
@@ -670,7 +682,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.markdown("[ ] Verificar se o imóvel está em área com proteção especial")
     st.markdown("[ ] Conferir se o projeto atende às exigências técnicas antes do protocolo")
 
-    st.markdown("---\n### ✅ 1️⃣6️⃣ Fechamento final")
+    st.markdown("---\n### ✅ 1️⃣5️⃣ Fechamento final")
     st.markdown(
         "Este relatório foi pensado para ajudar a entender o terreno de forma mais simples.\n\n"
         "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no licenciamento."
