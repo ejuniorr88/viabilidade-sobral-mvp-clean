@@ -840,6 +840,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             )
 
     st.markdown("---\n### 🚗 9️⃣ Vagas de estacionamento")
+    st.markdown("---\n### 🚗 9️⃣ Vagas de estacionamento")
     st.markdown(
         "**A quantidade de vagas depende do tamanho da unidade habitacional.**\n\n"
         "Regras:\n"
@@ -916,6 +917,8 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             f"- e a altura deve respeitar o limite máximo permitido da zona."
         )
 
+    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
+    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     _render_alvara_section()
 
