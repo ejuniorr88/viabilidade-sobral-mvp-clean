@@ -343,61 +343,46 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     else:
         st.markdown(
             f"A zona permite ocupar até **{_fmt_pct(to_max)}** do terreno no térreo.\n\n"
-            f"👉 **{_fmt_num(A)} m² × {_fmt_pct(to_max)} = {_fmt_num(A_to)} m²**\n\n"
+            f"👉 **{_fmt_num(A)} m² × {_fmt_pct(to_max)} = {_fmt_num(A_to)} m²\n\n"
             "Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**."
         )
-        if area_pedida is not None:
-            st.markdown(f"A área construída pretendida informada foi de **{_fmt_num(area_pedida)} m²**.")
-
+        st.markdown(
+            "Mas aqui tem um ponto importante: uma coisa é o limite da zona no papel, e outra é o que realmente cabe dentro do lote depois de respeitar os recuos."
+        )
+        st.markdown(
+            "Por isso, além do percentual permitido, também vale olhar a área que sobra de forma prática dentro do terreno."
+        )
         st.markdown(
             "> **Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
             "a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima "
             "e da Taxa de Ocupação Máxima da zona em que se encontra."
         )
         st.markdown(
-            "No caso da **residência unifamiliar**, a legislação admite leitura com flexibilidade dos recuos de frente e laterais, "
-            "desde que continuem sendo respeitadas a **TO máxima**, a **TP mínima** e as demais exigências aplicáveis."
+            "👉 **Na prática:** para residência unifamiliar, a norma permite encostar nas laterais e alinhar na frente, desde que o projeto continue respeitando a **TO máxima** e a **TP mínima**."
         )
+        st.markdown("Agora veja duas possibilidades de leitura:")
+        st.markdown("✅ **Opção principal — aproveitando a flexibilidade da lei**")
+        st.markdown("Para este caso, a legislação admite **zerar recuo frontal e laterais**.")
         st.markdown(
-            "**Comparação entre o limite legal da zona e o que realmente cabe no lote**"
+            "Assim, o térreo pode aproveitar melhor a área do lote, desde que continue respeitando TO e TP."
         )
-        st.markdown(
-            f"- **Limite legal pela TO:** {_fmt_num(A_to)} m²"
-            + (f"\n- **Implantação prática com recuos integrais da zona:** {_fmt_num(A_recuos)} m²" if A_recuos is not None else "")
-        )
+        st.markdown(f"👉 **Térreo máximo nesta opção:** **{_fmt_num(A_to)} m²**")
+        st.markdown("⚠️ O recuo de fundo e as demais exigências aplicáveis continuam precisando ser respeitados.")
         if A_recuos is not None:
+            st.markdown("✅ **Opção alternativa — adotando os recuos da zona**")
+            st.markdown(f"- **Frontal:** {_fmt_num(rec_fr)} m")
+            st.markdown(f"- **Laterais:** {_fmt_num(rec_lat)} m cada")
+            st.markdown(f"- **Fundo:** {_fmt_num(rec_fun)} m")
+            st.markdown(f"- **Largura útil:** {_fmt_num(W_util)} m")
+            st.markdown(f"- **Profundidade útil:** {_fmt_num(D_util)} m")
+            st.markdown(f"👉 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
             st.markdown(
-                f"👉 **Cálculo da largura útil:** {_fmt_num(W)} m − {_fmt_num(rec_lat)} m − {_fmt_num(rec_lat)} m = {_fmt_num(W_util)} m\n\n"
-                f"👉 **Cálculo da profundidade útil:** {_fmt_num(D)} m − {_fmt_num(rec_fr)} m − {_fmt_num(rec_fun)} m = {_fmt_num(D_util)} m\n\n"
-                f"👉 **Área útil com recuos integrais:** {_fmt_num(W_util)} m × {_fmt_num(D_util)} m = {_fmt_num(A_recuos)} m²"
+                f"👉 Neste cenário, mesmo que a zona permita até **{_fmt_num(A_to)} m²**, o limite físico pelos recuos fica em **{_fmt_num(A_recuos)} m²**."
             )
-        if A_op1_max is not None:
-            st.markdown(f"**Opção 1 — recuos integrais da zona:** até **{_fmt_num(A_op1_max)} m²** no térreo.")
-        if A_op2_max is not None:
-            st.markdown(f"**Opção 2 — leitura com flexibilidade do Art. 112:** até **{_fmt_num(A_op2_max)} m²** no térreo, sempre respeitando TO e TP.")
-        if A_considerada is not None and area_pedida is not None:
-            if excedeu_area:
-                st.markdown(
-                    f"Como a área pretendida de **{_fmt_num(area_pedida)} m²** excede o limite adotado, o relatório passou a considerar **{_fmt_num(A_considerada)} m²** como base para os cálculos."
-                )
-            else:
-                st.markdown(
-                    f"Como a área pretendida de **{_fmt_num(area_pedida)} m²** está dentro do limite admissível, o relatório adotou essa mesma área como base para os cálculos."
-                )
-        else:
             st.markdown(
-                "👉 **Leitura prática:** uma coisa é o limite da zona no papel; outra é o que realmente cabe dentro do lote quando os recuos são aplicados integralmente."
+                f"**Leitura prática:** pela TO, o lote pode ocupar até **{_fmt_num(A_to)} m²** no térreo. "
+                f"Mas, se você optar por seguir os recuos da zona, a implantação prática cai para **{_fmt_num(A_recuos)} m²**."
             )
-        if A_considerada is not None and to_projeto_pct is not None:
-            st.markdown("**TO efetiva considerada no relatório**")
-            st.markdown(f"👉 **{_fmt_num(A_considerada)} m² ÷ {_fmt_num(A)} m² = {_fmt_pct(to_projeto_pct)}**")
-            st.markdown(f"**TO considerada no relatório: {_fmt_pct(to_projeto_pct)}**")
-        st.markdown(
-            f"👉 **Em resumo:** você pode ocupar até **{_fmt_num(A_to)} m²** no térreo"
-            + (f", mas se aplicar integralmente os recuos da zona a implantação prática cai para **{_fmt_num(A_recuos)} m²**" if A_recuos is not None else "")
-            + (f". Para os cálculos deste relatório, foi adotada a área de **{_fmt_num(A_considerada)} m²**." if A_considerada is not None else ".")
-        )
-
     st.markdown("---\n### 🌿 6️⃣ Quanto preciso deixar livre?")
     if tp_min is None or A_perm_min is None:
         st.info("Sem TP mínima cadastrada para esta zona/uso.")
