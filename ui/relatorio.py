@@ -100,6 +100,30 @@ def _use_label(uso: str) -> str:
     return mapping.get(code, code or "uso informado")
 
 
+
+
+def _fetch_adequabilidade_unifamiliar(*, zone_sigla: str, via_tipo_texto: str | None) -> tuple[str | None, str | None, dict[str, Any]]:
+    """Reaproveita o resolvedor consolidado do multifamiliar.
+
+    Primeiro tenta a leitura específica do unifamiliar. Se a base de adequabilidade
+    ainda não tiver esse uso cadastrado, faz fallback controlado para as tipologias
+    residenciais multifamiliares, preservando a mesma lógica consolidada de zona/via.
+    """
+    tried: list[dict[str, Any]] = []
+    for use_code in ("RES_UNI", "RES_MULTI_R21", "RES_MULTI_R22", "RES_MULTI_R3"):
+        zc, vc, dbg = _mf_fetch_adequabilidade(
+            zone_sigla=str(zone_sigla or ""),
+            via_tipo_texto=via_tipo_texto,
+            use_type_code=use_code,
+        )
+        tried.append({"use_type_code": use_code, "zone_class": zc, "via_class": vc, "debug": dbg})
+        if zc or vc:
+            out_dbg = dict(dbg or {})
+            out_dbg["resolved_use_type_code"] = use_code
+            out_dbg["fallback_chain"] = [t["use_type_code"] for t in tried]
+            return zc, vc, out_dbg
+    return None, None, {"fallback_chain": [t["use_type_code"] for t in tried], "attempts": tried}
+
 def render_zone_description_section(calc: Dict[str, Any]) -> None:
     # Compatibilidade mantida: o app principal chama esta função antes do relatório.
     # Para evitar repetição do bloco da zona, a renderização visível agora acontece
@@ -207,10 +231,9 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     if not zona_texto_pratico:
         zona_texto_pratico = "Essa zona ajuda a definir o uso permitido, o quanto pode ocupar no térreo, a área que precisa ficar livre e o porte da edificação."
 
-    zone_class, via_class, adeq_dbg = _mf_fetch_adequabilidade(
+    zone_class, via_class, adeq_dbg = _fetch_adequabilidade_unifamiliar(
         zone_sigla=str(zone_sigla or zone or ""),
         via_tipo_texto=via_tipo,
-        use_type_code=str(uso or "RES_UNI"),
     )
     via_norm = _mf_via_tipo_norm(via_tipo)
     icon, status_curto, explicacao = _mf_summarize_adequabilidade(
@@ -255,8 +278,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. "
             "Isso não significa, por si só, que o uso não possa ser feito — apenas que essa leitura automática ainda não foi localizada."
         )
-        with st.expander("🔎 Diagnóstico (para conferência)"):
-            st.json(adeq_dbg)
     else:
         via_line = (
             f"- **Por via:** {via_class} ({_mf_sigla_nome(via_class)})"
