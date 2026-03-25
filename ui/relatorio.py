@@ -100,6 +100,20 @@ def _use_label(uso: str) -> str:
     return mapping.get(code, code or "uso informado")
 
 
+def _fetch_adequabilidade_unifamiliar(zone_sigla: str, via_tipo_texto: Any) -> tuple[str | None, str | None, dict]:
+    debug: dict = {"attempts": []}
+    for use_code in ("RES_UNI", "RES_MULTI_R21", "RES_MULTI_R22", "RES_MULTI_R3"):
+        zc, vc, dbg = _mf_fetch_adequabilidade(
+            zone_sigla=str(zone_sigla or ""),
+            via_tipo_texto=via_tipo_texto,
+            use_type_code=use_code,
+        )
+        debug["attempts"].append({"use_type_code": use_code, "zone_class": zc, "via_class": vc, "debug": dbg})
+        if zc or vc:
+            return zc, vc, debug
+    return None, None, debug
+
+
 def render_zone_description_section(calc: Dict[str, Any]) -> None:
     # Compatibilidade mantida: o app principal chama esta função antes do relatório.
     # Para evitar repetição do bloco da zona, a renderização visível agora acontece
@@ -178,10 +192,10 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 
     A_teto_projeto = A_op2_max or A_op1_max or A_to
     area_pedida = built_ground if (built_ground is not None and built_ground > 0) else None
+    excedeu_area = bool(area_pedida is not None and A_considerada is not None and area_pedida > A_considerada)
     A_considerada = None
     if built_ground is not None and built_ground > 0:
         A_considerada = min(built_ground, A_teto_projeto) if A_teto_projeto is not None else built_ground
-    excedeu_area = bool(area_pedida is not None and A_considerada is not None and area_pedida > A_considerada)
 
     to_projeto_pct = ((A_considerada / A) * 100.0) if (A_considerada is not None and A > 0) else None
     A_livre = (A - A_considerada) if (A_considerada is not None and A > 0) else None
@@ -207,10 +221,9 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     if not zona_texto_pratico:
         zona_texto_pratico = "Essa zona ajuda a definir o uso permitido, o quanto pode ocupar no térreo, a área que precisa ficar livre e o porte da edificação."
 
-    zone_class, via_class, adeq_dbg = _mf_fetch_adequabilidade(
+    zone_class, via_class, adeq_dbg = _fetch_adequabilidade_unifamiliar(
         zone_sigla=str(zone_sigla or zone or ""),
         via_tipo_texto=via_tipo,
-        use_type_code=str(uso or "RES_UNI"),
     )
     via_norm = _mf_via_tipo_norm(via_tipo)
     icon, status_curto, explicacao = _mf_summarize_adequabilidade(
@@ -255,8 +268,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. "
             "Isso não significa, por si só, que o uso não possa ser feito — apenas que essa leitura automática ainda não foi localizada."
         )
-        with st.expander("🔎 Diagnóstico (para conferência)"):
-            st.json(adeq_dbg)
     else:
         via_line = (
             f"- **Por via:** {via_class} ({_mf_sigla_nome(via_class)})"
@@ -276,10 +287,12 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             st.warning(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
         else:
             st.error(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
+    st.markdown("**Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.**")
 
+    st.markdown("---\n### 📘 3️⃣ Como funciona a leitura da adequabilidade no unifamiliar?")
     st.markdown(
-        "**No unifamiliar, usamos a mesma leitura-base do multifamiliar para interpretar a adequabilidade.** "
-        "As siglas abaixo ajudam a entender o resultado mostrado acima."
+        "**No unifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o tipo da via. "
+        "Por isso, estas siglas ajudam a interpretar corretamente a viabilidade mostrada acima.**"
     )
     col1, col2 = st.columns(2)
     with col1:
@@ -302,7 +315,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "| **Grande** | de **1.000,01 m²** até **5.000 m²** |\n"
             "| **Projeto especial** | acima de **5.000 m²** |"
         )
-    st.markdown("**Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.**")
 
     st.markdown("---\n### 🧭 3️⃣ O que essa zona permite neste terreno?")
     if desc and desc.get("description_text"):
@@ -343,13 +355,11 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     else:
         st.markdown(
             f"A zona permite ocupar até **{_fmt_pct(to_max)}** do terreno no térreo.\n\n"
-            f"👉 **{_fmt_num(A)} m² × {_fmt_pct(to_max)} = {_fmt_num(A_to)} m²\n\n"
+            f"👉 **{_fmt_num(A)} m² × {_fmt_pct(to_max)} = {_fmt_num(A_to)} m²**\n\n"
             "Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**."
         )
         st.markdown(
-            "Mas aqui tem um ponto importante: uma coisa é o limite da zona no papel, e outra é o que realmente cabe dentro do lote depois de respeitar os recuos."
-        )
-        st.markdown(
+            "Mas aqui tem um ponto importante: uma coisa é o limite da zona no papel, e outra é o que realmente cabe dentro do lote depois de respeitar os recuos.\n\n"
             "Por isso, além do percentual permitido, também vale olhar a área que sobra de forma prática dentro do terreno."
         )
         st.markdown(
@@ -358,23 +368,29 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "e da Taxa de Ocupação Máxima da zona em que se encontra."
         )
         st.markdown(
-            "👉 **Na prática:** para residência unifamiliar, a norma permite encostar nas laterais e alinhar na frente, desde que o projeto continue respeitando a **TO máxima** e a **TP mínima**."
+            "👉 **Na prática:** para residência unifamiliar, a norma permite encostar nas laterais e alinhar na frente, "
+            "desde que o projeto continue respeitando a **TO máxima** e a **TP mínima**."
         )
         st.markdown("Agora veja duas possibilidades de leitura:")
         st.markdown("✅ **Opção principal — aproveitando a flexibilidade da lei**")
-        st.markdown("Para este caso, a legislação admite **zerar recuo frontal e laterais**.")
         st.markdown(
-            "Assim, o térreo pode aproveitar melhor a área do lote, desde que continue respeitando TO e TP."
+            "Para este caso, a legislação admite **zerar recuo frontal e laterais**.\n\n"
+            "Assim, o térreo pode aproveitar melhor a área do lote, desde que continue respeitando TO e TP.\n\n"
+            f"👉 **Térreo máximo nesta opção:** **{_fmt_num(A_to)} m²**"
         )
-        st.markdown(f"👉 **Térreo máximo nesta opção:** **{_fmt_num(A_to)} m²**")
         st.markdown("⚠️ O recuo de fundo e as demais exigências aplicáveis continuam precisando ser respeitados.")
+
+        st.markdown("✅ **Opção alternativa — adotando os recuos da zona**")
+        st.markdown(
+            f"- **Frontal:** {_fmt_num(rec_fr)} m\n"
+            f"- **Laterais:** {_fmt_num(rec_lat)} m cada\n"
+            f"- **Fundo:** {_fmt_num(rec_fun)} m"
+        )
         if A_recuos is not None:
-            st.markdown("✅ **Opção alternativa — adotando os recuos da zona**")
-            st.markdown(f"- **Frontal:** {_fmt_num(rec_fr)} m")
-            st.markdown(f"- **Laterais:** {_fmt_num(rec_lat)} m cada")
-            st.markdown(f"- **Fundo:** {_fmt_num(rec_fun)} m")
-            st.markdown(f"- **Largura útil:** {_fmt_num(W_util)} m")
-            st.markdown(f"- **Profundidade útil:** {_fmt_num(D_util)} m")
+            st.markdown(
+                f"- **Largura útil:** {_fmt_num(W_util)} m\n"
+                f"- **Profundidade útil:** {_fmt_num(D_util)} m"
+            )
             st.markdown(f"👉 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
             st.markdown(
                 f"👉 Neste cenário, mesmo que a zona permita até **{_fmt_num(A_to)} m²**, o limite físico pelos recuos fica em **{_fmt_num(A_recuos)} m²**."
@@ -441,7 +457,8 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
                 "A diferença está em quanto sobra livre além desse mínimo."
             )
 
-    st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
+    st.markdown("---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?")
+    st.markdown("---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?")
     st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
     st.markdown(
         _md_table(
@@ -484,7 +501,8 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
                 "👉 Isso é apenas uma referência inicial. Na prática, a quantidade real de andares depende também da laje, cobertura, "
                 "platibanda, caixa d’água e da forma como o projeto será desenvolvido."
             )
-    st.markdown("---\n### 🚗 9️⃣ Preciso de vagas de estacionamento?")
+    st.markdown("---\n### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?")
+    st.markdown("---\n### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?")
     st.success("**Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento.**")
     st.markdown("Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.")
 
@@ -566,7 +584,8 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "e a altura deve respeitar o limite da zona."
         )
 
-    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
+    st.markdown("---\n### 🏛️ 1️⃣5️⃣ O que acontece depois desta etapa?")
+    st.markdown("---\n### 🏛️ 1️⃣5️⃣ O que acontece depois desta etapa?")
     st.markdown(
         "Após a finalização dos projetos, será necessário dar entrada na documentação junto à **Prefeitura** para obter o **alvará de construção**.\n\n"
         "De forma geral, esse processo pode seguir por **duas vias**:\n\n"
