@@ -332,7 +332,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         )
     st.markdown("**É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.**")
 
-    st.markdown("---\n### 📏 4️⃣ Regras principais para este terreno")
+    st.markdown("---\n### 📏 5️⃣ Regras principais para este terreno")
     st.markdown(
         "Depois de entender a zona, o próximo passo é ver as regras básicas do lote.\n\n"
         "Para este terreno, vale olhar principalmente:\n\n"
@@ -353,7 +353,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     )
     st.markdown("Essas são as regras que mais impactam o projeto.")
 
-    st.markdown("---\n### 📐 5️⃣ Quanto posso ocupar no térreo?")
+    st.markdown("---\n### 📐 6️⃣ Quanto posso ocupar no térreo?")
     if to_max is None or A_to is None:
         st.info("Sem TO máxima cadastrada para esta zona/uso.")
     else:
@@ -396,7 +396,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             st.markdown(
                 f"**Leitura prática:** pela TO, o lote pode ocupar até **{_fmt_num(A_to)} m²** no térreo. Mas, se você optar por seguir os recuos da zona, a implantação prática cai para **{_fmt_num(A_recuos)} m²**."
             )
-    st.markdown("---\n### 🌿 6️⃣ Quanto preciso deixar livre?")
+    st.markdown("---\n### 🌿 7️⃣ Quanto preciso deixar livre?")
     if tp_min is None or A_perm_min is None:
         st.info("Sem TP mínima cadastrada para esta zona/uso.")
     else:
@@ -454,7 +454,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
                 "A diferença está em quanto sobra livre além desse mínimo."
             )
 
-    st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
+    st.markdown("---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?")
     st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
     st.markdown(
         _md_table(
@@ -469,7 +469,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     )
     st.markdown("Isso ajuda a entender que nem toda área “livre” do lote conta 100% como permeável.")
 
-    st.markdown("---\n### 🏢 8️⃣ Posso construir mais andares?")
+    st.markdown("---\n### 🏢 9️⃣ Posso construir mais andares?")
     if ia_max is None or A_total is None:
         st.info("Sem IA máximo cadastrado para esta zona/uso.")
     else:
@@ -497,25 +497,25 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
                 "👉 Isso é apenas uma referência inicial. Na prática, a quantidade real de andares depende também da laje, cobertura, "
                 "platibanda, caixa d’água e da forma como o projeto será desenvolvido."
             )
-    st.markdown("---\n### 🚗 9️⃣ Preciso de vagas de estacionamento?")
+    st.markdown("---\n### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?")
     st.success("**Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento.**")
     st.markdown("Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.")
 
-    st.markdown("---\n### 📋 1️⃣0️⃣ Quais medidas mínimas os ambientes precisam ter?")
+    st.markdown("---\n### 📋 1️⃣1️⃣ Quais medidas mínimas os ambientes precisam ter?")
     st.markdown(
         "Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação. "
         "Isso vale para itens como sala, quartos, cozinha, banheiro, área de serviço, garagem e escada."
     )
     render_quadro_tecnico()
 
-    st.markdown("---\n### 🚶 1️⃣1️⃣ O que preciso saber sobre a calçada?")
+    st.markdown("---\n### 🚶 1️⃣2️⃣ O que preciso saber sobre a calçada?")
     st.markdown(
         "A análise não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação do lote com a rua. "
         "As figuras abaixo ajudam a visualizar esse padrão."
     )
     render_figuras_anexo_v(rule, is_corner=is_corner)
 
-    st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
+    st.markdown("---\n### 💡 1️⃣3️⃣ Dicas valiosas")
     st.markdown(
         "**Flexibilidade de recuos no uso residencial unifamiliar**\n\n"
         "**Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
@@ -533,7 +533,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "Além disso, deve respeitar afastamento mínimo de 0,50 m das divisas."
     )
 
-    st.markdown("---\n### 📌 1️⃣3️⃣ Resumo rápido final")
+    st.markdown("---\n### 📌 1️⃣4️⃣ Resumo rápido final")
     st.markdown("**Se você quiser ver só o essencial deste terreno, este é o resumo principal:**")
     resumo_extra = ""
     if area_pedida is not None and A_considerada is not None:
@@ -579,7 +579,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             "e a altura deve respeitar o limite da zona."
         )
 
-    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
+    st.markdown("---\n### 🏛️ 1️⃣5️⃣ O que acontece depois desta etapa?")
     st.markdown(
         "Após a finalização dos projetos, será necessário dar entrada na documentação junto à **Prefeitura** para obter o **alvará de construção**.\n\n"
         "De forma geral, esse processo pode seguir por **duas vias**:\n\n"
@@ -648,7 +648,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.markdown("[ ] Verificar se o imóvel está em área com proteção especial")
     st.markdown("[ ] Conferir se o projeto atende às exigências técnicas antes do protocolo")
 
-    st.markdown("---\n### ✅ 1️⃣5️⃣ Fechamento final")
+    st.markdown("---\n### ✅ 1️⃣6️⃣ Fechamento final")
     st.markdown(
         "Este relatório foi pensado para ajudar a entender o terreno de forma mais simples.\n\n"
         "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no licenciamento."
