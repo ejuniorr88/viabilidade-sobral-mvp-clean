@@ -22,6 +22,12 @@ def test_gerar_relatorio_flow_contract_keeps_generate_button_and_credit_gate() -
         'st.session_state.show_inline_payments = True',
         'st.session_state.report_unlocked = True',
         'render_payments_panel()',
+        'report_unlocked_signature',
+        'pending_report_generation_signature',
+        'Você tem certeza que deseja gerar outro relatório?',
+        'Isso vai gastar outro crédito.',
+        'btn_confirm_generate_other_report',
+        'btn_cancel_generate_other_report',
     ]
     for item in required:
         assert item in app_py, f"Fluxo de geração do relatório perdeu a âncora crítica: {item}"
@@ -66,13 +72,13 @@ def test_gerar_relatorio_flow_contract_keeps_signature_lock_and_pre_generation_g
     app_py = _read(ROOT / 'app.py')
 
     required = [
-        'report_unlocked_signature',
-        'report_unlocked_for_current_signature',
         'current_report_signature = build_report_signature(',
+        'report_unlocked_for_current_signature',
+        'cached_pdf_matches_current_signature',
         'preview_pdf_bytes = generate_report_pdf_bytes(',
         'st.session_state["last_generated_pdf_bytes"] = preview_pdf_bytes',
-        'st.session_state.report_unlocked_signature = current_report_signature',
+        'st.session_state["last_generated_pdf_signature"] = current_report_signature',
         'Não foi possível preparar o relatório antes de descontar o crédito',
     ]
     for item in required:
-        assert item in app_py, f"Fluxo de geração do relatório perdeu a proteção crítica contra consumo indevido: {item}"
+        assert item in app_py, f"Fluxo de geração do relatório perdeu a proteção crítica: {item}"
