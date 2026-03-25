@@ -55,3 +55,16 @@ def test_pdf_contract_must_keep_zone_description_integration() -> None:
     ]
     for anchor in required_anchors:
         assert anchor in txt, f"Integração da descrição da zona sumiu do PDF: {anchor}"
+
+
+def test_pdf_contract_must_support_string_based_dicas_valiosas() -> None:
+    pdf_py = ROOT / "core" / "report_pdf.py"
+    txt = _read(pdf_py)
+
+    required_anchors = [
+        'for dica in get_dicas_valiosas(is_corner=is_corner):',
+        'isinstance(dica, (list, tuple))',
+        'texto = str(dica).strip()',
+    ]
+    for anchor in required_anchors:
+        assert anchor in txt, f"core/report_pdf.py perdeu a compatibilidade com dicas em texto simples: {anchor}"
