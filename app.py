@@ -48,97 +48,6 @@ def _zones_prepared():
     return load_zones(ZONE_FILE)
 
 
-def _build_report_session_payload(calc: Dict[str, Any], built_ground: float, permeable_area: float) -> Dict[str, Any]:
-    return {
-        "lot_area_m2": calc.get("lot_area_m2"),
-        "built_ground_m2": built_ground,
-        "permeable_area_m2": permeable_area,
-        "lot_front_m": calc.get("lot_front_m"),
-        "lot_depth_m": calc.get("lot_depth_m"),
-        "lot_is_corner": calc.get("lot_is_corner"),
-        "lot_is_midblock": calc.get("lot_is_midblock"),
-        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-    }
-
-
-def _prepare_report_pdf(calc: Dict[str, Any], built_ground: float, permeable_area: float) -> tuple[bytes, str, Dict[str, Any]]:
-    report_session_payload = _build_report_session_payload(calc, built_ground, permeable_area)
-    current_report_signature = build_report_signature(
-        calc=calc,
-        session_state=report_session_payload,
-    )
-    cached_pdf_bytes = st.session_state.get("last_generated_pdf_bytes")
-    cached_pdf_signature = st.session_state.get("last_generated_pdf_signature")
-    if cached_pdf_bytes and cached_pdf_signature == current_report_signature:
-        return cached_pdf_bytes, current_report_signature, report_session_payload
-
-    pdf_bytes = generate_report_pdf_bytes(
-        calc=calc,
-        session_state=report_session_payload,
-    )
-    st.session_state["last_generated_pdf_bytes"] = pdf_bytes
-    st.session_state["last_generated_pdf_signature"] = current_report_signature
-    return pdf_bytes, current_report_signature, report_session_payload
-
-
-
-def _store_unlocked_report_context(calc: Dict[str, Any], built_ground: float, permeable_area: float) -> None:
-    st.session_state["last_unlocked_report_context"] = {
-        "calc": deepcopy(calc),
-        "lot_area": calc.get("lot_area_m2"),
-        "built_ground": built_ground,
-        "permeable_area": permeable_area,
-        "selected_use_label": st.session_state.get("vf_residential_option"),
-        "categoria_label": st.session_state.get("vf_categoria"),
-        "ui": {
-            "lot_front_m": st.session_state.get("lot_front_m"),
-            "lot_depth_m": st.session_state.get("lot_depth_m"),
-            "lot_is_corner": st.session_state.get("lot_is_corner", False),
-            "lot_is_irregular": st.session_state.get("lot_is_irregular", False),
-        },
-    }
-
-
-def _render_unlocked_report_from_context() -> bool:
-    ctx = st.session_state.get("last_unlocked_report_context")
-    if not isinstance(ctx, dict):
-        return False
-
-    calc_ctx = ctx.get("calc")
-    if not isinstance(calc_ctx, dict):
-        return False
-
-    lot_area = ctx.get("lot_area")
-    built_ground = ctx.get("built_ground")
-    permeable_area = ctx.get("permeable_area")
-    ui_ctx = ctx.get("ui") or {}
-
-    old_keys = {
-        "lot_front_m": st.session_state.get("lot_front_m"),
-        "lot_depth_m": st.session_state.get("lot_depth_m"),
-        "lot_is_corner": st.session_state.get("lot_is_corner"),
-        "lot_is_irregular": st.session_state.get("lot_is_irregular"),
-    }
-    try:
-        st.session_state["lot_front_m"] = ui_ctx.get("lot_front_m")
-        st.session_state["lot_depth_m"] = ui_ctx.get("lot_depth_m")
-        st.session_state["lot_is_corner"] = bool(ui_ctx.get("lot_is_corner", False))
-        st.session_state["lot_is_irregular"] = bool(ui_ctx.get("lot_is_irregular", False))
-
-        render_analise_section(
-            calc_ctx,
-            lot_area=lot_area,
-            built_ground=built_ground,
-            permeable_area=permeable_area,
-            pick_func=pick_rule,
-        )
-        render_zone_description_section(calc_ctx)
-        render_relatorio_section(calc_ctx)
-        return True
-    finally:
-        for k, v in old_keys.items():
-            st.session_state[k] = v
-
 def _card(title: str, value: Any, suffix: str = "") -> None:
     v = "—" if value is None or value == "" else f"{value}{suffix}"
     st.markdown(
@@ -385,14 +294,23 @@ if "last_generated_pdf_signature" not in st.session_state:
 if "last_saved_report_signature" not in st.session_state:
     st.session_state.last_saved_report_signature = None
 
-if "pending_new_report_signature" not in st.session_state:
-    st.session_state.pending_new_report_signature = None
+if "unlocked_report_signature" not in st.session_state:
+    st.session_state.unlocked_report_signature = None
 
-if "last_unlocked_report_context" not in st.session_state:
-    st.session_state.last_unlocked_report_context = None
+if "unlocked_report_calc" not in st.session_state:
+    st.session_state.unlocked_report_calc = None
 
-if "last_unlocked_report_signature" not in st.session_state:
-    st.session_state.last_unlocked_report_signature = None
+if "unlocked_report_context" not in st.session_state:
+    st.session_state.unlocked_report_context = None
+
+if "pending_confirm_report_signature" not in st.session_state:
+    st.session_state.pending_confirm_report_signature = None
+
+if "pending_confirm_report_calc" not in st.session_state:
+    st.session_state.pending_confirm_report_calc = None
+
+if "pending_confirm_report_context" not in st.session_state:
+    st.session_state.pending_confirm_report_context = None
 
 # Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
 if safe_get_query_param("auth_flow") == "callback":
@@ -567,11 +485,6 @@ with btn_col2:
         st.session_state.scroll_to_item3 = False
         st.session_state.post_login_action = None
         st.session_state.show_inline_payments = False
-        st.session_state.last_generated_pdf_bytes = None
-        st.session_state.last_generated_pdf_signature = None
-        st.session_state.pending_new_report_signature = None
-        st.session_state.last_unlocked_report_context = None
-        st.session_state.last_unlocked_report_signature = None
         st.rerun()
 
 st.session_state.calc["lot_area_m2"] = float(lot_area)
@@ -597,9 +510,9 @@ current_signature = json.dumps(
 )
 
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
+    st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
     st.session_state.show_inline_payments = False
-    st.session_state.pending_new_report_signature = None
     st.session_state.calc.pop("err", None)
     st.session_state.calc.pop("rule", None)
 
@@ -656,10 +569,10 @@ st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
 show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
 
 if run_free_calc_now:
+    st.session_state.report_unlocked = False
     st.session_state.free_calc_done = False
     st.session_state.last_calc_signature = current_signature
     st.session_state.show_inline_payments = False
-    st.session_state.pending_new_report_signature = None
 
     calc.pop("err", None)
     calc.pop("rule", None)
@@ -740,6 +653,111 @@ if section4_can_try:
 
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
+
+def _current_report_context() -> Dict[str, Any]:
+    return {
+        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+        "built_ground_m2": built_ground,
+        "permeable_area_m2": permeable_area,
+        "lot_front_m": st.session_state.calc.get("lot_front_m"),
+        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
+        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+    }
+
+
+def _current_report_signature() -> str | None:
+    if not can_offer_report:
+        return None
+    try:
+        return build_report_signature(calc=calc, session_state=_current_report_context())
+    except Exception:
+        return None
+
+
+def _store_unlocked_report(report_calc: Dict[str, Any], report_context: Dict[str, Any], pdf_bytes: bytes, report_signature: str) -> None:
+    st.session_state.report_unlocked = True
+    st.session_state.unlocked_report_signature = report_signature
+    st.session_state.unlocked_report_calc = deepcopy(report_calc)
+    st.session_state.unlocked_report_context = deepcopy(report_context)
+    st.session_state.last_generated_pdf_bytes = pdf_bytes
+    st.session_state.last_generated_pdf_signature = report_signature
+    st.session_state.pending_confirm_report_signature = None
+    st.session_state.pending_confirm_report_calc = None
+    st.session_state.pending_confirm_report_context = None
+
+
+def _clear_pending_report_confirmation() -> None:
+    st.session_state.pending_confirm_report_signature = None
+    st.session_state.pending_confirm_report_calc = None
+    st.session_state.pending_confirm_report_context = None
+
+
+def _try_prepare_and_unlock_report(report_calc: Dict[str, Any], report_context: Dict[str, Any], report_signature: str, saldo_atual: int | None) -> bool:
+    try:
+        pdf_bytes = generate_report_pdf_bytes(calc=report_calc, session_state=report_context)
+    except Exception as e:
+        st.session_state.show_inline_payments = False
+        st.error(f"Não foi possível preparar o relatório antes de descontar o crédito: {e}")
+        st.code(traceback.format_exc())
+        return False
+
+    same_as_unlocked = bool(st.session_state.get("report_unlocked")) and st.session_state.get("unlocked_report_signature") == report_signature
+
+    if same_as_unlocked:
+        _store_unlocked_report(report_calc, report_context, pdf_bytes, report_signature)
+        st.info("Este relatório já está liberado. Você pode baixar novamente sem gastar outro crédito.")
+        return True
+
+    if saldo_atual is not None and int(saldo_atual) <= 0:
+        st.session_state.show_inline_payments = True
+        st.session_state.report_unlocked = False
+        st.error("Você não possui créditos suficientes para gerar o relatório.")
+        return False
+
+    try:
+        debit_result = consume_viability_credit(
+            user_id=user_id,
+            amount=1,
+            description="Geração de relatório de viabilidade",
+        )
+    except Exception as e:
+        st.session_state.show_inline_payments = True
+        st.session_state.report_unlocked = False
+        st.error(f"Não foi possível descontar o crédito: {e}")
+        st.code(traceback.format_exc())
+        return False
+
+    if not debit_result.get("ok"):
+        st.session_state.show_inline_payments = True
+        st.session_state.report_unlocked = False
+        st.error(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
+        return False
+
+    novo_saldo = debit_result.get("new_balance")
+    st.session_state.show_inline_payments = False
+    _store_unlocked_report(report_calc, report_context, pdf_bytes, report_signature)
+    st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+    return True
+
+
+current_report_signature = _current_report_signature()
+unlocked_report_signature = st.session_state.get("unlocked_report_signature")
+has_unlocked_report = bool(st.session_state.get("report_unlocked")) and isinstance(st.session_state.get("unlocked_report_calc"), dict)
+if has_unlocked_report and not unlocked_report_signature:
+    try:
+        unlocked_report_signature = build_report_signature(
+            calc=st.session_state.get("unlocked_report_calc") or {},
+            session_state=st.session_state.get("unlocked_report_context") or {},
+        )
+        st.session_state.unlocked_report_signature = unlocked_report_signature
+    except Exception:
+        unlocked_report_signature = None
+
+unlocked_use_type_code = ((st.session_state.get("unlocked_report_calc") or {}).get("use_type_code") if has_unlocked_report else None)
+scenario_changed_vs_unlocked = bool(has_unlocked_report and unlocked_use_type_code and unlocked_use_type_code != selected_use_code)
+
 if can_offer_report:
     st.markdown("---")
     st.subheader("Relatório completo")
@@ -748,35 +766,12 @@ if can_offer_report:
         "gere o relatório com 1 crédito."
     )
 
-    report_session_payload = _build_report_session_payload(calc, built_ground, permeable_area)
-    current_report_signature = build_report_signature(
-        calc=calc,
-        session_state=report_session_payload,
-    )
-
     saldo_atual = None
     if user_logged_in and user_id:
         try:
             saldo_atual = get_credit_balance(user_id)
         except Exception:
             saldo_atual = None
-
-    existing_signature = st.session_state.get("last_unlocked_report_signature")
-    has_other_generated_report = bool(
-        st.session_state.get("report_unlocked")
-        and st.session_state.get("last_unlocked_report_context")
-        and existing_signature
-        and existing_signature != current_report_signature
-    )
-    already_unlocked_current_report = bool(
-        st.session_state.get("report_unlocked")
-        and existing_signature == current_report_signature
-        and st.session_state.get("last_generated_pdf_bytes")
-    )
-    show_confirm_new_report = bool(
-        st.session_state.get("pending_new_report_signature") == current_report_signature
-        and has_other_generated_report
-    )
 
     c1, c2 = st.columns([1, 2])
 
@@ -797,145 +792,133 @@ if can_offer_report:
             else:
                 st.info("Não foi possível consultar o saldo neste momento.")
 
-    confirmar_novo_relatorio = False
-    cancelar_novo_relatorio = False
-    if show_confirm_new_report:
+    if has_unlocked_report and scenario_changed_vs_unlocked:
         st.warning(
-            "Você tem certeza que deseja gerar outro relatório? Isso vai gastar outro crédito."
+            "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, confirme antes. Isso gastará outro crédito."
         )
-        cc1, cc2 = st.columns(2)
-        with cc1:
-            confirmar_novo_relatorio = st.button(
-                "Sim, gerar outro relatório",
-                key="btn_confirm_generate_new_report",
-                use_container_width=True,
-            )
-        with cc2:
-            cancelar_novo_relatorio = st.button(
-                "Não",
-                key="btn_cancel_generate_new_report",
-                use_container_width=True,
-            )
 
-    if cancelar_novo_relatorio:
-        st.session_state.pending_new_report_signature = None
-        st.rerun()
+    should_generate_now = False
+    target_calc = deepcopy({**calc, "selected_use_label": selected_use_label, "categoria_label": categoria_label})
+    target_context = _current_report_context()
+    target_signature = current_report_signature
 
-    trigger_generate_report = bool(gerar_relatorio or confirmar_novo_relatorio)
-
-    if gerar_relatorio and has_other_generated_report and not show_confirm_new_report:
-        st.session_state.pending_new_report_signature = current_report_signature
-        st.rerun()
-
-    if trigger_generate_report:
+    if gerar_relatorio:
         if not user_logged_in or not user_id:
             st.error("Faça login com Google para gerar o relatório completo.")
-        elif already_unlocked_current_report:
-            st.success("O relatório atual já está liberado. Use o botão de download abaixo.")
-        elif saldo_atual is not None and int(saldo_atual) <= 0:
-            st.session_state.show_inline_payments = True
-            st.session_state.report_unlocked = False
-            st.error("Você não possui créditos suficientes para gerar o relatório.")
+        elif scenario_changed_vs_unlocked:
+            st.session_state.pending_confirm_report_signature = current_report_signature
+            st.session_state.pending_confirm_report_calc = deepcopy({**calc, "selected_use_label": selected_use_label, "categoria_label": categoria_label})
+            st.session_state.pending_confirm_report_context = _current_report_context()
         else:
-            try:
-                pdf_bytes, prepared_signature, _ = _prepare_report_pdf(
-                    calc=calc,
-                    built_ground=built_ground,
-                    permeable_area=permeable_area,
-                )
-                if not pdf_bytes:
-                    raise RuntimeError("PDF vazio após o preparo do relatório.")
-            except Exception as e:
-                st.session_state.show_inline_payments = False
-                st.error(f"Não foi possível preparar o relatório antes de descontar o crédito: {e}")
-                st.code(traceback.format_exc(), language="python")
-            else:
-                try:
-                    debit_result = consume_viability_credit(
-                        user_id=user_id,
-                        amount=1,
-                        description="Geração de relatório de viabilidade",
-                    )
+            should_generate_now = True
 
-                    if not debit_result.get("ok"):
-                        st.session_state.show_inline_payments = True
-                        st.session_state.report_unlocked = False
-                        st.error(
-                            debit_result.get("message")
-                            or "Saldo insuficiente para gerar o relatório."
-                        )
-                    else:
-                        st.session_state.show_inline_payments = False
-                        st.session_state.report_unlocked = True
-                        st.session_state.pending_new_report_signature = None
-                        st.session_state["last_generated_pdf_signature"] = prepared_signature
-                        st.session_state["last_unlocked_report_signature"] = prepared_signature
-                        _store_unlocked_report_context(calc, built_ground, permeable_area)
-                        novo_saldo = debit_result.get("new_balance")
-                        st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-                        st.rerun()
+    pending_matches_current = (
+        bool(st.session_state.get("pending_confirm_report_signature"))
+        and st.session_state.get("pending_confirm_report_signature") == current_report_signature
+        and scenario_changed_vs_unlocked
+    )
 
-                except Exception as e:
-                    st.session_state.show_inline_payments = True
-                    st.error(f"Não foi possível descontar o crédito: {e}")
-                    st.code(traceback.format_exc(), language="python")
+    if pending_matches_current:
+        st.warning("Você tem certeza que deseja gerar outro relatório? Isso vai gastar outro crédito.")
+        yes_col, no_col = st.columns(2)
+        with yes_col:
+            confirm_yes = st.button("Sim, gerar outro relatório", key="confirm_generate_new_report_yes", use_container_width=True)
+        with no_col:
+            confirm_no = st.button("Não", key="confirm_generate_new_report_no", use_container_width=True)
+
+        if confirm_no:
+            _clear_pending_report_confirmation()
+            st.rerun()
+
+        if confirm_yes:
+            should_generate_now = True
+            target_calc = deepcopy(st.session_state.get("pending_confirm_report_calc") or {**calc, "selected_use_label": selected_use_label, "categoria_label": categoria_label})
+            target_context = deepcopy(st.session_state.get("pending_confirm_report_context") or _current_report_context())
+            target_signature = st.session_state.get("pending_confirm_report_signature") or current_report_signature
+            _clear_pending_report_confirmation()
+
+    if should_generate_now and target_signature:
+        generated_ok = _try_prepare_and_unlock_report(target_calc, target_context, target_signature, saldo_atual)
+        if generated_ok:
+            st.rerun()
 
     if st.session_state.get("show_inline_payments"):
         st.markdown("### Comprar créditos")
         render_payments_panel()
 
-if st.session_state.get("report_unlocked") and st.session_state.get("last_unlocked_report_context"):
+report_calc_for_view = None
+report_context_for_view = None
+report_signature_for_view = None
+
+if has_unlocked_report:
+    report_calc_for_view = deepcopy(st.session_state.get("unlocked_report_calc") or {})
+    report_context_for_view = deepcopy(st.session_state.get("unlocked_report_context") or {})
+    report_signature_for_view = st.session_state.get("unlocked_report_signature")
+
+if report_calc_for_view and report_context_for_view and report_signature_for_view:
     st.markdown("---")
 
-    rendered = _render_unlocked_report_from_context()
-    if not rendered:
-        st.error("Não foi possível renderizar o relatório já liberado.")
-    else:
-        st.markdown("### Download do relatório")
-        pdf_bytes = st.session_state.get("last_generated_pdf_bytes")
-        unlocked_signature = st.session_state.get("last_unlocked_report_signature")
-        unlocked_ctx = st.session_state.get("last_unlocked_report_context") or {}
-        unlocked_calc = unlocked_ctx.get("calc") or {}
-        unlocked_session_payload = _build_report_session_payload(
-            unlocked_calc,
-            unlocked_ctx.get("built_ground"),
-            unlocked_ctx.get("permeable_area"),
-        )
+    render_analise_section(
+        report_calc_for_view,
+        lot_area=report_context_for_view.get("lot_area_m2"),
+        built_ground=report_context_for_view.get("built_ground_m2"),
+        permeable_area=report_context_for_view.get("permeable_area_m2"),
+        pick_func=pick_rule,
+    )
 
-        if pdf_bytes:
+    render_zone_description_section(report_calc_for_view)
+    render_relatorio_section(report_calc_for_view)
+
+    st.markdown("### Download do relatório")
+    pdf_bytes_for_view = st.session_state.get("last_generated_pdf_bytes")
+    if pdf_bytes_for_view and st.session_state.get("last_generated_pdf_signature") == report_signature_for_view:
+        st.download_button(
+            label="⬇️ Baixar relatório em PDF",
+            data=pdf_bytes_for_view,
+            file_name="relatorio_viabilidade.pdf",
+            mime="application/pdf",
+            key="download_report_pdf",
+            use_container_width=True,
+        )
+    else:
+        try:
+            pdf_bytes_for_view = generate_report_pdf_bytes(calc=report_calc_for_view, session_state=report_context_for_view)
+            st.session_state["last_generated_pdf_bytes"] = pdf_bytes_for_view
+            st.session_state["last_generated_pdf_signature"] = report_signature_for_view
             st.download_button(
                 label="⬇️ Baixar relatório em PDF",
-                data=pdf_bytes,
+                data=pdf_bytes_for_view,
                 file_name="relatorio_viabilidade.pdf",
                 mime="application/pdf",
                 key="download_report_pdf",
                 use_container_width=True,
             )
+        except Exception as e:
+            st.error(f"Não foi possível preparar o PDF para download: {e}")
+            st.code(traceback.format_exc())
+            pdf_bytes_for_view = None
 
-        if unlocked_signature and pdf_bytes and user_id:
-            if st.session_state.get("last_saved_report_signature") != unlocked_signature:
-                try:
-                    save_result = save_client_report(
-                        user_id=user_id,
-                        user_email=st.session_state.get("auth_user_email") or "",
-                        calc={
-                            **unlocked_calc,
-                            "selected_use_label": unlocked_ctx.get("selected_use_label"),
-                            "categoria_label": unlocked_ctx.get("categoria_label"),
-                        },
-                        session_state=unlocked_session_payload,
-                        pdf_bytes=pdf_bytes,
-                        report_signature=unlocked_signature,
-                    )
-                    st.session_state["last_saved_report_signature"] = unlocked_signature
-                    if save_result.get("already_exists"):
-                        st.info("Este relatório já estava salvo automaticamente na sua área do cliente.")
-                    else:
-                        st.success("Relatório salvo automaticamente na sua área do cliente.")
-                except Exception as e:
-                    st.error(f"Não foi possível salvar automaticamente o relatório na área do cliente: {e}")
-            else:
-                st.caption("Este relatório já está salvo na sua área do cliente.")
+    if user_logged_in and user_id and pdf_bytes_for_view:
+        if st.session_state.get("last_saved_report_signature") != report_signature_for_view:
+            try:
+                save_result = save_client_report(
+                    user_id=user_id,
+                    user_email=st.session_state.get("auth_user_email") or "",
+                    calc=report_calc_for_view,
+                    session_state=report_context_for_view,
+                    pdf_bytes=pdf_bytes_for_view,
+                    report_signature=report_signature_for_view,
+                )
+                st.session_state["last_saved_report_signature"] = report_signature_for_view
+                if save_result.get("already_exists"):
+                    st.info("Este relatório já estava salvo automaticamente na sua área do cliente.")
+                else:
+                    st.success("Relatório salvo automaticamente na sua área do cliente.")
+            except Exception as e:
+                st.error(f"Não foi possível salvar automaticamente o relatório na área do cliente: {e}")
+                st.code(traceback.format_exc())
+        else:
+            st.caption("Este relatório já está salvo na sua área do cliente.")
 
 if st.session_state.get("scroll_to_login_gate"):
     components.html(
