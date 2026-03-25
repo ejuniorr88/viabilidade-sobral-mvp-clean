@@ -639,26 +639,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             st.error(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
     st.markdown("**Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.**")
 
-    st.markdown("---\n### 🧭 3️⃣ O que essa zona permite neste terreno?")
-    if desc and desc.get("description_text"):
-        title = str(desc.get("title") or zona).strip()
-        if title.upper() == (zona or "").upper():
-            zone_head = zona
-        elif title.upper().startswith((zona or "").upper() + " —") or title.upper().startswith((zona or "").upper() + " -"):
-            zone_head = title
-        else:
-            zone_head = f"{zona} — {title}"
-        st.markdown(f"**{zone_head}**")
-        st.markdown(str(desc.get("description_text")))
-    else:
-        st.markdown(
-            f"- **Zona:** {zona or '—'}\n"
-            f"- **Via do terreno:** {via}\n"
-            f"- **Tipo de via:** {via_tipo_txt or '—'}"
-        )
-    st.markdown("**É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.**")
-
-    st.markdown("---\n### 📘 4️⃣ Como funciona a leitura da adequabilidade no multifamiliar?")
+    st.markdown("---\n### 📘 3️⃣ Como funciona a leitura da adequabilidade no multifamiliar?")
     st.markdown(
         "**No multifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o porte do empreendimento e o tipo da via. "
         "Por isso, estas siglas ajudam a interpretar corretamente a viabilidade mostrada acima.**"
@@ -684,6 +665,25 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             "| **Grande** | de **1.000,01 m²** até **5.000 m²** |\n"
             "| **Projeto especial** | acima de **5.000 m²** |"
         )
+
+    st.markdown("---\n### 🧭 4️⃣ O que essa zona permite neste terreno?")
+    if desc and desc.get("description_text"):
+        title = str(desc.get("title") or zona).strip()
+        if title.upper() == (zona or "").upper():
+            zone_head = zona
+        elif title.upper().startswith((zona or "").upper() + " —") or title.upper().startswith((zona or "").upper() + " -"):
+            zone_head = title
+        else:
+            zone_head = f"{zona} — {title}"
+        st.markdown(f"**{zone_head}**")
+        st.markdown(str(desc.get("description_text")))
+    else:
+        st.markdown(
+            f"- **Zona:** {zona or '—'}\n"
+            f"- **Via do terreno:** {via}\n"
+            f"- **Tipo de via:** {via_tipo_txt or '—'}"
+        )
+    st.markdown("**É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.**")
 
     st.markdown("---\n### 📏 5️⃣ Regras principais para este terreno")
     st.markdown("**Depois de entender se o uso é permitido, o próximo passo é ver as regras básicas da zona para começar o estudo.**")
@@ -840,7 +840,6 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             )
 
     st.markdown("---\n### 🚗 9️⃣ Vagas de estacionamento")
-    st.markdown("---\n### 🚗 9️⃣ Vagas de estacionamento")
     st.markdown(
         "**A quantidade de vagas depende do tamanho da unidade habitacional.**\n\n"
         "Regras:\n"
@@ -917,8 +916,6 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
             f"- e a altura deve respeitar o limite máximo permitido da zona."
         )
 
-    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
-    st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     st.markdown("---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?")
     _render_alvara_section()
 
