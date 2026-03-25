@@ -11,7 +11,6 @@ from .relatorio_blocks import (
     render_figuras_anexo_v,
     render_multifamiliar_guia,
 )
-from .relatorio_blocks.multifamiliar_guia import _fetch_adequabilidade, _sigla_nome, _via_tipo_norm
 from core.zone_descriptions import fetch_zone_description
 
 
@@ -94,42 +93,6 @@ def _use_label(uso: str) -> str:
     }
     return mapping.get(code, code or "uso informado")
 
-
-
-
-def _norm_text(v: Any) -> str:
-    return str(v or "").strip().upper()
-
-
-def _summarize_adequabilidade_unifamiliar(*, zone_class: str | None, via_norm: str | None, via_class: str | None) -> tuple[str, str, str]:
-    z = _norm_text(zone_class)
-    v = _norm_text(via_class)
-
-    if z == "I":
-        return (
-            "❌",
-            "NÃO PERMITE",
-            "A zona indicou I (Inadequado / não permitido). Para o unifamiliar, a via não libera um uso residencial que a zona já proibiu.",
-        )
-
-    if not via_norm:
-        if z == "AP/AM":
-            return ("⚠️", "DEPENDE DO PORTE", "A zona indicou AP/AM (depende do porte). Em via local, normalmente vale a regra da zona.")
-        if z == "PE":
-            return ("⚠️", "PROJETO ESPECIAL", "A zona indicou PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
-        if z in ("A", "AP", "AM"):
-            return ("✅", "PERMITE", "A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.")
-        return ("⚠️", "SEM DADO", "Não foi possível determinar o resultado por zona.")
-
-    if v == "I":
-        return ("❌", "NÃO PERMITE", "O tipo de via indicou I (não permitido).")
-    if z == "AP/AM" or v == "AP/AM":
-        return ("⚠️", "DEPENDE DO PORTE", "Existe indicação AP/AM (depende do porte). Confira se o empreendimento se enquadra no porte permitido.")
-    if z == "PE" or v == "PE":
-        return ("⚠️", "PROJETO ESPECIAL", "Existe indicação PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
-    if z in ("A", "AP", "AM") or v in ("A", "AP", "AM"):
-        return ("✅", "PERMITE", "Zona e/ou tipo de via permitem. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.")
-    return ("⚠️", "SEM DADO", "Não foi possível determinar a adequabilidade do uso por zona e via.")
 
 def render_zone_description_section(calc: Dict[str, Any]) -> None:
     # Compatibilidade mantida: o app principal chama esta função antes do relatório.
@@ -238,38 +201,10 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     if not zona_texto_pratico:
         zona_texto_pratico = "Essa zona ajuda a definir o uso permitido, o quanto pode ocupar no térreo, a área que precisa ficar livre e o porte da edificação."
 
-    zone_class, via_class, dbg = _fetch_adequabilidade(
-        zone_sigla=str(zone_sigla or zone),
-        via_tipo_texto=str(via_tipo or ""),
-        use_type_code=str(uso or "RES_UNI"),
-    )
-    via_norm = _via_tipo_norm(via_tipo)
-    icon, status_curto, explicacao = _summarize_adequabilidade_unifamiliar(
-        zone_class=zone_class, via_norm=via_norm, via_class=via_class
-    )
-
-    resultado_zona = (
-        f"{zone_class} ({_sigla_nome(zone_class)})" if zone_class else "não encontrado"
-    )
-    if via_norm and via_class:
-        resultado_via = f"{via_class} ({_sigla_nome(via_class)})"
-    elif via_norm:
-        resultado_via = str(via_tipo or "via local")
-    else:
-        resultado_via = "Sem restrição adicional identificada nesta etapa"
-
-    if status_curto == "PERMITE":
-        resultado_final = "Viável"
-    elif status_curto == "NÃO PERMITE":
-        resultado_final = "Não viável"
-    else:
-        resultado_final = status_curto.title()
-
-    texto_apoio = "Primeiro olhamos a zona em que o terreno está localizado. Em alguns casos, a via também entra nessa análise, mas a via não libera um uso residencial que a zona já proíba."
-    calc["adequab_zone_class"] = zone_class
-    calc["adequab_via_class"] = via_class
-    calc["adequab_status_curto"] = status_curto
-    calc["adequab_explicacao"] = explicacao
+    resultado_zona = "Viável nesta análise inicial"
+    resultado_via = "Sem restrição adicional identificada nesta etapa"
+    resultado_final = "Viável"
+    texto_apoio = "Primeiro olhamos a zona em que o terreno está localizado. Em alguns casos, a via também entra nessa análise e pode reforçar ou limitar o que pode ser feito no local."
 
     recuos_resumo = f"Frontal: {_fmt_num(rec_fr)} m | Laterais: {_fmt_num(rec_lat)} m | Fundos: {_fmt_num(rec_fun)} m"
     ia_min_texto = _fmt_num(ia_min) if ia_min is not None else "não informado"
@@ -315,6 +250,29 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
             f"- **Via identificada:** {via}\n"
             f"- **Tipo de via:** {via_tipo}\n\n"
             "👉 Na prática, isso quer dizer que a via também entra na leitura do uso neste caso."
+        )
+
+    st.markdown("---\n### 📘 4️⃣ Como funciona a leitura da adequabilidade no unifamiliar?")
+    st.markdown(
+        "**No unifamiliar, a leitura também começa pela zona. Em alguns casos, a via entra como informação complementar, "
+        "mas a via não libera um uso residencial que a zona já proíba. Por isso, vale interpretar o resultado acima com esta chave de leitura.**"
+    )
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(
+            "| Sigla / situação | O que significa | Como interpretar |\n"
+            "|---|---|---|\n"
+            "| **A** | Adequado / permitido | Pode seguir para a leitura dos índices urbanísticos e das demais regras. |\n"
+            "| **I** | Inadequado / não permitido | Em regra, o uso residencial unifamiliar não deve ser considerado viável nesse local. |\n"
+            "| **Sem dado** | Ainda não localizado no banco | O sistema ainda não encontrou a leitura automática; o caso precisa de conferência adicional. |"
+        )
+    with col2:
+        st.markdown(
+            "| Leitura prática no unifamiliar | Como entender |\n"
+            "|---|---|\n"
+            "| **Zona permite** | O uso pode seguir para a análise dos parâmetros do lote. |\n"
+            "| **Zona não permite** | O resultado final do uso deve ser tratado como negativo, mesmo que a via seja favorável. |\n"
+            "| **Via entra como apoio** | A via ajuda a contextualizar o caso, mas não substitui a leitura principal da zona. |"
         )
 
     st.markdown("---\n### 🧭 3️⃣ O que essa zona permite neste terreno?")
