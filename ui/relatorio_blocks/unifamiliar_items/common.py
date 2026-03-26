@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import streamlit as st
+
+
+def md(text: str) -> None:
+    st.markdown(text)
+
 
 def fmt_num(v: Any, dec: int = 2) -> str:
     try:

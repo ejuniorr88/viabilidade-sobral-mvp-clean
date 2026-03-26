@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import streamlit as _st
+import streamlit as st
+
+from .common import md
 
 
 def render(ctx: dict) -> None:
-    st = ctx.get("st", _st)
-    st.markdown("---\n### ✅ 2️⃣ O uso residencial unifamiliar é viável neste terreno?")
-    st.markdown("**Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.**")
+    md("**Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.**")
     if not ctx['zone_class'] and not ctx['via_class']:
         st.warning(
             "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. "
@@ -14,21 +14,21 @@ def render(ctx: dict) -> None:
         )
     else:
         via_line = (
-            f"- **Por via:** {ctx['via_class']} ({ctx['via_class_nome']})"
+            f"- **Por via:** {ctx['via_class']} ({ctx['_mf_sigla_nome'](ctx['via_class'])})"
             if ctx['via_norm'] and ctx['via_class']
             else f"- **Por via:** {ctx['via_tipo'] or 'via local'}"
         )
-        st.markdown(
+        md(
             f"- **Por zona:** {ctx['zone_class'] or 'não encontrado'}"
-            + (f" ({ctx['zone_class_nome']})" if ctx['zone_class'] else "")
+            + (f" ({ctx['_mf_sigla_nome'](ctx['zone_class'])})" if ctx['zone_class'] else "")
             + "\n"
             + via_line
             + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
         )
-        if ctx['status_curto'] == 'PERMITE':
+        if ctx['status_curto'] == "PERMITE":
             st.success(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
-        elif ctx['status_curto'] in ('DEPENDE DO PORTE', 'PROJETO ESPECIAL', 'POSSÍVEL PELA VIA', 'SEM DADO'):
+        elif ctx['status_curto'] in ("DEPENDE DO PORTE", "PROJETO ESPECIAL", "POSSÍVEL PELA VIA", "SEM DADO"):
             st.warning(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
         else:
             st.error(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
-    st.markdown("**Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.**")
+    md("**Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.**")

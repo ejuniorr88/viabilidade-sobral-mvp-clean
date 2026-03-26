@@ -1,40 +1,39 @@
 from __future__ import annotations
 
-from .common import fmt_num, fmt_pct, md_table
-from . import (
-    item_01_localizacao,
-    item_02_adequabilidade,
-    item_03_leitura_adequabilidade,
-    item_04_zona,
-    item_05_regras_principais,
-    item_06_ocupacao_terreo,
-    item_07_permeabilidade,
-    item_08_tipos_piso,
-    item_09_ia_altura,
-    item_10_vagas,
-    item_11_quadro_tecnico,
-    item_12_calcada,
-    item_13_dicas,
-    item_14_resumo,
-    item_15_pos_etapa,
-    item_16_fechamento,
-)
+from .item_01_localizacao import render as render_item_01
+from .item_02_adequabilidade import render as render_item_02
+from .item_03_leitura_adequabilidade import render as render_item_03
+from .item_04_zona import render as render_item_04
+from .item_05_regras_principais import render as render_item_05
+from .item_06_ocupacao_terreo import render as render_item_06
+from .item_07_permeabilidade import render as render_item_07
+from .item_08_tipos_piso import render as render_item_08
+from .item_09_ia_altura import render as render_item_09
+from .item_10_vagas import render as render_item_10
+from .item_11_quadro_tecnico import render as render_item_11
+from .item_12_calcada import render as render_item_12
+from .item_13_dicas import render as render_item_13
+from .item_14_resumo import render as render_item_14
+from .item_15_pos_etapa import render as render_item_15
+from .item_16_fechamento import render as render_item_16
 
+UNIFAMILIAR_ITEM_RENDERERS = {
+    "item_01": render_item_01,
+    "item_02": render_item_02,
+    "item_03": render_item_03,
+    "item_04": render_item_04,
+    "item_05": render_item_05,
+    "item_06": render_item_06,
+    "item_07": render_item_07,
+    "item_08": render_item_08,
+    "item_09": render_item_09,
+    "item_10": render_item_10,
+    "item_11": render_item_11,
+    "item_12": render_item_12,
+    "item_13": render_item_13,
+    "item_14": render_item_14,
+    "item_15": render_item_15,
+    "item_16": render_item_16,
+}
 
-def render_unifamiliar_items(ctx: dict) -> None:
-    item_01_localizacao.render(ctx)
-    item_02_adequabilidade.render(ctx)
-    item_03_leitura_adequabilidade.render(ctx)
-    item_04_zona.render(ctx)
-    item_05_regras_principais.render(ctx)
-    item_06_ocupacao_terreo.render(ctx)
-    item_07_permeabilidade.render(ctx)
-    item_08_tipos_piso.render(ctx)
-    item_09_ia_altura.render(ctx)
-    item_10_vagas.render(ctx)
-    item_11_quadro_tecnico.render(ctx)
-    item_12_calcada.render(ctx)
-    item_13_dicas.render(ctx)
-    item_14_resumo.render(ctx)
-    item_15_pos_etapa.render(ctx)
-    item_16_fechamento.render(ctx)
+__all__ = ["UNIFAMILIAR_ITEM_RENDERERS"]
