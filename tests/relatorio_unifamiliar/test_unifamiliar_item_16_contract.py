@@ -13,7 +13,8 @@ def test_item_16_keeps_minimum_content_contract() -> None:
     assert_item_has_required_phrases(
         "item_16",
         [
-            "Este relatório foi pensado para ajudar a entender o terreno de forma mais simples."
+            "Este relatório foi pensado para ajudar a entender o terreno de forma mais simples.",
+            "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no setor de licenciamento de obras da prefeitura.",
         ],
     )
 
