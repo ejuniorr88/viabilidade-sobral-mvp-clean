@@ -1,5 +1,5 @@
 from __future__ import annotations
+from . import common
 
-
-def render(ctx: dict) -> None:
-    ctx['_render_alvara_section']()
+def render(ctx):
+    common._render_alvara_section()
