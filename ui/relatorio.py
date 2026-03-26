@@ -17,29 +17,8 @@ from .relatorio_blocks.multifamiliar_guia import (
     _summarize_adequabilidade as _mf_summarize_adequabilidade,
     _via_tipo_norm as _mf_via_tipo_norm,
 )
-from .relatorio_blocks.unifamiliar_items import render_unifamiliar_items
-from .relatorio_blocks.unifamiliar_items.common import fmt_num as _u_fmt_num, fmt_pct as _u_fmt_pct, md_table as _u_md_table
 from core.zone_descriptions import fetch_zone_description
-
-# Contratos textuais do unifamiliar preservados em ui/relatorio.py para blindagem da suíte atual:
-# ### 🧭 3️⃣ O que essa zona permite neste terreno?
-# ### 💡 1️⃣2️⃣ Dicas valiosas
-# ### 📌 1️⃣3️⃣ Resumo rápido final
-# ### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?
-# #### 📄 Alvará de Construção Simplificado
-# #### 🏗️ Alvará de Construção (Obra Nova)
-# [ ] Documento de identidade do requerente ou representante legal
-# [ ] CPF ou CNPJ
-# [ ] Matrícula atualizada do imóvel ou documento equivalente
-# [ ] Parecer favorável de Adequabilidade Locacional
-# [ ] ART/RRT do responsável técnico
-# [ ] Requerimento único
-# [ ] Projeto hidrossanitário
-# [ ] Memorial de cálculo e drenagem pluvial
-# [ ] EIV, quando exigido pela legislação
-# [ ] Conferir se o projeto atende às exigências técnicas antes do protocolo
-# 👉 **Em resumo:** você pode ocupar até / precisa manter pelo menos
-# ### ✅ 1️⃣5️⃣ Fechamento final
+from .relatorio_blocks.unifamiliar_items import UNIFAMILIAR_ITEM_RENDERERS
 
 
 def _safe_float(v: Any) -> float | None:
@@ -227,7 +206,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     A_livre = (A - A_considerada) if (A_considerada is not None and A > 0) else None
     A_impermeavel_possivel = (A_livre - A_perm_min) if (A_livre is not None and A_perm_min is not None) else None
     A_ia_saldo = (A_total - A_considerada) if (A_total is not None and A_considerada is not None) else None
-    ia_consumido_terreo = (A_considerada / A) if (A_considerada is not None and A > 0) else None
 
     zone_sigla = calc.get("zone_sigla") or calc.get("zone_lookup") or zone or rule.get("zone_sigla") or ""
     subzone_code = calc.get("subzone_code") or rule.get("subzone_code") or "PADRAO"
@@ -237,15 +215,6 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     except Exception:
         desc = None
     zone_title = _zone_title(str(zone_sigla or zone), desc)
-    zona_texto = str((desc or {}).get("description_text") or "").strip()
-    zona_texto_o_que_e = zona_texto
-    zona_texto_pratico = ""
-    if "Na prática:" in zona_texto:
-        before, after = zona_texto.split("Na prática:", 1)
-        zona_texto_o_que_e = before.strip()
-        zona_texto_pratico = after.strip()
-    if not zona_texto_pratico:
-        zona_texto_pratico = "Essa zona ajuda a definir o uso permitido, o quanto pode ocupar no térreo, a área que precisa ficar livre e o porte da edificação."
 
     zone_class, via_class, adeq_dbg = _fetch_adequabilidade_unifamiliar(
         zone_sigla=str(zone_sigla or zone or ""),
@@ -273,84 +242,92 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "**Importante:** este relatório é uma análise inicial. A aprovação final depende da conferência completa no licenciamento."
     )
 
-    unifamiliar_ctx = {
+    item_headings = {
+        "item_01": "---\n### 📍 1️⃣ Onde está localizado o terreno?",
+        "item_02": "---\n### ✅ 2️⃣ O uso residencial unifamiliar é viável neste terreno?",
+        "item_03": "---\n### 📘 3️⃣ Como funciona a leitura da adequabilidade no unifamiliar?",
+        "item_04": "---\n### 🧭 4️⃣ O que essa zona permite neste terreno?",
+        "item_05": "---\n### 📏 5️⃣ Regras principais para este terreno",
+        "item_06": "---\n### 📐 6️⃣ Quanto posso ocupar no térreo?",
+        "item_07": "---\n### 🌿 7️⃣ Quanto preciso deixar livre?",
+        "item_08": "---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?",
+        "item_09": "---\n### 🏢 9️⃣ Posso construir mais andares?",
+        "item_10": "---\n### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?",
+        "item_11": "---\n### 📋 1️⃣1️⃣ Quais medidas mínimas os ambientes precisam ter?",
+        "item_12": "---\n### 🚶 1️⃣2️⃣ O que preciso saber sobre a calçada?",
+        "item_13": "---\n### 💡 1️⃣3️⃣ Dicas valiosas",
+        "item_14": "---\n### 📌 1️⃣4️⃣ Resumo rápido final",
+        "item_15": "---\n### 🏛️ 1️⃣5️⃣ O que acontece depois desta etapa?",
+        "item_16": "---\n### ✅ 1️⃣6️⃣ Fechamento final",
+    }
+
+    ctx = {
+        "calc": calc,
         "rule": rule,
-        "is_corner": is_corner,
-        "uso_label": uso_label,
         "zone": zone,
         "via": via,
         "via_tipo": via_tipo,
-        "subzone_code": subzone_code,
-        "tipo_lote": tipo_lote,
+        "uso": uso,
+        "uso_label": uso_label,
         "A": A,
         "W": W,
         "D": D,
-        "A_fmt": _u_fmt_num(A),
-        "W_fmt": _u_fmt_num(W),
-        "D_fmt": _u_fmt_num(D),
+        "is_corner": is_corner,
+        "tipo_lote": tipo_lote,
         "to_max": to_max,
         "tp_min": tp_min,
         "ia_max": ia_max,
         "ia_min": ia_min,
+        "rec_fr": rec_fr,
+        "rec_lat": rec_lat,
+        "rec_fun": rec_fun,
         "gabarito_m": gabarito_m,
-        "to_max_fmt": _u_fmt_pct(to_max),
-        "tp_min_fmt": _u_fmt_pct(tp_min),
-        "ia_max_fmt": _u_fmt_num(ia_max) if ia_max is not None else "—",
-        "gabarito_fmt": _u_fmt_num(gabarito_m),
-        "ia_min_texto": ia_min_texto,
-        "recuos_resumo": recuos_resumo,
-        "rec_fr_fmt": _u_fmt_num(rec_fr),
-        "rec_lat_fmt": _u_fmt_num(rec_lat),
-        "rec_fun_fmt": _u_fmt_num(rec_fun),
         "A_to": A_to,
-        "A_to_fmt": _u_fmt_num(A_to),
         "A_perm_min": A_perm_min,
-        "A_perm_min_fmt": _u_fmt_num(A_perm_min),
         "A_total": A_total,
-        "A_total_fmt": _u_fmt_num(A_total),
+        "built_ground": built_ground,
         "W_util": W_util,
-        "W_util_fmt": _u_fmt_num(W_util),
         "D_util": D_util,
-        "D_util_fmt": _u_fmt_num(D_util),
         "A_recuos": A_recuos,
-        "A_recuos_fmt": _u_fmt_num(A_recuos),
         "A_op1_max": A_op1_max,
-        "A_op1_max_fmt": _u_fmt_num(A_op1_max),
+        "A_fundo": A_fundo,
         "A_op2_max": A_op2_max,
-        "A_op2_max_fmt": _u_fmt_num(A_op2_max),
         "tp1": tp1,
         "tp2": tp2,
+        "A_teto_projeto": A_teto_projeto,
         "area_pedida": area_pedida,
-        "area_pedida_fmt": _u_fmt_num(area_pedida),
         "A_considerada": A_considerada,
-        "A_considerada_fmt": _u_fmt_num(A_considerada),
         "excedeu_area": excedeu_area,
         "to_projeto_pct": to_projeto_pct,
-        "to_projeto_pct_fmt": _u_fmt_pct(to_projeto_pct),
         "A_livre": A_livre,
-        "A_livre_fmt": _u_fmt_num(A_livre),
         "A_impermeavel_possivel": A_impermeavel_possivel,
-        "A_impermeavel_possivel_fmt": _u_fmt_num(A_impermeavel_possivel),
         "A_ia_saldo": A_ia_saldo,
-        "A_ia_saldo_fmt": _u_fmt_num(A_ia_saldo),
-        "zone_title": zone_title,
+        "zone_sigla": zone_sigla,
+        "subzone_code": subzone_code,
+        "zone_label": zone_label,
         "desc": desc,
+        "zone_title": zone_title,
         "zone_class": zone_class,
         "via_class": via_class,
+        "adeq_dbg": adeq_dbg,
         "via_norm": via_norm,
-        "zone_class_nome": _mf_sigla_nome(zone_class) if zone_class else "",
-        "via_class_nome": _mf_sigla_nome(via_class) if via_class else "",
         "icon": icon,
         "status_curto": status_curto,
         "explicacao": explicacao,
+        "recuos_resumo": recuos_resumo,
+        "ia_min_texto": ia_min_texto,
         "pav_est": pav_est,
-        "fmt_num": _u_fmt_num,
-        "fmt_pct": _u_fmt_pct,
-        "md_table": _u_md_table,
-        "st": st,
+        "render_quadro_tecnico": render_quadro_tecnico,
         "render_figuras_anexo_v": render_figuras_anexo_v,
+        "_mf_sigla_nome": _mf_sigla_nome,
     }
-    render_unifamiliar_items(unifamiliar_ctx)
+
+    for item_key in [
+        "item_01", "item_02", "item_03", "item_04", "item_05", "item_06", "item_07", "item_08",
+        "item_09", "item_10", "item_11", "item_12", "item_13", "item_14", "item_15", "item_16",
+    ]:
+        st.markdown(item_headings[item_key])
+        UNIFAMILIAR_ITEM_RENDERERS[item_key](ctx)
 
     with st.expander("Ver regra completa (JSON)"):
         st.json(rule)
