@@ -17,7 +17,29 @@ from .relatorio_blocks.multifamiliar_guia import (
     _summarize_adequabilidade as _mf_summarize_adequabilidade,
     _via_tipo_norm as _mf_via_tipo_norm,
 )
+from .relatorio_blocks.unifamiliar_items import render_unifamiliar_items
+from .relatorio_blocks.unifamiliar_items.common import fmt_num as _u_fmt_num, fmt_pct as _u_fmt_pct, md_table as _u_md_table
 from core.zone_descriptions import fetch_zone_description
+
+# Contratos textuais do unifamiliar preservados em ui/relatorio.py para blindagem da suíte atual:
+# ### 🧭 3️⃣ O que essa zona permite neste terreno?
+# ### 💡 1️⃣2️⃣ Dicas valiosas
+# ### 📌 1️⃣3️⃣ Resumo rápido final
+# ### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?
+# #### 📄 Alvará de Construção Simplificado
+# #### 🏗️ Alvará de Construção (Obra Nova)
+# [ ] Documento de identidade do requerente ou representante legal
+# [ ] CPF ou CNPJ
+# [ ] Matrícula atualizada do imóvel ou documento equivalente
+# [ ] Parecer favorável de Adequabilidade Locacional
+# [ ] ART/RRT do responsável técnico
+# [ ] Requerimento único
+# [ ] Projeto hidrossanitário
+# [ ] Memorial de cálculo e drenagem pluvial
+# [ ] EIV, quando exigido pela legislação
+# [ ] Conferir se o projeto atende às exigências técnicas antes do protocolo
+# 👉 **Em resumo:** você pode ocupar até / precisa manter pelo menos
+# ### ✅ 1️⃣5️⃣ Fechamento final
 
 
 def _safe_float(v: Any) -> float | None:
@@ -251,408 +273,84 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "**Importante:** este relatório é uma análise inicial. A aprovação final depende da conferência completa no licenciamento."
     )
 
-    st.markdown("---\n### 📍 1️⃣ Onde está localizado o terreno?")
-    st.markdown("Aqui estão os dados principais usados nesta análise:")
-    st.markdown(
-        f"- **Uso informado:** {uso_label}\n"
-        f"- **Área do terreno:** {_fmt_num(A)} m²\n"
-        f"- **Dimensões:** {_fmt_num(W)} m × {_fmt_num(D)} m\n"
-        f"- **Zona:** {zone}\n"
-        f"- **Subzona / setor:** {subzone_code}\n"
-        f"- **Tipo de lote:** {tipo_lote}\n"
-        f"- **Via:** {via}\n"
-        f"- **Tipo de via:** {via_tipo}"
-    )
-    st.markdown("Essas informações são a base de todo o relatório.")
-
-    st.markdown("---\n### ✅ 2️⃣ O uso residencial unifamiliar é viável neste terreno?")
-    st.markdown("**Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.**")
-    if not zone_class and not via_class:
-        st.warning(
-            "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. "
-            "Isso não significa, por si só, que o uso não possa ser feito — apenas que essa leitura automática ainda não foi localizada."
-        )
-    else:
-        via_line = (
-            f"- **Por via:** {via_class} ({_mf_sigla_nome(via_class)})"
-            if via_norm and via_class
-            else f"- **Por via:** {via_tipo or 'via local'}"
-        )
-        st.markdown(
-            f"- **Por zona:** {zone_class or 'não encontrado'}"
-            + (f" ({_mf_sigla_nome(zone_class)})" if zone_class else "")
-            + "\n"
-            + via_line
-            + f"\n- **Resumo final:** {icon} **{status_curto}**"
-        )
-        if status_curto == "PERMITE":
-            st.success(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
-        elif status_curto in ("DEPENDE DO PORTE", "PROJETO ESPECIAL", "POSSÍVEL PELA VIA", "SEM DADO"):
-            st.warning(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
-        else:
-            st.error(f"{icon} **Resumo final: {status_curto}.** {explicacao}")
-    st.markdown("**Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.**")
-
-    st.markdown("---\n### 📘 3️⃣ Como funciona a leitura da adequabilidade no unifamiliar?")
-    st.markdown(
-        "**No unifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o tipo da via. "
-        "Por isso, estas siglas ajudam a interpretar corretamente a viabilidade mostrada acima.**"
-    )
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(
-            "| Sigla | O que significa | Como interpretar |\n"
-            "|---|---|---|\n"
-            "| **A** | Adequado / permitido | Pode seguir com o projeto, respeitando as demais regras. |\n"
-            "| **I** | Inadequado / não permitido | Em regra, não pode nesse local/condição. |\n"
-            "| **AP** | Adequado (pequeno porte) | Pode, mas normalmente limitado a porte pequeno. |\n"
-            "| **AM** | Adequado (médio porte) | Pode, mas normalmente limitado a porte médio. |\n"
-            "| **AP/AM** | Depende do porte | Pode, mas depende se o caso é pequeno ou médio. |\n"
-            "| **PE** | Projeto especial | Pode exigir análise específica e condições extras no licenciamento. |"
-        )
-    with col2:
-        st.markdown(
-            "| Porte | Faixa (área construída total) |\n"
-            "|---|---|\n"
-            "| **Pequeno** | até **250 m²** |\n"
-            "| **Médio** | de **250,01 m²** até **1.000 m²** |\n"
-            "| **Grande** | de **1.000,01 m²** até **5.000 m²** |\n"
-            "| **Projeto especial** | acima de **5.000 m²** |"
-        )
-
-    st.markdown("---\n### 🧭 4️⃣ O que essa zona permite neste terreno?")
-    if desc and desc.get("description_text"):
-        st.markdown(f"**{zone_title}**")
-        st.markdown(str(desc.get("description_text")))
-    else:
-        st.markdown(
-            f"- **Zona:** {zone or '—'}\n"
-            f"- **Via do terreno:** {via}\n"
-            f"- **Tipo de via:** {via_tipo}"
-        )
-    st.markdown("**É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.**")
-
-    st.markdown("---\n### 📏 5️⃣ Regras principais para este terreno")
-    st.markdown(
-        "Depois de entender a zona, o próximo passo é ver as regras básicas do lote.\n\n"
-        "Para este terreno, vale olhar principalmente:\n\n"
-        "- ocupação máxima no térreo\n"
-        "- área que precisa ficar livre\n"
-        "- recuos\n"
-        "- altura máxima\n"
-        "- potencial total de construção"
-    )
-    st.markdown(
-        f"**Resumo das regras**\n\n"
-        f"- **TO máxima:** {_fmt_pct(to_max)}\n"
-        f"- **TP mínima:** {_fmt_pct(tp_min)}\n"
-        f"- **IA máximo:** {_fmt_num(ia_max) if ia_max is not None else '—'}\n"
-        f"- **IA mínimo:** {ia_min_texto}\n"
-        f"- **Recuos:** {recuos_resumo}\n"
-        f"- **Altura máxima:** {_fmt_num(gabarito_m)} m"
-    )
-    st.markdown("Essas são as regras que mais impactam o projeto.")
-
-    st.markdown("---\n### 📐 6️⃣ Quanto posso ocupar no térreo?")
-    if to_max is None or A_to is None:
-        st.info("Sem TO máxima cadastrada para esta zona/uso.")
-    else:
-        st.markdown(
-            f"A zona permite ocupar até **{_fmt_pct(to_max)}** do terreno no térreo.\n\n"
-            f"👉 **{_fmt_num(A)} m² × {_fmt_pct(to_max)} = {_fmt_num(A_to)} m²**\n\n"
-            "Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**.\n\n"
-            "Mas aqui tem um ponto importante: uma coisa é o limite da zona no papel, e outra é o que realmente cabe dentro do lote depois de respeitar os recuos.\n\n"
-            "Por isso, além do percentual permitido, também vale olhar a área que sobra de forma prática dentro do terreno."
-        )
-        st.markdown(
-            "> **Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
-            "a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima "
-            "e da Taxa de Ocupação Máxima da zona em que se encontra."
-        )
-        st.markdown(
-            "👉 **Na prática:** para residência unifamiliar, a norma permite encostar nas laterais e alinhar na frente, desde que o projeto continue respeitando a **TO máxima** e a **TP mínima**."
-        )
-        st.markdown("Agora veja duas possibilidades de leitura:")
-
-        st.markdown("✅ **Opção principal — aproveitando a flexibilidade da lei**")
-        st.markdown(
-            "Para este caso, a legislação admite **zerar recuo frontal e laterais**.\n\n"
-            "Assim, o térreo pode aproveitar melhor a área do lote, desde que continue respeitando TO e TP.\n\n"
-            f"👉 **Térreo máximo nesta opção:** **{_fmt_num(A_to)} m²**\n\n"
-            "⚠️ O recuo de fundo e as demais exigências aplicáveis continuam precisando ser respeitados."
-        )
-
-        if A_recuos is not None:
-            st.markdown("✅ **Opção alternativa — adotando os recuos da zona**")
-            st.markdown(f"- **Frontal:** {_fmt_num(rec_fr)} m")
-            st.markdown(f"- **Laterais:** {_fmt_num(rec_lat)} m cada")
-            st.markdown(f"- **Fundo:** {_fmt_num(rec_fun)} m")
-            st.markdown(f"- **Largura útil:** {_fmt_num(W_util)} m")
-            st.markdown(f"- **Profundidade útil:** {_fmt_num(D_util)} m")
-            st.markdown(f"👉 **{_fmt_num(W_util)} × {_fmt_num(D_util)} = {_fmt_num(A_recuos)} m²**")
-            st.markdown(
-                f"👉 Neste cenário, mesmo que a zona permita até **{_fmt_num(A_to)} m²**, o limite físico pelos recuos fica em **{_fmt_num(A_recuos)} m²**."
-            )
-            st.markdown(
-                f"**Leitura prática:** pela TO, o lote pode ocupar até **{_fmt_num(A_to)} m²** no térreo. Mas, se você optar por seguir os recuos da zona, a implantação prática cai para **{_fmt_num(A_recuos)} m²**."
-            )
-    st.markdown("---\n### 🌿 7️⃣ Quanto preciso deixar livre?")
-    if tp_min is None or A_perm_min is None:
-        st.info("Sem TP mínima cadastrada para esta zona/uso.")
-    else:
-        st.markdown(
-            f"A zona exige **{_fmt_pct(tp_min)}** de área permeável.\n\n"
-            f"👉 **{_fmt_num(A)} m² × {_fmt_pct(tp_min)} = {_fmt_num(A_perm_min)} m²** obrigatórios permeáveis\n\n"
-            "Isso quer dizer que parte do terreno precisa continuar permitindo a infiltração da água da chuva no solo."
-        )
-        if A_considerada is not None and A_livre is not None:
-            st.markdown("**Área livre considerando a área adotada no relatório**")
-            st.markdown(
-                f"Como o relatório adotou **{_fmt_num(A_considerada)} m²** no térreo, a área livre remanescente no lote fica assim:\n\n"
-                f"👉 **{_fmt_num(A)} m² − {_fmt_num(A_considerada)} m² = {_fmt_num(A_livre)} m²**"
-            )
-            st.markdown(f"**Área livre remanescente no lote: {_fmt_num(A_livre)} m²**")
-            st.markdown(f"Desses, **{_fmt_num(A_perm_min)} m²** precisam permanecer permeáveis.")
-            if A_impermeavel_possivel is not None:
-                st.markdown(
-                    f"Assim, restam:\n\n👉 **{_fmt_num(A_livre)} m² − {_fmt_num(A_perm_min)} m² = {_fmt_num(A_impermeavel_possivel)} m²**\n\n"
-                    f"**Área que ainda pode receber piso impermeável: {_fmt_num(A_impermeavel_possivel)} m²**"
-                )
-            leitura_tp = (
-                f"como a área pretendida inicial de **{_fmt_num(area_pedida)} m²** excedeu o limite adotado no relatório, os cálculos passaram a considerar **{_fmt_num(A_considerada)} m²** no térreo"
-                if excedeu_area and area_pedida is not None
-                else f"os cálculos passaram a considerar a própria área pretendida informada, de **{_fmt_num(A_considerada)} m²** no térreo"
-            )
-            st.markdown(
-                f"👉 **Leitura prática:** {leitura_tp}. Com isso, a área livre remanescente fica em **{_fmt_num(A_livre)} m²**, "
-                f"dos quais **{_fmt_num(A_perm_min)} m²** devem permanecer permeáveis para atender à exigência mínima da zona."
-            )
-        else:
-            st.markdown("**Ver cenários usando os máximos das opções**")
-            if tp1 is not None and A_op1_max is not None:
-                a_rest, a_imperm = tp1
-                st.markdown("✅ **Cenário pela Opção 1 (recuos padrão)**")
-                st.markdown(
-                    f"Se você utilizar **{_fmt_num(A_op1_max)} m²** no térreo:\n\n"
-                    f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op1_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
-                    f"Desses:\n\n"
-                    f"- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo\n"
-                    f"- **{_fmt_num(a_imperm)} m²** podem receber piso impermeável"
-                )
-            if tp2 is not None and A_op2_max is not None:
-                a_rest, a_imperm = tp2
-                st.markdown("✅ **Cenário pela Opção 2 (Art. 112)**")
-                st.markdown(
-                    f"Se você utilizar **{_fmt_num(A_op2_max)} m²** no térreo:\n\n"
-                    f"👉 Área restante no lote: **{_fmt_num(A)} m² − {_fmt_num(A_op2_max)} m² = {_fmt_num(a_rest)} m²**\n\n"
-                    f"Desses:\n\n"
-                    f"- **{_fmt_num(A_perm_min)} m²** devem permitir infiltração no solo\n"
-                    f"- **{_fmt_num(a_imperm)} m²** podem receber piso impermeável"
-                )
-            st.markdown(
-                "**Leitura prática:** nas duas opções, o lote precisa manter a área permeável mínima. "
-                "A diferença está em quanto sobra livre além desse mínimo."
-            )
-
-    st.markdown("---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?")
-    st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
-    st.markdown(
-        _md_table(
-            [
-                ("Grama", "100%"),
-                ("Brita solta / terra batida", "100%"),
-                ("Piso drenante", "90%"),
-                ("Bloco de concreto vazado (“piso verde”)", "60%"),
-                ("Pedra portuguesa / intertravado", "25%"),
-            ]
-        )
-    )
-    st.markdown("Isso ajuda a entender que nem toda área “livre” do lote conta 100% como permeável.")
-
-    st.markdown("---\n### 🏢 9️⃣ Posso construir mais andares?")
-    if ia_max is None or A_total is None:
-        st.info("Sem IA máximo cadastrado para esta zona/uso.")
-    else:
-        st.markdown(
-            f"Além da ocupação no térreo, a zona também define o potencial construtivo total do lote por meio do **Índice de Aproveitamento (IA)**.\n\n"
-            f"Se o IA máximo da zona for **{_fmt_num(ia_max)}**, então o potencial construtivo total do lote será:\n\n"
-            f"👉 **{_fmt_num(A)} m² × {_fmt_num(ia_max)} = {_fmt_num(A_total)} m²**\n\n"
-            f"Esse é o total que pode ser distribuído entre térreo e pavimentos superiores, respeitando também os demais parâmetros urbanísticos."
-        )
-        if A_considerada is not None and A_ia_saldo is not None:
-            st.markdown(
-                f"Como o relatório adotou **{_fmt_num(A_considerada)} m²** no térreo, o saldo estimado para crescer acima fica assim:\n\n"
-                f"👉 **{_fmt_num(A_total)} m² − {_fmt_num(A_considerada)} m² = {_fmt_num(A_ia_saldo)} m²**\n\n"
-                f"**Saldo estimado para pavimentos superiores: {_fmt_num(A_ia_saldo)} m²**"
-            )
-            st.markdown(
-                f"👉 **Leitura prática:** considerando a área adotada de **{_fmt_num(A_considerada)} m²** no térreo, ainda restam **{_fmt_num(A_ia_saldo)} m²** de potencial construtivo pelo IA para crescimento em pavimentos superiores, desde que o projeto respeite também altura máxima, recuos, ventilação, iluminação, circulação e demais exigências aplicáveis."
-            )
-    if gabarito_m is not None:
-        st.markdown(f"**Altura máxima da zona:** {_fmt_num(gabarito_m)} m")
-        if pav_est is not None:
-            st.markdown(
-                f"**Exemplo simples para ter uma noção de andares:** adotando um pé-direito médio de **3,00 m por pavimento**, "
-                f"a altura máxima de **{_fmt_num(gabarito_m)} m** pode permitir, em média, algo próximo de **{pav_est} pavimentos**.\n\n"
-                "👉 Isso é apenas uma referência inicial. Na prática, a quantidade real de andares depende também da laje, cobertura, "
-                "platibanda, caixa d’água e da forma como o projeto será desenvolvido."
-            )
-    st.markdown("---\n### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?")
-    st.success("**Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento.**")
-    st.markdown("Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.")
-
-    st.markdown("---\n### 📋 1️⃣1️⃣ Quais medidas mínimas os ambientes precisam ter?")
-    st.markdown(
-        "Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação. "
-        "Isso vale para itens como sala, quartos, cozinha, banheiro, área de serviço, garagem e escada."
-    )
-    render_quadro_tecnico()
-
-    st.markdown("---\n### 🚶 1️⃣2️⃣ O que preciso saber sobre a calçada?")
-    st.markdown(
-        "A análise não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação do lote com a rua. "
-        "As figuras abaixo ajudam a visualizar esse padrão."
-    )
-    render_figuras_anexo_v(rule, is_corner=is_corner)
-
-    st.markdown("---\n### 💡 1️⃣3️⃣ Dicas valiosas")
-    st.markdown(
-        "**Flexibilidade de recuos no uso residencial unifamiliar**\n\n"
-        "**Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
-        "a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima "
-        "e da Taxa de Ocupação Máxima da zona em que se encontra.\n\n"
-        "👉 **Na prática:** para residência unifamiliar, a legislação admite zerar recuos frontal e laterais, desde que a proposta continue respeitando a **TP mínima** e a **TO máxima** da zona."
-    )
-    # render_dicas_valiosas  # âncora mantida para blindagem
-    st.markdown(
-        "**Calçada**\n\n"
-        "Não existe uma largura única e fixa para toda calçada no município. Quando houver padrão definido no loteamento ou na via, ele deve ser seguido. "
-        "Quando não houver, a referência costuma ser a calçada já existente no local.\n\n"
-        "**Piscina**\n\n"
-        "Piscina não entra como área construída para a Taxa de Ocupação (TO). Mas ela conta como área impermeável para a Taxa de Permeabilidade (TP). "
-        "Além disso, deve respeitar afastamento mínimo de 0,50 m das divisas."
-    )
-
-    st.markdown("---\n### 📌 1️⃣4️⃣ Resumo rápido final")
-    st.markdown("**Se você quiser ver só o essencial deste terreno, este é o resumo principal:**")
-    resumo_extra = ""
-    if area_pedida is not None and A_considerada is not None:
-        resumo_extra += f"\n- **Área pretendida informada:** {_fmt_num(area_pedida)} m²"
-        resumo_extra += f"\n- **Área adotada no relatório:** {_fmt_num(A_considerada)} m²"
-        if to_projeto_pct is not None:
-            resumo_extra += f"\n- **TO efetiva considerada:** {_fmt_pct(to_projeto_pct)}"
-        if A_livre is not None:
-            resumo_extra += f"\n- **Área livre remanescente:** {_fmt_num(A_livre)} m²"
-        if A_ia_saldo is not None:
-            resumo_extra += f"\n- **Saldo estimado pelo IA:** {_fmt_num(A_ia_saldo)} m²"
-    st.markdown(
-        f"- **Uso analisado:** {uso_label}\n"
-        f"- **Zona:** {zone_title}\n"
-        f"- **Tipo de lote:** {tipo_lote}\n"
-        f"- **Via:** {via}\n"
-        f"- **Tipo de via:** {via_tipo}\n\n"
-        f"- **TO máxima:** {_fmt_pct(to_max)}\n"
-        f"- **TP mínima:** {_fmt_pct(tp_min)}\n"
-        f"- **IA máximo:** {_fmt_num(ia_max) if ia_max is not None else '—'}\n"
-        f"- **Altura máxima:** {_fmt_num(gabarito_m)} m\n\n"
-        f"- **Área máxima no térreo pela TO:** {_fmt_num(A_to)} m²\n"
-        f"- **Área permeável mínima:** {_fmt_num(A_perm_min)} m²\n"
-        f"- **Área total máxima estimada:** {_fmt_num(A_total)} m²"
-        f"{resumo_extra}"
-    )
-    if area_pedida is not None and A_considerada is not None:
-        if excedeu_area:
-            st.markdown(
-                f"👉 **Em resumo:** você informou **{_fmt_num(area_pedida)} m²** no térreo, mas o relatório adotou **{_fmt_num(A_considerada)} m²** para respeitar os limites urbanísticos do lote. "
-                f"Com isso, a TO considerada ficou em **{_fmt_pct(to_projeto_pct)}**, a área livre remanescente em **{_fmt_num(A_livre)} m²** e o saldo estimado pelo IA em **{_fmt_num(A_ia_saldo)} m²**."
-            )
-        else:
-            st.markdown(
-                f"👉 **Em resumo:** o relatório considerou a área pretendida de **{_fmt_num(A_considerada)} m²** no térreo. "
-                f"Com isso, a TO considerada ficou em **{_fmt_pct(to_projeto_pct)}**, a área livre remanescente em **{_fmt_num(A_livre)} m²** e o saldo estimado pelo IA em **{_fmt_num(A_ia_saldo)} m²**."
-            )
-    else:
-        st.markdown(
-            f"👉 **Em resumo:** você pode ocupar até **{_fmt_pct(to_max)}** do lote no térreo; "
-            f"precisa manter pelo menos **{_fmt_pct(tp_min)}** do terreno permeável; "
-            f"a construção pode chegar até **{_fmt_num(ia_max) if ia_max is not None else '—'}** vezes a área do lote no total; "
-            "e a altura deve respeitar o limite da zona."
-        )
-
-    st.markdown("---\n### 🏛️ 1️⃣5️⃣ O que acontece depois desta etapa?")
-    st.markdown(
-        "Após a finalização dos projetos, será necessário dar entrada na documentação junto à **Prefeitura** para obter o **alvará de construção**.\n\n"
-        "De forma geral, esse processo pode seguir por **duas vias**:\n\n"
-        "- **Alvará de Construção Simplificado** → voltado para casos mais simples e de menor porte;\n"
-        "- **Alvará de Construção (Obra Nova)** → usado quando a obra exige análise técnica mais completa e documentação complementar.\n\n"
-        "Abaixo, apresentamos um resumo dos dois caminhos e um checklist básico dos itens que normalmente precisam ser providenciados."
-    )
-
-    st.markdown("#### 📄 Alvará de Construção Simplificado")
-    st.markdown(
-        "O **Alvará de Construção Simplificado** é uma forma mais rápida de licenciamento, voltada para casos mais simples. "
-        "Ele costuma ser usado para **residência unifamiliar** e para **comércio/serviços de pequeno porte**, com área construída de até **250,00 m²**.\n\n"
-        "A lógica desse alvará é mais enxuta e autodeclaratória, mas isso não elimina a necessidade de apresentar os documentos corretos "
-        "e atender às exigências urbanísticas e técnicas do Município."
-    )
-    st.markdown("**✅ Checklist — documentos e itens principais**")
-    st.markdown("[ ] Documento de identidade do requerente ou representante legal")
-    st.markdown("[ ] CPF ou CNPJ")
-    st.markdown("[ ] Matrícula atualizada do imóvel ou documento equivalente")
-    st.markdown("[ ] Certidão negativa de IPTU")
-    st.markdown("[ ] Parecer favorável de Adequabilidade Locacional")
-    st.markdown("[ ] Tabela com índices urbanísticos e áreas da edificação")
-    st.markdown("[ ] Projeto arquitetônico em arquivo digital")
-    st.markdown("[ ] ART/RRT do responsável técnico")
-    st.markdown("[ ] Termo de responsabilidade do responsável técnico")
-    st.markdown("[ ] Termo de responsabilidade do proprietário")
-    st.markdown("[ ] Isenção da licença ambiental")
-
-    st.markdown("**📌 Atenção**")
-    st.markdown("[ ] Confirmar se o caso realmente se enquadra como simplificado")
-    st.markdown("[ ] Conferir se a área construída está dentro do limite permitido")
-    st.markdown("[ ] Protocolar o pedido com antecedência mínima indicada pelo procedimento")
-    st.markdown("[ ] Verificar se todos os arquivos digitais estão prontos e legíveis")
-
-    st.markdown("#### 🏗️ Alvará de Construção (Obra Nova)")
-    st.markdown(
-        "O **Alvará de Construção (Obra Nova)** é o caminho regular de licenciamento para obras novas que exigem análise técnica completa da Prefeitura. "
-        "Ele é mais detalhado e costuma ser necessário em casos que não se enquadram no procedimento simplificado ou que exigem documentação complementar.\n\n"
-        "Esse tipo de alvará pede uma conferência mais ampla do projeto, incluindo aspectos urbanísticos, arquitetônicos, hidrossanitários, ambientais e, em alguns casos, exigências de outros órgãos."
-    )
-    st.markdown("**✅ Checklist — documentos principais**")
-    st.markdown("[ ] Requerimento único")
-    st.markdown("[ ] Documento de identidade do requerente ou representante legal")
-    st.markdown("[ ] CPF ou CNPJ")
-    st.markdown("[ ] Matrícula atualizada do imóvel")
-    st.markdown("[ ] Autorização do proprietário, quando necessária")
-    st.markdown("[ ] BCI")
-    st.markdown("[ ] ART/RRT com comprovante de pagamento")
-    st.markdown("[ ] Projeto arquitetônico assinado")
-    st.markdown("[ ] Projeto hidrossanitário")
-    st.markdown("[ ] Memorial de cálculo e drenagem pluvial")
-    st.markdown("[ ] Declaração do SAAE sobre rede de esgoto, quando necessária")
-
-    st.markdown("**✅ Checklist — documentos adicionais que podem ser exigidos**")
-    st.markdown("[ ] Aprovação do Corpo de Bombeiros")
-    st.markdown("[ ] Aprovação do IPHAN, quando o imóvel estiver em ZEIP")
-    st.markdown("[ ] Licenciamento ambiental ou termo de isenção")
-    st.markdown("[ ] PGRSCC")
-    st.markdown("[ ] Autorização do COMAR, quando aplicável")
-    st.markdown("[ ] Aprovação do DNIT ou SOP, quando houver acesso por rodovia")
-    st.markdown("[ ] EIV, quando exigido pela legislação")
-
-    st.markdown("**📌 Atenção**")
-    st.markdown("[ ] Confirmar se o caso realmente exige alvará regular de obra nova")
-    st.markdown("[ ] Conferir se há exigência de documentos complementares por localização ou tipologia")
-    st.markdown("[ ] Verificar se o imóvel está em área com proteção especial")
-    st.markdown("[ ] Conferir se o projeto atende às exigências técnicas antes do protocolo")
-
-    st.markdown("---\n### ✅ 1️⃣6️⃣ Fechamento final")
-    st.markdown(
-        "Este relatório foi pensado para ajudar a entender o terreno de forma mais simples.\n\n"
-        "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no licenciamento."
-    )
+    unifamiliar_ctx = {
+        "rule": rule,
+        "is_corner": is_corner,
+        "uso_label": uso_label,
+        "zone": zone,
+        "via": via,
+        "via_tipo": via_tipo,
+        "subzone_code": subzone_code,
+        "tipo_lote": tipo_lote,
+        "A": A,
+        "W": W,
+        "D": D,
+        "A_fmt": _u_fmt_num(A),
+        "W_fmt": _u_fmt_num(W),
+        "D_fmt": _u_fmt_num(D),
+        "to_max": to_max,
+        "tp_min": tp_min,
+        "ia_max": ia_max,
+        "ia_min": ia_min,
+        "gabarito_m": gabarito_m,
+        "to_max_fmt": _u_fmt_pct(to_max),
+        "tp_min_fmt": _u_fmt_pct(tp_min),
+        "ia_max_fmt": _u_fmt_num(ia_max) if ia_max is not None else "—",
+        "gabarito_fmt": _u_fmt_num(gabarito_m),
+        "ia_min_texto": ia_min_texto,
+        "recuos_resumo": recuos_resumo,
+        "rec_fr_fmt": _u_fmt_num(rec_fr),
+        "rec_lat_fmt": _u_fmt_num(rec_lat),
+        "rec_fun_fmt": _u_fmt_num(rec_fun),
+        "A_to": A_to,
+        "A_to_fmt": _u_fmt_num(A_to),
+        "A_perm_min": A_perm_min,
+        "A_perm_min_fmt": _u_fmt_num(A_perm_min),
+        "A_total": A_total,
+        "A_total_fmt": _u_fmt_num(A_total),
+        "W_util": W_util,
+        "W_util_fmt": _u_fmt_num(W_util),
+        "D_util": D_util,
+        "D_util_fmt": _u_fmt_num(D_util),
+        "A_recuos": A_recuos,
+        "A_recuos_fmt": _u_fmt_num(A_recuos),
+        "A_op1_max": A_op1_max,
+        "A_op1_max_fmt": _u_fmt_num(A_op1_max),
+        "A_op2_max": A_op2_max,
+        "A_op2_max_fmt": _u_fmt_num(A_op2_max),
+        "tp1": tp1,
+        "tp2": tp2,
+        "area_pedida": area_pedida,
+        "area_pedida_fmt": _u_fmt_num(area_pedida),
+        "A_considerada": A_considerada,
+        "A_considerada_fmt": _u_fmt_num(A_considerada),
+        "excedeu_area": excedeu_area,
+        "to_projeto_pct": to_projeto_pct,
+        "to_projeto_pct_fmt": _u_fmt_pct(to_projeto_pct),
+        "A_livre": A_livre,
+        "A_livre_fmt": _u_fmt_num(A_livre),
+        "A_impermeavel_possivel": A_impermeavel_possivel,
+        "A_impermeavel_possivel_fmt": _u_fmt_num(A_impermeavel_possivel),
+        "A_ia_saldo": A_ia_saldo,
+        "A_ia_saldo_fmt": _u_fmt_num(A_ia_saldo),
+        "zone_title": zone_title,
+        "desc": desc,
+        "zone_class": zone_class,
+        "via_class": via_class,
+        "via_norm": via_norm,
+        "zone_class_nome": _mf_sigla_nome(zone_class) if zone_class else "",
+        "via_class_nome": _mf_sigla_nome(via_class) if via_class else "",
+        "icon": icon,
+        "status_curto": status_curto,
+        "explicacao": explicacao,
+        "pav_est": pav_est,
+        "fmt_num": _u_fmt_num,
+        "fmt_pct": _u_fmt_pct,
+        "md_table": _u_md_table,
+        "st": st,
+        "render_figuras_anexo_v": render_figuras_anexo_v,
+    }
+    render_unifamiliar_items(unifamiliar_ctx)
 
     with st.expander("Ver regra completa (JSON)"):
         st.json(rule)
