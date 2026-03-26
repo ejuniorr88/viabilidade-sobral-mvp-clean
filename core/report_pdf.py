@@ -715,9 +715,21 @@ def _render_quadro_tecnico(pdf: _ReportPDF) -> None:
 
 def _render_dicas_valiosas(pdf: _ReportPDF, is_corner: bool = False) -> None:
     _section_title(pdf, "DICAS VALIOSAS")
-    for titulo, texto in get_dicas_valiosas(is_corner=is_corner):
-        pdf.set_font("Helvetica", "B", 10.8)
-        pdf.multi_cell(_full_width(pdf), 5.4, _sanitize(titulo + ":"))
+    for item in get_dicas_valiosas(is_corner=is_corner):
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            titulo = str(item[0] or "").strip()
+            texto = str(item[1] or "").strip()
+            if titulo:
+                pdf.set_font("Helvetica", "B", 10.8)
+                pdf.multi_cell(_full_width(pdf), 5.4, _sanitize(titulo + ":"))
+            if texto:
+                pdf.set_font("Helvetica", "", 10)
+                pdf.multi_cell(_full_width(pdf), 5.3, _sanitize(texto))
+                pdf.ln(1)
+            continue
+        texto = str(item or "").strip()
+        if not texto:
+            continue
         pdf.set_font("Helvetica", "", 10)
         pdf.multi_cell(_full_width(pdf), 5.3, _sanitize(texto))
         pdf.ln(1)

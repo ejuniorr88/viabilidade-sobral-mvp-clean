@@ -7,12 +7,6 @@ import streamlit as st
 
 
 def render_quadro_tecnico() -> None:
-    st.markdown("---\n### 📋 1️⃣0️⃣ Quais medidas mínimas os ambientes precisam ter?")
-    st.markdown(
-        "Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação. "
-        "Isso vale para itens como sala, quartos, cozinha, banheiro, área de serviço, garagem e escada."
-    )
-
     # Âncora literal blindada
     st.markdown("**Quadro técnico — parâmetros dos ambientes**")
     st.caption("Lei Complementar nº 90/2023 — Anexo II")

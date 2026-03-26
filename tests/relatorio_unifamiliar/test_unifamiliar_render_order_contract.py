@@ -1,35 +1,29 @@
-
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def _read(rel_path: str) -> str:
-    return (ROOT / rel_path).read_text(encoding="utf-8")
+from .test_unifamiliar_items_helpers import ITEM_HEADINGS, read_relatorio
 
 
 def test_unifamiliar_render_order_stable_at_end() -> None:
-    txt = _read("ui/relatorio.py")
+    txt = read_relatorio()
 
     anchors = [
-        "### 💡 1️⃣2️⃣ Dicas valiosas",
-        "### 📌 1️⃣3️⃣ Resumo rápido final",
-        "### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?",
-        "### ✅ 1️⃣5️⃣ Fechamento final",
+        ITEM_HEADINGS['item_13'],
+        ITEM_HEADINGS['item_14'],
+        ITEM_HEADINGS['item_15'],
+        ITEM_HEADINGS['item_16'],
     ]
 
     positions = []
     for anchor in anchors:
+        count = txt.count(anchor)
+        assert count == 1, f"Âncora final do unifamiliar deve aparecer 1x. Encontrado {count}x: {anchor}"
         idx = txt.find(anchor)
-        assert idx != -1, f"Âncora obrigatória sumiu do fluxo final do unifamiliar: {anchor}"
         positions.append(idx)
 
     assert positions == sorted(positions), "A ordem final dos blocos do unifamiliar foi alterada."
 
 
 def test_unifamiliar_json_block_stays_after_fechamento_header_only() -> None:
-    txt = _read("ui/relatorio.py")
-    fechamento = "### ✅ 1️⃣5️⃣ Fechamento final"
+    txt = read_relatorio()
+    fechamento = ITEM_HEADINGS['item_16']
     idx = txt.find(fechamento)
     assert idx != -1, "Fechamento final não encontrado."
 

@@ -8,31 +8,47 @@ def _read(rel_path: str) -> str:
 
 
 def test_relatorio_unifamiliar_prioritizes_area_pretendida_in_text() -> None:
-    txt = _read("ui/relatorio.py")
-    required = [
-        "A área construída pretendida informada foi de",
-        "TO efetiva",
-        "Área livre remanescente",
-        "potencial construtivo",
-    ]
-    for item in required:
-        assert item in txt, f"ui/relatorio.py perdeu a leitura contratual da área pretendida: {item}"
+    required_by_file = {
+        "ui/relatorio_blocks/unifamiliar_items/item_07_permeabilidade.py": [
+            "área pretendida inicial",
+            "área pretendida informada",
+            "Área livre remanescente",
+        ],
+        "ui/relatorio_blocks/unifamiliar_items/item_09_ia_altura.py": [
+            "potencial construtivo",
+        ],
+        "ui/relatorio_blocks/unifamiliar_items/item_14_resumo.py": [
+            "TO considerada",
+            "área livre remanescente",
+        ],
+    }
+    for rel_path, required in required_by_file.items():
+        txt = _read(rel_path)
+        for item in required:
+            assert item in txt, f"{rel_path} perdeu a leitura contratual da área pretendida: {item}"
 
 
 def test_relatorio_unifamiliar_keeps_maximum_reference_and_tp_reading() -> None:
-    txt = _read("ui/relatorio.py")
-    required = [
-        "Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**.",
-        "área permeável",
-        "devem permanecer permeáveis",
-        "Índice de Aproveitamento (IA)",
-    ]
-    for item in required:
-        assert item in txt, f"ui/relatorio.py perdeu referência importante do bloco 5/6/8: {item}"
+    required_by_file = {
+        "ui/relatorio_blocks/unifamiliar_items/item_06_ocupacao_terreo.py": [
+            "Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**.",
+        ],
+        "ui/relatorio_blocks/unifamiliar_items/item_07_permeabilidade.py": [
+            "área permeável",
+            "devem permanecer permeáveis",
+        ],
+        "ui/relatorio_blocks/unifamiliar_items/item_09_ia_altura.py": [
+            "Índice de Aproveitamento (IA)",
+        ],
+    }
+    for rel_path, required in required_by_file.items():
+        txt = _read(rel_path)
+        for item in required:
+            assert item in txt, f"{rel_path} perdeu referência importante do bloco 5/6/8: {item}"
 
 
 def test_relatorio_unifamiliar_passes_corner_flag_to_figuras() -> None:
-    txt = _read("ui/relatorio.py")
-    assert "render_figuras_anexo_v(rule, is_corner=is_corner)" in txt, (
-        "ui/relatorio.py precisa repassar is_corner para as figuras do Anexo V."
+    txt = _read("ui/relatorio_blocks/unifamiliar_items/item_12_calcada.py")
+    assert "ctx['render_figuras_anexo_v'](ctx['rule'], is_corner=ctx['is_corner'])" in txt, (
+        "item_12_calcada.py precisa repassar is_corner para as figuras do Anexo V."
     )

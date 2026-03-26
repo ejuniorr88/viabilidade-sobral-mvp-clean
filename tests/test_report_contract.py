@@ -39,6 +39,8 @@ def test_pdf_contract_must_keep_pdf_generation_hooks() -> None:
         "_render_quadro_tecnico",
         "_render_dicas_valiosas",
         "_render_figuras",
+        "for item in get_dicas_valiosas",
+        "if isinstance(item, (list, tuple)) and len(item) >= 2",
     ]
     for anchor in required_anchors:
         assert anchor in txt, f"core/report_pdf.py perdeu a âncora crítica: {anchor}"

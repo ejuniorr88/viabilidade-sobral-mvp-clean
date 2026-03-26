@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict
 
@@ -291,6 +292,21 @@ if "last_generated_pdf_signature" not in st.session_state:
 
 if "last_saved_report_signature" not in st.session_state:
     st.session_state.last_saved_report_signature = None
+
+if "report_snapshot_calc" not in st.session_state:
+    st.session_state.report_snapshot_calc = None
+if "report_snapshot_session" not in st.session_state:
+    st.session_state.report_snapshot_session = None
+if "report_snapshot_signature" not in st.session_state:
+    st.session_state.report_snapshot_signature = None
+if "confirm_new_report" not in st.session_state:
+    st.session_state.confirm_new_report = False
+if "pending_report_calc" not in st.session_state:
+    st.session_state.pending_report_calc = None
+if "pending_report_session" not in st.session_state:
+    st.session_state.pending_report_session = None
+if "pending_report_signature" not in st.session_state:
+    st.session_state.pending_report_signature = None
 
 # Se esta aba for a popup de callback, ela só devolve o retorno do Google para a aba principal.
 if safe_get_query_param("auth_flow") == "callback":
@@ -631,6 +647,64 @@ if section4_can_try:
     except Exception as e:
         st.error(f"Falha no debug pós-item-4: {e}")
 
+
+
+def _current_report_session_snapshot(calc_ref, built_ground_value, permeable_area_value):
+    return {
+        "lot_area_m2": calc_ref.get("lot_area_m2"),
+        "built_ground_m2": built_ground_value,
+        "permeable_area_m2": permeable_area_value,
+        "lot_front_m": calc_ref.get("lot_front_m"),
+        "lot_depth_m": calc_ref.get("lot_depth_m"),
+        "lot_is_corner": calc_ref.get("lot_is_corner"),
+        "lot_is_midblock": calc_ref.get("lot_is_midblock"),
+        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+    }
+
+
+def _commit_report_snapshot(calc_ref, session_snapshot, pdf_bytes, signature):
+    st.session_state.report_snapshot_calc = deepcopy(calc_ref)
+    st.session_state.report_snapshot_session = deepcopy(session_snapshot)
+    st.session_state.report_snapshot_signature = signature
+    st.session_state.last_generated_pdf_bytes = pdf_bytes
+    st.session_state.last_generated_pdf_signature = signature
+    st.session_state.report_unlocked = True
+    st.session_state.show_inline_payments = False
+
+
+def _clear_pending_report():
+    st.session_state.confirm_new_report = False
+    st.session_state.pending_report_calc = None
+    st.session_state.pending_report_session = None
+    st.session_state.pending_report_signature = None
+
+
+def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, user_id_value, selected_use_label_value, categoria_label_value):
+    pdf_bytes = generate_report_pdf_bytes(calc=calc_ref, session_state=session_snapshot)
+    debit_result = consume_viability_credit(
+        user_id=user_id_value,
+        amount=1,
+        description="Geração de relatório de viabilidade",
+    )
+    if not debit_result.get("ok"):
+        raise RuntimeError(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
+    _commit_report_snapshot(calc_ref, session_snapshot, pdf_bytes, report_signature)
+    try:
+        if st.session_state.get("last_saved_report_signature") != report_signature:
+            save_result = save_client_report(
+                user_id=user_id_value,
+                user_email=st.session_state.get("auth_user_email") or "",
+                calc={**calc_ref, "selected_use_label": selected_use_label_value, "categoria_label": categoria_label_value},
+                session_state=session_snapshot,
+                pdf_bytes=pdf_bytes,
+                report_signature=report_signature,
+            )
+            if save_result.get("ok"):
+                st.session_state.last_saved_report_signature = report_signature
+    except Exception:
+        pass
+    return debit_result, pdf_bytes
+
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
 if can_offer_report:
@@ -640,6 +714,12 @@ if can_offer_report:
         "A análise inicial acima é gratuita. Para liberar o relatório completo, "
         "gere o relatório com 1 crédito."
     )
+
+    current_report_session = _current_report_session_snapshot(calc, built_ground, permeable_area)
+    current_report_signature = build_report_signature(calc=calc, session_state=current_report_session)
+    snapshot_signature = st.session_state.get("report_snapshot_signature")
+    has_snapshot = bool(st.session_state.get("report_snapshot_calc")) and bool(snapshot_signature)
+    is_same_as_snapshot = bool(has_snapshot and snapshot_signature == current_report_signature)
 
     saldo_atual = None
     if user_logged_in and user_id:
@@ -670,84 +750,100 @@ if can_offer_report:
     if gerar_relatorio:
         if not user_logged_in or not user_id:
             st.error("Faça login com Google para gerar o relatório completo.")
+        elif has_snapshot and not is_same_as_snapshot:
+            st.session_state.confirm_new_report = True
+            st.session_state.pending_report_calc = deepcopy(calc)
+            st.session_state.pending_report_session = deepcopy(current_report_session)
+            st.session_state.pending_report_signature = current_report_signature
+            st.rerun()
+        elif is_same_as_snapshot:
+            st.info("Este relatório já foi gerado e continua disponível abaixo.")
         elif saldo_atual is not None and int(saldo_atual) <= 0:
             st.session_state.show_inline_payments = True
-            st.session_state.report_unlocked = False
             st.error("Você não possui créditos suficientes para gerar o relatório.")
         else:
             try:
-                debit_result = consume_viability_credit(
-                    user_id=user_id,
-                    amount=1,
-                    description="Geração de relatório de viabilidade",
+                debit_result, _ = _prepare_and_consume_report(
+                    calc_ref=deepcopy(calc),
+                    session_snapshot=deepcopy(current_report_session),
+                    report_signature=current_report_signature,
+                    user_id_value=user_id,
+                    selected_use_label_value=selected_use_label,
+                    categoria_label_value=categoria_label,
                 )
-
-                if not debit_result.get("ok"):
-                    st.session_state.show_inline_payments = True
-                    st.session_state.report_unlocked = False
-                    st.error(
-                        debit_result.get("message")
-                        or "Saldo insuficiente para gerar o relatório."
-                    )
-                else:
-                    st.session_state.show_inline_payments = False
-                    st.session_state.report_unlocked = True
-                    novo_saldo = debit_result.get("new_balance")
-                    st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-                    st.rerun()
-
+                novo_saldo = debit_result.get("new_balance")
+                st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+                _clear_pending_report()
+                st.rerun()
             except Exception as e:
                 st.session_state.show_inline_payments = True
-                st.session_state.report_unlocked = False
-                st.error(f"Não foi possível descontar o crédito: {e}")
+                st.error(f"Não foi possível preparar e gerar o relatório: {e}")
+
+    if has_snapshot and not is_same_as_snapshot:
+        st.warning(
+            "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, confirme antes. Isso gastará outro crédito."
+        )
+
+    if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature") == current_report_signature:
+        st.warning("Você tem certeza que deseja gerar outro relatório? Isso vai gastar outro crédito.")
+        c_yes, c_no = st.columns(2)
+        with c_yes:
+            confirm_yes = st.button("Sim, gerar outro relatório", key="btn_confirm_new_report_yes", use_container_width=True)
+        with c_no:
+            confirm_no = st.button("Não", key="btn_confirm_new_report_no", use_container_width=True)
+
+        if confirm_no:
+            _clear_pending_report()
+            st.rerun()
+
+        if confirm_yes:
+            try:
+                pending_calc = deepcopy(st.session_state.get("pending_report_calc") or calc)
+                pending_session = deepcopy(st.session_state.get("pending_report_session") or current_report_session)
+                pending_sig = st.session_state.get("pending_report_signature") or current_report_signature
+                debit_result, _ = _prepare_and_consume_report(
+                    calc_ref=pending_calc,
+                    session_snapshot=pending_session,
+                    report_signature=pending_sig,
+                    user_id_value=user_id,
+                    selected_use_label_value=selected_use_label,
+                    categoria_label_value=categoria_label,
+                )
+                novo_saldo = debit_result.get("new_balance")
+                st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+                _clear_pending_report()
+                st.rerun()
+            except Exception as e:
+                st.session_state.show_inline_payments = True
+                st.error(f"Não foi possível preparar e gerar o novo relatório: {e}")
 
     if st.session_state.get("show_inline_payments"):
         st.markdown("### Comprar créditos")
         render_payments_panel()
 
-if st.session_state.get("report_unlocked") and can_offer_report:
+if (st.session_state.get("report_snapshot_calc") and st.session_state.get("report_snapshot_signature")) and can_offer_report:
     st.markdown("---")
+    report_calc = deepcopy(st.session_state.get("report_snapshot_calc"))
+    report_session = deepcopy(st.session_state.get("report_snapshot_session") or {})
 
     render_analise_section(
-        calc,
-        lot_area=lot_area,
-        built_ground=built_ground,
-        permeable_area=permeable_area,
+        report_calc,
+        lot_area=report_session.get("lot_area_m2", lot_area),
+        built_ground=report_session.get("built_ground_m2", built_ground),
+        permeable_area=report_session.get("permeable_area_m2", permeable_area),
         pick_func=pick_rule,
     )
 
-    render_zone_description_section(calc)
-    render_relatorio_section(calc)
+    render_zone_description_section(report_calc)
+    render_relatorio_section(report_calc)
 
     st.markdown("### Download do relatório")
     try:
-        pdf_bytes = generate_report_pdf_bytes(
-            calc=calc,
-            session_state={
-                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-                "built_ground_m2": built_ground,
-                "permeable_area_m2": permeable_area,
-                "lot_front_m": st.session_state.calc.get("lot_front_m"),
-                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
-                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-            },
-        )
-
-        st.session_state["last_generated_pdf_bytes"] = pdf_bytes
-        current_report_signature = build_report_signature(
-            calc=calc,
-            session_state={
-                "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-                "lot_front_m": st.session_state.calc.get("lot_front_m"),
-                "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-                "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
-                "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-            },
-        )
-        st.session_state["last_generated_pdf_signature"] = current_report_signature
+        pdf_bytes = st.session_state.get("last_generated_pdf_bytes")
+        if not pdf_bytes or st.session_state.get("last_generated_pdf_signature") != st.session_state.get("report_snapshot_signature"):
+            pdf_bytes = generate_report_pdf_bytes(calc=report_calc, session_state=report_session)
+            st.session_state["last_generated_pdf_bytes"] = pdf_bytes
+            st.session_state["last_generated_pdf_signature"] = st.session_state.get("report_snapshot_signature")
 
         st.download_button(
             label="⬇️ Baixar relatório em PDF",
@@ -757,54 +853,9 @@ if st.session_state.get("report_unlocked") and can_offer_report:
             key="download_report_pdf",
             use_container_width=True,
         )
-
-        if st.session_state.get("last_saved_report_signature") != current_report_signature:
-            try:
-                save_result = save_client_report(
-                    user_id=user_id,
-                    user_email=st.session_state.get("auth_user_email") or "",
-                    calc={
-                        **calc,
-                        "selected_use_label": selected_use_label,
-                        "categoria_label": categoria_label,
-                    },
-                    session_state={
-                        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-                        "lot_front_m": st.session_state.calc.get("lot_front_m"),
-                        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-                        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
-                        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-                    },
-                    pdf_bytes=pdf_bytes,
-                    report_signature=current_report_signature,
-                )
-                st.session_state["last_saved_report_signature"] = current_report_signature
-                if save_result.get("already_exists"):
-                    st.info("Este relatório já estava salvo automaticamente na sua área do cliente.")
-                else:
-                    st.success("Relatório salvo automaticamente na sua área do cliente.")
-            except Exception as e:
-                st.error(f"Não foi possível salvar automaticamente o relatório na área do cliente: {e}")
-        else:
-            st.caption("Este relatório já está salvo na sua área do cliente.")
     except Exception as e:
-        st.error(f"Não foi possível gerar o PDF do relatório: {e}")
+        st.error(f"Falha ao preparar o PDF para download: {e}")
 
-if st.session_state.get("scroll_to_login_gate"):
-    components.html(
-        """
-        <script>
-            const rootDoc = window.parent.document;
-            const el = rootDoc.getElementById("login-gate-start");
-            if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-        </script>
-        """,
-        height=0,
-    )
-    st.session_state.scroll_to_login_gate = False
 
 if st.session_state.get("scroll_to_item3"):
     components.html(
