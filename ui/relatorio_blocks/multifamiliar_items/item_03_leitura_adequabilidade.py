@@ -1,17 +1,13 @@
 from __future__ import annotations
+from . import common
 
-from .common import md
-
-
-def render(ctx: dict) -> None:
-    st = ctx["st"]
-    md(
-        "**No multifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o porte do empreendimento e o tipo da via. "
-        "Por isso, estas siglas ajudam a interpretar corretamente a viabilidade mostrada acima.**"
+def render(ctx):
+    common.st.markdown(
+        "**No multifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o porte do empreendimento e o tipo da via. Por isso, estas siglas ajudam a interpretar corretamente a viabilidade mostrada acima.**"
     )
-    col1, col2 = st.columns(2)
+    col1, col2 = common.st.columns(2)
     with col1:
-        md(
+        common.st.markdown(
             "| Sigla | O que significa | Como interpretar |\n"
             "|---|---|---|\n"
             "| **A** | Adequado / permitido | Pode seguir com o projeto, respeitando as demais regras. |\n"
@@ -22,7 +18,7 @@ def render(ctx: dict) -> None:
             "| **PE** | Projeto especial | Pode exigir análise específica e condições extras no licenciamento. |"
         )
     with col2:
-        md(
+        common.st.markdown(
             "| Porte | Faixa (área construída total) |\n"
             "|---|---|\n"
             "| **Pequeno** | até **250 m²** |\n"
