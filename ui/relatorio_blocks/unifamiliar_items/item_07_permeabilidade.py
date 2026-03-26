@@ -38,26 +38,22 @@ def render(ctx: dict) -> None:
         )
     else:
         md("**Ver cenários usando os máximos das opções**")
-        cenarios = []
-        if ctx['tp1'] is not None and ctx['A_op1_max'] is not None:
-            cenarios.append((
-                "✅ **Cenário pela Opção 1 (recuos padrão)**",
-                ctx['A_op1_max'],
-                ctx['tp1'],
-            ))
         if ctx['tp2'] is not None and ctx['A_op2_max'] is not None:
-            cenarios.append((
-                "✅ **Cenário pela Opção 2 (Art. 112)**",
-                ctx['A_op2_max'],
-                ctx['tp2'],
-            ))
-
-        for titulo_cenario, area_cenario, valores_cenario in cenarios:
-            a_rest, a_imperm = valores_cenario
-            md(titulo_cenario)
+            a_rest, a_imperm = ctx['tp2']
+            md("✅ **Cenário pela Opção 2 (Art. 112)**")
             md(
-                f"Se você utilizar **{fmt_num(area_cenario)} m²** no térreo:\n\n"
-                f"👉 Área restante no lote: **{fmt_num(ctx['A'])} m² − {fmt_num(area_cenario)} m² = {fmt_num(a_rest)} m²**\n\n"
+                f"Se você utilizar **{fmt_num(ctx['A_op2_max'])} m²** no térreo:\n\n"
+                f"👉 Área restante no lote: **{fmt_num(ctx['A'])} m² − {fmt_num(ctx['A_op2_max'])} m² = {fmt_num(a_rest)} m²**\n\n"
+                f"Desses:\n\n"
+                f"- **{fmt_num(ctx['A_perm_min'])} m²** devem permitir infiltração no solo\n"
+                f"- **{fmt_num(a_imperm)} m²** podem receber piso impermeável"
+            )
+        if ctx['tp1'] is not None and ctx['A_op1_max'] is not None:
+            a_rest, a_imperm = ctx['tp1']
+            md("✅ **Cenário pela Opção 1 (recuos padrão)**")
+            md(
+                f"Se você utilizar **{fmt_num(ctx['A_op1_max'])} m²** no térreo:\n\n"
+                f"👉 Área restante no lote: **{fmt_num(ctx['A'])} m² − {fmt_num(ctx['A_op1_max'])} m² = {fmt_num(a_rest)} m²**\n\n"
                 f"Desses:\n\n"
                 f"- **{fmt_num(ctx['A_perm_min'])} m²** devem permitir infiltração no solo\n"
                 f"- **{fmt_num(a_imperm)} m²** podem receber piso impermeável"
