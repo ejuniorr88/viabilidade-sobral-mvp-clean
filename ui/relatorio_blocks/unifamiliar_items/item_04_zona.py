@@ -4,6 +4,12 @@ from .common import md
 
 
 def render(ctx: dict) -> None:
+    md(
+        "Todo terreno fica dentro de uma zona, e cada zona tem suas próprias regras. "
+        "É isso que ajuda a definir o que pode ser construído, quanto pode ocupar no térreo, "
+        "quanto precisa ficar livre e qual o porte permitido da edificação."
+    )
+
     if ctx['desc'] and ctx['desc'].get("description_text"):
         md(f"**{ctx['zone_title']}**")
         md(str(ctx['desc'].get("description_text")))
