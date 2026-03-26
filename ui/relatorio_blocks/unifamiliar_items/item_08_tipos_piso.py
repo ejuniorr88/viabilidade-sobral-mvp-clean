@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import streamlit as _st
+from .common import md, md_table
 
 
 def render(ctx: dict) -> None:
-    st = ctx.get("st", _st)
-    st.markdown("---\n### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
-    st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
-    st.markdown(
-        ctx['md_table'](
+    md("Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:")
+    md(
+        md_table(
             [
                 ("Grama", "100%"),
                 ("Brita solta / terra batida", "100%"),
@@ -18,4 +16,4 @@ def render(ctx: dict) -> None:
             ]
         )
     )
-    st.markdown("Isso ajuda a entender que nem toda área “livre” do lote conta 100% como permeável.")
+    md("Isso ajuda a entender que nem toda área “livre” do lote conta 100% como permeável.")

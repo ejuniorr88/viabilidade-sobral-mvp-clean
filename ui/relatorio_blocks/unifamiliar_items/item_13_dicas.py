@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import streamlit as _st
+from .common import md
 
 
 def render(ctx: dict) -> None:
-    st = ctx.get("st", _st)
-    st.markdown("---\n### 💡 1️⃣2️⃣ Dicas valiosas")
-    st.markdown(
+    md(
         "**Flexibilidade de recuos no uso residencial unifamiliar**\n\n"
         "**Art. 112.** Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, "
         "a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima "
         "e da Taxa de Ocupação Máxima da zona em que se encontra.\n\n"
         "👉 **Na prática:** para residência unifamiliar, a legislação admite zerar recuos frontal e laterais, desde que a proposta continue respeitando a **TP mínima** e a **TO máxima** da zona."
     )
-    st.markdown(
+    md(
         "**Calçada**\n\n"
         "Não existe uma largura única e fixa para toda calçada no município. Quando houver padrão definido no loteamento ou na via, ele deve ser seguido. "
         "Quando não houver, a referência costuma ser a calçada já existente no local.\n\n"
