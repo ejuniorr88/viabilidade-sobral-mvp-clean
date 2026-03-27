@@ -34,48 +34,49 @@ def render(ctx: dict) -> None:
     pct_txt = _fmt_pct_local(to_max)
 
     md(
-        f"""A zona permite ocupar até **{pct_txt}** do terreno no térreo.
-
-"""
-        f"""👉 **{fmt_num(area_lote)} m² × {pct_txt} = {fmt_num(area_to)} m²**
-
-"""
+        f"""A zona permite ocupar até **{pct_txt}** do terreno no térreo.\n\n"""
+        f"""👉 **{fmt_num(area_lote)} m² × {pct_txt} = {fmt_num(area_to)} m²**\n\n"""
         """Esse é o limite máximo permitido pela Taxa de Ocupação (TO)."""
     )
+
+    to_efetiva = None
+    if area_pedida is not None and area_lote:
+        try:
+            to_efetiva = (float(area_pedida) / float(area_lote)) * 100.0
+        except Exception:
+            to_efetiva = None
 
     if area_pedida is not None and area_considerada is not None:
         if excedeu_area:
             md(
                 f"""👉 **Área pretendida informada: {fmt_num(area_pedida)} m².** Como esse valor ultrapassa o limite máximo permitido pela TO, ele não pode ser adotado como referência de implantação no térreo. Por isso, o estudo passa a considerar **{fmt_num(area_considerada)} m²** como teto urbanístico inicial para esta análise."""
             )
+            if to_efetiva is not None:
+                md(
+                    f"""👉 **TO correspondente à área pretendida: {fmt_num(area_pedida)} m² ÷ {fmt_num(area_lote)} m² = {_fmt_pct_local(to_efetiva)}**\n\n"""
+                    f"""Isso significa que, para esta proposta, a ocupação no térreo ficaria em **{_fmt_pct_local(to_efetiva)}** do lote, portanto acima da TO máxima permitida de **{pct_txt}**."""
+                )
         else:
             md(
                 f"""👉 **Área pretendida informada: {fmt_num(area_pedida)} m².** Como esse valor está abaixo do limite máximo permitido, ele pode ser adotado como referência inicial para a implantação no térreo."""
             )
+            if to_efetiva is not None:
+                md(
+                    f"""👉 **TO correspondente à área pretendida: {fmt_num(area_pedida)} m² ÷ {fmt_num(area_lote)} m² = {_fmt_pct_local(to_efetiva)}**\n\n"""
+                    f"""Isso significa que, para esta proposta, a ocupação no térreo ficaria em **{_fmt_pct_local(to_efetiva)}** do lote, portanto abaixo da TO máxima permitida de **{pct_txt}**."""
+                )
 
     md(
-        """Como complemento a essa verificação, também é importante analisar a área que efetivamente cabe no lote, considerando os recuos aplicáveis.
-
-"""
-        """Art. 112. Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima e da Taxa de Ocupação Máxima da zona em que se encontra.
-
-"""
-        """👉 **Na prática:** para residência unifamiliar, a norma permite encostar nas laterais e alinhar na frente, desde que o projeto continue respeitando a TO máxima e a TP mínima.
-
-"""
+        """Como complemento a essa verificação, também é importante analisar a área que efetivamente cabe no lote, considerando os recuos aplicáveis.\n\n"""
+        """Art. 112. Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima e da Taxa de Ocupação Máxima da zona em que se encontra.\n\n"""
+        """👉 **Na prática:** para residência unifamiliar, a norma permite encostar nas laterais e alinhar na frente, desde que o projeto continue respeitando a TO máxima e a TP mínima.\n\n"""
         """A partir disso, este lote pode ser lido de duas formas:"""
     )
 
     md(
-        f"""✅ **Opção principal — aproveitando a flexibilidade da lei**
-
-"""
-        """Para este caso, a legislação admite zerar o recuo frontal e os recuos laterais.
-
-"""
-        """Assim, o térreo pode aproveitar melhor a área do lote, desde que continue respeitando a TO e a TP.
-
-"""
+        f"""✅ **Opção principal — aproveitando a flexibilidade da lei**\n\n"""
+        """Para este caso, a legislação admite zerar o recuo frontal e os recuos laterais.\n\n"""
+        """Assim, o térreo pode aproveitar melhor a área do lote, desde que continue respeitando a TO e a TP.\n\n"""
         f"""👉 **Térreo máximo nesta opção: {fmt_num(area_to)} m²**"""
     )
 
@@ -91,9 +92,7 @@ def render(ctx: dict) -> None:
 
     md("""⚠️ **O recuo de fundo e as demais exigências urbanísticas aplicáveis continuam precisando ser respeitados.**""")
 
-    md("""✅ **Opção alternativa — adotando os recuos da zona**
-
-Caso se opte por seguir os recuos padrão da zona, a implantação prática fica assim:""")
+    md("""✅ **Opção alternativa — adotando os recuos da zona**\n\nCaso se opte por seguir os recuos padrão da zona, a implantação prática fica assim:""")
 
     if rec_fr is not None:
         md(f"""Frontal: **{fmt_num(rec_fr)} m**""")
@@ -111,9 +110,7 @@ Caso se opte por seguir os recuos padrão da zona, a implantação prática fica
 
     if a_recuos is not None and w_util is not None and d_util is not None:
         md(
-            f"""👉 **{fmt_num(w_util)} × {fmt_num(d_util)} = {fmt_num(a_recuos)} m²**
-
-"""
+            f"""👉 **{fmt_num(w_util)} × {fmt_num(d_util)} = {fmt_num(a_recuos)} m²**\n\n"""
             f"""👉 Nesse cenário, mesmo que a zona permita até **{fmt_num(area_to)} m²** pela TO, o limite físico de implantação, considerando os recuos, fica em **{fmt_num(a_recuos)} m²**."""
         )
 
@@ -132,6 +129,11 @@ Caso se opte por seguir os recuos padrão da zona, a implantação prática fica
     md(f"""Pela Taxa de Ocupação (TO), o lote pode ocupar até **{fmt_num(area_to)} m²** no térreo.""")
 
     if area_pedida is not None and area_considerada is not None:
+        if not excedeu_area and to_efetiva is not None:
+            md(
+                f"""A área pretendida informada foi de **{fmt_num(area_pedida)} m²**, o que corresponde a uma TO efetiva de **{_fmt_pct_local(to_efetiva)}**."""
+            )
+
         if excedeu_area:
             md(
                 f"""Isso significa que uma proposta com **{fmt_num(area_pedida)} m²** no térreo não é urbanisticamente possível, porque excede o limite máximo permitido pela zona."""
