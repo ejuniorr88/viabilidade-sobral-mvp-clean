@@ -22,6 +22,7 @@ from .multifamiliar_items import (
     render_item_13,
     render_item_14,
     render_item_15,
+    render_item_16,
 )
 
 # Reexporta helpers usados por outras partes do projeto/tests.
@@ -48,14 +49,15 @@ ITEM_HEADINGS = [
     ("item_05", "---\n### 📏 5️⃣ Regras principais para este terreno", render_item_05),
     ("item_06", "---\n### 📐 6️⃣ Quanto posso ocupar no térreo?", render_item_06),
     ("item_07", "---\n### 🌿 7️⃣ Quanto preciso deixar livre?", render_item_07),
-    ("item_08", "---\n### 🏢 8️⃣ Posso construir mais andares?", render_item_08),
-    ("item_09", "---\n### 🚗 9️⃣ Vagas de estacionamento", render_item_09),
-    ("item_10", "---\n### 📋 1️⃣0️⃣ Quais medidas mínimas os ambientes precisam ter?", render_item_10),
-    ("item_11", "---\n### 🚶 1️⃣1️⃣ O que preciso saber sobre a calçada?", render_item_11),
-    ("item_12", "---\n### 💡 1️⃣2️⃣ Dicas valiosas", render_item_12),
-    ("item_13", "---\n### 📌 1️⃣3️⃣ Resumo rápido final", render_item_13),
-    ("item_14", "---\n### 🏛️ 1️⃣4️⃣ O que acontece depois desta etapa?", render_item_14),
-    ("item_15", "---\n### ✅ 1️⃣5️⃣ Fechamento final", render_item_15),
+    ("item_08", "---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?", render_item_08),
+    ("item_09", "---\n### 🏢 9️⃣ Posso construir mais andares?", render_item_09),
+    ("item_10", "---\n### 🚗 1️⃣0️⃣ Vagas de estacionamento", render_item_10),
+    ("item_11", "---\n### 📋 1️⃣1️⃣ Quais medidas mínimas os ambientes precisam ter?", render_item_11),
+    ("item_12", "---\n### 🚶 1️⃣2️⃣ O que preciso saber sobre a calçada?", render_item_12),
+    ("item_13", "---\n### 💡 1️⃣3️⃣ Dicas valiosas", render_item_13),
+    ("item_14", "---\n### 📌 1️⃣4️⃣ Resumo rápido final", render_item_14),
+    ("item_15", "---\n### 🏛️ 1️⃣5️⃣ O que acontece depois desta etapa?", render_item_15),
+    ("item_16", "---\n### ✅ 1️⃣6️⃣ Fechamento final", render_item_16),
 ]
 
 
