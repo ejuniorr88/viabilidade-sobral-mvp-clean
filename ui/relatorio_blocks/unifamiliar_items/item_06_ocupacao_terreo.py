@@ -9,10 +9,56 @@ def render(ctx: dict) -> None:
     if ctx['to_max'] is None or ctx['A_to'] is None:
         st.info("Sem TO máxima cadastrada para esta zona/uso.")
         return
+
     md(
         f"A zona permite ocupar até **{fmt_pct(ctx['to_max'])}** do terreno no térreo.\n\n"
         f"👉 **{fmt_num(ctx['A'])} m² × {fmt_pct(ctx['to_max'])} = {fmt_num(ctx['A_to'])} m²**\n\n"
-        "Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**.\n\n"
+        "Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**."
+    )
+
+    if ctx.get('A_considerada') is not None and ctx.get('area_pedida') is not None:
+        md(
+            f"Como foi informada uma **Área Construída Pretendida** de **{fmt_num(ctx['area_pedida'])} m²**, "
+            "o item passa a comparar esse valor com os limites aplicáveis ao terreno."
+        )
+        if ctx.get('excedeu_area'):
+            md(
+                f"👉 **Área pretendida informada:** **{fmt_num(ctx['area_pedida'])} m²**\n\n"
+                f"👉 **Área adotada no relatório:** **{fmt_num(ctx['A_considerada'])} m²**\n\n"
+                "Como a área informada ultrapassou o limite adotado para o estudo, os cálculos abaixo passam a considerar o valor máximo permitido pelo terreno."
+            )
+        else:
+            md(
+                f"👉 **Área pretendida informada:** **{fmt_num(ctx['area_pedida'])} m²**\n\n"
+                f"👉 **Área adotada no relatório:** **{fmt_num(ctx['A_considerada'])} m²**"
+            )
+
+        if ctx.get('to_projeto_pct') is not None:
+            md(
+                f"Isso representa uma **TO efetiva de {fmt_pct(ctx['to_projeto_pct'])}**, considerando a área adotada no relatório."
+            )
+
+        if ctx.get('A_op2_max') is not None:
+            situacao_op2 = "cabe" if ctx['A_considerada'] <= ctx['A_op2_max'] else "não cabe"
+            md(
+                f"✅ **Comparação com a Opção principal (Art. 112):** a área adotada de **{fmt_num(ctx['A_considerada'])} m²** {situacao_op2} "
+                f"dentro do limite de **{fmt_num(ctx['A_op2_max'])} m²** nesta leitura."
+            )
+
+        if ctx.get('A_recuos') is not None:
+            situacao_recuos = "cabe" if ctx['A_considerada'] <= ctx['A_recuos'] else "não cabe"
+            md(
+                f"✅ **Comparação com os recuos da zona:** a área adotada de **{fmt_num(ctx['A_considerada'])} m²** {situacao_recuos} "
+                f"dentro do limite físico de **{fmt_num(ctx['A_recuos'])} m²** quando todos os recuos são respeitados."
+            )
+
+        md(
+            f"**Leitura prática:** para o estudo deste lote, o relatório passa a considerar **{fmt_num(ctx['A_considerada'])} m²** no térreo, "
+            "sempre limitado pela TO máxima e pelas demais exigências urbanísticas aplicáveis."
+        )
+        return
+
+    md(
         "Mas aqui tem um ponto importante: uma coisa é o limite da zona no papel, e outra é o que realmente cabe dentro do lote depois de respeitar os recuos.\n\n"
         "Por isso, além do percentual permitido, também vale olhar a área que sobra de forma prática dentro do terreno."
     )
