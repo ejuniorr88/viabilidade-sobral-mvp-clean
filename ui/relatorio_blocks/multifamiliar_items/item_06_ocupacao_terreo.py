@@ -15,6 +15,51 @@ def render(ctx):
         f"{common._fmt_num(ctx['lot_area_f'])} × {common._fmt_pct(ctx['to_max_pct'])} = {common._fmt_num(ctx['to_m2'])}"
     )
     common.st.markdown("Esse é o limite máximo permitido pela Taxa de Ocupação (TO).")
+
+    if ctx.get("a_adotada") is not None and ctx.get("built_ground") is not None:
+        common.st.markdown(
+            f"Como foi informada uma **Área Construída Pretendida** de **{common._fmt_num(ctx['built_ground'])} m²**, "
+            "o item passa a comparar esse valor com os limites aplicáveis ao terreno."
+        )
+        if ctx.get("built_ground") != ctx.get("a_adotada"):
+            common.st.markdown(
+                f"👉 **Área pretendida informada:** **{common._fmt_num(ctx['built_ground'])} m²**\n\n"
+                f"👉 **Área adotada no relatório:** **{common._fmt_num(ctx['a_adotada'])} m²**\n\n"
+                "Como a área informada ultrapassou o limite adotado para o estudo, os cálculos abaixo passam a considerar o valor máximo permitido para o lote."
+            )
+        else:
+            common.st.markdown(
+                f"👉 **Área pretendida informada:** **{common._fmt_num(ctx['built_ground'])} m²**\n\n"
+                f"👉 **Área adotada no relatório:** **{common._fmt_num(ctx['a_adotada'])} m²**"
+            )
+
+        if ctx.get("to_utilizada_pct") is not None:
+            common.st.markdown(
+                f"Isso representa uma **TO efetiva de {common._fmt_pct(ctx['to_utilizada_pct'])}**, considerando a área adotada no relatório."
+            )
+
+        if ctx.get("to_m2") is not None:
+            situacao_to = "cabe" if ctx["a_adotada"] <= ctx["to_m2"] else "não cabe"
+            common.st.markdown(
+                f"✅ **Comparação com o limite da TO:** a área adotada de **{common._fmt_num(ctx['a_adotada'])} m²** {situacao_to} dentro do limite de **{common._fmt_num(ctx['to_m2'])} m²** no térreo."
+            )
+
+        if ctx.get("A_recuos") is not None:
+            situacao_recuos = "cabe" if ctx["a_adotada"] <= ctx["A_recuos"] else "não cabe"
+            common.st.markdown(
+                f"✅ **Comparação com a implantação pelos recuos:** a área adotada de **{common._fmt_num(ctx['a_adotada'])} m²** {situacao_recuos} dentro do limite físico de **{common._fmt_num(ctx['A_recuos'])} m²** quando todos os recuos da zona são respeitados."
+            )
+
+        if ctx.get("multi_tipo") in ("R21", "R2.1", "R2_1") or str(ctx.get("use_type_code", "")).endswith("R21"):
+            common.st.markdown(
+                "👉 **No caso do R2.1**, quando a zona admitir leitura semelhante ao unifamiliar, o aproveitamento do térreo pode ser comparado também com a lógica mais flexível da implantação, sempre respeitando as demais exigências urbanísticas."
+            )
+
+        common.st.markdown(
+            f"**Leitura prática:** para o estudo deste lote, o relatório passa a considerar **{common._fmt_num(ctx['a_adotada'])} m²** no térreo, sempre limitado pela TO máxima e pelas demais exigências urbanísticas aplicáveis."
+        )
+        return
+
     common.st.markdown(
         f"Na prática, isso significa que a edificação não pode ultrapassar **{common._fmt_num(ctx['to_m2'])} m²** no chão, considerando a ocupação máxima permitida pela zona."
     )
