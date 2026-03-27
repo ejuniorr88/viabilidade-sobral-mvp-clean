@@ -50,3 +50,9 @@ def md_table(headers: list[str], rows: list[list[str]]) -> None:
 
     table += "</tbody></table>"
     st.markdown(table, unsafe_allow_html=True)
+
+
+# Aliases para compatibilidade com o multifamiliar_guia.py
+_fmt_num = fmt_num
+_fmt_pct = fmt_pct
+_md_table = md_table
