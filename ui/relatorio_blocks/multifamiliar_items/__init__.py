@@ -14,3 +14,4 @@ from .item_12_dicas import render as render_item_12
 from .item_13_resumo import render as render_item_13
 from .item_14_pos_etapa import render as render_item_14
 from .item_15_fechamento import render as render_item_15
+from .item_16_fechamento import render as render_item_16
