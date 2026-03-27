@@ -24,8 +24,6 @@ def render(ctx: dict) -> None:
     area_considerada = ctx.get("A_considerada")
     excedeu_area = bool(ctx.get("excedeu_area"))
 
-    w = ctx.get("W")
-    d = ctx.get("D")
     rec_fr = ctx.get("rec_fr")
     rec_lat = ctx.get("rec_lat")
     rec_fun = ctx.get("rec_fun")
@@ -48,7 +46,7 @@ def render(ctx: dict) -> None:
     if area_pedida is not None and area_considerada is not None:
         if excedeu_area:
             md(
-                f"""👉 **Área pretendida informada: {fmt_num(area_pedida)} m².** Como esse valor ultrapassa o limite máximo permitido, o estudo passa a considerar **{fmt_num(area_considerada)} m²** como referência inicial para a implantação no térreo."""
+                f"""👉 **Área pretendida informada: {fmt_num(area_pedida)} m².** Como esse valor ultrapassa o limite máximo permitido pela TO, ele não pode ser adotado como referência de implantação no térreo. Por isso, o estudo passa a considerar **{fmt_num(area_considerada)} m²** como teto urbanístico inicial para esta análise."""
             )
         else:
             md(
@@ -82,12 +80,14 @@ def render(ctx: dict) -> None:
     )
 
     if area_pedida is not None and area_considerada is not None:
-        ref_area = area_considerada if excedeu_area else area_pedida
-        md(
-            f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela cabe dentro desse limite máximo.**"""
-            if not excedeu_area
-            else f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela ultrapassa esse limite máximo. Para esta leitura, passa a ser considerada a área de {fmt_num(ref_area)} m².**"""
-        )
+        if excedeu_area:
+            md(
+                f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela não é permitida nesta leitura, porque ultrapassa a Taxa de Ocupação máxima da zona. Portanto, para esta hipótese, o estudo passa a considerar {fmt_num(area_considerada)} m² como limite máximo admissível no térreo.**"""
+            )
+        else:
+            md(
+                f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela cabe dentro desse limite máximo.**"""
+            )
 
     md("""⚠️ **O recuo de fundo e as demais exigências urbanísticas aplicáveis continuam precisando ser respeitados.**""")
 
@@ -118,44 +118,47 @@ Caso se opte por seguir os recuos padrão da zona, a implantação prática fica
         )
 
         if area_pedida is not None and area_considerada is not None:
-            ref_area = area_considerada if excedeu_area else area_pedida
-            md(
-                f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela também cabe dentro desse limite físico.**"""
-                if ref_area <= a_recuos
-                else f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela não cabe dentro desse limite físico. Para esta leitura, passa a ser considerada a área de {fmt_num(a_recuos)} m² como teto de implantação com recuos.**"""
-            )
+            if excedeu_area:
+                md(
+                    f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela também não pode ser adotada nesta leitura, porque ultrapassa não apenas a TO máxima da zona, mas também o limite físico de implantação com recuos. Assim, nesta hipótese, o estudo passa a considerar {fmt_num(a_recuos)} m² como teto máximo possível de implantação.**"""
+                )
+            else:
+                md(
+                    f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela também cabe dentro desse limite físico.**"""
+                )
 
     md("""**Leitura prática**""")
 
     md(f"""Pela Taxa de Ocupação (TO), o lote pode ocupar até **{fmt_num(area_to)} m²** no térreo.""")
 
     if area_pedida is not None and area_considerada is not None:
-        ref_area = area_considerada if excedeu_area else area_pedida
-
-        if not excedeu_area:
+        if excedeu_area:
+            md(
+                f"""Isso significa que uma proposta com **{fmt_num(area_pedida)} m²** no térreo não é urbanisticamente possível, porque excede o limite máximo permitido pela zona."""
+            )
+            md(
+                f"""Na leitura com a flexibilidade do art. 112, o teto máximo admissível passa a ser **{fmt_num(area_considerada)} m²**."""
+            )
+            if a_recuos is not None:
+                md(
+                    f"""Na leitura com os recuos padrão da zona, a área útil de implantação cai para **{fmt_num(a_recuos)} m²**, que passa a ser o limite físico do lote nessa hipótese."""
+                )
+                md(
+                    f"""👉 **Neste caso, a área pretendida de {fmt_num(area_pedida)} m² não pode ser considerada viável, porque ultrapassa a TO máxima permitida. Na prática, o projeto precisaria ser reduzido para se enquadrar nos parâmetros urbanísticos, respeitando no máximo {fmt_num(area_considerada)} m² pela TO, ou {fmt_num(a_recuos)} m² caso sejam adotados os recuos padrão da zona.**"""
+                )
+            else:
+                md(
+                    f"""👉 **Neste caso, a área pretendida de {fmt_num(area_pedida)} m² não pode ser considerada viável, porque ultrapassa a TO máxima permitida. Na prática, o projeto precisaria ser reduzido para se enquadrar nos parâmetros urbanísticos, respeitando no máximo {fmt_num(area_considerada)} m² pela TO.**"""
+                )
+        else:
             md(f"""Na leitura com a flexibilidade do art. 112, a área pretendida de **{fmt_num(area_pedida)} m²** é viável.""")
-        else:
-            md(f"""Na leitura com a flexibilidade do art. 112, a área pretendida de **{fmt_num(area_pedida)} m²** ultrapassa o limite máximo, por isso a leitura passa a considerar **{fmt_num(ref_area)} m²** como teto pela TO.""")
-
-        if a_recuos is not None:
-            if ref_area <= a_recuos:
-                md(f"""Na leitura com os recuos padrão da zona, a área útil de implantação cai para **{fmt_num(a_recuos)} m²**, mas a área pretendida de **{fmt_num(ref_area)} m²** continua sendo viável.""")
-            else:
-                md(f"""Na leitura com os recuos padrão da zona, a área útil de implantação cai para **{fmt_num(a_recuos)} m²**, de modo que esse passa a ser o limite físico de implantação.""")
-            if not excedeu_area and ref_area <= a_recuos:
+            if a_recuos is not None:
+                md(f"""Na leitura com os recuos padrão da zona, a área útil de implantação cai para **{fmt_num(a_recuos)} m²**, mas a área pretendida de **{fmt_num(area_pedida)} m²** continua sendo viável.""")
                 md("""👉 **Neste caso, a área pretendida informada permanece viável nas duas leituras: tanto pela TO máxima da zona quanto pela implantação prática com recuos.**""")
-            elif excedeu_area and ref_area <= a_recuos:
-                md("""👉 **Neste caso, a área originalmente informada precisou ser ajustada, e a leitura final passa a considerar a área adotada como viável nas duas leituras.**""")
             else:
-                md("""👉 **Neste caso, a leitura final deve respeitar o menor limite aplicável entre a TO máxima da zona e a implantação prática com recuos.**""")
-        else:
-            if not excedeu_area:
                 md("""👉 **Neste caso, a área pretendida informada permanece viável pela TO máxima da zona.**""")
-            else:
-                md("""👉 **Neste caso, a leitura final deve respeitar o limite máximo pela TO da zona.**""")
     else:
         md("""Na leitura com a flexibilidade do art. 112, o aproveitamento do térreo pode chegar ao limite máximo permitido pela zona, desde que sejam respeitadas a TO, a TP e as demais exigências aplicáveis.""")
-
         if a_recuos is not None:
             md(f"""Na leitura com os recuos padrão da zona, a área útil de implantação fica em **{fmt_num(a_recuos)} m²**.""")
             md("""👉 **Neste caso, sem uma área pretendida informada, o estudo passa a apresentar os dois referenciais principais do lote: o limite máximo pela TO e o limite físico de implantação considerando os recuos.**""")
