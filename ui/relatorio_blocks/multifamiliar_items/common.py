@@ -7,6 +7,17 @@ import math
 import streamlit as st
 
 
+def md(text: str) -> None:
+    st.markdown(text)
+
+
+def md_table(rows: list[tuple[str, str]]) -> str:
+    out = ["| Tipo de Piso | Percentual considerado permeável |", "|---|---:|"]
+    for a, b in rows:
+        out.append(f"| {a} | {b} |")
+    return "\n".join(out)
+
+
 def _get_supabase():
     try:
         from core.supabase_client import get_supabase  # type: ignore
