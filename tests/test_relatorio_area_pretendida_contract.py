@@ -31,7 +31,7 @@ def test_relatorio_unifamiliar_prioritizes_area_pretendida_in_text() -> None:
 def test_relatorio_unifamiliar_keeps_maximum_reference_and_tp_reading() -> None:
     required_by_file = {
         "ui/relatorio_blocks/unifamiliar_items/item_06_ocupacao_terreo.py": [
-            "Esse é o limite máximo permitido pela **Taxa de Ocupação (TO)**.",
+            "Esse é o limite máximo permitido pela Taxa de Ocupação (TO).",
         ],
         "ui/relatorio_blocks/unifamiliar_items/item_07_permeabilidade.py": [
             "área permeável",

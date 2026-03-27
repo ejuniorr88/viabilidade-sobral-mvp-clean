@@ -11,11 +11,39 @@ def md(text: str) -> None:
     st.markdown(text)
 
 
-def md_table(rows: list[tuple[str, str]]) -> str:
-    out = ["| Tipo de Piso | Percentual considerado permeável |", "|---|---:|"]
-    for a, b in rows:
-        out.append(f"| {a} | {b} |")
-    return "\n".join(out)
+def md_table(headers: list[str], rows: list[list[str]]) -> None:
+    if not headers:
+        return
+
+    table = "<table style='width:100%; border-collapse: collapse;'>"
+    table += "<thead><tr>"
+    for h in headers:
+        table += (
+            "<th style='text-align:left; padding:8px; border:1px solid #ddd;'>"
+            f"{h}</th>"
+        )
+    table += "</tr></thead><tbody>"
+
+    for row in rows:
+        table += "<tr>"
+        for cell in row:
+            table += (
+                "<td style='padding:8px; border:1px solid #ddd;'>"
+                f"{cell}</td>"
+            )
+        table += "</tr>"
+
+    table += "</tbody></table>"
+    st.markdown(table, unsafe_allow_html=True)
+
+
+def fmt_num(v: Any, dec: int = 2) -> str:
+    return _fmt_num(v, dec)
+
+
+def fmt_pct(v: Any, dec: int = 1) -> str:
+    return _fmt_pct(v, dec)
+
 
 
 def _get_supabase():
@@ -646,3 +674,8 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         "ia_saldo": ia_saldo,
         "is_r21": is_r21,
     }
+
+
+# Aliases de compatibilidade para a arquitetura modular
+_md = md
+_md_table = md_table
