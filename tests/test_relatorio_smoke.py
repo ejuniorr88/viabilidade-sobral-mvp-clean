@@ -19,18 +19,21 @@ def test_relatorio_smoke_must_keep_core_blocks() -> None:
     dicas_py = ROOT / "ui" / "relatorio_blocks" / "dicas_valiosas.py"
     figuras_py = ROOT / "ui" / "relatorio_blocks" / "figuras_anexo_v.py"
     multi_py = ROOT / "ui" / "relatorio_blocks" / "multifamiliar_guia.py"
+    multi_common_py = ROOT / "ui" / "relatorio_blocks" / "multifamiliar_items" / "common.py"
 
     assert relatorio_py.exists(), "ui/relatorio.py não encontrado"
     assert quadro_py.exists(), "ui/relatorio_blocks/quadro_tecnico.py não encontrado"
     assert dicas_py.exists(), "ui/relatorio_blocks/dicas_valiosas.py não encontrado"
     assert figuras_py.exists(), "ui/relatorio_blocks/figuras_anexo_v.py não encontrado"
     assert multi_py.exists(), "ui/relatorio_blocks/multifamiliar_guia.py não encontrado"
+    assert multi_common_py.exists(), "ui/relatorio_blocks/multifamiliar_items/common.py não encontrado"
 
     txt_relatorio = relatorio_py.read_text(encoding="utf-8")
     txt_quadro = quadro_py.read_text(encoding="utf-8")
     txt_dicas = dicas_py.read_text(encoding="utf-8")
     txt_figuras = figuras_py.read_text(encoding="utf-8")
     txt_multi = multi_py.read_text(encoding="utf-8")
+    txt_multi_common = multi_common_py.read_text(encoding="utf-8")
 
     for anchor in [
         "RELATÓRIO URBANÍSTICO",
@@ -79,5 +82,9 @@ def test_relatorio_smoke_must_keep_core_blocks() -> None:
     for anchor in ["Abrir em tamanho real", "Anexo V"]:
         assert anchor in txt_figuras, f"Âncora obrigatória sumiu de ui/relatorio_blocks/figuras_anexo_v.py: {anchor}"
 
-    for anchor in ["Vagas de estacionamento", "quadra máxima"]:
-        assert anchor in txt_multi, f"Âncora obrigatória sumiu de ui/relatorio_blocks/multifamiliar_guia.py: {anchor}"
+    assert "Vagas de estacionamento" in txt_multi, (
+        "Âncora obrigatória sumiu de ui/relatorio_blocks/multifamiliar_guia.py: Vagas de estacionamento"
+    )
+    assert ("quadra máxima" in txt_multi) or ("quadra máxima" in txt_multi_common), (
+        "Âncora obrigatória sumiu do estado atual do multifamiliar: quadra máxima"
+    )

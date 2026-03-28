@@ -75,3 +75,33 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     for _, heading, renderer in ITEM_HEADINGS:
         st.markdown(heading)
         renderer(ctx)
+
+
+def should_block_multifamiliar_preview(calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None) -> bool:
+    if not isinstance(calc, dict):
+        return False
+    if not str(calc.get("use_type_code") or "").startswith("RES_MULTI_"):
+        return False
+    if calc.get("project_mode") != "GUIA_FASE_1":
+        return False
+    if not calc.get("ok") or not (rule or calc.get("rule")) or not (calc.get("zone") or calc.get("zone_sigla")) or calc.get("err"):
+        return False
+    ctx = common.build_context(calc=calc, rule=rule, fetch_adequabilidade_fn=_fetch_adequabilidade)
+    return str(ctx.get("status_curto") or "").strip().upper() == "NÃO PERMITE"
+
+
+def render_multifamiliar_inadequado_preview(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, **_: Any) -> None:
+    common.st = st
+    ctx = common.build_context(calc=calc, rule=rule, fetch_adequabilidade_fn=_fetch_adequabilidade)
+    render_item_00_intro(ctx)
+    for item_key, heading, renderer in ITEM_HEADINGS:
+        if item_key not in ("item_01", "item_02"):
+            continue
+        st.markdown(heading)
+        renderer(ctx)
+    st.markdown("---\n### ⚠️ Situação do estudo")
+    st.warning("A análise de adequabilidade resultou em **NÃO PERMITE** para a condição atual deste terreno.")
+    st.markdown(
+        "Por isso, o relatório completo não será continuado, já que não há viabilidade urbanística para este caso na forma analisada."
+    )
+    st.info("**Seu crédito foi preservado**, para que você possa realizar um novo estudo em outra condição.")

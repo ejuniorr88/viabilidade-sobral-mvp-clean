@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-RELATORIO = ROOT / "ui/relatorio.py"
-ITEMS_DIR = ROOT / "ui/relatorio_blocks/unifamiliar_items"
+GUIA = ROOT / "ui/relatorio_blocks/multifamiliar_guia.py"
+ITEMS_DIR = ROOT / "ui/relatorio_blocks/multifamiliar_items"
+COMMON = ITEMS_DIR / "common.py"
+INTRO = ITEMS_DIR / "item_00_intro.py"
 
 ITEM_FILES = {
     "item_01": "item_01_localizacao.py",
@@ -27,15 +29,15 @@ ITEM_FILES = {
 
 ITEM_HEADINGS = {
     "item_01": "### 📍 1️⃣ Onde está localizado o terreno?",
-    "item_02": "### ✅ 2️⃣ O uso residencial unifamiliar é viável neste terreno?",
-    "item_03": "### 📘 3️⃣ Como funciona a leitura da adequabilidade no unifamiliar?",
+    "item_02": "### ✅ 2️⃣ O uso residencial multifamiliar é viável neste terreno?",
+    "item_03": "### 📘 3️⃣ Como funciona a leitura da adequabilidade no multifamiliar?",
     "item_04": "### 🧭 4️⃣ O que essa zona permite neste terreno?",
     "item_05": "### 📏 5️⃣ Regras principais para este terreno",
     "item_06": "### 📐 6️⃣ Quanto posso ocupar no térreo?",
     "item_07": "### 🌿 7️⃣ Quanto preciso deixar livre?",
     "item_08": "### 🧱 8️⃣ Tipos de piso: o que conta como permeável?",
     "item_09": "### 🏢 9️⃣ Posso construir mais andares?",
-    "item_10": "### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?",
+    "item_10": "### 🚗 1️⃣0️⃣ Vagas de estacionamento",
     "item_11": "### 📋 1️⃣1️⃣ Quais medidas mínimas os ambientes precisam ter?",
     "item_12": "### 🚶 1️⃣2️⃣ O que preciso saber sobre a calçada?",
     "item_13": "### 💡 1️⃣3️⃣ Dicas valiosas",
@@ -45,30 +47,29 @@ ITEM_HEADINGS = {
 }
 
 
-def read_relatorio() -> str:
-    return RELATORIO.read_text(encoding="utf-8")
+def read_guia() -> str:
+    return GUIA.read_text(encoding="utf-8")
+
+
+def read_common() -> str:
+    return COMMON.read_text(encoding="utf-8")
+
+
+def read_intro() -> str:
+    return INTRO.read_text(encoding="utf-8")
 
 
 def read_item(item_key: str) -> str:
-    path = ITEMS_DIR / ITEM_FILES[item_key]
-    return path.read_text(encoding="utf-8")
-
-
-def _expected_heading_count(item_key: str) -> int:
-    # item_01 e item_02 também aparecem no preview inadequado do unifamiliar
-    return 2 if item_key in {"item_01", "item_02"} else 1
+    return (ITEMS_DIR / ITEM_FILES[item_key]).read_text(encoding="utf-8")
 
 
 def assert_main_heading_centralized(item_key: str) -> None:
     heading = ITEM_HEADINGS[item_key]
-    relatorio_txt = read_relatorio()
+    guia_txt = read_guia()
     item_txt = read_item(item_key)
 
-    assert heading in relatorio_txt, f"Heading principal ausente no ui/relatorio.py: {heading}"
-    expected = _expected_heading_count(item_key)
-    assert relatorio_txt.count(heading) == expected, (
-        f"Heading principal deve aparecer {expected}x no ui/relatorio.py: {heading}"
-    )
+    assert heading in guia_txt, f"Heading principal ausente no multifamiliar_guia.py: {heading}"
+    assert guia_txt.count(heading) == 1, f"Heading deve aparecer 1x no multifamiliar_guia.py: {heading}"
     assert heading not in item_txt, f"Heading principal do {item_key} não pode ficar dentro do arquivo do item."
     assert 'st.markdown("### ' not in item_txt, f"Arquivo do {item_key} não pode renderizar heading principal próprio."
     assert 'md("### ' not in item_txt, f"Arquivo do {item_key} não pode guardar heading principal dentro de md(...)."
@@ -80,7 +81,19 @@ def assert_item_has_required_phrases(item_key: str, required_phrases: list[str])
         assert phrase in item_txt, f"{item_key} perdeu conteúdo obrigatório: {phrase}"
 
 
-def assert_relatorio_does_not_keep_residual_text(forbidden_phrases: list[str]) -> None:
-    relatorio_txt = read_relatorio()
+def assert_common_has_required_phrases(required_phrases: list[str]) -> None:
+    txt = read_common()
+    for phrase in required_phrases:
+        assert phrase in txt, f"common.py do multifamiliar perdeu conteúdo obrigatório: {phrase}"
+
+
+def assert_intro_has_required_phrases(required_phrases: list[str]) -> None:
+    txt = read_intro()
+    for phrase in required_phrases:
+        assert phrase in txt, f"item_00_intro perdeu conteúdo obrigatório: {phrase}"
+
+
+def assert_guia_does_not_keep_residual_text(forbidden_phrases: list[str]) -> None:
+    guia_txt = read_guia()
     for phrase in forbidden_phrases:
-        assert phrase not in relatorio_txt, f"ui/relatorio.py ainda guarda conteúdo interno de item: {phrase}"
+        assert phrase not in guia_txt, f"multifamiliar_guia.py ainda guarda conteúdo interno de item: {phrase}"

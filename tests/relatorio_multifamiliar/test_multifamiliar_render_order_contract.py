@@ -1,7 +1,6 @@
 import sys
 import types
 from contextlib import contextmanager
-from pathlib import Path
 
 if "streamlit" not in sys.modules:
     streamlit_stub = types.ModuleType("streamlit")
@@ -23,7 +22,6 @@ if "streamlit" not in sys.modules:
     def _expander(*args, **kwargs):
         yield streamlit_stub
     streamlit_stub.expander = _expander
-    streamlit_stub.columns = lambda spec: [streamlit_stub for _ in range(spec if isinstance(spec, int) else len(spec))]
     sys.modules["streamlit"] = streamlit_stub
 
 if "supabase" not in sys.modules:
@@ -32,9 +30,7 @@ if "supabase" not in sys.modules:
     supabase_stub.create_client = lambda *args, **kwargs: object()
     sys.modules["supabase"] = supabase_stub
 
-from .test_unifamiliar_items_helpers import ITEM_HEADINGS, read_relatorio
-
-ROOT = Path(__file__).resolve().parents[1]
+from .test_multifamiliar_items_helpers import ITEM_HEADINGS, read_guia
 
 
 class StreamlitCapture:
@@ -98,10 +94,13 @@ class StreamlitCapture:
         return "\n".join(self.texts)
 
 
-def test_unifamiliar_final_sections_exist_and_keep_order() -> None:
-    txt = read_relatorio()
+def test_multifamiliar_render_order_stable_at_end() -> None:
+    txt = read_guia()
 
-    ordered = [
+    anchors = [
+        ITEM_HEADINGS['item_10'],
+        ITEM_HEADINGS['item_11'],
+        ITEM_HEADINGS['item_12'],
         ITEM_HEADINGS['item_13'],
         ITEM_HEADINGS['item_14'],
         ITEM_HEADINGS['item_15'],
@@ -109,98 +108,86 @@ def test_unifamiliar_final_sections_exist_and_keep_order() -> None:
     ]
 
     positions = []
-    for anchor in ordered:
+    for anchor in anchors:
         count = txt.count(anchor)
-        assert count >= 1, f'Âncora final obrigatória sumiu do unifamiliar: {anchor}'
+        assert count == 1, f"Âncora final do multifamiliar deve aparecer 1x. Encontrado {count}x: {anchor}"
         idx = txt.find(anchor)
         positions.append(idx)
 
-    assert positions == sorted(positions), 'As seções finais do unifamiliar perderam a ordem esperada.'
+    assert positions == sorted(positions), "A ordem final dos blocos do multifamiliar foi alterada."
 
 
-def test_unifamiliar_nothing_reappears_after_fechamento_final() -> None:
-    txt = read_relatorio()
-    fechamento = ITEM_HEADINGS['item_16']
-    idx = txt.find(fechamento)
-    assert idx != -1, 'Fechamento final não encontrado no unifamiliar.'
-
-    tail = txt[idx + len(fechamento):]
-    forbidden = [
-        'Dicas valiosas',
-        'Resumo rápido final',
-        'O que acontece depois desta etapa?',
-    ]
-    for item in forbidden:
-        assert item not in tail, f'Nada deve reaparecer depois do Fechamento final do unifamiliar. Encontrado: {item}'
+def test_multifamiliar_calculation_markers_are_kept_in_items() -> None:
+    txt = read_guia()
+    assert ITEM_HEADINGS['item_06'] in txt
+    assert ITEM_HEADINGS['item_07'] in txt
 
 
-def test_unifamiliar_rendered_output_enforces_unique_final_headings(monkeypatch) -> None:
-    import ui.relatorio as relatorio
+def test_multifamiliar_rendered_output_enforces_unique_final_headings(monkeypatch) -> None:
+    import core.zone_descriptions as zone_descriptions
+    import ui.relatorio_blocks.figuras_anexo_v as figuras_anexo_v
+    import ui.relatorio_blocks.multifamiliar_guia as multifamiliar_guia
     import ui.relatorio_blocks.quadro_tecnico as quadro_tecnico
-    from ui.relatorio_blocks.unifamiliar_items import common as item_common
-    from ui.relatorio_blocks.unifamiliar_items import item_02_adequabilidade, item_03_leitura_adequabilidade, item_10_vagas
 
     st = StreamlitCapture()
-    st.session_state.update(
-        {
-            'lot_is_irregular': False,
-            'lot_front_m': 10.0,
-            'lot_depth_m': 30.0,
-            'lot_is_corner': False,
-        }
-    )
+    st.session_state.update({"lot_is_corner": False})
 
-    monkeypatch.setattr(relatorio, 'st', st, raising=False)
-    monkeypatch.setattr(quadro_tecnico, 'st', st, raising=False)
-    monkeypatch.setattr(item_common, 'st', st, raising=False)
-    monkeypatch.setattr(item_02_adequabilidade, 'st', st, raising=False)
-    monkeypatch.setattr(item_03_leitura_adequabilidade, 'st', st, raising=False)
-    monkeypatch.setattr(item_10_vagas, 'st', st, raising=False)
+    monkeypatch.setattr(multifamiliar_guia, "st", st, raising=False)
+    monkeypatch.setattr(quadro_tecnico, "st", st, raising=False)
+    monkeypatch.setattr(figuras_anexo_v, "st", st, raising=False)
     monkeypatch.setattr(
-        relatorio,
-        'fetch_zone_description',
-        lambda zone_sigla, subzone_code=None, zone_label=None: {'title': 'Zona de Adensamento Médio'},
+        multifamiliar_guia,
+        "_fetch_adequabilidade",
+        lambda **kwargs: ("A", None, {"source": "test"}),
         raising=False,
     )
     monkeypatch.setattr(
-        relatorio,
-        'render_figuras_anexo_v',
-        lambda rule, is_corner=False: st.markdown('[FIGURAS ANEXO V]'),
+        zone_descriptions,
+        "fetch_zone_description",
+        lambda zone_sigla, subzone_code=None, zone_label=None: {"title": "Zona de Adensamento Médio", "description_text": "Texto de teste"},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        figuras_anexo_v,
+        "render_figuras_anexo_v",
+        lambda rule, is_corner=False: st.markdown("[FIGURAS ANEXO V]"),
         raising=False,
     )
 
     calc = {
-        'ok': True,
-        'rule': {
-            'to_max_pct': 60,
-            'tp_min_pct': 30,
-            'ia_max': 1.5,
-            'recuo_frontal_m': 3.0,
-            'recuo_lateral_m': 1.5,
-            'recuo_fundos_m': 1.5,
-            'gabarito_m': 15,
-        },
-        'zone': 'ZAM',
-        'zone_sigla': 'ZAM',
-        'via_nome': 'Rua Exemplo',
-        'via_tipo': 'Local',
-        'use_type_code': 'RES_UNI',
-        'lot_area_m2': 300,
+        "multi_tipo": "R3",
+        "use_type_code": "RES_MULTI_R3",
+        "zone": "ZAM",
+        "zone_sigla": "ZAM",
+        "subzone_code": "PADRAO",
+        "via_nome": "Rua Exemplo",
+        "via_tipo": "Local",
+        "lot_area_m2": 300,
+        "lot_front_m": 10,
+        "lot_depth_m": 30,
+        "project_mode": "GUIA_FASE_1",
+    }
+    rule = {
+        "to_max_pct": 60,
+        "tp_min_pct": 30,
+        "ia_max": 1.5,
+        "recuo_frontal_m": 3.0,
+        "recuo_lateral_m": 1.5,
+        "recuo_fundos_m": 1.5,
+        "gabarito_m": 15,
     }
 
-    relatorio.render_relatorio_section(calc)
+    multifamiliar_guia.render_multifamiliar_guia(calc=calc, rule=rule)
     dumped = st.dump()
 
     required_once = [
-        ITEM_HEADINGS['item_08'],
         ITEM_HEADINGS['item_10'],
         ITEM_HEADINGS['item_11'],
         ITEM_HEADINGS['item_12'],
         ITEM_HEADINGS['item_15'],
-        ITEM_HEADINGS['item_16'],
     ]
     for anchor in required_once:
-        assert dumped.count(anchor) == 1, f'Heading duplicado no output final do unifamiliar: {anchor}'
+        assert dumped.count(anchor) == 1, f"Heading duplicado no output final do multifamiliar: {anchor}"
 
     ordered = [
         ITEM_HEADINGS['item_10'],
@@ -212,5 +199,5 @@ def test_unifamiliar_rendered_output_enforces_unique_final_headings(monkeypatch)
         ITEM_HEADINGS['item_16'],
     ]
     positions = [dumped.find(anchor) for anchor in ordered]
-    assert all(pos != -1 for pos in positions), 'Output final do unifamiliar perdeu headings obrigatórios.'
-    assert positions == sorted(positions), 'Ordem final do output renderizado do unifamiliar foi alterada.'
+    assert all(pos != -1 for pos in positions), "Output final do multifamiliar perdeu headings obrigatórios."
+    assert positions == sorted(positions), "Ordem final do output renderizado do multifamiliar foi alterada."
