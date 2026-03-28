@@ -19,6 +19,7 @@ from .relatorio_blocks.multifamiliar_guia import (
 )
 from core.zone_descriptions import fetch_zone_description
 from .relatorio_blocks.unifamiliar_items import UNIFAMILIAR_ITEM_RENDERERS
+from .relatorio_blocks.inadequado_preview import render_block_message as render_inadequado_block_message
 
 
 def _safe_float(v: Any) -> float | None:
@@ -322,8 +323,16 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "_mf_sigla_nome": _mf_sigla_nome,
     }
 
+    for item_key in ["item_01", "item_02", "item_03"]:
+        st.markdown(item_headings[item_key])
+        UNIFAMILIAR_ITEM_RENDERERS[item_key](ctx)
+
+    if status_curto == "NÃO PERMITE":
+        render_inadequado_block_message()
+        return
+
     for item_key in [
-        "item_01", "item_02", "item_03", "item_04", "item_05", "item_06", "item_07", "item_08",
+        "item_04", "item_05", "item_06", "item_07", "item_08",
         "item_09", "item_10", "item_11", "item_12", "item_13", "item_14", "item_15", "item_16",
     ]:
         st.markdown(item_headings[item_key])
