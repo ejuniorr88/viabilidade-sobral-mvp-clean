@@ -54,19 +54,18 @@ def read_item(item_key: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-PREVIEW_DUPLICATE_ITEMS = {"item_01", "item_02"}
-
-
-def _expected_heading_count_in_relatorio(item_key: str) -> int:
-    return 2 if item_key in PREVIEW_DUPLICATE_ITEMS else 1
+def expected_heading_count_in_relatorio(item_key: str) -> int:
+    # item_01 e item_02 aparecem no fluxo normal e também no preview inadequado.
+    if item_key in ("item_01", "item_02"):
+        return 2
+    return 1
 
 
 def assert_main_heading_centralized(item_key: str) -> None:
     heading = ITEM_HEADINGS[item_key]
     relatorio_txt = read_relatorio()
     item_txt = read_item(item_key)
-
-    expected_count = _expected_heading_count_in_relatorio(item_key)
+    expected_count = expected_heading_count_in_relatorio(item_key)
 
     assert heading in relatorio_txt, f"Heading principal ausente no ui/relatorio.py: {heading}"
     assert relatorio_txt.count(heading) == expected_count, (
