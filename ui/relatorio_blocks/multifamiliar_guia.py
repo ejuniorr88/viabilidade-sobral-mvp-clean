@@ -5,7 +5,11 @@ from typing import Any, Dict, Optional
 import streamlit as st
 
 from .multifamiliar_items import common
-from .inadequado_preview import render_block_message as render_inadequado_block_message
+from .inadequado_preview import (
+    render_block_message as render_inadequado_block_message,
+    render_debug_snapshot as render_inadequado_debug_snapshot,
+    _build_debug_snapshot as build_inadequado_debug_snapshot,
+)
 from .multifamiliar_items import (
     render_item_00_intro,
     render_item_01,
@@ -78,6 +82,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         renderer(ctx)
 
     if ctx.get("status_curto") == "NÃO PERMITE":
+        render_inadequado_debug_snapshot(build_inadequado_debug_snapshot(calc, ctx), title="Debug provisório — preview inadequado (multifamiliar)")
         render_inadequado_block_message()
         return
 
