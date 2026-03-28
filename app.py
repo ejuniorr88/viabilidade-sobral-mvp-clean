@@ -27,6 +27,7 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section, render_zone_description_section
+from ui.relatorio_blocks.inadequado_preview import should_block_report, render_inadequado_preview
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
@@ -707,7 +708,18 @@ def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, us
 
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
+preview_inadequado = False
 if can_offer_report:
+    try:
+        preview_inadequado = should_block_report(calc)
+    except Exception:
+        preview_inadequado = False
+
+if preview_inadequado:
+    st.markdown("---")
+    render_inadequado_preview(calc)
+
+if can_offer_report and not preview_inadequado:
     st.markdown("---")
     st.subheader("Relatório completo")
     st.caption(
@@ -821,7 +833,7 @@ if can_offer_report:
         st.markdown("### Comprar créditos")
         render_payments_panel()
 
-if (st.session_state.get("report_snapshot_calc") and st.session_state.get("report_snapshot_signature")) and can_offer_report:
+if (st.session_state.get("report_snapshot_calc") and st.session_state.get("report_snapshot_signature")) and can_offer_report and not preview_inadequado:
     st.markdown("---")
     report_calc = deepcopy(st.session_state.get("report_snapshot_calc"))
     report_session = deepcopy(st.session_state.get("report_snapshot_session") or {})
