@@ -54,22 +54,20 @@ def read_item(item_key: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def expected_heading_count_in_relatorio(item_key: str) -> int:
-    # item_01 e item_02 aparecem no fluxo normal e também no preview inadequado.
-    if item_key in ("item_01", "item_02"):
-        return 2
-    return 1
+def _expected_heading_count(item_key: str) -> int:
+    # item_01 e item_02 também aparecem no preview inadequado do unifamiliar
+    return 2 if item_key in {"item_01", "item_02"} else 1
 
 
 def assert_main_heading_centralized(item_key: str) -> None:
     heading = ITEM_HEADINGS[item_key]
     relatorio_txt = read_relatorio()
     item_txt = read_item(item_key)
-    expected_count = expected_heading_count_in_relatorio(item_key)
 
     assert heading in relatorio_txt, f"Heading principal ausente no ui/relatorio.py: {heading}"
-    assert relatorio_txt.count(heading) == expected_count, (
-        f"Heading principal deve aparecer {expected_count}x no ui/relatorio.py: {heading}"
+    expected = _expected_heading_count(item_key)
+    assert relatorio_txt.count(heading) == expected, (
+        f"Heading principal deve aparecer {expected}x no ui/relatorio.py: {heading}"
     )
     assert heading not in item_txt, f"Heading principal do {item_key} não pode ficar dentro do arquivo do item."
     assert 'st.markdown("### ' not in item_txt, f"Arquivo do {item_key} não pode renderizar heading principal próprio."
