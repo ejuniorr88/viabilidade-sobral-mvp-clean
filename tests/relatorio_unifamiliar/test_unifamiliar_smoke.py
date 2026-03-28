@@ -138,7 +138,7 @@ def test_unifamiliar_rendered_output_enforces_unique_final_headings(monkeypatch)
     import ui.relatorio as relatorio
     import ui.relatorio_blocks.quadro_tecnico as quadro_tecnico
     from ui.relatorio_blocks.unifamiliar_items import common as item_common
-    from ui.relatorio_blocks.unifamiliar_items import item_02_adequabilidade, item_03_leitura_adequabilidade
+    from ui.relatorio_blocks.unifamiliar_items import item_02_adequabilidade, item_03_leitura_adequabilidade, item_10_vagas
 
     st = StreamlitCapture()
     st.session_state.update(
@@ -155,6 +155,7 @@ def test_unifamiliar_rendered_output_enforces_unique_final_headings(monkeypatch)
     monkeypatch.setattr(item_common, 'st', st, raising=False)
     monkeypatch.setattr(item_02_adequabilidade, 'st', st, raising=False)
     monkeypatch.setattr(item_03_leitura_adequabilidade, 'st', st, raising=False)
+    monkeypatch.setattr(item_10_vagas, 'st', st, raising=False)
     monkeypatch.setattr(
         relatorio,
         'fetch_zone_description',
