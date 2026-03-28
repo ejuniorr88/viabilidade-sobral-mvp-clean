@@ -27,7 +27,11 @@ from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import render_relatorio_section, render_zone_description_section
-from ui.relatorio_blocks.inadequado_preview import should_block_report, render_inadequado_preview
+from ui.relatorio_blocks.inadequado_preview import (
+    should_block_report,
+    render_inadequado_preview,
+    render_debug_snapshot as render_inadequado_debug_snapshot,
+)
 from core.auth import handle_oauth_callback, get_app_url, safe_get_query_param
 from ui.auth_panel import render_google_login_top, render_google_login_box
 from ui.payments_panel import render_payments_panel
@@ -709,11 +713,32 @@ def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, us
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err"))
 
 preview_inadequado = False
+preview_inadequado_debug_error = None
 if can_offer_report:
     try:
         preview_inadequado = should_block_report(calc)
-    except Exception:
+    except Exception as e:
         preview_inadequado = False
+        preview_inadequado_debug_error = str(e)
+
+st.markdown("### Debug provisório — fluxo inadequado")
+try:
+    st.json({
+        "can_offer_report": can_offer_report,
+        "preview_inadequado": preview_inadequado,
+        "preview_inadequado_debug_error": preview_inadequado_debug_error,
+        "calc.zone": calc.get("zone"),
+        "calc.zone_sigla": calc.get("zone_sigla"),
+        "calc.subzone_code": calc.get("subzone_code"),
+        "calc.use_type_code": calc.get("use_type_code"),
+        "calc.project_mode": calc.get("project_mode"),
+        "calc.via_tipo": calc.get("via_tipo") or calc.get("street_type"),
+        "calc.has_rule": bool(calc.get("rule")),
+        "calc.err": calc.get("err"),
+    })
+    render_inadequado_debug_snapshot()
+except Exception as e:
+    st.error(f"Falha no debug provisório do fluxo inadequado: {e}")
 
 if preview_inadequado:
     st.markdown("---")
@@ -775,6 +800,11 @@ if can_offer_report and not preview_inadequado:
             st.error("Você não possui créditos suficientes para gerar o relatório.")
         else:
             try:
+                if should_block_report(calc):
+                    st.error("DEBUG: o sistema identificou inadequabilidade no clique de gerar relatório. O crédito não deve ser consumido neste caso.")
+                    render_inadequado_debug_snapshot()
+                    render_inadequado_preview(calc)
+                    st.stop()
                 debit_result, _ = _prepare_and_consume_report(
                     calc_ref=deepcopy(calc),
                     session_snapshot=deepcopy(current_report_session),
