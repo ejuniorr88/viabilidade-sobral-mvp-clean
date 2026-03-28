@@ -19,7 +19,11 @@ from .relatorio_blocks.multifamiliar_guia import (
 )
 from core.zone_descriptions import fetch_zone_description
 from .relatorio_blocks.unifamiliar_items import UNIFAMILIAR_ITEM_RENDERERS
-from .relatorio_blocks.inadequado_preview import render_block_message as render_inadequado_block_message
+from .relatorio_blocks.inadequado_preview import (
+    render_block_message as render_inadequado_block_message,
+    render_debug_snapshot as render_inadequado_debug_snapshot,
+    _build_debug_snapshot as build_inadequado_debug_snapshot,
+)
 
 
 def _safe_float(v: Any) -> float | None:
