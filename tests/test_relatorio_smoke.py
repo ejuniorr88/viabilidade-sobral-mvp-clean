@@ -31,7 +31,6 @@ def test_relatorio_smoke_must_keep_core_blocks() -> None:
     txt_dicas = dicas_py.read_text(encoding="utf-8")
     txt_figuras = figuras_py.read_text(encoding="utf-8")
     txt_multi = multi_py.read_text(encoding="utf-8")
-    txt_multi_common = (ROOT / "ui" / "relatorio_blocks" / "multifamiliar_items" / "common.py").read_text(encoding="utf-8")
 
     for anchor in [
         "RELATÓRIO URBANÍSTICO",
@@ -80,9 +79,5 @@ def test_relatorio_smoke_must_keep_core_blocks() -> None:
     for anchor in ["Abrir em tamanho real", "Anexo V"]:
         assert anchor in txt_figuras, f"Âncora obrigatória sumiu de ui/relatorio_blocks/figuras_anexo_v.py: {anchor}"
 
-    assert "Vagas de estacionamento" in txt_multi, (
-        "Âncora obrigatória sumiu de ui/relatorio_blocks/multifamiliar_guia.py: Vagas de estacionamento"
-    )
-    assert "quadra máxima" in txt_multi or "quadra máxima" in txt_multi_common, (
-        "Âncora obrigatória sumiu do fluxo multifamiliar: quadra máxima"
-    )
+    for anchor in ["Vagas de estacionamento", "quadra máxima"]:
+        assert anchor in txt_multi, f"Âncora obrigatória sumiu de ui/relatorio_blocks/multifamiliar_guia.py: {anchor}"
