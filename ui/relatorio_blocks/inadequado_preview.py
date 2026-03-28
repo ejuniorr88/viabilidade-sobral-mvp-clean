@@ -9,6 +9,57 @@ from core.zone_descriptions import fetch_zone_description
 from ui.relatorio_blocks.unifamiliar_items import UNIFAMILIAR_ITEM_RENDERERS
 from ui.relatorio_blocks.multifamiliar_items import common as mf_common
 
+DEBUG_SESSION_KEY = "_debug_inadequado_flow"
+
+
+def _build_debug_snapshot(calc: Dict[str, Any], ctx: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    ctx = ctx or {}
+    return {
+        "project_mode": calc.get("project_mode"),
+        "use_type_code": calc.get("use_type_code"),
+        "zone": calc.get("zone"),
+        "zone_sigla": calc.get("zone_sigla"),
+        "zone_lookup": calc.get("zone_lookup"),
+        "subzone_code": calc.get("subzone_code"),
+        "zone_label_raw": calc.get("zone_label_raw"),
+        "via_nome": calc.get("via_nome") or calc.get("street_name"),
+        "via_tipo": calc.get("via_tipo") or calc.get("street_type"),
+        "has_rule": bool(calc.get("rule")),
+        "rule_zone_sigla": (calc.get("rule") or {}).get("zone_sigla") if isinstance(calc.get("rule"), dict) else None,
+        "rule_subzone_code": (calc.get("rule") or {}).get("subzone_code") if isinstance(calc.get("rule"), dict) else None,
+        "calc_err": calc.get("err"),
+        "ctx_status_curto": ctx.get("status_curto"),
+        "ctx_icon": ctx.get("icon"),
+        "ctx_zone_class": ctx.get("zone_class"),
+        "ctx_via_class": ctx.get("via_class"),
+        "ctx_via_norm": ctx.get("via_norm"),
+        "ctx_explicacao": ctx.get("explicacao"),
+        "ctx_tipo_lote": ctx.get("tipo_lote"),
+        "ctx_zone_title": ctx.get("zone_title"),
+        "ctx_adequabilidade_debug": ctx.get("adeq_dbg"),
+        "session_lot_front_m": st.session_state.get("lot_front_m"),
+        "session_lot_depth_m": st.session_state.get("lot_depth_m"),
+        "session_lot_is_corner": st.session_state.get("lot_is_corner"),
+        "session_lot_is_irregular": st.session_state.get("lot_is_irregular"),
+        "session_built_ground_m2": st.session_state.get("built_ground_m2"),
+        "session_built_ground_input_m2": st.session_state.get("built_ground_input_m2"),
+        "session_free_calc_done": st.session_state.get("free_calc_done"),
+        "session_report_unlocked": st.session_state.get("report_unlocked"),
+    }
+
+
+def _store_debug_snapshot(calc: Dict[str, Any], ctx: Dict[str, Any] | None = None, stage: str = "") -> Dict[str, Any]:
+    payload = _build_debug_snapshot(calc, ctx)
+    payload["stage"] = stage
+    st.session_state[DEBUG_SESSION_KEY] = payload
+    return payload
+
+
+def render_debug_snapshot(snapshot: Dict[str, Any] | None = None, title: str = "Debug provisório — fluxo inadequado") -> None:
+    payload = snapshot or st.session_state.get(DEBUG_SESSION_KEY) or {}
+    with st.expander(title):
+        st.json(payload)
+
 
 def _safe_float(v: Any) -> float | None:
     try:
@@ -258,8 +309,19 @@ def _build_multifamiliar_ctx(calc: Dict[str, Any]) -> Dict[str, Any]:
 def should_block_report(calc: Dict[str, Any]) -> bool:
     try:
         ctx = _build_multifamiliar_ctx(calc) if _is_multifamiliar(calc) else _build_unifamiliar_ctx(calc)
+        _store_debug_snapshot(calc, ctx, stage="should_block_report")
         return str(ctx.get("status_curto") or "").strip().upper() == "NÃO PERMITE"
-    except Exception:
+    except Exception as e:
+        st.session_state[DEBUG_SESSION_KEY] = {
+            "stage": "should_block_report_exception",
+            "error": str(e),
+            "project_mode": calc.get("project_mode"),
+            "use_type_code": calc.get("use_type_code"),
+            "zone": calc.get("zone"),
+            "zone_sigla": calc.get("zone_sigla"),
+            "subzone_code": calc.get("subzone_code"),
+            "via_tipo": calc.get("via_tipo") or calc.get("street_type"),
+        }
         return False
 
 
@@ -282,6 +344,7 @@ def render_inadequado_preview(calc: Dict[str, Any]) -> None:
         )
 
         ctx = _build_multifamiliar_ctx(calc)
+        render_debug_snapshot(_store_debug_snapshot(calc, ctx, stage="render_inadequado_preview_multifamiliar"))
         _mf_render_item_00_intro(ctx)
         st.markdown("---\n### 📍 1️⃣ Onde está localizado o terreno?")
         _mf_render_item_01(ctx)
@@ -293,6 +356,7 @@ def render_inadequado_preview(calc: Dict[str, Any]) -> None:
         return
 
     ctx = _build_unifamiliar_ctx(calc)
+    render_debug_snapshot(_store_debug_snapshot(calc, ctx, stage="render_inadequado_preview_unifamiliar"))
     st.markdown("## 🏡 RELATÓRIO URBANÍSTICO")
     st.markdown(
         "Este relatório mostra, de forma simples, o que pode ou não pode ser feito no terreno informado, "
