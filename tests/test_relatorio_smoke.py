@@ -85,7 +85,6 @@ def test_relatorio_smoke_must_keep_core_blocks() -> None:
     assert "Vagas de estacionamento" in txt_multi, (
         "Âncora obrigatória sumiu de ui/relatorio_blocks/multifamiliar_guia.py: Vagas de estacionamento"
     )
-
-    assert "quadra máxima" in txt_multi or "quadra máxima" in txt_multi_common, (
-        "Âncora obrigatória sumiu do fluxo multifamiliar: quadra máxima"
+    assert ("quadra máxima" in txt_multi) or ("quadra máxima" in txt_multi_common), (
+        "Âncora obrigatória sumiu do estado atual do multifamiliar: quadra máxima"
     )
