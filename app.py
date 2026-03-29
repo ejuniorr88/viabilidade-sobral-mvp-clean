@@ -597,7 +597,10 @@ current_signature = json.dumps(
         "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
         "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
         "use_type_code": st.session_state.calc.get("use_type_code"),
+        "project_mode": st.session_state.calc.get("project_mode"),
         "categoria_label": categoria_label,
+        "built_ground_m2": built_ground,
+        "permeable_area_m2": permeable_area,
     },
     sort_keys=True,
     default=str,
@@ -752,7 +755,7 @@ if can_offer_report:
 
     if gerar_relatorio:
         if preview_inadequado:
-            _clear_report_runtime_state()
+            _clear_report_runtime_state(preserve_snapshot=True)
             st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
         elif not user_logged_in or not user_id:
             st.error("Faça login com Google para gerar o relatório completo.")
@@ -790,7 +793,7 @@ if can_offer_report:
             "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, confirme antes. Isso gastará outro crédito."
         )
 
-    if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature") == current_report_signature:
+    if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature"):
         st.warning("Você tem certeza que deseja gerar outro relatório? Isso vai gastar outro crédito.")
         c_yes, c_no = st.columns(2)
         with c_yes:
@@ -804,7 +807,7 @@ if can_offer_report:
 
         if confirm_yes:
             if preview_inadequado:
-                _clear_report_runtime_state()
+                _clear_report_runtime_state(preserve_snapshot=True)
                 st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
             else:
                 try:
