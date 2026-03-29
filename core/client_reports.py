@@ -75,6 +75,8 @@ def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) 
         "lot_depth_m": _normalize_number(session_state.get("lot_depth_m") or calc.get("lot_depth_m")),
         "lot_is_corner": bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner")),
         "lot_is_irregular": bool(session_state.get("lot_is_irregular") or calc.get("lot_is_irregular")),
+        "built_ground_m2": _normalize_number(session_state.get("built_ground_m2") or session_state.get("built_ground_input_m2") or calc.get("built_ground") or st.session_state.get("built_ground")),
+        "permeable_area_m2": _normalize_number(session_state.get("permeable_area_m2") or calc.get("permeable_area") or st.session_state.get("permeable_area")),
         "selected_lat": _normalize_number(calc.get("selected_lat") or st.session_state.get("selected_lat"), 6),
         "selected_lon": _normalize_number(calc.get("selected_lon") or st.session_state.get("selected_lon"), 6),
     }
