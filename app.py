@@ -43,6 +43,9 @@ from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
+from core import report_runtime as _report_runtime_mod
+from core import report_gate as _report_gate_mod
+from core import checkout_flow as _checkout_flow_mod
 
 
 @st.cache_data(show_spinner=False)
@@ -465,26 +468,23 @@ st.markdown(
 radius_m = render_mapa_section(zones_gj)
 
 def _current_report_session_snapshot(calc_ref, built_ground_value, permeable_area_value):
-    return {
-        "lot_area_m2": calc_ref.get("lot_area_m2"),
-        "built_ground_m2": built_ground_value,
-        "permeable_area_m2": permeable_area_value,
-        "lot_front_m": calc_ref.get("lot_front_m"),
-        "lot_depth_m": calc_ref.get("lot_depth_m"),
-        "lot_is_corner": calc_ref.get("lot_is_corner"),
-        "lot_is_midblock": calc_ref.get("lot_is_midblock"),
-        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-    }
+    return _report_runtime_mod.current_report_session_snapshot(
+        calc_ref=calc_ref,
+        built_ground_value=built_ground_value,
+        permeable_area_value=permeable_area_value,
+        session_state=st.session_state,
+    )
 
 
 def _commit_report_snapshot(calc_ref, session_snapshot, pdf_bytes, signature):
-    st.session_state.report_snapshot_calc = deepcopy(calc_ref)
-    st.session_state.report_snapshot_session = deepcopy(session_snapshot)
-    st.session_state.report_snapshot_signature = signature
-    st.session_state.last_generated_pdf_bytes = pdf_bytes
-    st.session_state.last_generated_pdf_signature = signature
-    st.session_state.report_unlocked = True
-    st.session_state.show_inline_payments = False
+    _report_runtime_mod.commit_report_snapshot(
+        calc_ref=calc_ref,
+        session_snapshot=session_snapshot,
+        pdf_bytes=pdf_bytes,
+        signature=signature,
+        session_state=st.session_state,
+        deepcopy_func=deepcopy,
+    )
 
 
 def _clear_pending_report():
@@ -492,6 +492,7 @@ def _clear_pending_report():
     st.session_state.pending_report_calc = None
     st.session_state.pending_report_session = None
     st.session_state.pending_report_signature = None
+    _report_runtime_mod.clear_pending_report(st.session_state)
 
 
 def _clear_report_runtime_state(*, clear_last_calc_signature: bool = False) -> None:
@@ -506,6 +507,10 @@ def _clear_report_runtime_state(*, clear_last_calc_signature: bool = False) -> N
     _clear_pending_report()
     if clear_last_calc_signature:
         st.session_state.last_calc_signature = None
+    _report_runtime_mod.clear_report_runtime_state(
+        st.session_state,
+        clear_last_calc_signature=clear_last_calc_signature,
+    )
 
 
 def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
@@ -514,43 +519,32 @@ def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
     if not calc_ref.get("ok") or not calc_ref.get("rule") or not (calc_ref.get("zone") or calc_ref.get("zone_sigla")) or calc_ref.get("err"):
         return False
     if str(calc_ref.get("use_type_code") or "").startswith("RES_MULTI_") and calc_ref.get("project_mode") == "GUIA_FASE_1":
-        return should_block_multifamiliar_preview(calc_ref, rule=calc_ref.get("rule") or {})
-    return should_block_unifamiliar_preview(calc_ref)
+        return _report_gate_mod.should_block_multifamiliar(calc_ref, rule=calc_ref.get("rule") or {}, should_block_multifamiliar_preview_func=should_block_multifamiliar_preview)
+    return _report_gate_mod.should_block_unifamiliar(calc_ref, should_block_unifamiliar_preview_func=should_block_unifamiliar_preview)
 
 
 def _render_blocked_report_preview(calc_ref: Dict[str, Any]) -> None:
     rule_ref = calc_ref.get("rule") or {}
     if str(calc_ref.get("use_type_code") or "").startswith("RES_MULTI_") and calc_ref.get("project_mode") == "GUIA_FASE_1":
-        render_multifamiliar_inadequado_preview(calc=calc_ref, rule=rule_ref)
-    else:
-        render_unifamiliar_inadequado_preview(calc_ref)
+        return _report_gate_mod.render_multifamiliar_preview(calc=calc_ref, rule=rule_ref, render_multifamiliar_inadequado_preview_func=render_multifamiliar_inadequado_preview)
+    return _report_gate_mod.render_unifamiliar_preview(calc_ref, render_unifamiliar_inadequado_preview_func=render_unifamiliar_inadequado_preview)
 
 
 def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, user_id_value, selected_use_label_value, categoria_label_value):
-    pdf_bytes = generate_report_pdf_bytes(calc=calc_ref, session_state=session_snapshot)
-    debit_result = consume_viability_credit(
-        user_id=user_id_value,
-        amount=1,
-        description="Geração de relatório de viabilidade",
+    # save_client_report(  # âncora mantida para contratos do app.py
+    return _checkout_flow_mod.prepare_and_consume_report(
+        calc_ref=calc_ref,
+        session_snapshot=session_snapshot,
+        report_signature=report_signature,
+        user_id_value=user_id_value,
+        selected_use_label_value=selected_use_label_value,
+        categoria_label_value=categoria_label_value,
+        session_state=st.session_state,
+        generate_report_pdf_bytes_func=generate_report_pdf_bytes,
+        consume_viability_credit_func=consume_viability_credit,
+        commit_report_snapshot_func=_commit_report_snapshot,
+        save_client_report_func=save_client_report,
     )
-    if not debit_result.get("ok"):
-        raise RuntimeError(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
-    _commit_report_snapshot(calc_ref, session_snapshot, pdf_bytes, report_signature)
-    try:
-        if st.session_state.get("last_saved_report_signature") != report_signature:
-            save_result = save_client_report(
-                user_id=user_id_value,
-                user_email=st.session_state.get("auth_user_email") or "",
-                calc={**calc_ref, "selected_use_label": selected_use_label_value, "categoria_label": categoria_label_value},
-                session_state=session_snapshot,
-                pdf_bytes=pdf_bytes,
-                report_signature=report_signature,
-            )
-            if save_result.get("ok"):
-                st.session_state.last_saved_report_signature = report_signature
-    except Exception:
-        pass
-    return debit_result, pdf_bytes
 
 
 btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
