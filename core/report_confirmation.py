@@ -142,7 +142,7 @@ def compute_report_confirmation_state(
         permeable_area_value=permeable_area_value,
         session_state=session_state,
     )
-    current_report_signature = signature_builder(calc=calc_ref, session_state=current_report_session)
+    current_report_signature = signature_builder(calc_ref, current_report_session)
     snapshot_signature = session_state.get("report_snapshot_signature")
     has_snapshot = bool(session_state.get("report_snapshot_calc")) and bool(snapshot_signature)
     is_same_as_snapshot = bool(has_snapshot and snapshot_signature == current_report_signature)
