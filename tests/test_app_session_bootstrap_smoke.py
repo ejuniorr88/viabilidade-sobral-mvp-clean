@@ -1,35 +1,35 @@
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
 
+def test_app_bootstrap_initializes_session_state_before_use() -> None:
+    text = Path("app.py").read_text(encoding="utf-8")
 
-def test_app_bootstrap_initializes_minimum_session_state_before_calc_usage() -> None:
-    text = (ROOT / "app.py").read_text(encoding="utf-8")
-
-    helper = "def _ensure_minimum_session_state() -> None:"
-    calc_init = 'st.session_state.calc = {}'
-    call = '_ensure_minimum_session_state()'
-    first_calc_use = 'st.session_state.calc["use_type_code"] = selected_use_code'
-
-    assert helper in text, "app.py perdeu o helper mínimo de bootstrap do session_state."
-    assert calc_init in text, "app.py não garante calc como dict no boot."
-    assert call in text, "app.py não chama o bootstrap mínimo do session_state no boot."
-    assert first_calc_use in text, "Âncora de uso de calc mudou; revise o teste."
-
-    assert text.index(call) < text.index(first_calc_use), (
-        "app.py usa st.session_state.calc antes de garantir o bootstrap mínimo do session_state."
-    )
-
-
-def test_app_bootstrap_keeps_basic_runtime_defaults() -> None:
-    text = (ROOT / "app.py").read_text(encoding="utf-8")
-    required = [
-        'st.session_state.free_calc_done = False',
-        'st.session_state.show_login_gate = False',
-        'st.session_state.scroll_to_login_gate = False',
-        'st.session_state.scroll_to_item3 = False',
-        'st.session_state.post_login_action = None',
-        'st.session_state.show_inline_payments = False',
+    required_defaults = [
+        'if "calc" not in ss or not isinstance(ss.get("calc"), dict):',
+        'ss["calc"] = {}',
+        'ss.setdefault("last_calc_signature", None)',
+        'ss.setdefault("confirm_new_report", False)',
+        'ss.setdefault("free_calc_done", False)',
+        'ss.setdefault("show_login_gate", False)',
+        'ss.setdefault("scroll_to_login_gate", False)',
+        'ss.setdefault("scroll_to_item3", False)',
+        'ss.setdefault("post_login_action", None)',
+        'ss.setdefault("show_inline_payments", False)',
+        'ss.setdefault("show_client_area", False)',
     ]
-    for item in required:
-        assert item in text, f"Bootstrap mínimo do session_state perdeu default crítico: {item}"
+
+    for item in required_defaults:
+        assert item in text, f"Bootstrap do session_state perdeu item obrigatório: {item}"
+
+    bootstrap_pos = text.index('_bootstrap_session_state()')
+    first_calc_use_pos = text.index('st.session_state.calc["use_type_code"] = selected_use_code')
+    first_signature_use_pos = text.index('if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:')
+
+    assert bootstrap_pos < first_calc_use_pos
+    assert bootstrap_pos < first_signature_use_pos
+
+
+def test_app_imports_card_helper_from_app_shell() -> None:
+    text = Path("app.py").read_text(encoding="utf-8")
+    assert 'from ui.app_shell import (' in text
+    assert 'card as _card' in text
