@@ -7,6 +7,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from ui.app_shell import (
+    card as _card,
     inject_global_styles,
     render_auth_callback_bridge,
     render_login_gate_block,
@@ -15,6 +16,24 @@ from ui.app_shell import (
 )
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
+
+
+def _bootstrap_session_state() -> None:
+    ss = st.session_state
+
+    if "calc" not in ss or not isinstance(ss.get("calc"), dict):
+        ss["calc"] = {}
+
+    ss.setdefault("last_calc_signature", None)
+    ss.setdefault("confirm_new_report", False)
+    ss.setdefault("free_calc_done", False)
+    ss.setdefault("show_login_gate", False)
+    ss.setdefault("scroll_to_login_gate", False)
+    ss.setdefault("scroll_to_item3", False)
+    ss.setdefault("post_login_action", None)
+    ss.setdefault("show_inline_payments", False)
+    ss.setdefault("show_client_area", False)
+
 
 DATA_DIR = Path("data")
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
@@ -131,24 +150,6 @@ def _render_blocked_report_preview(calc_ref: Dict[str, Any]) -> None:
         render_unifamiliar_inadequado_preview(calc_ref)
 
 
-
-
-def _ensure_minimum_session_state() -> None:
-    if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
-        st.session_state.calc = {}
-    if "free_calc_done" not in st.session_state:
-        st.session_state.free_calc_done = False
-    if "show_login_gate" not in st.session_state:
-        st.session_state.show_login_gate = False
-    if "scroll_to_login_gate" not in st.session_state:
-        st.session_state.scroll_to_login_gate = False
-    if "scroll_to_item3" not in st.session_state:
-        st.session_state.scroll_to_item3 = False
-    if "post_login_action" not in st.session_state:
-        st.session_state.post_login_action = None
-    if "show_inline_payments" not in st.session_state:
-        st.session_state.show_inline_payments = False
-
 def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, user_id_value, selected_use_label_value, categoria_label_value):
     pdf_bytes = generate_report_pdf_bytes(calc=calc_ref, session_state=session_snapshot)
     debit_result = consume_viability_credit(
@@ -180,9 +181,9 @@ if safe_get_query_param("auth_flow") == "callback":
     render_auth_callback_bridge()
 
 handle_oauth_callback()
+_bootstrap_session_state()
 inject_global_styles()
 render_top_nav()
-_ensure_minimum_session_state()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
