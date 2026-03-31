@@ -131,6 +131,24 @@ def _render_blocked_report_preview(calc_ref: Dict[str, Any]) -> None:
         render_unifamiliar_inadequado_preview(calc_ref)
 
 
+
+
+def _ensure_minimum_session_state() -> None:
+    if "calc" not in st.session_state or not isinstance(st.session_state.calc, dict):
+        st.session_state.calc = {}
+    if "free_calc_done" not in st.session_state:
+        st.session_state.free_calc_done = False
+    if "show_login_gate" not in st.session_state:
+        st.session_state.show_login_gate = False
+    if "scroll_to_login_gate" not in st.session_state:
+        st.session_state.scroll_to_login_gate = False
+    if "scroll_to_item3" not in st.session_state:
+        st.session_state.scroll_to_item3 = False
+    if "post_login_action" not in st.session_state:
+        st.session_state.post_login_action = None
+    if "show_inline_payments" not in st.session_state:
+        st.session_state.show_inline_payments = False
+
 def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, user_id_value, selected_use_label_value, categoria_label_value):
     pdf_bytes = generate_report_pdf_bytes(calc=calc_ref, session_state=session_snapshot)
     debit_result = consume_viability_credit(
@@ -164,6 +182,7 @@ if safe_get_query_param("auth_flow") == "callback":
 handle_oauth_callback()
 inject_global_styles()
 render_top_nav()
+_ensure_minimum_session_state()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
