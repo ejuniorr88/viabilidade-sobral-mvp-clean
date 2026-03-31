@@ -465,45 +465,15 @@ st.markdown(
 radius_m = render_mapa_section(zones_gj)
 
 def _current_report_session_snapshot(calc_ref, built_ground_value, permeable_area_value):
-    lot_front_live = float(
-        st.session_state.get("lot_front_m")
-        or calc_ref.get("lot_front_m")
-        or calc_ref.get("lot_testada_m")
-        or 0.0
-    )
-    lot_depth_live = float(
-        st.session_state.get("lot_depth_m")
-        or calc_ref.get("lot_depth_m")
-        or calc_ref.get("lot_profundidade_m")
-        or 0.0
-    )
-    lot_area_live = float(calc_ref.get("lot_area_m2") or 0.0)
-    built_ground_live = float(
-        built_ground_value
-        if built_ground_value is not None
-        else (calc_ref.get("built_ground_m2") or calc_ref.get("built_ground_input_m2") or 0.0)
-    )
-    permeable_area_live = float(
-        permeable_area_value
-        if permeable_area_value is not None
-        else (calc_ref.get("area_permeavel_prevista_m2") or calc_ref.get("permeable_area_m2") or 0.0)
-    )
-    lot_is_corner_live = bool(st.session_state.get("lot_is_corner", calc_ref.get("lot_is_corner", False)))
-    lot_is_midblock_live = bool(
-        st.session_state.get("lot_is_midblock", calc_ref.get("lot_is_midblock", not lot_is_corner_live))
-    )
-    lot_is_irregular_live = bool(
-        st.session_state.get("lot_is_irregular", calc_ref.get("lot_irregular", calc_ref.get("lot_is_irregular", False)))
-    )
     return {
-        "lot_area_m2": lot_area_live,
-        "built_ground_m2": built_ground_live,
-        "permeable_area_m2": permeable_area_live,
-        "lot_front_m": lot_front_live,
-        "lot_depth_m": lot_depth_live,
-        "lot_is_corner": lot_is_corner_live,
-        "lot_is_midblock": lot_is_midblock_live,
-        "lot_is_irregular": lot_is_irregular_live,
+        "lot_area_m2": calc_ref.get("lot_area_m2"),
+        "built_ground_m2": built_ground_value,
+        "permeable_area_m2": permeable_area_value,
+        "lot_front_m": calc_ref.get("lot_front_m"),
+        "lot_depth_m": calc_ref.get("lot_depth_m"),
+        "lot_is_corner": calc_ref.get("lot_is_corner"),
+        "lot_is_midblock": calc_ref.get("lot_is_midblock"),
+        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
     }
 
 
@@ -524,7 +494,12 @@ def _clear_pending_report():
     st.session_state.pending_report_signature = None
 
 
-def _clear_report_runtime_state(*, clear_last_calc_signature: bool = False, preserve_snapshot: bool = False) -> None:
+def _clear_report_runtime_state(
+    *,
+    clear_last_calc_signature: bool = False,
+    preserve_snapshot: bool = False,
+    preserve_pending: bool = False,
+) -> None:
     st.session_state.report_unlocked = False
     st.session_state.show_inline_payments = False
     st.session_state.last_generated_pdf_bytes = None
@@ -534,7 +509,8 @@ def _clear_report_runtime_state(*, clear_last_calc_signature: bool = False, pres
         st.session_state.report_snapshot_calc = None
         st.session_state.report_snapshot_session = None
         st.session_state.report_snapshot_signature = None
-    _clear_pending_report()
+    if not preserve_pending:
+        _clear_pending_report()
     if clear_last_calc_signature:
         st.session_state.last_calc_signature = None
 
@@ -612,25 +588,32 @@ with btn_col2:
         st.rerun()
 
 st.session_state.calc["lot_area_m2"] = float(lot_area)
-st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or st.session_state.calc.get("lot_testada_m") or 0.0)
-st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or st.session_state.calc.get("lot_profundidade_m") or 0.0)
+st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or 0.0)
+st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
 
-calc_signature = json.dumps(
+current_signature = json.dumps(
     {
         "lat": st.session_state.get("selected_lat"),
         "lon": st.session_state.get("selected_lon"),
+        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
+        "lot_front_m": st.session_state.calc.get("lot_front_m"),
+        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
+        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
+        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
         "use_type_code": st.session_state.calc.get("use_type_code"),
         "project_mode": st.session_state.calc.get("project_mode"),
         "categoria_label": categoria_label,
+        "built_ground_m2": built_ground,
+        "permeable_area_m2": permeable_area,
     },
     sort_keys=True,
     default=str,
 )
 
-if st.session_state.last_calc_signature and st.session_state.last_calc_signature != calc_signature:
-    _clear_report_runtime_state(preserve_snapshot=True)
+if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
+    _clear_report_runtime_state(preserve_snapshot=True, preserve_pending=True)
     st.session_state.free_calc_done = False
     st.session_state.calc.pop("err", None)
     st.session_state.calc.pop("rule", None)
@@ -690,7 +673,7 @@ show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
 if run_free_calc_now:
     _clear_report_runtime_state(preserve_snapshot=True)
     st.session_state.free_calc_done = False
-    st.session_state.last_calc_signature = calc_signature
+    st.session_state.last_calc_signature = current_signature
 
     calc.pop("err", None)
     calc.pop("rule", None)
