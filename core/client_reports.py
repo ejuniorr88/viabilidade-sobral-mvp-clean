@@ -50,6 +50,24 @@ def _normalize_number(value: Any, decimals: int = 2) -> float:
         return 0.0
 
 
+def _pick_value(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and value.strip() == "":
+            continue
+        return value
+    return None
+
+
+def _pick_bool(*values: Any) -> bool:
+    for value in values:
+        if value is None:
+            continue
+        return bool(value)
+    return False
+
+
 def _safe_local_now() -> datetime:
     return datetime.now(_TZ)
 
@@ -67,19 +85,51 @@ def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) 
         "use_type_code": _normalize_text(calc.get("use_type_code")),
         "selected_use_label": _normalize_text(calc.get("selected_use_label")),
         "categoria_label": _normalize_text(calc.get("categoria_label")),
-        "zone": _normalize_text(calc.get("zone") or calc.get("zone_label")),
+        "zone": _normalize_text(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_label")),
         "road_name": _normalize_text(calc.get("street_name") or calc.get("road_name") or calc.get("logradouro")),
         "road_type": _normalize_text(calc.get("road_type") or calc.get("via_type")),
         "project_mode": _normalize_text(calc.get("project_mode")),
-        "lot_area_m2": _normalize_number(session_state.get("lot_area_m2") or calc.get("lot_area_m2")),
-        "built_ground_m2": _normalize_number(session_state.get("built_ground_m2") or calc.get("built_ground_m2") or calc.get("built_ground_input_m2")),
-        "permeable_area_m2": _normalize_number(session_state.get("permeable_area_m2") or calc.get("permeable_area_m2") or calc.get("area_permeavel_prevista_m2")),
-        "lot_front_m": _normalize_number(session_state.get("lot_front_m") or calc.get("lot_front_m") or calc.get("lot_testada_m")),
-        "lot_depth_m": _normalize_number(session_state.get("lot_depth_m") or calc.get("lot_depth_m") or calc.get("lot_profundidade_m")),
-        "lot_is_corner": bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner")),
-        "lot_is_irregular": bool(session_state.get("lot_is_irregular") or calc.get("lot_is_irregular")),
-        "selected_lat": _normalize_number(calc.get("selected_lat") or st.session_state.get("selected_lat"), 6),
-        "selected_lon": _normalize_number(calc.get("selected_lon") or st.session_state.get("selected_lon"), 6),
+        "lot_area_m2": _normalize_number(_pick_value(session_state.get("lot_area_m2"), calc.get("lot_area_m2"))),
+        "built_ground_m2": _normalize_number(
+            _pick_value(
+                session_state.get("built_ground_m2"),
+                session_state.get("built_ground_input_m2"),
+                calc.get("built_ground_m2"),
+                calc.get("built_ground_input_m2"),
+            )
+        ),
+        "permeable_area_m2": _normalize_number(
+            _pick_value(
+                session_state.get("permeable_area_m2"),
+                session_state.get("area_permeavel_prevista_m2"),
+                calc.get("permeable_area_m2"),
+                calc.get("area_permeavel_prevista_m2"),
+            )
+        ),
+        "lot_front_m": _normalize_number(
+            _pick_value(
+                session_state.get("lot_front_m"),
+                session_state.get("lot_testada_m"),
+                calc.get("lot_front_m"),
+                calc.get("lot_testada_m"),
+            )
+        ),
+        "lot_depth_m": _normalize_number(
+            _pick_value(
+                session_state.get("lot_depth_m"),
+                session_state.get("lot_profundidade_m"),
+                calc.get("lot_depth_m"),
+                calc.get("lot_profundidade_m"),
+            )
+        ),
+        "lot_is_corner": _pick_bool(session_state.get("lot_is_corner"), calc.get("lot_is_corner")),
+        "lot_is_irregular": _pick_bool(
+            session_state.get("lot_is_irregular"),
+            calc.get("lot_is_irregular"),
+            calc.get("lot_irregular"),
+        ),
+        "selected_lat": _normalize_number(_pick_value(calc.get("selected_lat"), st.session_state.get("selected_lat")), 6),
+        "selected_lon": _normalize_number(_pick_value(calc.get("selected_lon"), st.session_state.get("selected_lon")), 6),
     }
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -152,10 +202,10 @@ def save_client_report(
         "road_type": _normalize_text(calc.get("road_type") or calc.get("via_type")),
         "project_mode": _normalize_text(calc.get("project_mode")),
         "lot_area_m2": _normalize_number(session_state.get("lot_area_m2") or calc.get("lot_area_m2")),
-        "built_ground_m2": _normalize_number(session_state.get("built_ground_m2") or calc.get("built_ground_m2") or calc.get("built_ground_input_m2")),
-        "permeable_area_m2": _normalize_number(session_state.get("permeable_area_m2") or calc.get("permeable_area_m2") or calc.get("area_permeavel_prevista_m2")),
-        "lot_front_m": _normalize_number(session_state.get("lot_front_m") or calc.get("lot_front_m") or calc.get("lot_testada_m")),
-        "lot_depth_m": _normalize_number(session_state.get("lot_depth_m") or calc.get("lot_depth_m") or calc.get("lot_profundidade_m")),
+        "built_ground_m2": _normalize_number(_pick_value(session_state.get("built_ground_m2"), session_state.get("built_ground_input_m2"), calc.get("built_ground_m2"), calc.get("built_ground_input_m2"))),
+        "permeable_area_m2": _normalize_number(_pick_value(session_state.get("permeable_area_m2"), session_state.get("area_permeavel_prevista_m2"), calc.get("permeable_area_m2"), calc.get("area_permeavel_prevista_m2"))),
+        "lot_front_m": _normalize_number(_pick_value(session_state.get("lot_front_m"), session_state.get("lot_testada_m"), calc.get("lot_front_m"), calc.get("lot_testada_m"))),
+        "lot_depth_m": _normalize_number(_pick_value(session_state.get("lot_depth_m"), session_state.get("lot_profundidade_m"), calc.get("lot_depth_m"), calc.get("lot_profundidade_m"))),
         "pdf_bucket": _BUCKET,
         "pdf_storage_path": storage_path,
         "pdf_file_name": file_name,
