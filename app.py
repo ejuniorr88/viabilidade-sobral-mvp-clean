@@ -7,6 +7,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from ui.app_shell import (
+    card as _card,
     inject_global_styles,
     render_auth_callback_bridge,
     render_login_gate_block,
