@@ -7,7 +7,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from ui.app_shell import (
-    card as _card,
     inject_global_styles,
     render_auth_callback_bridge,
     render_login_gate_block,
@@ -20,10 +19,8 @@ st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
 def _bootstrap_session_state() -> None:
     ss = st.session_state
-
     if "calc" not in ss or not isinstance(ss.get("calc"), dict):
         ss["calc"] = {}
-
     ss.setdefault("last_calc_signature", None)
     ss.setdefault("confirm_new_report", False)
     ss.setdefault("free_calc_done", False)
@@ -34,6 +31,8 @@ def _bootstrap_session_state() -> None:
     ss.setdefault("show_inline_payments", False)
     ss.setdefault("show_client_area", False)
 
+
+_bootstrap_session_state()
 
 DATA_DIR = Path("data")
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
@@ -181,7 +180,6 @@ if safe_get_query_param("auth_flow") == "callback":
     render_auth_callback_bridge()
 
 handle_oauth_callback()
-_bootstrap_session_state()
 inject_global_styles()
 render_top_nav()
 
@@ -222,6 +220,14 @@ if user_logged_in and user_id and user_email:
             st.session_state["wallet_reconcile_result"] = reconcile_result
         except Exception as e:
             st.session_state["wallet_reconcile_error"] = str(e)
+
+main_spacer_col, login_col = st.columns([2.4, 1.2], gap="large")
+with main_spacer_col:
+    st.write("")
+with login_col:
+    if user_logged_in and user_id:
+        render_wallet_summary()
+    render_google_login_top()
 
 with st.sidebar:
     st.markdown("### 📋 1. Escolha o Uso")
@@ -284,6 +290,13 @@ with st.sidebar:
 
     lot_area, built_ground, permeable_area = render_lote_section()
 
+st.markdown(
+    '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
+    unsafe_allow_html=True,
+)
+
+radius_m = render_mapa_section(zones_gj)
+
 btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
 with btn_col2:
     clicked_calcular = st.button(
@@ -311,12 +324,6 @@ with btn_col2:
         st.session_state.show_inline_payments = False
         st.rerun()
 
-st.markdown(
-    '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
-    unsafe_allow_html=True,
-)
-
-radius_m = render_mapa_section(zones_gj)
 
 st.session_state.calc["lot_area_m2"] = float(lot_area)
 st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or st.session_state.calc.get("lot_testada_m") or 0.0)
