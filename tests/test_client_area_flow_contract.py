@@ -11,6 +11,8 @@ def _read(path: Path) -> str:
 
 def test_client_area_flow_contract_keeps_entry_and_return_paths() -> None:
     app_py = _read(ROOT / 'app.py')
+    access_gates = _read(ROOT / 'ui' / 'access_gates.py')
+    app_shell = _read(ROOT / 'ui' / 'app_shell.py')
 
     required = [
         'if st.session_state.get("show_client_area"):',
@@ -20,8 +22,9 @@ def test_client_area_flow_contract_keeps_entry_and_return_paths() -> None:
         'st.session_state["show_client_area"] = False',
         'st.markdown("## Área do cliente")',
     ]
+    haystack = app_py + '\n' + access_gates + '\n' + app_shell
     for item in required:
-        assert item in app_py, f"Fluxo principal da Área do cliente perdeu a âncora: {item}"
+        assert item in haystack, f"Fluxo principal da Área do cliente perdeu a âncora: {item}"
 
 
 def test_client_area_flow_contract_keeps_identity_credit_and_reports_cards() -> None:
