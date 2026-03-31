@@ -43,6 +43,7 @@ from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
+from core import report_confirmation as report_confirmation_core
 
 
 @st.cache_data(show_spinner=False)
@@ -465,33 +466,26 @@ st.markdown(
 radius_m = render_mapa_section(zones_gj)
 
 def _current_report_session_snapshot(calc_ref, built_ground_value, permeable_area_value):
-    return {
-        "lot_area_m2": calc_ref.get("lot_area_m2"),
-        "built_ground_m2": built_ground_value,
-        "permeable_area_m2": permeable_area_value,
-        "lot_front_m": calc_ref.get("lot_front_m"),
-        "lot_depth_m": calc_ref.get("lot_depth_m"),
-        "lot_is_corner": calc_ref.get("lot_is_corner"),
-        "lot_is_midblock": calc_ref.get("lot_is_midblock"),
-        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
-    }
+    return report_confirmation_core.current_report_session_snapshot(
+        calc_ref=calc_ref,
+        built_ground_value=built_ground_value,
+        permeable_area_value=permeable_area_value,
+        session_state=st.session_state,
+    )
 
 
 def _commit_report_snapshot(calc_ref, session_snapshot, pdf_bytes, signature):
-    st.session_state.report_snapshot_calc = deepcopy(calc_ref)
-    st.session_state.report_snapshot_session = deepcopy(session_snapshot)
-    st.session_state.report_snapshot_signature = signature
-    st.session_state.last_generated_pdf_bytes = pdf_bytes
-    st.session_state.last_generated_pdf_signature = signature
-    st.session_state.report_unlocked = True
-    st.session_state.show_inline_payments = False
+    report_confirmation_core.commit_report_snapshot(
+        session_state=st.session_state,
+        calc_ref=calc_ref,
+        session_snapshot=session_snapshot,
+        pdf_bytes=pdf_bytes,
+        signature=signature,
+    )
 
 
 def _clear_pending_report():
-    st.session_state.confirm_new_report = False
-    st.session_state.pending_report_calc = None
-    st.session_state.pending_report_session = None
-    st.session_state.pending_report_signature = None
+    report_confirmation_core.clear_pending_report(st.session_state)
 
 
 def _clear_report_runtime_state(
@@ -500,19 +494,16 @@ def _clear_report_runtime_state(
     preserve_snapshot: bool = False,
     preserve_pending: bool = False,
 ) -> None:
-    st.session_state.report_unlocked = False
-    st.session_state.show_inline_payments = False
-    st.session_state.last_generated_pdf_bytes = None
-    st.session_state.last_generated_pdf_signature = None
-    st.session_state.last_saved_report_signature = None
-    if not preserve_snapshot:
-        st.session_state.report_snapshot_calc = None
-        st.session_state.report_snapshot_session = None
-        st.session_state.report_snapshot_signature = None
-    if not preserve_pending:
-        _clear_pending_report()
-    if clear_last_calc_signature:
-        st.session_state.last_calc_signature = None
+    report_confirmation_core.clear_report_runtime_state(
+        session_state=st.session_state,
+        clear_last_calc_signature=clear_last_calc_signature,
+        preserve_snapshot=preserve_snapshot,
+        preserve_pending=preserve_pending,
+    )
+
+
+def _build_current_report_signature(calc_ref, session_snapshot):
+    return build_report_signature(calc=calc_ref, session_state=session_snapshot)
 
 
 def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
@@ -588,28 +579,17 @@ with btn_col2:
         st.rerun()
 
 st.session_state.calc["lot_area_m2"] = float(lot_area)
-st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or 0.0)
-st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or 0.0)
+st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or st.session_state.calc.get("lot_testada_m") or 0.0)
+st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or st.session_state.calc.get("lot_profundidade_m") or 0.0)
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
 
-current_signature = json.dumps(
-    {
-        "lat": st.session_state.get("selected_lat"),
-        "lon": st.session_state.get("selected_lon"),
-        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-        "lot_front_m": st.session_state.calc.get("lot_front_m"),
-        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
-        "use_type_code": st.session_state.calc.get("use_type_code"),
-        "project_mode": st.session_state.calc.get("project_mode"),
-        "categoria_label": categoria_label,
-        "built_ground_m2": built_ground,
-        "permeable_area_m2": permeable_area,
-    },
-    sort_keys=True,
-    default=str,
+current_signature = report_confirmation_core.build_calc_signature(
+    selected_lat=st.session_state.get("selected_lat"),
+    selected_lon=st.session_state.get("selected_lon"),
+    use_type_code=st.session_state.calc.get("use_type_code"),
+    project_mode=st.session_state.calc.get("project_mode"),
+    categoria_label=categoria_label,
 )
 
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
@@ -727,11 +707,18 @@ if can_offer_report:
         "gere o relatório com 1 crédito."
     )
 
-    current_report_session = _current_report_session_snapshot(calc, built_ground, permeable_area)
-    current_report_signature = build_report_signature(calc=calc, session_state=current_report_session)
-    snapshot_signature = st.session_state.get("report_snapshot_signature")
-    has_snapshot = bool(st.session_state.get("report_snapshot_calc")) and bool(snapshot_signature)
-    is_same_as_snapshot = bool(has_snapshot and snapshot_signature == current_report_signature)
+    report_confirmation_state = report_confirmation_core.compute_report_confirmation_state(
+        calc_ref=calc,
+        built_ground_value=built_ground,
+        permeable_area_value=permeable_area,
+        session_state=st.session_state,
+        signature_builder=_build_current_report_signature,
+    )
+    current_report_session = report_confirmation_state["current_report_session"]
+    current_report_signature = report_confirmation_state["current_report_signature"]
+    snapshot_signature = report_confirmation_state["snapshot_signature"]
+    has_snapshot = report_confirmation_state["has_snapshot"]
+    is_same_as_snapshot = report_confirmation_state["is_same_as_snapshot"]
 
     saldo_atual = None
     if user_logged_in and user_id:
@@ -766,10 +753,12 @@ if can_offer_report:
         elif not user_logged_in or not user_id:
             st.error("Faça login com Google para gerar o relatório completo.")
         elif has_snapshot and not is_same_as_snapshot:
-            st.session_state.confirm_new_report = True
-            st.session_state.pending_report_calc = deepcopy(calc)
-            st.session_state.pending_report_session = deepcopy(current_report_session)
-            st.session_state.pending_report_signature = current_report_signature
+            report_confirmation_core.arm_new_report_confirmation(
+                session_state=st.session_state,
+                calc_ref=deepcopy(calc),
+                current_report_session=deepcopy(current_report_session),
+                current_report_signature=current_report_signature,
+            )
             st.rerun()
         elif is_same_as_snapshot:
             st.info("Este relatório já foi gerado e continua disponível abaixo.")
