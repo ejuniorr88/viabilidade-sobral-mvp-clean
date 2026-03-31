@@ -593,7 +593,31 @@ current_signature = report_confirmation_core.build_calc_signature(
 )
 
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
-    _clear_report_runtime_state(preserve_snapshot=True, preserve_pending=True)
+    previous_report_snapshot_calc = deepcopy(st.session_state.get("report_snapshot_calc"))
+    previous_report_snapshot_session = deepcopy(st.session_state.get("report_snapshot_session"))
+    previous_report_snapshot_signature = st.session_state.get("report_snapshot_signature")
+    previous_pending_confirm = bool(st.session_state.get("confirm_new_report"))
+    previous_pending_report_calc = deepcopy(st.session_state.get("pending_report_calc"))
+    previous_pending_report_session = deepcopy(st.session_state.get("pending_report_session"))
+    previous_pending_report_signature = st.session_state.get("pending_report_signature")
+
+    _clear_report_runtime_state()
+
+    if previous_report_snapshot_calc is not None:
+        st.session_state.report_snapshot_calc = previous_report_snapshot_calc
+    if previous_report_snapshot_session is not None:
+        st.session_state.report_snapshot_session = previous_report_snapshot_session
+    if previous_report_snapshot_signature is not None:
+        st.session_state.report_snapshot_signature = previous_report_snapshot_signature
+
+    st.session_state.confirm_new_report = previous_pending_confirm
+    if previous_pending_report_calc is not None:
+        st.session_state.pending_report_calc = previous_pending_report_calc
+    if previous_pending_report_session is not None:
+        st.session_state.pending_report_session = previous_pending_report_session
+    if previous_pending_report_signature is not None:
+        st.session_state.pending_report_signature = previous_pending_report_signature
+
     st.session_state.free_calc_done = False
     st.session_state.calc.pop("err", None)
     st.session_state.calc.pop("rule", None)
