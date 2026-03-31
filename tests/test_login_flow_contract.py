@@ -13,6 +13,7 @@ def test_login_flow_contract_keeps_google_login_entrypoints() -> None:
     auth_panel = _read(ROOT / 'ui' / 'auth_panel.py')
     app_py = _read(ROOT / 'app.py')
     access_gates = _read(ROOT / 'ui' / 'access_gates.py')
+    app_shell = _read(ROOT / 'ui' / 'app_shell.py')
 
     required = [
         'Entrar com Google',
@@ -28,6 +29,7 @@ def test_login_flow_contract_keeps_google_login_entrypoints() -> None:
 def test_login_flow_contract_keeps_client_area_post_login_handoff() -> None:
     app_py = _read(ROOT / 'app.py')
     access_gates = _read(ROOT / 'ui' / 'access_gates.py')
+    app_shell = _read(ROOT / 'ui' / 'app_shell.py')
 
     required = [
         'Área do cliente',
@@ -38,7 +40,7 @@ def test_login_flow_contract_keeps_client_area_post_login_handoff() -> None:
         'render_client_area_page(',
         'st.rerun()',
     ]
-    haystack = app_py + '\n' + access_gates
+    haystack = app_py + '\n' + access_gates + '\n' + app_shell
     for item in required:
         assert item in haystack, (
             'Fluxo crítico da Área do cliente após login foi alterado ou removido: '
