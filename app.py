@@ -466,14 +466,32 @@ radius_m = render_mapa_section(zones_gj)
 
 def _current_report_session_snapshot(calc_ref, built_ground_value, permeable_area_value):
     return {
-        "lot_area_m2": calc_ref.get("lot_area_m2"),
+        "lot_area_m2": calc_ref.get("lot_area_m2") or st.session_state.get("lot_area_m2"),
         "built_ground_m2": built_ground_value,
         "permeable_area_m2": permeable_area_value,
-        "lot_front_m": calc_ref.get("lot_front_m"),
-        "lot_depth_m": calc_ref.get("lot_depth_m"),
-        "lot_is_corner": calc_ref.get("lot_is_corner"),
-        "lot_is_midblock": calc_ref.get("lot_is_midblock"),
-        "lot_is_irregular": bool(st.session_state.get("lot_is_irregular", False)),
+        "lot_front_m": (
+            st.session_state.get("lot_front_m")
+            or calc_ref.get("lot_front_m")
+            or calc_ref.get("lot_testada_m")
+        ),
+        "lot_depth_m": (
+            st.session_state.get("lot_depth_m")
+            or calc_ref.get("lot_depth_m")
+            or calc_ref.get("lot_profundidade_m")
+        ),
+        "lot_is_corner": bool(
+            st.session_state.get("lot_is_corner", False)
+            or calc_ref.get("lot_is_corner")
+        ),
+        "lot_is_midblock": bool(
+            st.session_state.get("lot_is_midblock", False)
+            or calc_ref.get("lot_is_midblock")
+        ),
+        "lot_is_irregular": bool(
+            st.session_state.get("lot_is_irregular", False)
+            or calc_ref.get("lot_irregular")
+            or calc_ref.get("lot_is_irregular")
+        ),
     }
 
 
@@ -591,11 +609,11 @@ current_signature = json.dumps(
     {
         "lat": st.session_state.get("selected_lat"),
         "lon": st.session_state.get("selected_lon"),
-        "lot_area_m2": st.session_state.calc.get("lot_area_m2"),
-        "lot_front_m": st.session_state.calc.get("lot_front_m"),
-        "lot_depth_m": st.session_state.calc.get("lot_depth_m"),
-        "lot_is_corner": st.session_state.calc.get("lot_is_corner"),
-        "lot_is_midblock": st.session_state.calc.get("lot_is_midblock"),
+        "lot_area_m2": lot_area or st.session_state.calc.get("lot_area_m2"),
+        "lot_front_m": st.session_state.get("lot_front_m") or st.session_state.calc.get("lot_front_m") or st.session_state.calc.get("lot_testada_m"),
+        "lot_depth_m": st.session_state.get("lot_depth_m") or st.session_state.calc.get("lot_depth_m") or st.session_state.calc.get("lot_profundidade_m"),
+        "lot_is_corner": st.session_state.get("lot_is_corner") if st.session_state.get("lot_is_corner") is not None else st.session_state.calc.get("lot_is_corner"),
+        "lot_is_midblock": st.session_state.get("lot_is_midblock") if st.session_state.get("lot_is_midblock") is not None else st.session_state.calc.get("lot_is_midblock"),
         "use_type_code": st.session_state.calc.get("use_type_code"),
         "project_mode": st.session_state.calc.get("project_mode"),
         "categoria_label": categoria_label,
