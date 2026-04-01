@@ -236,7 +236,6 @@ with st.sidebar:
     lot_area, built_ground, permeable_area = render_lot_inputs()
 
 # Compatibilidade contratual do layout do mapa:
-# '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>'
 radius_m = render_mapa_section(zones_gj)
 
 clicked_calcular = render_primary_actions(
