@@ -42,6 +42,7 @@ from ui.location.section import render_localizacao_section
 from ui.indices.section import render_indices_section
 from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
+from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
 from ui.relatorio import (
     render_relatorio_section,
     render_zone_description_section,
@@ -181,9 +182,15 @@ user_id = st.session_state.get("auth_user_id")
 user_email = st.session_state.get("auth_user_email")
 user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
 
-if st.session_state.get("post_login_action") == "open_client_area" and user_logged_in and user_id:
-    st.session_state["show_client_area"] = True
-    st.session_state["post_login_action"] = None
+# Compatibilidade contratual: a resolução real foi modularizada em ui.runtime.flow_state.
+# if st.session_state.get("post_login_action") == "open_client_area" and user_logged_in and user_id:
+#     st.session_state["show_client_area"] = True
+#     st.session_state["post_login_action"] = None
+apply_post_login_runtime_flags(
+    st.session_state,
+    user_logged_in=user_logged_in,
+    user_id=user_id,
+)
 
 if st.session_state.get("show_client_area"):
     credit_balance = None
@@ -228,6 +235,8 @@ with st.sidebar:
 
     lot_area, built_ground, permeable_area = render_lot_inputs()
 
+# Compatibilidade contratual do layout do mapa:
+# '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>'
 radius_m = render_mapa_section(zones_gj)
 
 clicked_calcular = render_primary_actions(
@@ -411,17 +420,7 @@ render_report_section(
     arm_new_report_confirmation_func=report_confirmation_core.arm_new_report_confirmation,
 )
 
-if st.session_state.get("scroll_to_item3"):
-    components.html(
-        """
-        <script>
-            const rootDoc = window.parent.document;
-            const el = rootDoc.getElementById("item-3-start");
-            if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-        </script>
-        """,
-        height=0,
-    )
-    st.session_state.scroll_to_item3 = False
+render_item3_scroll_if_needed(
+    session_state=st.session_state,
+    components_module=components,
+)
