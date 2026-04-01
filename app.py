@@ -39,10 +39,10 @@ except Exception:
 from ui.map.section import render_mapa_section
 from ui.lot.inputs import render_lot_inputs
 from ui.location.section import render_localizacao_section
-from ui.indices import render_indices_section
-from ui.analise import render_analise_section
+from ui.indices.section import render_indices_section
+from ui.analysis.section import render_analise_section
+from ui.report.section import render_report_section
 from ui.relatorio import (
-    render_relatorio_section,
     render_zone_description_section,
     render_unifamiliar_inadequado_preview,
     should_block_unifamiliar_preview,
@@ -65,6 +65,8 @@ from core.credits import consume_viability_credit, get_credit_balance, reconcile
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
 from core import report_confirmation as report_confirmation_core
+
+render_relatorio_section = render_report_section
 
 
 @st.cache_data(show_spinner=False)
@@ -220,12 +222,16 @@ with login_col:
 
 with st.sidebar:
     categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)
-    st.session_state.calc["use_type_code"] = selected_use_code
 
     st.markdown("### 📐 3. Dados do Lote")
     st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
 
     lot_area, built_ground, permeable_area = render_lot_inputs()
+
+st.markdown(
+    '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
+    unsafe_allow_html=True,
+)
 
 radius_m = render_mapa_section(zones_gj)
 
