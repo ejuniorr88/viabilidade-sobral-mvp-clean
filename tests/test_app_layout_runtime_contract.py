@@ -14,6 +14,6 @@ def test_app_restores_login_top_and_map_order_contract():
 
 def test_app_bootstrap_session_state_exists_before_first_calc_use():
     text = Path("app.py").read_text(encoding="utf-8")
-    bootstrap_idx = text.index("_bootstrap_session_state()")
+    bootstrap_idx = text.index("bootstrap_session_state(st.session_state)")
     first_calc_use_idx = text.index('st.session_state.calc["use_type_code"] = selected_use_code')
     assert bootstrap_idx < first_calc_use_idx
