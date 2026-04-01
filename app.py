@@ -6,10 +6,8 @@ from typing import Any, Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Core bootstrap
 from core.session.bootstrap import bootstrap_session_state
 
-# UI shell
 from ui.app_shell import (
     card as _card,
     inject_global_styles,
@@ -19,8 +17,6 @@ from ui.app_shell import (
 )
 from ui.flow.primary_actions import render_primary_actions
 from ui.flow.use_selector import render_use_selector
-
-# App sections
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
@@ -47,15 +43,12 @@ from ui.indices.section import render_indices_section
 from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
 from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
-
-# Legacy-compatible report blocks still consumed by the delegated report section
 from ui.relatorio import (
     render_relatorio_section,
     render_zone_description_section,
     render_unifamiliar_inadequado_preview,
     should_block_unifamiliar_preview,
 )
-# Auth and gates
 from core.auth import handle_oauth_callback, safe_get_query_param
 from ui.auth_panel import render_google_login_top
 from ui.access_gates import (
@@ -70,8 +63,6 @@ from ui.relatorio_blocks.multifamiliar_guia import (
     should_block_multifamiliar_preview,
 )
 from ui.client_area import render_client_area_page
-
-# Credits, reports and persistence
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
@@ -176,7 +167,6 @@ def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, us
     return debit_result, pdf_bytes
 
 
-# Bootstrap visual do app
 if safe_get_query_param("auth_flow") == "callback":
     render_auth_callback_bridge()
 
@@ -218,7 +208,6 @@ if st.session_state.get("show_client_area"):
     )
     st.stop()
 
-# Reconciliação de carteira após login
 if user_logged_in and user_id and user_email:
     reconcile_key = f"{user_id}:{user_email}"
     if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
@@ -237,7 +226,6 @@ with login_col:
         render_wallet_summary()
     render_google_login_top()
 
-# Barra lateral: escolha do uso e lote
 with st.sidebar:
     categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)
     st.session_state.calc["use_type_code"] = selected_use_code
@@ -267,7 +255,6 @@ st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m")
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
 
-# Assinatura do cálculo atual para preservar o fluxo do relatório
 current_signature = report_confirmation_core.build_calc_signature(
     selected_lat=st.session_state.get("selected_lat"),
     selected_lon=st.session_state.get("selected_lon"),
@@ -286,7 +273,6 @@ calc = st.session_state.calc
 
 st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
 
-# Gate de acesso para o cálculo gratuito
 run_free_calc_now = resolve_calculate_access(
     clicked_calcular=clicked_calcular,
     categoria_label=categoria_label,
@@ -346,7 +332,6 @@ if section4_can_try:
 
 
 
-# Preview bloqueado para cenários inadequados
 preview_inadequado = _should_block_report_preview(calc)
 if preview_inadequado:
     _clear_report_runtime_state(preserve_snapshot=True)
@@ -408,7 +393,6 @@ if st.session_state.get("confirm_new_report") and st.session_state.get("pending_
 # btn_confirm_new_report
 # Sim, gerar outro relatório
 
-# Seção de relatório delegada
 render_report_section(
     calc=calc,
     built_ground=built_ground,
@@ -434,7 +418,6 @@ render_report_section(
     arm_new_report_confirmation_func=report_confirmation_core.arm_new_report_confirmation,
 )
 
-# Scroll visual pós-cálculo
 render_item3_scroll_if_needed(
     session_state=st.session_state,
     components_module=components,
