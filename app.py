@@ -38,7 +38,7 @@ except Exception:
 
 from ui.mapa import render_mapa_section
 from ui.lot.inputs import render_lot_inputs
-from ui.location.section import render_localizacao_section
+from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
 from ui.relatorio import (
@@ -220,6 +220,7 @@ with login_col:
 
 with st.sidebar:
     categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)
+    st.session_state.calc["use_type_code"] = selected_use_code
 
     st.markdown("### 📐 3. Dados do Lote")
     st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
