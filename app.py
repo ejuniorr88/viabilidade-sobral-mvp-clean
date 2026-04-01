@@ -13,6 +13,7 @@ from ui.app_shell import (
     render_wallet_summary,
 )
 from ui.app_shell import card as _card
+from core.session.bootstrap import bootstrap_session_state
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
@@ -45,7 +46,6 @@ from ui.relatorio import (
 )
 from core.auth import handle_oauth_callback, safe_get_query_param
 from ui.auth_panel import render_google_login_top
-from core.session.bootstrap import bootstrap_session_state
 from ui.access_gates import (
     render_login_gate_block,
     render_client_area_gate,
