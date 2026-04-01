@@ -36,7 +36,7 @@ except Exception:
     from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
 
 from ui.mapa import render_mapa_section
-from ui.lote import render_lote_section
+from ui.lot.inputs import render_lot_inputs
 from ui.localizacao import render_localizacao_section
 from ui.indices import render_indices_section
 from ui.analise import render_analise_section
@@ -276,7 +276,7 @@ with st.sidebar:
     st.markdown("### 📐 3. Dados do Lote")
     st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
 
-    lot_area, built_ground, permeable_area = render_lote_section()
+    lot_area, built_ground, permeable_area = render_lot_inputs()
 
 st.markdown(
     '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
