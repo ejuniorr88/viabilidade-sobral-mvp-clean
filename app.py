@@ -39,8 +39,8 @@ except Exception:
 from ui.mapa import render_mapa_section
 from ui.lot.inputs import render_lot_inputs
 from ui.location.section import render_localizacao_section
-from ui.indices import render_indices_section
-from ui.analise import render_analise_section
+from ui.indices.section import render_indices_section
+from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
 from ui.relatorio import (
     render_relatorio_section,
