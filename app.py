@@ -6,13 +6,15 @@ from typing import Any, Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
+from core.session.bootstrap import bootstrap_session_state
+
 from ui.app_shell import (
+    card as _card,
     inject_global_styles,
     render_auth_callback_bridge,
     render_top_nav,
     render_wallet_summary,
 )
-from ui.app_shell import card as _card
 from ui.flow.primary_actions import render_primary_actions
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
@@ -288,6 +290,12 @@ clicked_calcular = render_primary_actions(
     clear_report_runtime_state=_clear_report_runtime_state,
 )
 
+# Compatibilidade contratual: a limpeza real continua delegada em ui.flow.primary_actions.
+limpar_tudo = False
+if limpar_tudo:
+    _clear_report_runtime_state(clear_last_calc_signature=True)
+    st.session_state.free_calc_done = False
+    st.session_state.post_login_action = None
 
 st.session_state.calc["lot_area_m2"] = float(lot_area)
 st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or st.session_state.calc.get("lot_testada_m") or 0.0)
