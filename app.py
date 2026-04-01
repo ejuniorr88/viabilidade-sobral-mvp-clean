@@ -7,6 +7,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from ui.app_shell import (
+    card as _card,
     inject_global_styles,
     render_auth_callback_bridge,
     render_login_gate_block,
@@ -15,6 +16,24 @@ from ui.app_shell import (
 )
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
+
+
+def _bootstrap_session_state() -> None:
+    ss = st.session_state
+    if "calc" not in ss or not isinstance(ss.get("calc"), dict):
+        ss["calc"] = {}
+    ss.setdefault("last_calc_signature", None)
+    ss.setdefault("confirm_new_report", False)
+    ss.setdefault("free_calc_done", False)
+    ss.setdefault("show_login_gate", False)
+    ss.setdefault("scroll_to_login_gate", False)
+    ss.setdefault("scroll_to_item3", False)
+    ss.setdefault("post_login_action", None)
+    ss.setdefault("show_inline_payments", False)
+    ss.setdefault("show_client_area", False)
+
+
+_bootstrap_session_state()
 
 DATA_DIR = Path("data")
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
@@ -165,54 +184,9 @@ handle_oauth_callback()
 inject_global_styles()
 render_top_nav()
 
-btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
-with btn_col2:
-    clicked_calcular = st.button(
-        "🚀 GERAR ESTUDO DE VIABILIDADE",
-        key="btn_calc",
-        use_container_width=True,
-    )
+zones_gj = _zones_geojson()
+zones_prepared = _zones_prepared()
 
-    limpar_tudo = st.button(
-        "🗑️ LIMPAR TUDO",
-        key="btn_clear_all",
-        use_container_width=True,
-    )
-
-    if limpar_tudo:
-        st.session_state.selected_lat = None
-        st.session_state.selected_lon = None
-        st.session_state.calc = {"use_type_code": st.session_state.calc.get("use_type_code", "RES_UNI")}
-        _clear_report_runtime_state(clear_last_calc_signature=True)
-        st.session_state.free_calc_done = False
-        st.session_state.show_login_gate = False
-        st.session_state.scroll_to_login_gate = False
-        st.session_state.scroll_to_item3 = False
-        st.session_state.post_login_action = None
-        st.session_state.show_inline_payments = False
-        st.rerun()
-
-st.session_state.calc["lot_area_m2"] = float(lot_area)
-st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or st.session_state.calc.get("lot_testada_m") or 0.0)
-st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or st.session_state.calc.get("lot_profundidade_m") or 0.0)
-st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
-st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
-
-current_signature = report_confirmation_core.build_calc_signature(
-    selected_lat=st.session_state.get("selected_lat"),
-    selected_lon=st.session_state.get("selected_lon"),
-    use_type_code=st.session_state.calc.get("use_type_code"),
-    project_mode=st.session_state.calc.get("project_mode"),
-    categoria_label=categoria_label,
-)
-
-if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
-    _clear_report_runtime_state(preserve_snapshot=True, preserve_pending=True)
-    st.session_state.free_calc_done = False
-    st.session_state.calc.pop("err", None)
-    st.session_state.calc.pop("rule", None)
-
-calc = st.session_state.calc
 user_logged_in = bool(st.session_state.get("auth_logged_in"))
 user_id = st.session_state.get("auth_user_id")
 user_email = st.session_state.get("auth_user_email")
@@ -247,6 +221,132 @@ if user_logged_in and user_id and user_email:
             st.session_state["wallet_reconcile_result"] = reconcile_result
         except Exception as e:
             st.session_state["wallet_reconcile_error"] = str(e)
+
+main_spacer_col, login_col = st.columns([2.4, 1.2], gap="large")
+with main_spacer_col:
+    st.write("")
+with login_col:
+    if user_logged_in and user_id:
+        render_wallet_summary()
+    render_google_login_top()
+
+with st.sidebar:
+    st.markdown("### 📋 1. Escolha o Uso")
+
+    categoria_label = st.selectbox(
+        "Categoria:",
+        options=[
+            "Residencial",
+            "Comercial (Em breve)",
+            "Serviço (Em breve)",
+            "Saúde/Educação (Em breve)",
+        ],
+        index=0,
+        key="vf_categoria",
+    )
+
+    residential_options = {
+        "Residencial Unifamiliar (Casa)": ("RES_UNI", ""),
+        "Multifamiliar R2.1 (2 unidades no mesmo lote)": ("RES_MULTI_R21", "R21"),
+        "Multifamiliar R2.2 (condomínio horizontal com via interna)": ("RES_MULTI_R22", "R22"),
+        "Multifamiliar R3 (condomínio vertical / prédio)": ("RES_MULTI_R3", "R3"),
+    }
+
+    selected_use_label = st.selectbox(
+        "Opções na Categoria:",
+        options=list(residential_options.keys()),
+        index=0,
+        key="vf_residential_option",
+        disabled=(categoria_label != "Residencial"),
+    )
+
+    selected_use_code, selected_multi_tipo = residential_options.get(selected_use_label, ("RES_UNI", ""))
+    st.session_state.calc["use_type_code"] = selected_use_code
+
+    if selected_use_code.startswith("RES_MULTI_"):
+        st.session_state.calc["project_mode"] = "GUIA_FASE_1"
+        st.session_state.calc["multi_tipo"] = selected_multi_tipo
+    else:
+        st.session_state.calc.pop("project_mode", None)
+        st.session_state.calc.pop("multi_tipo", None)
+
+    if categoria_label != "Residencial":
+        st.caption("Essa categoria ficará disponível em breve.")
+
+    st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
+
+    st.markdown("### 🔎 2. Busca Direta")
+    st.text_input(
+        "Ou digite para pesquisar:",
+        value="Em breve",
+        disabled=True,
+        key="vf_busca_direta",
+    )
+    st.caption("A busca direta ficará disponível em breve.")
+
+    st.markdown('<div class="vf-side-divider"></div>', unsafe_allow_html=True)
+
+    st.markdown("### 📐 3. Dados do Lote")
+    st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
+
+    lot_area, built_ground, permeable_area = render_lote_section()
+
+st.markdown(
+    '<div class="vf-section-title">📍 Selecione o lote no mapa:</div>',
+    unsafe_allow_html=True,
+)
+
+radius_m = render_mapa_section(zones_gj)
+
+btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
+with btn_col2:
+    clicked_calcular = st.button(
+        "🚀 GERAR ESTUDO DE VIABILIDADE",
+        key="btn_calc",
+        use_container_width=True,
+    )
+
+    limpar_tudo = st.button(
+        "🗑️ LIMPAR TUDO",
+        key="btn_clear_all",
+        use_container_width=True,
+    )
+
+    if limpar_tudo:
+        st.session_state.selected_lat = None
+        st.session_state.selected_lon = None
+        st.session_state.calc = {"use_type_code": st.session_state.calc.get("use_type_code", "RES_UNI")}
+        _clear_report_runtime_state(clear_last_calc_signature=True)
+        st.session_state.free_calc_done = False
+        st.session_state.show_login_gate = False
+        st.session_state.scroll_to_login_gate = False
+        st.session_state.scroll_to_item3 = False
+        st.session_state.post_login_action = None
+        st.session_state.show_inline_payments = False
+        st.rerun()
+
+
+st.session_state.calc["lot_area_m2"] = float(lot_area)
+st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or st.session_state.calc.get("lot_testada_m") or 0.0)
+st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or st.session_state.calc.get("lot_profundidade_m") or 0.0)
+st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
+st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
+
+current_signature = report_confirmation_core.build_calc_signature(
+    selected_lat=st.session_state.get("selected_lat"),
+    selected_lon=st.session_state.get("selected_lon"),
+    use_type_code=st.session_state.calc.get("use_type_code"),
+    project_mode=st.session_state.calc.get("project_mode"),
+    categoria_label=categoria_label,
+)
+
+if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
+    _clear_report_runtime_state(preserve_snapshot=True, preserve_pending=True)
+    st.session_state.free_calc_done = False
+    st.session_state.calc.pop("err", None)
+    st.session_state.calc.pop("rule", None)
+
+calc = st.session_state.calc
 
 st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
 
