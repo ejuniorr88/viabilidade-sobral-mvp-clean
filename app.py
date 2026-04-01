@@ -7,33 +7,17 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from ui.app_shell import (
-    card as _card,
     inject_global_styles,
     render_auth_callback_bridge,
-    render_login_gate_block,
     render_top_nav,
     render_wallet_summary,
 )
+from ui.app_shell import card as _card
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
 
-def _bootstrap_session_state() -> None:
-    ss = st.session_state
-    if "calc" not in ss or not isinstance(ss.get("calc"), dict):
-        ss["calc"] = {}
-    ss.setdefault("last_calc_signature", None)
-    ss.setdefault("confirm_new_report", False)
-    ss.setdefault("free_calc_done", False)
-    ss.setdefault("show_login_gate", False)
-    ss.setdefault("scroll_to_login_gate", False)
-    ss.setdefault("scroll_to_item3", False)
-    ss.setdefault("post_login_action", None)
-    ss.setdefault("show_inline_payments", False)
-    ss.setdefault("show_client_area", False)
-
-
-_bootstrap_session_state()
+bootstrap_session_state(st.session_state)
 
 DATA_DIR = Path("data")
 ZONE_FILE = DATA_DIR / "zoneamento_light.json"
@@ -61,6 +45,7 @@ from ui.relatorio import (
 )
 from core.auth import handle_oauth_callback, safe_get_query_param
 from ui.auth_panel import render_google_login_top
+from core.session.bootstrap import bootstrap_session_state
 from ui.access_gates import (
     render_login_gate_block,
     render_client_area_gate,
