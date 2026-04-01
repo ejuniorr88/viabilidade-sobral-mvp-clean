@@ -13,7 +13,7 @@ from ui.app_shell import (
     render_wallet_summary,
 )
 from ui.app_shell import card as _card
-from core.session.bootstrap import bootstrap_session_state
+from ui.flow.primary_actions import render_primary_actions
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
@@ -283,32 +283,10 @@ st.markdown(
 
 radius_m = render_mapa_section(zones_gj)
 
-btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
-with btn_col2:
-    clicked_calcular = st.button(
-        "🚀 GERAR ESTUDO DE VIABILIDADE",
-        key="btn_calc",
-        use_container_width=True,
-    )
-
-    limpar_tudo = st.button(
-        "🗑️ LIMPAR TUDO",
-        key="btn_clear_all",
-        use_container_width=True,
-    )
-
-    if limpar_tudo:
-        st.session_state.selected_lat = None
-        st.session_state.selected_lon = None
-        st.session_state.calc = {"use_type_code": st.session_state.calc.get("use_type_code", "RES_UNI")}
-        _clear_report_runtime_state(clear_last_calc_signature=True)
-        st.session_state.free_calc_done = False
-        st.session_state.show_login_gate = False
-        st.session_state.scroll_to_login_gate = False
-        st.session_state.scroll_to_item3 = False
-        st.session_state.post_login_action = None
-        st.session_state.show_inline_payments = False
-        st.rerun()
+clicked_calcular = render_primary_actions(
+    session_state=st.session_state,
+    clear_report_runtime_state=_clear_report_runtime_state,
+)
 
 
 st.session_state.calc["lot_area_m2"] = float(lot_area)
