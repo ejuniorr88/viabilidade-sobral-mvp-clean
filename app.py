@@ -225,7 +225,7 @@ with login_col:
 with st.sidebar:
     categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)
 
-st.session_state.calc["use_type_code"] = selected_use_code
+    st.session_state.calc["use_type_code"] = selected_use_code
 
     st.markdown("### 📐 3. Dados do Lote")
     st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
