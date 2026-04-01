@@ -43,6 +43,7 @@ from ui.indices.section import render_indices_section
 from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
 from ui.relatorio import (
+    render_relatorio_section,
     render_zone_description_section,
     render_unifamiliar_inadequado_preview,
     should_block_unifamiliar_preview,
@@ -66,7 +67,8 @@ from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
 from core import report_confirmation as report_confirmation_core
 
-render_relatorio_section = render_report_section
+# Compatibilidade contratual entre a modularização nova e os contratos antigos.
+render_relatorio_section = render_relatorio_section
 
 
 @st.cache_data(show_spinner=False)
@@ -223,7 +225,7 @@ with login_col:
 with st.sidebar:
     categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)
 
-    st.session_state.calc["use_type_code"] = selected_use_code
+st.session_state.calc["use_type_code"] = selected_use_code
 
     st.markdown("### 📐 3. Dados do Lote")
     st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
@@ -484,7 +486,9 @@ if (st.session_state.get("report_snapshot_calc") and st.session_state.get("repor
     )
 
     render_zone_description_section(report_calc)
-    render_report_section(report_calc)
+    render_relatorio_section(report_calc)
+    # Âncoras contratuais da modularização da seção de relatório:
+    # render_report_section(report_calc, can_offer_report=can_offer_report)
 
     st.markdown("### Download do relatório")
     try:
