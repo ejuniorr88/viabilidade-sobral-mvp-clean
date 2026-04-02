@@ -40,6 +40,24 @@
     }
   }
 
+
+  function continueToSystemWithToken(accessToken, { closePopup = false } = {}) {
+    const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
+    streamlitUrl.searchParams.set("ext_access_token", accessToken);
+
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.location.replace(streamlitUrl.toString());
+        if (closePopup) {
+          window.close();
+        }
+        return;
+      }
+    } catch (_err) {}
+
+    window.location.href = streamlitUrl.toString();
+  }
+
   async function verifyWithGateway(accessToken) {
     const response = await fetch(`${cfg.GATEWAY_BASE_URL}/api/auth/session/verify`, {
       method: "POST",
@@ -79,11 +97,18 @@
       localStorage.setItem("vf_access_token", session.access_token);
       localStorage.setItem("vf_user", JSON.stringify(verified.user));
       setLoggedInView(verified.user);
-      setStatus("Login validado com sucesso. Agora você já pode seguir para o sistema.", "ok");
 
       if (window.location.hash && window.location.hash.includes("access_token=")) {
         history.replaceState(null, "", window.location.pathname);
       }
+
+      if (window.opener && !window.opener.closed) {
+        setStatus("Login validado com sucesso. Voltando para o sistema...", "ok");
+        window.setTimeout(() => continueToSystemWithToken(session.access_token, { closePopup: true }), 250);
+        return;
+      }
+
+      setStatus("Login validado com sucesso. Agora você já pode seguir para o sistema.", "ok");
     } catch (err) {
       setLoggedOutView();
       setStatus(err.message || String(err), "error");
@@ -139,9 +164,7 @@
           throw new Error(error?.message || "Sessão ausente para continuar.");
         }
 
-        const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
-        streamlitUrl.searchParams.set("ext_access_token", data.session.access_token);
-        window.location.href = streamlitUrl.toString();
+        continueToSystemWithToken(data.session.access_token, { closePopup: true });
       } catch (err) {
         setStatus(err.message || String(err), "error");
       }
