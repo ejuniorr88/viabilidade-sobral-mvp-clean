@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from typing import Optional
+from uuid import uuid4
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from core.auth import start_google_login, sign_out_current_user
 
@@ -30,25 +32,54 @@ def _render_login_anchor(
     full_width: bool = False,
     subtle: bool = False,
 ) -> None:
-    width_css = "width:100%;" if full_width else ""
+    width_css = "width:100%;" if full_width else "width:100%;"
     padding = "8px 12px" if subtle else "12px 16px"
     font_size = "13px" if subtle else "15px"
     font_weight = "600" if subtle else "700"
     border_radius = "10px" if subtle else "12px"
+    button_id = f"vf-login-popup-{uuid4().hex}"
 
     popup_html = f"""
-    <button type="button" onclick="
-        (function() {{
+    <!doctype html>
+    <html>
+      <body style="margin:0; padding:0; background:transparent;">
+        <button id="{button_id}" type="button" style="
+            display:block;
+            {width_css}
+            padding:{padding};
+            border-radius:{border_radius};
+            text-decoration:none;
+            border:1px solid #d9d9d9;
+            font-weight:{font_weight};
+            font-size:{font_size};
+            text-align:center;
+            background:#ffffff;
+            color:#222222;
+            box-shadow:0 1px 4px rgba(0,0,0,0.06);
+            box-sizing:border-box;
+            cursor:pointer;
+            font-family: inherit;
+        ">
+            {label}
+        </button>
+
+        <script>
+          (function() {{
+            const btn = document.getElementById({button_id!r});
             const authUrl = {auth_url!r};
-            const popupWidth = 520;
-            const popupHeight = 760;
-            const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
-            const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
-            const currentWidth = window.innerWidth || document.documentElement.clientWidth || screen.width;
-            const currentHeight = window.innerHeight || document.documentElement.clientHeight || screen.height;
-            const left = Math.max(0, dualScreenLeft + ((currentWidth - popupWidth) / 2));
-            const top = Math.max(0, dualScreenTop + ((currentHeight - popupHeight) / 2));
-            const features = [
+
+            function openPopup() {{
+              const popupWidth = 520;
+              const popupHeight = 760;
+
+              const parentWin = window.parent || window;
+              const dualScreenLeft = parentWin.screenLeft !== undefined ? parentWin.screenLeft : parentWin.screenX || 0;
+              const dualScreenTop = parentWin.screenTop !== undefined ? parentWin.screenTop : parentWin.screenY || 0;
+              const currentWidth = parentWin.innerWidth || document.documentElement.clientWidth || screen.width;
+              const currentHeight = parentWin.innerHeight || document.documentElement.clientHeight || screen.height;
+              const left = Math.max(0, dualScreenLeft + ((currentWidth - popupWidth) / 2));
+              const top = Math.max(0, dualScreenTop + ((currentHeight - popupHeight) / 2));
+              const features = [
                 'popup=yes',
                 'toolbar=no',
                 'location=yes',
@@ -60,37 +91,38 @@ def _render_login_anchor(
                 'height=' + popupHeight,
                 'left=' + left,
                 'top=' + top
-            ].join(',');
-            const popup = window.open(authUrl, 'vfGoogleLoginPopup', features);
-            if (popup && !popup.closed) {{
+              ].join(',');
+
+              let popup = null;
+              try {{
+                popup = parentWin.open(authUrl, 'vfGoogleLoginPopup', features);
+              }} catch (_err) {{
+                popup = null;
+              }}
+
+              if (popup && !popup.closed) {{
                 popup.focus();
-                return false;
+                return;
+              }}
+
+              try {{
+                parentWin.location.href = authUrl;
+              }} catch (_err) {{
+                window.location.href = authUrl;
+              }}
             }}
-            window.location.href = authUrl;
-            return false;
-        }})();
-        return false;
-    " style="
-        display:inline-block;
-        {width_css}
-        padding:{padding};
-        border-radius:{border_radius};
-        text-decoration:none;
-        border:1px solid #d9d9d9;
-        font-weight:{font_weight};
-        font-size:{font_size};
-        text-align:center;
-        background:#ffffff;
-        color:#222222;
-        box-shadow:0 1px 4px rgba(0,0,0,0.06);
-        box-sizing:border-box;
-        cursor:pointer;
-    ">
-        {label}
-    </button>
+
+            btn.addEventListener('click', function (event) {{
+              event.preventDefault();
+              openPopup();
+            }});
+          }})();
+        </script>
+      </body>
+    </html>
     """
 
-    st.markdown(popup_html, unsafe_allow_html=True)
+    components.html(popup_html, height=58 if subtle else 64)
 
 
 def render_google_login_cta(
