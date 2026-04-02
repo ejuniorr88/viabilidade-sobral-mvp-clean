@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Optional
-from uuid import uuid4
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -25,27 +24,32 @@ def _user_email() -> str:
     return st.session_state.get("auth_user_email") or "-"
 
 
-def _render_login_anchor(
+def _render_login_popup_button(
     label: str,
     auth_url: str,
     *,
-    full_width: bool = False,
     subtle: bool = False,
 ) -> None:
-    width_css = "width:100%;" if full_width else "width:100%;"
     padding = "8px 12px" if subtle else "12px 16px"
     font_size = "13px" if subtle else "15px"
     font_weight = "600" if subtle else "700"
     border_radius = "10px" if subtle else "12px"
-    button_id = f"vf-login-popup-{uuid4().hex}"
 
-    popup_html = f"""
+    html = f"""
     <!doctype html>
     <html>
-      <body style="margin:0; padding:0; background:transparent;">
-        <button id="{button_id}" type="button" style="
+      <head>
+        <meta charset="utf-8" />
+      </head>
+      <body style="margin:0;padding:0;background:transparent;">
+        <a
+          id="vf-login-popup-link"
+          href="{auth_url}"
+          target="vfGoogleLoginPopup"
+          style="
             display:block;
-            {width_css}
+            width:100%;
+            box-sizing:border-box;
             padding:{padding};
             border-radius:{border_radius};
             text-decoration:none;
@@ -56,73 +60,71 @@ def _render_login_anchor(
             background:#ffffff;
             color:#222222;
             box-shadow:0 1px 4px rgba(0,0,0,0.06);
-            box-sizing:border-box;
+            font-family:inherit;
             cursor:pointer;
-            font-family: inherit;
-        ">
-            {label}
-        </button>
+          "
+        >{label}</a>
 
         <script>
-          (function() {{
-            const btn = document.getElementById({button_id!r});
-            const authUrl = {auth_url!r};
+          (function () {{
+            const link = document.getElementById("vf-login-popup-link");
+            const href = link.href;
 
-            function openPopup() {{
+            function openLoginPopup(event) {{
+              if (event) event.preventDefault();
+
+              const rootWin = window.top || window.parent || window;
               const popupWidth = 520;
               const popupHeight = 760;
-
-              const parentWin = window.parent || window;
-              const dualScreenLeft = parentWin.screenLeft !== undefined ? parentWin.screenLeft : parentWin.screenX || 0;
-              const dualScreenTop = parentWin.screenTop !== undefined ? parentWin.screenTop : parentWin.screenY || 0;
-              const currentWidth = parentWin.innerWidth || document.documentElement.clientWidth || screen.width;
-              const currentHeight = parentWin.innerHeight || document.documentElement.clientHeight || screen.height;
+              const dualScreenLeft = rootWin.screenLeft !== undefined ? rootWin.screenLeft : (rootWin.screenX || 0);
+              const dualScreenTop = rootWin.screenTop !== undefined ? rootWin.screenTop : (rootWin.screenY || 0);
+              const currentWidth = rootWin.innerWidth || document.documentElement.clientWidth || screen.width;
+              const currentHeight = rootWin.innerHeight || document.documentElement.clientHeight || screen.height;
               const left = Math.max(0, dualScreenLeft + ((currentWidth - popupWidth) / 2));
               const top = Math.max(0, dualScreenTop + ((currentHeight - popupHeight) / 2));
               const features = [
-                'popup=yes',
-                'toolbar=no',
-                'location=yes',
-                'status=no',
-                'menubar=no',
-                'scrollbars=yes',
-                'resizable=yes',
-                'width=' + popupWidth,
-                'height=' + popupHeight,
-                'left=' + left,
-                'top=' + top
-              ].join(',');
+                "popup=yes",
+                "toolbar=no",
+                "location=yes",
+                "status=no",
+                "menubar=no",
+                "scrollbars=yes",
+                "resizable=yes",
+                "width=" + popupWidth,
+                "height=" + popupHeight,
+                "left=" + left,
+                "top=" + top
+              ].join(",");
 
               let popup = null;
               try {{
-                popup = parentWin.open(authUrl, 'vfGoogleLoginPopup', features);
-              }} catch (_err) {{
+                popup = rootWin.open(href, "vfGoogleLoginPopup", features);
+              }} catch (err) {{
                 popup = null;
               }}
 
               if (popup && !popup.closed) {{
-                popup.focus();
-                return;
+                try {{ popup.focus(); }} catch (err) {{}}
+                return false;
               }}
 
               try {{
-                parentWin.location.href = authUrl;
-              }} catch (_err) {{
-                window.location.href = authUrl;
+                rootWin.location.href = href;
+              }} catch (err) {{
+                window.location.href = href;
               }}
+              return false;
             }}
 
-            btn.addEventListener('click', function (event) {{
-              event.preventDefault();
-              openPopup();
-            }});
+            link.addEventListener("click", openLoginPopup);
+            link.onclick = openLoginPopup;
           }})();
         </script>
       </body>
     </html>
     """
 
-    components.html(popup_html, height=58 if subtle else 64)
+    components.html(html, height=58 if subtle else 64)
 
 
 def render_google_login_cta(
@@ -142,15 +144,10 @@ def render_google_login_cta(
         st.error("Não foi possível iniciar o login com Google.")
         return
 
-    _render_login_anchor(
-        label,
-        auth_url,
-        full_width=full_width,
-        subtle=subtle,
-    )
+    _render_login_popup_button(label, auth_url, subtle=subtle)
 
     if not subtle:
-        st.caption("O login abrirá em uma janela menor e o sistema continuará no mesmo fluxo.")
+        st.caption("O login abrirá em uma janela menor. Se o navegador bloquear o popup, o fluxo seguirá normalmente na aba atual.")
 
 
 def _render_logged_in_box(prefix: str) -> None:
