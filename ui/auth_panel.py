@@ -36,28 +36,61 @@ def _render_login_anchor(
     font_weight = "600" if subtle else "700"
     border_radius = "10px" if subtle else "12px"
 
-    st.markdown(
-        f"""
-        <a href="{auth_url}" style="
-            display:inline-block;
-            {width_css}
-            padding:{padding};
-            border-radius:{border_radius};
-            text-decoration:none;
-            border:1px solid #d9d9d9;
-            font-weight:{font_weight};
-            font-size:{font_size};
-            text-align:center;
-            background:#ffffff;
-            color:#222222;
-            box-shadow:0 1px 4px rgba(0,0,0,0.06);
-            box-sizing:border-box;
-        ">
-            {label}
-        </a>
-        """,
-        unsafe_allow_html=True,
-    )
+    popup_html = f"""
+    <button type="button" onclick="
+        (function() {{
+            const authUrl = {auth_url!r};
+            const popupWidth = 520;
+            const popupHeight = 760;
+            const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
+            const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
+            const currentWidth = window.innerWidth || document.documentElement.clientWidth || screen.width;
+            const currentHeight = window.innerHeight || document.documentElement.clientHeight || screen.height;
+            const left = Math.max(0, dualScreenLeft + ((currentWidth - popupWidth) / 2));
+            const top = Math.max(0, dualScreenTop + ((currentHeight - popupHeight) / 2));
+            const features = [
+                'popup=yes',
+                'toolbar=no',
+                'location=yes',
+                'status=no',
+                'menubar=no',
+                'scrollbars=yes',
+                'resizable=yes',
+                'width=' + popupWidth,
+                'height=' + popupHeight,
+                'left=' + left,
+                'top=' + top
+            ].join(',');
+            const popup = window.open(authUrl, 'vfGoogleLoginPopup', features);
+            if (popup && !popup.closed) {{
+                popup.focus();
+                return false;
+            }}
+            window.location.href = authUrl;
+            return false;
+        }})();
+        return false;
+    " style="
+        display:inline-block;
+        {width_css}
+        padding:{padding};
+        border-radius:{border_radius};
+        text-decoration:none;
+        border:1px solid #d9d9d9;
+        font-weight:{font_weight};
+        font-size:{font_size};
+        text-align:center;
+        background:#ffffff;
+        color:#222222;
+        box-shadow:0 1px 4px rgba(0,0,0,0.06);
+        box-sizing:border-box;
+        cursor:pointer;
+    ">
+        {label}
+    </button>
+    """
+
+    st.markdown(popup_html, unsafe_allow_html=True)
 
 
 def render_google_login_cta(
@@ -85,7 +118,7 @@ def render_google_login_cta(
     )
 
     if not subtle:
-        st.caption("O login será concluído nesta mesma aba.")
+        st.caption("O login abrirá em uma janela menor e o sistema continuará no mesmo fluxo.")
 
 
 def _render_logged_in_box(prefix: str) -> None:
