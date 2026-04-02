@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Optional
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from core.auth import start_google_login, sign_out_current_user
 
@@ -24,109 +23,6 @@ def _user_email() -> str:
     return st.session_state.get("auth_user_email") or "-"
 
 
-def _render_login_popup_button(
-    label: str,
-    auth_url: str,
-    *,
-    subtle: bool = False,
-) -> None:
-    padding = "8px 12px" if subtle else "12px 16px"
-    font_size = "13px" if subtle else "15px"
-    font_weight = "600" if subtle else "700"
-    border_radius = "10px" if subtle else "12px"
-
-    html = f"""
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-      </head>
-      <body style="margin:0;padding:0;background:transparent;">
-        <a
-          id="vf-login-popup-link"
-          href="{auth_url}"
-          target="vfGoogleLoginPopup"
-          style="
-            display:block;
-            width:100%;
-            box-sizing:border-box;
-            padding:{padding};
-            border-radius:{border_radius};
-            text-decoration:none;
-            border:1px solid #d9d9d9;
-            font-weight:{font_weight};
-            font-size:{font_size};
-            text-align:center;
-            background:#ffffff;
-            color:#222222;
-            box-shadow:0 1px 4px rgba(0,0,0,0.06);
-            font-family:inherit;
-            cursor:pointer;
-          "
-        >{label}</a>
-
-        <script>
-          (function () {{
-            const link = document.getElementById("vf-login-popup-link");
-            const href = link.href;
-
-            function openLoginPopup(event) {{
-              if (event) event.preventDefault();
-
-              const rootWin = window.top || window.parent || window;
-              const popupWidth = 520;
-              const popupHeight = 760;
-              const dualScreenLeft = rootWin.screenLeft !== undefined ? rootWin.screenLeft : (rootWin.screenX || 0);
-              const dualScreenTop = rootWin.screenTop !== undefined ? rootWin.screenTop : (rootWin.screenY || 0);
-              const currentWidth = rootWin.innerWidth || document.documentElement.clientWidth || screen.width;
-              const currentHeight = rootWin.innerHeight || document.documentElement.clientHeight || screen.height;
-              const left = Math.max(0, dualScreenLeft + ((currentWidth - popupWidth) / 2));
-              const top = Math.max(0, dualScreenTop + ((currentHeight - popupHeight) / 2));
-              const features = [
-                "popup=yes",
-                "toolbar=no",
-                "location=yes",
-                "status=no",
-                "menubar=no",
-                "scrollbars=yes",
-                "resizable=yes",
-                "width=" + popupWidth,
-                "height=" + popupHeight,
-                "left=" + left,
-                "top=" + top
-              ].join(",");
-
-              let popup = null;
-              try {{
-                popup = rootWin.open(href, "vfGoogleLoginPopup", features);
-              }} catch (err) {{
-                popup = null;
-              }}
-
-              if (popup && !popup.closed) {{
-                try {{ popup.focus(); }} catch (err) {{}}
-                return false;
-              }}
-
-              try {{
-                rootWin.location.href = href;
-              }} catch (err) {{
-                window.location.href = href;
-              }}
-              return false;
-            }}
-
-            link.addEventListener("click", openLoginPopup);
-            link.onclick = openLoginPopup;
-          }})();
-        </script>
-      </body>
-    </html>
-    """
-
-    components.html(html, height=58 if subtle else 64)
-
-
 def render_google_login_cta(
     label: str = "Entrar com Google",
     *,
@@ -144,10 +40,18 @@ def render_google_login_cta(
         st.error("Não foi possível iniciar o login com Google.")
         return
 
-    _render_login_popup_button(label, auth_url, subtle=subtle)
-
-    if not subtle:
-        st.caption("O login abrirá em uma janela menor. Se o navegador bloquear o popup, o fluxo seguirá normalmente na aba atual.")
+    kind = "secondary" if subtle else "primary"
+    clicked = st.button(
+        label,
+        use_container_width=full_width if full_width else True,
+        type=kind,
+        key=f"google_login_cta::{label}::{force_select_account}::{subtle}",
+    )
+    if clicked:
+        st.markdown(
+            f'<meta http-equiv="refresh" content="0; url={auth_url}">',
+            unsafe_allow_html=True,
+        )
 
 
 def _render_logged_in_box(prefix: str) -> None:
