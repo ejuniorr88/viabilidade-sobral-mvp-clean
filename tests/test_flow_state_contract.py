@@ -1,6 +1,9 @@
-"""Compat shim for migrated runtime flow-state contract tests.
+"""Legacy compatibility shim for the migrated runtime flow-state contract tests.
 
-This file preserves the old path while delegating to the new canonical test module:
+Keep this thin wrapper only while external runners or old references still point to:
+tests/test_flow_state_contract.py
+
+The canonical contract now lives in:
 tests/runtime/test_flow_state_contract.py
 """
 
