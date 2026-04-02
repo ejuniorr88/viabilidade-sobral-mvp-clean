@@ -36,9 +36,17 @@ def _render_login_anchor(
     font_weight = "600" if subtle else "700"
     border_radius = "10px" if subtle else "12px"
 
+    popup_js = (
+        "var w=520,h=760,l=(screen.width-w)/2,t=(screen.height-h)/2;"
+        "var p=window.open(this.href,'vfGoogleLoginPopup',"
+        "'popup=yes,toolbar=no,location=yes,status=no,menubar=no,scrollbars=yes,resizable=yes,'+"
+        "'width='+w+',height='+h+',left='+l+',top='+t);"
+        "if(p){try{p.focus();}catch(e){} return false;} return true;"
+    )
+
     st.markdown(
         f"""
-        <a href="{auth_url}" style="
+        <a href="{auth_url}" target="vfGoogleLoginPopup" onclick="{popup_js}" style="
             display:inline-block;
             {width_css}
             padding:{padding};
