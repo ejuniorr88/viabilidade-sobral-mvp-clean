@@ -90,6 +90,7 @@
     }
   }
 
+
 function continueToSystemWithToken(accessToken) {
   const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
   streamlitUrl.searchParams.set("ext_access_token", accessToken);
@@ -107,7 +108,8 @@ function continueToSystemWithToken(accessToken) {
   window.location.href = streamlitUrl.toString();
 }
 
-  async function handleInitialCallback() {
+async function handleInitialCallback() {
+
     if (window.location.hash && window.location.hash.includes("access_token=")) {
       setStatus("Processando retorno do Google...", "muted");
       window.setTimeout(refreshState, 300);
