@@ -57,23 +57,22 @@
     return response.json();
   }
 
-function continueToSystemWithToken(accessToken) {
-  const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
-  streamlitUrl.searchParams.set("ext_access_token", accessToken);
 
-  if (window.opener && !window.opener.closed) {
+  function notifyParentLogin(accessToken) {
     try {
-      window.opener.location.href = streamlitUrl.toString();
-      window.close();
-      return true;
-    } catch (_err) {
-      // fallback below
-    }
+      const channel = new BroadcastChannel("vf-auth-popup");
+      channel.postMessage({ type: "vf_auth_success", access_token: accessToken });
+      channel.close();
+    } catch (_err) {}
+
+    try {
+      localStorage.setItem("vf_auth_popup_token", accessToken);
+    } catch (_err) {}
   }
 
-  window.location.href = streamlitUrl.toString();
-  return false;
-}
+  function isPopupFlow() {
+    return !!window.opener || window.name === "vfGoogleLoginPopup";
+  }
 
   async function refreshState() {
     const { data, error } = await supabaseClient.auth.getSession();
@@ -101,6 +100,15 @@ function continueToSystemWithToken(accessToken) {
 
       if (window.location.hash && window.location.hash.includes("access_token=")) {
         history.replaceState(null, "", window.location.pathname);
+      }
+
+      if (isPopupFlow()) {
+        notifyParentLogin(session.access_token);
+        setStatus("Login concluído. Voltando para o sistema...", "ok");
+        window.setTimeout(() => {
+          try { window.close(); } catch (_err) {}
+        }, 300);
+        return;
       }
     } catch (err) {
       setLoggedOutView();
@@ -155,6 +163,14 @@ function continueToSystemWithToken(accessToken) {
         const { data, error } = await supabaseClient.auth.getSession();
         if (error || !data?.session?.access_token) {
           throw new Error(error?.message || "Sessão ausente para continuar.");
+        }
+
+        if (isPopupFlow()) {
+          notifyParentLogin(data.session.access_token);
+          window.setTimeout(() => {
+            try { window.close(); } catch (_err) {}
+          }, 300);
+          return;
         }
 
         const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
