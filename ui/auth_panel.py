@@ -5,6 +5,7 @@ from typing import Optional
 import streamlit as st
 import streamlit.components.v1 as components
 
+from components.auth_popup_component import render_auth_popup_bridge
 from core.auth import start_google_login, sign_out_current_user
 
 
@@ -37,32 +38,44 @@ def _render_popup_return_bridge() -> None:
 
                 function redirectMain(token) {
                   if (!token) return;
-                  try {
-                    const target = new URL(window.parent.location.href);
-                    target.searchParams.set("ext_access_token", token);
-                    window.parent.location.href = target.toString();
-                    return;
-                  } catch (_err) {}
-                  try {
-                    const target = new URL(window.top.location.href);
-                    target.searchParams.set("ext_access_token", token);
-                    window.top.location.href = target.toString();
-                    return;
-                  } catch (_err) {}
+
+                  function applyRedirect(targetWindow) {
+                    if (!targetWindow || !targetWindow.location) return false;
+                    try {
+                      const target = new URL(targetWindow.location.href);
+                      target.searchParams.set("ext_access_token", token);
+                      targetWindow.location.href = target.toString();
+                      return true;
+                    } catch (_err) {
+                      return false;
+                    }
+                  }
+
+                  if (applyRedirect(window.parent)) return;
+                  applyRedirect(window.top);
                 }
 
                 function receive(dataToken) {
                   if (!dataToken) return;
-                  try { localStorage.removeItem("vf_auth_popup_token"); } catch (_err) {}
                   redirectMain(dataToken);
                 }
+
+                function handlePayload(data) {
+                  if (!data || data.type !== "vf_auth_success" || !data.access_token) return;
+                  receive(data.access_token);
+                }
+
+                try {
+                  const hostWindow = window.parent && window.parent !== window ? window.parent : window;
+                  hostWindow.addEventListener("message", function (event) {
+                    handlePayload(event && event.data ? event.data : null);
+                  });
+                } catch (_err) {}
 
                 try {
                   const bc = new BroadcastChannel("vf-auth-popup");
                   bc.onmessage = function (event) {
-                    const data = event && event.data ? event.data : null;
-                    if (!data || data.type !== "vf_auth_success" || !data.access_token) return;
-                    receive(data.access_token);
+                    handlePayload(event && event.data ? event.data : null);
                   };
                 } catch (_err) {}
 
@@ -92,19 +105,11 @@ def _render_login_anchor(
     font_weight = "600" if subtle else "700"
     border_radius = "10px" if subtle else "12px"
 
-    popup_js = (
-        "var w=520,h=760;"
-        "var l=(window.screenX||window.screenLeft||0)+(((window.outerWidth||screen.width)-w)/2);"
-        "var t=(window.screenY||window.screenTop||0)+(((window.outerHeight||screen.height)-h)/2);"
-        "var p=window.open('about:blank','vfGoogleLoginPopup',"
-        "'popup=yes,toolbar=no,location=yes,status=no,menubar=no,scrollbars=yes,resizable=yes,width='+w+',height='+h+',left='+l+',top='+t);"
-        "if(p){try{p.location.href=this.href; p.focus();}catch(e){window.location.href=this.href;} return false;}"
-        "return true;"
-    )
+    render_auth_popup_bridge()
 
     st.markdown(
         f"""
-        <a href="{auth_url}" onclick="{popup_js}" style="
+        <a href="{auth_url}" data-vf-auth-popup="1" target="vfGoogleLoginPopup" style="
             display:inline-block;
             {width_css}
             padding:{padding};
