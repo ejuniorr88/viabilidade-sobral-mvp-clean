@@ -59,15 +59,17 @@
 
 
   function notifyParentLogin(accessToken) {
+    const payload = { type: "vf_auth_success", access_token: accessToken };
+
     try {
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: "vf_auth_success", access_token: accessToken }, "*");
+        window.opener.postMessage(payload, "*");
       }
     } catch (_err) {}
 
     try {
       const channel = new BroadcastChannel("vf-auth-popup");
-      channel.postMessage({ type: "vf_auth_success", access_token: accessToken });
+      channel.postMessage(payload);
       channel.close();
     } catch (_err) {}
 
