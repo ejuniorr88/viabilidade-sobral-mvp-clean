@@ -52,18 +52,11 @@
   }
 
   function openPopup(rootWin, href) {
-    const popup = rootWin.open("", "vfGoogleLoginPopup", popupFeatures(rootWin, 520, 760));
+    const popup = rootWin.open(href, "vfGoogleLoginPopup", popupFeatures(rootWin, 520, 760));
     if (popup && !popup.closed) {
       try {
         popup.focus();
-        popup.location.href = href;
-      } catch (_err) {
-        try {
-          rootWin.location.href = href;
-        } catch (__err) {
-          window.location.href = href;
-        }
-      }
+      } catch (_err) {}
       return true;
     }
 
