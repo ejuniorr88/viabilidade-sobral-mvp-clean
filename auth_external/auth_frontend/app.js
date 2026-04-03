@@ -59,9 +59,18 @@
 
 
   function notifyParentLogin(accessToken) {
+    const payload = { type: "vf_auth_success", access_token: accessToken };
+
+    try {
+      const targetOrigin = new URL(cfg.STREAMLIT_APP_URL).origin;
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(payload, targetOrigin);
+      }
+    } catch (_err) {}
+
     try {
       const channel = new BroadcastChannel("vf-auth-popup");
-      channel.postMessage({ type: "vf_auth_success", access_token: accessToken });
+      channel.postMessage(payload);
       channel.close();
     } catch (_err) {}
 
