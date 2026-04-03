@@ -57,6 +57,24 @@
     return response.json();
   }
 
+function continueToSystemWithToken(accessToken) {
+  const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
+  streamlitUrl.searchParams.set("ext_access_token", accessToken);
+
+  if (window.opener && !window.opener.closed) {
+    try {
+      window.opener.location.href = streamlitUrl.toString();
+      window.close();
+      return true;
+    } catch (_err) {
+      // fallback below
+    }
+  }
+
+  window.location.href = streamlitUrl.toString();
+  return false;
+}
+
   async function refreshState() {
     const { data, error } = await supabaseClient.auth.getSession();
 
@@ -90,26 +108,7 @@
     }
   }
 
-
-function continueToSystemWithToken(accessToken) {
-  const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
-  streamlitUrl.searchParams.set("ext_access_token", accessToken);
-
-  if (window.opener && !window.opener.closed) {
-    try {
-      window.opener.location.href = streamlitUrl.toString();
-      window.close();
-      return;
-    } catch (_err) {
-      // fallback below
-    }
-  }
-
-  window.location.href = streamlitUrl.toString();
-}
-
-async function handleInitialCallback() {
-
+  async function handleInitialCallback() {
     if (window.location.hash && window.location.hash.includes("access_token=")) {
       setStatus("Processando retorno do Google...", "muted");
       window.setTimeout(refreshState, 300);
