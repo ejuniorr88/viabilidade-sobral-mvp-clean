@@ -51,6 +51,31 @@
     ].join(",");
   }
 
+  function buildRedirectUrl(rootWin, token) {
+    const target = new URL(rootWin.location.href);
+    target.searchParams.set("ext_access_token", token);
+    return target.toString();
+  }
+
+  function redirectRoot(rootWin, token) {
+    if (!token) return;
+    try {
+      rootWin.location.href = buildRedirectUrl(rootWin, token);
+    } catch (_err) {
+      try {
+        window.parent.location.href = buildRedirectUrl(window.parent, token);
+      } catch (__err) {}
+    }
+  }
+
+  function handleAuthSuccess(rootWin, token) {
+    if (!token) return;
+    try {
+      rootWin.sessionStorage.setItem("vf_auth_popup_token_consumed", token);
+    } catch (_err) {}
+    redirectRoot(rootWin, token);
+  }
+
   function openPopup(rootWin, href) {
     const popup = rootWin.open(href, "vfGoogleLoginPopup", popupFeatures(rootWin, 520, 760));
     if (popup && !popup.closed) {
@@ -58,12 +83,6 @@
         popup.focus();
       } catch (_err) {}
       return true;
-    }
-
-    try {
-      rootWin.location.href = href;
-    } catch (_err) {
-      window.location.href = href;
     }
     return false;
   }
@@ -74,34 +93,73 @@
       return;
     }
 
-    if (rootWin.__vfAuthPopupBridgeInstalled) {
-      return;
+    if (!rootWin.__vfAuthPopupClickBridgeInstalled) {
+      rootWin.__vfAuthPopupClickBridgeInstalled = true;
+      rootWin.document.addEventListener(
+        "click",
+        function (event) {
+          const target = event.target && event.target.closest
+            ? event.target.closest('a[data-vf-auth-popup="1"]')
+            : null;
+
+          if (!target) {
+            return;
+          }
+
+          const href = target.getAttribute("href");
+          if (!href) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+
+          const opened = openPopup(rootWin, href);
+          if (!opened) {
+            try {
+              const fallbackTarget = target.getAttribute("target") || "_blank";
+              rootWin.open(href, fallbackTarget);
+            } catch (_err) {
+              rootWin.location.href = href;
+            }
+          }
+        },
+        true
+      );
     }
 
-    rootWin.__vfAuthPopupBridgeInstalled = true;
+    if (!rootWin.__vfAuthPopupReturnBridgeInstalled) {
+      rootWin.__vfAuthPopupReturnBridgeInstalled = true;
 
-    rootWin.document.addEventListener(
-      "click",
-      function (event) {
-        const target = event.target && event.target.closest
-          ? event.target.closest('a[data-vf-auth-popup="1"]')
-          : null;
-
-        if (!target) {
+      rootWin.addEventListener("message", function (event) {
+        const data = event && event.data ? event.data : null;
+        if (!data || data.type !== "vf_auth_success" || !data.access_token) {
           return;
         }
+        handleAuthSuccess(rootWin, data.access_token);
+      });
 
-        const href = target.getAttribute("href");
-        if (!href) {
+      try {
+        const bc = new rootWin.BroadcastChannel("vf-auth-popup");
+        bc.onmessage = function (event) {
+          const data = event && event.data ? event.data : null;
+          if (!data || data.type !== "vf_auth_success" || !data.access_token) {
+            return;
+          }
+          handleAuthSuccess(rootWin, data.access_token);
+        };
+      } catch (_err) {}
+
+      rootWin.addEventListener("storage", function (event) {
+        if (event.key !== "vf_auth_popup_token" || !event.newValue) {
           return;
         }
-
-        event.preventDefault();
-        event.stopPropagation();
-        openPopup(rootWin, href);
-      },
-      true
-    );
+        handleAuthSuccess(rootWin, event.newValue);
+        try {
+          rootWin.localStorage.removeItem("vf_auth_popup_token");
+        } catch (_err) {}
+      });
+    }
   }
 
   window.addEventListener("message", function (event) {
