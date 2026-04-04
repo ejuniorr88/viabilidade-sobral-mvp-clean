@@ -11,7 +11,6 @@
     logoutBtn: document.getElementById("logoutBtn"),
     continueBtn: document.getElementById("continueBtn"),
     status: document.getElementById("status"),
-    userBox: document.getElementById("userBox"),
   };
 
   function setStatus(text, kind = "muted") {
@@ -24,20 +23,12 @@
     if (els.loginBtn) els.loginBtn.hidden = false;
     if (els.logoutBtn) els.logoutBtn.hidden = true;
     if (els.continueBtn) els.continueBtn.hidden = true;
-    if (els.userBox) {
-      els.userBox.hidden = true;
-      els.userBox.textContent = "";
-    }
   }
 
-  function setLoggedInView(user) {
+  function setLoggedInView(_user) {
     if (els.loginBtn) els.loginBtn.hidden = true;
     if (els.logoutBtn) els.logoutBtn.hidden = false;
     if (els.continueBtn) els.continueBtn.hidden = false;
-    if (els.userBox) {
-      els.userBox.hidden = false;
-      els.userBox.textContent = JSON.stringify(user, null, 2);
-    }
   }
 
   async function verifyWithGateway(accessToken) {
@@ -57,42 +48,8 @@
     return response.json();
   }
 
-  function isPopupFlow() {
-    return !!window.opener || window.name === "vfGoogleLoginPopup";
-  }
 
-  function hasOAuthCallbackHash() {
-    return !!(window.location.hash && window.location.hash.includes("access_token="));
-  }
-
-  function waitForParentAck(timeoutMs) {
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = (value) => {
-        if (done) return;
-        done = true;
-        window.removeEventListener("message", onMessage);
-        window.clearTimeout(timer);
-        resolve(value);
-      };
-      const onMessage = (event) => {
-        const data = event && event.data ? event.data : null;
-        if (data && data.type === "vf_auth_ack") {
-          finish(true);
-        }
-      };
-      const timer = window.setTimeout(() => finish(false), Number(timeoutMs || 4000));
-      window.addEventListener("message", onMessage);
-    });
-  }
-
-  async function notifyParentAndMaybeClose(accessToken) {
-    try {
-      if (window.opener && typeof window.opener.postMessage === "function") {
-        window.opener.postMessage({ type: "vf_auth_success", access_token: accessToken }, "*");
-      }
-    } catch (_err) {}
-
+  function notifyParentLogin(accessToken) {
     try {
       const channel = new BroadcastChannel("vf-auth-popup");
       channel.postMessage({ type: "vf_auth_success", access_token: accessToken });
@@ -102,18 +59,10 @@
     try {
       localStorage.setItem("vf_auth_popup_token", accessToken);
     } catch (_err) {}
+  }
 
-    const acked = await waitForParentAck(4000);
-    if (acked) {
-      setStatus("Login concluído. Voltando para o sistema...", "ok");
-      window.setTimeout(() => {
-        try { window.close(); } catch (_err) {}
-      }, 120);
-      return true;
-    }
-
-    setStatus("Login concluído. Se a janela principal não atualizar, volte manualmente ao sistema.", "ok");
-    return false;
+  function isPopupFlow() {
+    return !!window.opener || window.name === "vfGoogleLoginPopup";
   }
 
   async function refreshState() {
@@ -140,12 +89,16 @@
       setLoggedInView(verified.user);
       setStatus("Login validado com sucesso. Agora você já pode seguir para o sistema.", "ok");
 
-      if (hasOAuthCallbackHash()) {
+      if (window.location.hash && window.location.hash.includes("access_token=")) {
         history.replaceState(null, "", window.location.pathname);
       }
 
-      if (isPopupFlow() && hasOAuthCallbackHash()) {
-        await notifyParentAndMaybeClose(session.access_token);
+      if (isPopupFlow()) {
+        notifyParentLogin(session.access_token);
+        setStatus("Login concluído. Voltando para o sistema...", "ok");
+        window.setTimeout(() => {
+          try { window.close(); } catch (_err) {}
+        }, 300);
         return;
       }
     } catch (err) {
@@ -155,7 +108,7 @@
   }
 
   async function handleInitialCallback() {
-    if (hasOAuthCallbackHash()) {
+    if (window.location.hash && window.location.hash.includes("access_token=")) {
       setStatus("Processando retorno do Google...", "muted");
       window.setTimeout(refreshState, 300);
       return;
@@ -204,7 +157,10 @@
         }
 
         if (isPopupFlow()) {
-          await notifyParentAndMaybeClose(data.session.access_token);
+          notifyParentLogin(data.session.access_token);
+          window.setTimeout(() => {
+            try { window.close(); } catch (_err) {}
+          }, 300);
           return;
         }
 
