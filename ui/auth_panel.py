@@ -31,7 +31,6 @@ def render_google_login_cta(
     message: Optional[str] = None,
     force_select_account: bool = False,
     subtle: bool = False,
-    key_suffix: str = "default",
 ) -> None:
     auth_url = start_google_login(force_select_account=force_select_account)
 
@@ -47,7 +46,7 @@ def render_google_login_cta(
         auth_url=auth_url,
         full_width=full_width,
         subtle=subtle,
-        key=f"vf_auth_popup_button_{key_suffix}_{'subtle' if subtle else 'main'}_{'full' if full_width else 'auto'}",
+        key=f"auth_popup_button_{label}_{'full' if full_width else 'auto'}_{'subtle' if subtle else 'regular'}_{'select' if force_select_account else 'default'}",
     )
 
     if not subtle:
@@ -70,7 +69,6 @@ def _render_logged_in_box(prefix: str) -> None:
             full_width=True,
             force_select_account=True,
             subtle=True,
-            key_suffix=f"{prefix}_switch",
         )
 
 
@@ -79,7 +77,6 @@ def _render_logged_out_box(prefix: str) -> None:
         "Entrar com Google",
         full_width=True,
         force_select_account=False,
-        key_suffix=f"{prefix}_login",
     )
 
 
