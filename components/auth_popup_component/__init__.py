@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import streamlit.components.v1 as components
 
@@ -20,7 +20,8 @@ def render_auth_popup_button(
     full_width: bool = False,
     subtle: bool = False,
     key: str = "vf_auth_popup_button",
-) -> Optional[dict]:
+) -> Optional[dict[str, Any]]:
+    height = 48 if subtle else 56
     return _auth_popup_component(
         label=label,
         auth_url=auth_url,
@@ -28,4 +29,5 @@ def render_auth_popup_button(
         subtle=subtle,
         default=None,
         key=key,
+        height=height,
     )
