@@ -1,0 +1,118 @@
+(function () {
+  const root = document.getElementById("root");
+  let currentArgs = { auth_url: "", label: "Entrar com Google", subtle: false };
+  let activeMessageHandler = null;
+
+  function sendMessageToStreamlitClient(type, data) {
+    const outData = Object.assign(
+      {
+        isStreamlitMessage: true,
+        type: type,
+      },
+      data || {}
+    );
+    window.parent.postMessage(outData, "*");
+  }
+
+  function setComponentValue(value) {
+    sendMessageToStreamlitClient("streamlit:setComponentValue", { value: value });
+  }
+
+  function setFrameHeight(height) {
+    sendMessageToStreamlitClient("streamlit:setFrameHeight", { height: height });
+  }
+
+  function popupFeatures(width, height) {
+    const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX || 0;
+    const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY || 0;
+    const currentWidth = window.innerWidth || document.documentElement.clientWidth || screen.width;
+    const currentHeight = window.innerHeight || document.documentElement.clientHeight || screen.height;
+    const left = Math.max(0, dualScreenLeft + (currentWidth - width) / 2);
+    const top = Math.max(0, dualScreenTop + (currentHeight - height) / 2);
+
+    return [
+      "popup=yes",
+      "toolbar=no",
+      "location=yes",
+      "status=no",
+      "menubar=no",
+      "scrollbars=yes",
+      "resizable=yes",
+      "width=" + width,
+      "height=" + height,
+      "left=" + Math.round(left),
+      "top=" + Math.round(top),
+    ].join(",");
+  }
+
+  function cleanupMessageHandler() {
+    if (activeMessageHandler) {
+      window.removeEventListener("message", activeMessageHandler);
+      activeMessageHandler = null;
+    }
+  }
+
+  function handleAuthSuccess(event) {
+    const data = event && event.data ? event.data : null;
+    if (!data || data.type !== "vf_auth_success" || !data.access_token) {
+      return;
+    }
+
+    setComponentValue(data.access_token);
+
+    try {
+      if (event.source && typeof event.source.postMessage === "function") {
+        event.source.postMessage({ type: "vf_auth_ack" }, "*");
+      }
+    } catch (_err) {}
+
+    cleanupMessageHandler();
+  }
+
+  function openPopup(url) {
+    cleanupMessageHandler();
+    activeMessageHandler = handleAuthSuccess;
+    window.addEventListener("message", activeMessageHandler);
+
+    const popup = window.open(url, "vfGoogleLoginPopup", popupFeatures(520, 760));
+    if (popup && !popup.closed) {
+      try { popup.focus(); } catch (_err) {}
+      return;
+    }
+
+    window.location.href = url;
+  }
+
+  function render() {
+    const subtle = !!currentArgs.subtle;
+    const label = currentArgs.label || "Entrar com Google";
+    root.innerHTML = "";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = subtle ? "auth-btn subtle" : "auth-btn";
+    button.textContent = label;
+    button.addEventListener("click", function () {
+      const authUrl = currentArgs.auth_url;
+      if (!authUrl) {
+        return;
+      }
+      openPopup(authUrl);
+    });
+
+    root.appendChild(button);
+    setFrameHeight(subtle ? 44 : 54);
+  }
+
+  function onRenderEvent(event) {
+    if (!event || !event.data || event.data.type !== "streamlit:render") {
+      return;
+    }
+    currentArgs = Object.assign({}, currentArgs, event.data.args || {});
+    render();
+  }
+
+  window.addEventListener("message", onRenderEvent);
+  sendMessageToStreamlitClient("streamlit:componentReady", { apiVersion: 1 });
+  setFrameHeight(54);
+})();

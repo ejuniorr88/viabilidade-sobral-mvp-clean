@@ -4,6 +4,7 @@ from typing import Optional
 
 import streamlit as st
 
+from components.auth_popup_component import render_auth_popup_button
 from core.auth import start_google_login, sign_out_current_user
 
 
@@ -23,43 +24,6 @@ def _user_email() -> str:
     return st.session_state.get("auth_user_email") or "-"
 
 
-def _render_login_anchor(
-    label: str,
-    auth_url: str,
-    *,
-    full_width: bool = False,
-    subtle: bool = False,
-) -> None:
-    width_css = "width:100%;" if full_width else ""
-    padding = "8px 12px" if subtle else "12px 16px"
-    font_size = "13px" if subtle else "15px"
-    font_weight = "600" if subtle else "700"
-    border_radius = "10px" if subtle else "12px"
-
-    st.markdown(
-        f"""
-        <a href="{auth_url}" style="
-            display:inline-block;
-            {width_css}
-            padding:{padding};
-            border-radius:{border_radius};
-            text-decoration:none;
-            border:1px solid #d9d9d9;
-            font-weight:{font_weight};
-            font-size:{font_size};
-            text-align:center;
-            background:#ffffff;
-            color:#222222;
-            box-shadow:0 1px 4px rgba(0,0,0,0.06);
-            box-sizing:border-box;
-        ">
-            {label}
-        </a>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def render_google_login_cta(
     label: str = "Entrar com Google",
     *,
@@ -77,15 +41,19 @@ def render_google_login_cta(
         st.error("Não foi possível iniciar o login com Google.")
         return
 
-    _render_login_anchor(
-        label,
-        auth_url,
-        full_width=full_width,
+    token = render_auth_popup_button(
+        auth_url=auth_url,
+        label=label,
         subtle=subtle,
+        key=f"auth_google_{'subtle' if subtle else 'main'}_{label.lower().replace(' ', '_')}",
     )
 
+    if token:
+        st.query_params["ext_access_token"] = token
+        st.rerun()
+
     if not subtle:
-        st.caption("O login será concluído nesta mesma aba.")
+        st.caption("O login abrirá em uma janela popup segura.")
 
 
 def _render_logged_in_box(prefix: str) -> None:
@@ -120,6 +88,7 @@ def render_google_login_top() -> None:
         _render_logged_in_box("top")
     else:
         _render_logged_out_box("top")
+
 
 
 def render_google_login_box(
