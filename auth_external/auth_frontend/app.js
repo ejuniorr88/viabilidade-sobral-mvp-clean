@@ -57,9 +57,38 @@
     return response.json();
   }
 
-  function notifyParentLogin(accessToken) {
+  function isPopupFlow() {
+    return !!window.opener || window.name === "vfGoogleLoginPopup";
+  }
+
+  function hasOAuthCallbackHash() {
+    return !!(window.location.hash && window.location.hash.includes("access_token="));
+  }
+
+  function waitForParentAck(timeoutMs) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        window.removeEventListener("message", onMessage);
+        window.clearTimeout(timer);
+        resolve(value);
+      };
+      const onMessage = (event) => {
+        const data = event && event.data ? event.data : null;
+        if (data && data.type === "vf_auth_ack") {
+          finish(true);
+        }
+      };
+      const timer = window.setTimeout(() => finish(false), Number(timeoutMs || 4000));
+      window.addEventListener("message", onMessage);
+    });
+  }
+
+  async function notifyParentAndMaybeClose(accessToken) {
     try {
-      if (window.opener && !window.opener.closed) {
+      if (window.opener && typeof window.opener.postMessage === "function") {
         window.opener.postMessage({ type: "vf_auth_success", access_token: accessToken }, "*");
       }
     } catch (_err) {}
@@ -73,51 +102,18 @@
     try {
       localStorage.setItem("vf_auth_popup_token", accessToken);
     } catch (_err) {}
-  }
 
-  function waitForParentAck(timeoutMs = 4000) {
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = (ok) => {
-        if (done) return;
-        done = true;
-        try { window.removeEventListener("message", onMessage); } catch (_err) {}
-        resolve(ok);
-      };
-
-      const onMessage = (event) => {
-        const data = event && event.data ? event.data : null;
-        if (data && data.type === "vf_auth_ack") {
-          finish(true);
-        }
-      };
-
-      window.addEventListener("message", onMessage);
-      window.setTimeout(() => finish(false), timeoutMs);
-    });
-  }
-
-  function isPopupFlow() {
-    return !!window.opener || window.name === "vfGoogleLoginPopup";
-  }
-
-  function hasOAuthCallbackHash() {
-    return !!(window.location.hash && window.location.hash.includes("access_token="));
-  }
-
-  async function notifyParentAndMaybeClose(accessToken) {
-    notifyParentLogin(accessToken);
-    setStatus("Login concluído. Avisando a janela principal...", "ok");
     const acked = await waitForParentAck(4000);
     if (acked) {
       setStatus("Login concluído. Voltando para o sistema...", "ok");
       window.setTimeout(() => {
         try { window.close(); } catch (_err) {}
-      }, 250);
-      return;
+      }, 120);
+      return true;
     }
 
-    setStatus("Login concluído. Se a janela principal não atualizar sozinha, clique em continuar.", "ok");
+    setStatus("Login concluído. Se a janela principal não atualizar, volte manualmente ao sistema.", "ok");
+    return false;
   }
 
   async function refreshState() {
