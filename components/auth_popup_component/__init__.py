@@ -13,5 +13,17 @@ _auth_popup_component = components.declare_component(
 )
 
 
-def render_auth_popup_bridge(*, key: str = "vf_auth_popup_bridge") -> Optional[dict]:
-    return _auth_popup_component(default=None, key=key)
+def render_auth_popup_button(
+    *,
+    auth_url: str,
+    label: str = "Entrar com Google",
+    subtle: bool = False,
+    key: str | None = None,
+) -> Optional[str]:
+    return _auth_popup_component(
+        auth_url=auth_url,
+        label=label,
+        subtle=bool(subtle),
+        default=None,
+        key=key,
+    )
