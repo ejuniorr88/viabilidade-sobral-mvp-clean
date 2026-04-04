@@ -4,7 +4,7 @@ from typing import Optional
 
 import streamlit as st
 
-from components.auth_popup_component import render_auth_popup_bridge
+from components.auth_popup_component import render_auth_popup_button
 from core.auth import start_google_login, sign_out_current_user
 
 
@@ -24,51 +24,6 @@ def _user_email() -> str:
     return st.session_state.get("auth_user_email") or "-"
 
 
-def _render_login_anchor(
-    label: str,
-    auth_url: str,
-    *,
-    full_width: bool = False,
-    subtle: bool = False,
-) -> None:
-    width_css = "width:100%;" if full_width else ""
-    padding = "8px 12px" if subtle else "12px 16px"
-    font_size = "13px" if subtle else "15px"
-    font_weight = "600" if subtle else "700"
-    border_radius = "10px" if subtle else "12px"
-
-    render_auth_popup_bridge()
-
-    st.markdown(
-        f"""
-        <a
-            href="{auth_url}"
-            target="_blank"
-            rel="noopener noreferrer"
-            data-vf-auth-popup="1"
-            style="
-                display:inline-block;
-                {width_css}
-                padding:{padding};
-                border-radius:{border_radius};
-                text-decoration:none;
-                border:1px solid #d9d9d9;
-                font-weight:{font_weight};
-                font-size:{font_size};
-                text-align:center;
-                background:#ffffff;
-                color:#222222;
-                box-shadow:0 1px 4px rgba(0,0,0,0.06);
-                box-sizing:border-box;
-            "
-        >
-            {label}
-        </a>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def render_google_login_cta(
     label: str = "Entrar com Google",
     *,
@@ -76,6 +31,7 @@ def render_google_login_cta(
     message: Optional[str] = None,
     force_select_account: bool = False,
     subtle: bool = False,
+    key_suffix: str = "default",
 ) -> None:
     auth_url = start_google_login(force_select_account=force_select_account)
 
@@ -86,11 +42,12 @@ def render_google_login_cta(
         st.error("Não foi possível iniciar o login com Google.")
         return
 
-    _render_login_anchor(
-        label,
-        auth_url,
+    render_auth_popup_button(
+        label=label,
+        auth_url=auth_url,
         full_width=full_width,
         subtle=subtle,
+        key=f"vf_auth_popup_button_{key_suffix}_{'subtle' if subtle else 'main'}_{'full' if full_width else 'auto'}",
     )
 
     if not subtle:
@@ -113,6 +70,7 @@ def _render_logged_in_box(prefix: str) -> None:
             full_width=True,
             force_select_account=True,
             subtle=True,
+            key_suffix=f"{prefix}_switch",
         )
 
 
@@ -121,6 +79,7 @@ def _render_logged_out_box(prefix: str) -> None:
         "Entrar com Google",
         full_width=True,
         force_select_account=False,
+        key_suffix=f"{prefix}_login",
     )
 
 
