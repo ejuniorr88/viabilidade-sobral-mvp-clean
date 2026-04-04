@@ -2,20 +2,56 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <title>Auth Popup Bridge</title>
+    <title>Auth Popup Button</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       html, body {
         margin: 0;
         padding: 0;
-        width: 0;
-        height: 0;
+        width: 100%;
+        min-height: 100%;
         overflow: hidden;
         background: transparent;
+        font-family: Arial, sans-serif;
+      }
+      #root {
+        width: 100%;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      .auth-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 44px;
+        box-sizing: border-box;
+        border: 1px solid #d9d9d9;
+        border-radius: 12px;
+        background: #ffffff;
+        color: #222222;
+        text-decoration: none;
+        font-weight: 700;
+        font-size: 15px;
+        padding: 12px 16px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        cursor: pointer;
+        user-select: none;
+      }
+      .auth-btn.subtle {
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 13px;
+        padding: 8px 12px;
+      }
+      .auth-btn:focus {
+        outline: 2px solid rgba(59,130,246,0.35);
+        outline-offset: 2px;
       }
     </style>
   </head>
   <body>
+    <div id="root"></div>
     <script src="./main.js"></script>
   </body>
 </html>
