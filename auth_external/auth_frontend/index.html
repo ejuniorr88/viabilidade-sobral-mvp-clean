@@ -12,8 +12,7 @@
         <p class="eyebrow">Viabilidade Fácil</p>
         <h1>Entrar com Google</h1>
         <p class="subtitle">
-          Faça login com sua conta Google para acessar os recursos da plataforma.<br />
-          Após o login, aguarde alguns segundos enquanto a autenticação é concluída na plataforma.
+          Este módulo externo cuida do login fora do Streamlit para evitar os bugs de PKCE e callback.
         </p>
 
         <button id="loginBtn" class="primary">Continuar com Google</button>
@@ -21,8 +20,7 @@
         <button id="continueBtn" class="primary" hidden>Continuar para o sistema</button>
 
         <div id="status" class="status muted">Aguardando ação.</div>
-        <pre id="userBox" class="user-box" hidden></pre>
-      </section>
+</section>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
