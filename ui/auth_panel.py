@@ -6,6 +6,7 @@ import streamlit as st
 
 from components.auth_popup_component import render_auth_popup_button
 from core.auth import start_google_login, sign_out_current_user
+from ui.auth_login_keys import build_auth_popup_key
 
 
 def _is_logged_in() -> bool:
@@ -31,6 +32,7 @@ def render_google_login_cta(
     message: Optional[str] = None,
     force_select_account: bool = False,
     subtle: bool = False,
+    context: str = "default",
 ) -> None:
     auth_url = start_google_login(force_select_account=force_select_account)
 
@@ -45,7 +47,12 @@ def render_google_login_cta(
         auth_url=auth_url,
         label=label,
         subtle=subtle,
-        key=f"auth_google_{'subtle' if subtle else 'main'}_{label.lower().replace(' ', '_')}",
+        key=build_auth_popup_key(
+            context=context,
+            label=label,
+            subtle=subtle,
+            force_select_account=force_select_account,
+        ),
     )
 
     if token:
@@ -72,6 +79,7 @@ def _render_logged_in_box(prefix: str) -> None:
             full_width=True,
             force_select_account=True,
             subtle=True,
+            context=f"{prefix}_swap_user",
         )
 
 
@@ -80,6 +88,7 @@ def _render_logged_out_box(prefix: str) -> None:
         "Entrar com Google",
         full_width=True,
         force_select_account=False,
+        context=f"{prefix}_login",
     )
 
 
@@ -95,6 +104,7 @@ def render_google_login_box(
     *,
     title: str = "Faça login para continuar",
     message: Optional[str] = None,
+    context: str = "box",
 ) -> None:
     st.subheader(title)
 
@@ -102,7 +112,7 @@ def render_google_login_box(
         st.info(message)
 
     if _is_logged_in():
-        _render_logged_in_box("box")
+        _render_logged_in_box(context)
         return
 
-    _render_logged_out_box("box")
+    _render_logged_out_box(context)
