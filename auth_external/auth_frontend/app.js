@@ -10,8 +10,7 @@
     loginBtn: document.getElementById("loginBtn"),
     logoutBtn: document.getElementById("logoutBtn"),
     continueBtn: document.getElementById("continueBtn"),
-    status: document.getElementById("status"),
-    userBox: document.getElementById("userBox"),
+    status: document.getElementById("status")
   };
 
   function setStatus(text, kind = "muted") {
@@ -24,20 +23,12 @@
     if (els.loginBtn) els.loginBtn.hidden = false;
     if (els.logoutBtn) els.logoutBtn.hidden = true;
     if (els.continueBtn) els.continueBtn.hidden = true;
-    if (els.userBox) {
-      els.userBox.hidden = true;
-      els.userBox.textContent = "";
-    }
   }
 
   function setLoggedInView(user) {
     if (els.loginBtn) els.loginBtn.hidden = true;
     if (els.logoutBtn) els.logoutBtn.hidden = false;
     if (els.continueBtn) els.continueBtn.hidden = false;
-    if (els.userBox) {
-      els.userBox.hidden = false;
-      els.userBox.textContent = JSON.stringify(user, null, 2);
-    }
   }
 
   async function verifyWithGateway(accessToken) {

@@ -166,6 +166,7 @@ def render_login_gate_block() -> None:
     render_google_login_box(
         title="Faça login para continuar",
         message="Para liberar a pesquisa de viabilidade, entre com sua conta Google.",
+        context="shell_gate",
     )
 
 
