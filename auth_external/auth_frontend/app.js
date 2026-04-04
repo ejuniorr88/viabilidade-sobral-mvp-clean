@@ -58,12 +58,46 @@
   }
 
 
-  function notifyParentLogin(accessToken) {
-    try {
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: "vf_auth_success", access_token: accessToken }, "*");
+  function hasOAuthCallbackHash() {
+    return !!(window.location.hash && window.location.hash.includes("access_token="));
+  }
+
+  function waitForParentAck(accessToken, timeoutMs = 5000) {
+    return new Promise((resolve) => {
+      let done = false;
+      let timeoutId = null;
+
+      function finish(ok) {
+        if (done) return;
+        done = true;
+        try { window.removeEventListener("message", onMessage); } catch (_err) {}
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        resolve(ok);
       }
-    } catch (_err) {}
+
+      function onMessage(event) {
+        const data = event && event.data ? event.data : null;
+        if (!data || data.type !== "vf_auth_ack") return;
+        if (data.access_token && data.access_token !== accessToken) return;
+        finish(true);
+      }
+
+      window.addEventListener("message", onMessage);
+      timeoutId = window.setTimeout(() => finish(false), timeoutMs);
+    });
+  }
+
+  async function notifyParentLogin(accessToken) {
+    let ackPromise = null;
+
+    if (window.opener && !window.opener.closed) {
+      ackPromise = waitForParentAck(accessToken);
+      try {
+        window.opener.postMessage({ type: "vf_auth_success", access_token: accessToken }, "*");
+      } catch (_err) {}
+    }
 
     try {
       const channel = new BroadcastChannel("vf-auth-popup");
@@ -74,6 +108,11 @@
     try {
       localStorage.setItem("vf_auth_popup_token", accessToken);
     } catch (_err) {}
+
+    if (!ackPromise) {
+      return false;
+    }
+    return await ackPromise;
   }
 
   function isPopupFlow() {
@@ -108,12 +147,17 @@
         history.replaceState(null, "", window.location.pathname);
       }
 
-      if (isPopupFlow()) {
-        notifyParentLogin(session.access_token);
-        setStatus("Login concluído. Voltando para o sistema...", "ok");
-        window.setTimeout(() => {
-          try { window.close(); } catch (_err) {}
-        }, 300);
+      if (isPopupFlow() && hasOAuthCallbackHash()) {
+        setStatus("Login concluído. Conectando com o sistema...", "ok");
+        const acked = await notifyParentLogin(session.access_token);
+        if (acked) {
+          setStatus("Login concluído. Voltando para o sistema...", "ok");
+          window.setTimeout(() => {
+            try { window.close(); } catch (_err) {}
+          }, 250);
+        } else {
+          setStatus("Login concluído. Se o sistema principal não atualizar sozinho, clique em Continuar.", "muted");
+        }
         return;
       }
     } catch (err) {
@@ -172,10 +216,14 @@
         }
 
         if (isPopupFlow()) {
-          notifyParentLogin(data.session.access_token);
-          window.setTimeout(() => {
-            try { window.close(); } catch (_err) {}
-          }, 300);
+          const acked = await notifyParentLogin(data.session.access_token);
+          if (acked) {
+            window.setTimeout(() => {
+              try { window.close(); } catch (_err) {}
+            }, 250);
+          } else {
+            setStatus("Login concluído. O sistema principal não confirmou o retorno; você pode fechar esta janela manualmente.", "muted");
+          }
           return;
         }
 
