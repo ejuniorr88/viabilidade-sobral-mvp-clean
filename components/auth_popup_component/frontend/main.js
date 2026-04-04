@@ -1,4 +1,8 @@
 (function () {
+  const root = document.getElementById("root");
+  let currentArgs = { auth_url: "", label: "Entrar com Google", subtle: false };
+  let activeMessageHandler = null;
+
   function sendMessageToStreamlitClient(type, data) {
     const outData = Object.assign(
       {
@@ -10,29 +14,19 @@
     window.parent.postMessage(outData, "*");
   }
 
+  function setComponentValue(value) {
+    sendMessageToStreamlitClient("streamlit:setComponentValue", { value: value });
+  }
+
   function setFrameHeight(height) {
     sendMessageToStreamlitClient("streamlit:setFrameHeight", { height: height });
   }
 
-  function init() {
-    sendMessageToStreamlitClient("streamlit:componentReady", { apiVersion: 1 });
-    setFrameHeight(0);
-    installPopupBridge();
-  }
-
-  function getRootWindow() {
-    return window.parent || window;
-  }
-
-  function popupFeatures(rootWin, width, height) {
-    const dualScreenLeft =
-      rootWin.screenLeft !== undefined ? rootWin.screenLeft : rootWin.screenX || 0;
-    const dualScreenTop =
-      rootWin.screenTop !== undefined ? rootWin.screenTop : rootWin.screenY || 0;
-    const currentWidth =
-      rootWin.innerWidth || rootWin.document.documentElement.clientWidth || screen.width;
-    const currentHeight =
-      rootWin.innerHeight || rootWin.document.documentElement.clientHeight || screen.height;
+  function popupFeatures(width, height) {
+    const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX || 0;
+    const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY || 0;
+    const currentWidth = window.innerWidth || document.documentElement.clientWidth || screen.width;
+    const currentHeight = window.innerHeight || document.documentElement.clientHeight || screen.height;
     const left = Math.max(0, dualScreenLeft + (currentWidth - width) / 2);
     const top = Math.max(0, dualScreenTop + (currentHeight - height) / 2);
 
@@ -46,123 +40,79 @@
       "resizable=yes",
       "width=" + width,
       "height=" + height,
-      "left=" + left,
-      "top=" + top,
+      "left=" + Math.round(left),
+      "top=" + Math.round(top),
     ].join(",");
   }
 
-  function openPopup(rootWin, href) {
-    const popup = rootWin.open(href, "vfGoogleLoginPopup", popupFeatures(rootWin, 520, 760));
+  function cleanupMessageHandler() {
+    if (activeMessageHandler) {
+      window.removeEventListener("message", activeMessageHandler);
+      activeMessageHandler = null;
+    }
+  }
+
+  function handleAuthSuccess(event) {
+    const data = event && event.data ? event.data : null;
+    if (!data || data.type !== "vf_auth_success" || !data.access_token) {
+      return;
+    }
+
+    setComponentValue(data.access_token);
+
+    try {
+      if (event.source && typeof event.source.postMessage === "function") {
+        event.source.postMessage({ type: "vf_auth_ack" }, "*");
+      }
+    } catch (_err) {}
+
+    cleanupMessageHandler();
+  }
+
+  function openPopup(url) {
+    cleanupMessageHandler();
+    activeMessageHandler = handleAuthSuccess;
+    window.addEventListener("message", activeMessageHandler);
+
+    const popup = window.open(url, "vfGoogleLoginPopup", popupFeatures(520, 760));
     if (popup && !popup.closed) {
-      try {
-        popup.focus();
-      } catch (_err) {}
-      return true;
-    }
-
-    try {
-      rootWin.location.href = href;
-    } catch (_err) {
-      window.location.href = href;
-    }
-    return false;
-  }
-
-  function redirectMain(rootWin, accessToken, sourcePopup) {
-    if (!accessToken) {
+      try { popup.focus(); } catch (_err) {}
       return;
     }
 
-    if (sourcePopup && !sourcePopup.closed) {
-      try {
-        sourcePopup.postMessage({ type: "vf_auth_ack" }, "*");
-      } catch (_err) {}
-    }
-
-    try {
-      const target = new URL(rootWin.location.href);
-      target.searchParams.set("ext_access_token", accessToken);
-      rootWin.location.href = target.toString();
-      return;
-    } catch (_err) {}
-
-    try {
-      rootWin.location.search = "?ext_access_token=" + encodeURIComponent(accessToken);
-    } catch (_err) {}
+    window.location.href = url;
   }
 
-  function receivePayload(rootWin, payload, sourcePopup) {
-    if (!payload || payload.type !== "vf_auth_success" || !payload.access_token) {
-      return;
-    }
+  function render() {
+    const subtle = !!currentArgs.subtle;
+    const label = currentArgs.label || "Entrar com Google";
+    root.innerHTML = "";
 
-    try {
-      rootWin.localStorage.removeItem("vf_auth_popup_token");
-    } catch (_err) {}
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = subtle ? "auth-btn subtle" : "auth-btn";
+    button.textContent = label;
+    button.addEventListener("click", function () {
+      const authUrl = currentArgs.auth_url;
+      if (!authUrl) {
+        return;
+      }
+      openPopup(authUrl);
+    });
 
-    redirectMain(rootWin, payload.access_token, sourcePopup);
+    root.appendChild(button);
+    setFrameHeight(subtle ? 44 : 54);
   }
 
-  function installPopupBridge() {
-    const rootWin = getRootWindow();
-    if (!rootWin || !rootWin.document) {
+  function onRenderEvent(event) {
+    if (!event || !event.data || event.data.type !== "streamlit:render") {
       return;
     }
-
-    if (!rootWin.__vfAuthPopupBridgeInstalled) {
-      rootWin.__vfAuthPopupBridgeInstalled = true;
-
-      rootWin.document.addEventListener(
-        "click",
-        function (event) {
-          const target = event.target && event.target.closest
-            ? event.target.closest('a[data-vf-auth-popup="1"]')
-            : null;
-
-          if (!target) {
-            return;
-          }
-
-          const href = target.getAttribute("href");
-          if (!href) {
-            return;
-          }
-
-          event.preventDefault();
-          event.stopPropagation();
-          openPopup(rootWin, href);
-        },
-        true
-      );
-
-      rootWin.addEventListener("message", function (event) {
-        const data = event && event.data ? event.data : null;
-        receivePayload(rootWin, data, event ? event.source : null);
-      });
-
-      rootWin.addEventListener("storage", function (event) {
-        if (event.key !== "vf_auth_popup_token" || !event.newValue) {
-          return;
-        }
-        receivePayload(rootWin, { type: "vf_auth_success", access_token: event.newValue }, null);
-      });
-
-      try {
-        const bc = new rootWin.BroadcastChannel("vf-auth-popup");
-        bc.onmessage = function (event) {
-          const data = event && event.data ? event.data : null;
-          receivePayload(rootWin, data, null);
-        };
-      } catch (_err) {}
-    }
+    currentArgs = Object.assign({}, currentArgs, event.data.args || {});
+    render();
   }
 
-  window.addEventListener("message", function (event) {
-    if (event && event.data && event.data.type === "streamlit:render") {
-      setFrameHeight(0);
-      installPopupBridge();
-    }
-  });
-
-  init();
+  window.addEventListener("message", onRenderEvent);
+  sendMessageToStreamlitClient("streamlit:componentReady", { apiVersion: 1 });
+  setFrameHeight(54);
 })();
