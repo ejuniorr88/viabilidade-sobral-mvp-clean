@@ -29,8 +29,14 @@ def inject_global_styles() -> None:
     st.markdown(
         """
         <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@700;800&display=swap');
+
         html, body, [data-testid="stAppViewContainer"], .main {
             overflow-x: hidden !important;
+        }
+
+        [data-testid="stAppViewContainer"] {
+            background: #ffffff !important;
         }
 
         .block-container {
@@ -68,19 +74,23 @@ def inject_global_styles() -> None:
             box-sizing: border-box;
         }
 
-        .vf-brand {
-            color: #FFFFFF;
-            font-family: 'Montserrat', sans-serif;
+        a.vf-brand,
+        a.vf-brand:visited,
+        a.vf-brand:hover,
+        a.vf-brand:active,
+        a.vf-brand:focus {
+            color: #FFFFFF !important;
+            text-decoration: none !important;
+            font-family: 'Montserrat', sans-serif !important;
             font-size: 1.5rem;
             font-weight: 700;
             letter-spacing: -0.02em;
             line-height: 1;
-            text-decoration: none !important;
             white-space: nowrap;
         }
 
         .vf-brand-dot {
-            color: #D68910;
+            color: #D68910 !important;
         }
 
         .vf-header-nav {
@@ -88,17 +98,18 @@ def inject_global_styles() -> None:
             align-items: center;
             justify-content: flex-end;
             gap: 2rem;
-            margin-right: 6rem;
+            margin-right: 5.75rem;
             flex-wrap: wrap;
         }
 
         .vf-header-link,
         .vf-header-link:visited,
         .vf-header-link:hover,
-        .vf-header-link:active {
+        .vf-header-link:active,
+        .vf-header-link:focus {
             color: #FFFFFF !important;
             text-decoration: none !important;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', sans-serif !important;
             font-size: 0.95rem;
             font-weight: 500;
             opacity: 0.92;
@@ -126,7 +137,6 @@ def inject_global_styles() -> None:
         """,
         unsafe_allow_html=True,
     )
-
 
 
 def _clear_nav_query_param() -> None:
