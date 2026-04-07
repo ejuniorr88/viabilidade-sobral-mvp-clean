@@ -4,8 +4,6 @@ from html import escape
 from typing import Any
 
 import streamlit as st
-import streamlit.components.v1 as components
-
 from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
 from ui.auth_panel import render_google_login_box
@@ -50,17 +48,22 @@ def inject_global_styles() -> None:
         header[data-testid="stHeader"] {
             background: transparent !important;
             z-index: 999999 !important;
-            pointer-events: none;
+            pointer-events: none !important;
         }
 
-        header[data-testid="stHeader"] * {
-            pointer-events: auto;
+        header[data-testid="stHeader"] [data-testid="stToolbar"],
+        header[data-testid="stHeader"] [data-testid="stToolbar"] *,
+        header[data-testid="stHeader"] button,
+        header[data-testid="stHeader"] a,
+        header[data-testid="stHeader"] svg {
+            pointer-events: auto !important;
         }
 
         .vf-topbar-shell {
             width: 100%;
             background: #0B132B;
             margin: 0 0 1.8rem 0;
+            min-height: 82px;
             box-sizing: border-box;
         }
 
@@ -70,7 +73,7 @@ def inject_global_styles() -> None:
             align-items: center;
             justify-content: space-between;
             gap: 1rem;
-            padding: 1.05rem 2rem;
+            padding: 1.3rem 2rem;
             box-sizing: border-box;
         }
 
@@ -94,11 +97,13 @@ def inject_global_styles() -> None:
         }
 
         .vf-header-nav {
+            position: relative;
+            z-index: 2;
             display: flex;
             align-items: center;
             justify-content: flex-end;
             gap: 2rem;
-            margin-right: 5.75rem;
+            margin-right: 6.35rem;
             flex-wrap: wrap;
         }
 
@@ -137,7 +142,6 @@ def inject_global_styles() -> None:
         """,
         unsafe_allow_html=True,
     )
-
 
 def _clear_nav_query_param() -> None:
     try:
