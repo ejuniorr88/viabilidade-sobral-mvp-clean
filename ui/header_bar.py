@@ -1,27 +1,32 @@
 from __future__ import annotations
 
-import html
+from html import escape
+from urllib.parse import urlencode
+
+
+def _nav_href(app_url: str, nav: str) -> str:
+    params = urlencode({"vf_nav": nav})
+    base = (app_url or "").rstrip("/")
+    return f"{base}/?{params}" if base else f"/?{params}"
 
 
 def build_header_bar_html(app_url: str) -> str:
-    app_url = (app_url or "").rstrip("/")
-    base = html.escape(app_url or "", quote=True)
-
-    def _href(nav: str) -> str:
-        return f"{base}/?vf_nav={nav}" if base else f"/?vf_nav={nav}"
-
-    return f"""
-    <div class="vf-header-wrap">
-      <div class="vf-header-bar">
-        <div class="vf-header-inner">
-          <div class="vf-header-brand">Viabilidade-Fácil<span>.</span></div>
-          <div class="vf-header-links">
-            <a class="vf-header-link" href="{_href('how')}" target="_self">Como funciona</a>
-            <a class="vf-header-link" href="{_href('client')}" target="_self">Área do cliente</a>
-            <a class="vf-header-link" href="{_href('plans')}" target="_self">Planos</a>
-            <a class="vf-header-link" href="{_href('support')}" target="_self">Dúvida e suporte</a>
-          </div>
-        </div>
-      </div>
-    </div>
-    """
+    brand = '<span class="vf-brand-text">Viabilidade-Fácil<span class="vf-brand-dot">.</span></span>'
+    links = [
+        ("Como funciona", "how"),
+        ("Área do cliente", "client"),
+        ("Planos", "plans"),
+        ("Dúvida e suporte", "support"),
+    ]
+    nav_html = "".join(
+        f'<a class="vf-header-link" href="{escape(_nav_href(app_url, key), quote=True)}">{escape(label)}</a>'
+        for label, key in links
+    )
+    return (
+        '<div class="vf-header-wrap">'
+        '  <div class="vf-header-bar">'
+        f'    <div class="vf-brand">{brand}</div>'
+        f'    <nav class="vf-header-nav" aria-label="Navegação principal">{nav_html}</nav>'
+        '  </div>'
+        '</div>'
+    )
