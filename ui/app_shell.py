@@ -44,8 +44,8 @@ def inject_global_styles() -> None:
         }
 
         .vf-header-wrap {
-            width: 100%;
-            margin: 0 0 1rem 0;
+            width: calc(100% + 2rem);
+            margin: 0 -1rem 1rem -1rem;
         }
 
         .vf-header-bar {
