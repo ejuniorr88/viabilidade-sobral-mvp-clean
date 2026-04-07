@@ -63,8 +63,10 @@ def inject_global_styles() -> None:
             width: 100%;
             background: #0B132B;
             margin: 0 0 1.8rem 0;
-            min-height: 82px;
+            min-height: 96px;
             box-sizing: border-box;
+            position: relative;
+            z-index: 10;
         }
 
         .vf-topbar-inner {
@@ -73,7 +75,8 @@ def inject_global_styles() -> None:
             align-items: center;
             justify-content: space-between;
             gap: 1rem;
-            padding: 1.3rem 2rem;
+            min-height: 96px;
+            padding: 0 2rem;
             box-sizing: border-box;
         }
 
@@ -89,6 +92,9 @@ def inject_global_styles() -> None:
             font-weight: 700;
             letter-spacing: -0.02em;
             line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            height: 100%;
             white-space: nowrap;
         }
 
@@ -98,7 +104,8 @@ def inject_global_styles() -> None:
 
         .vf-header-nav {
             position: relative;
-            z-index: 2;
+            z-index: 20;
+            pointer-events: auto;
             display: flex;
             align-items: center;
             justify-content: flex-end;
@@ -119,6 +126,9 @@ def inject_global_styles() -> None:
             font-weight: 500;
             opacity: 0.92;
             white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            min-height: 96px;
         }
 
         .vf-header-link:hover {
@@ -171,13 +181,13 @@ def _build_top_nav_html(app_url: str) -> str:
         ("Dúvida e suporte", "support"),
     ]
     nav_html = ''.join(
-        f'<a class="vf-header-link" href="{_nav_href(app_url, key)}" target="_self">{escape(label)}</a>'
+        f'<a class="vf-header-link" href="{_nav_href(app_url, key)}" target="_top">{escape(label)}</a>'
         for label, key in links
     )
     return (
         '<div class="vf-topbar-shell">'
         '  <div class="vf-topbar-inner">'
-        '    <a class="vf-brand" href="/?" target="_self">Viabilidade-Fácil<span class="vf-brand-dot">.</span></a>'
+        '    <a class="vf-brand" href="/?" target="_top">Viabilidade-Fácil<span class="vf-brand-dot">.</span></a>'
         f'    <nav class="vf-header-nav">{nav_html}</nav>'
         '  </div>'
         '</div>'
