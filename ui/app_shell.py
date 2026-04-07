@@ -10,10 +10,8 @@ from core.credits import get_credit_balance
 from ui.auth_panel import render_google_login_box
 
 
-HEADER_BG = "#0b1d4d"
-HEADER_BG_INNER = "#08163d"
-HEADER_TEXT = "#ffffff"
-HEADER_DOT = "#f59e0b"
+SITE_HEADER_BG = "#0b132b"
+SITE_HEADER_ACCENT = "#f59e0b"
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -48,75 +46,72 @@ def inject_global_styles() -> None:
             background: transparent !important;
         }}
 
-        .vf-topbar-shell {{
-            width: 100%;
-            margin: 0 0 1.35rem 0;
-            padding: 0.55rem 0.8rem;
-            background: {HEADER_BG};
-            border-radius: 14px;
-            box-sizing: border-box;
-        }}
-
-        .vf-topbar-inner {{
-            background: {HEADER_BG_INNER};
-            border-radius: 10px;
-            padding: 0.95rem 1.35rem;
-        }}
-
         .vf-brand {{
-            font-size: 30px;
-            font-weight: 800;
-            color: {HEADER_TEXT};
-            letter-spacing: -0.03em;
-            line-height: 1.05;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
             white-space: nowrap;
-            margin-top: 0.18rem;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }}
 
-        .vf-brand-dot {{
-            color: {HEADER_DOT};
+        .vf-brand-accent {{
+            color: {SITE_HEADER_ACCENT};
         }}
 
-        .vf-nav-btn .stButton > button[kind="tertiary"] {{
+        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] {{
+            background: {SITE_HEADER_BG};
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 1.05rem 1.35rem;
+            margin: 0 0 1.35rem 0;
+            align-items: center;
+            box-shadow: 0 10px 28px rgba(11, 19, 43, 0.08);
+        }}
+
+        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] [data-testid="column"] {{
+            display: flex;
+            align-items: center;
+        }}
+
+        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .stButton > button {{
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
-            color: {HEADER_TEXT} !important;
+            color: rgba(255,255,255,0.88) !important;
+            font-size: 0.88rem !important;
             font-weight: 500 !important;
-            font-size: 15px !important;
-            white-space: nowrap !important;
+            letter-spacing: 0.06em !important;
+            text-transform: uppercase !important;
             padding: 0 !important;
             min-height: auto !important;
-            line-height: 1.1 !important;
-            justify-content: center !important;
+            line-height: 1.15 !important;
+            justify-content: flex-end !important;
         }}
 
-        .vf-nav-btn .stButton > button[kind="tertiary"]:hover,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:active {{
-            color: {HEADER_TEXT} !important;
+        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .stButton > button:hover {{
+            color: #ffffff !important;
             background: transparent !important;
+        }}
+
+        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .stButton > button:focus,
+        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .stButton > button:focus-visible,
+        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .stButton > button:active {{
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
+            background: transparent !important;
         }}
 
-        .vf-nav-spacer {{
-            height: 0.42rem;
-        }}
-
-        @media (max-width: 900px) {{
-            .vf-topbar-shell {{
-                padding: 0.45rem 0.55rem;
-            }}
-
-            .vf-topbar-inner {{
-                padding: 0.85rem 0.95rem;
-            }}
-
+        @media (max-width: 1100px) {{
             .vf-brand {{
-                font-size: 24px;
+                font-size: 1.7rem;
+            }}
+            .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .stButton > button {{
+                font-size: 0.78rem !important;
+                letter-spacing: 0.04em !important;
             }}
         }}
         </style>
@@ -127,43 +122,30 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
-    st.markdown('<div class="vf-topbar-shell"><div class="vf-topbar-inner">', unsafe_allow_html=True)
-    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 1.5, 1.4, 1.7, 1.0, 1.8], gap="small")
+    st.markdown('<div class="vf-topbar-anchor"></div>', unsafe_allow_html=True)
+    brand_col, nav1, nav2, nav3, nav4 = st.columns([4.3, 1.3, 1.8, 1.0, 1.8], gap="medium")
 
     with brand_col:
         st.markdown(
-            '<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
+            '<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-accent">.</span></div>',
             unsafe_allow_html=True,
         )
 
-    with spacer_col:
-        st.markdown("&nbsp;", unsafe_allow_html=True)
-
     with nav1:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
         st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=False)
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with nav2:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
         if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=False):
             st.session_state["show_client_area"] = True
             if not st.session_state.get("auth_logged_in"):
                 st.session_state["post_login_action"] = "open_client_area"
             st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with nav3:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
         st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=False)
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with nav4:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
         st.button("Dúvida e suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 
