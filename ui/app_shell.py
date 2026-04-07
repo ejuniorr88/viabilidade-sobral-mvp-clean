@@ -30,7 +30,7 @@ def inject_global_styles() -> None:
         """
         <style>
         .block-container {
-            padding-top: 0.55rem !important;
+            padding-top: 0.35rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }
@@ -45,12 +45,10 @@ def inject_global_styles() -> None:
 
         .vf-header-wrap {
             position: relative;
-            left: 50%;
-            right: 50%;
-            width: 100vw;
-            max-width: 100vw;
-            margin-left: -50vw;
-            margin-right: -50vw;
+            width: calc(100% + 2rem);
+            max-width: none;
+            margin-left: -1rem;
+            margin-right: -1rem;
             margin-bottom: 1rem;
             padding: 0;
             box-sizing: border-box;
@@ -112,6 +110,12 @@ def inject_global_styles() -> None:
         }
 
         @media (max-width: 980px) {
+            .vf-header-wrap {
+                width: calc(100% + 1rem);
+                margin-left: -0.5rem;
+                margin-right: -0.5rem;
+            }
+
             .vf-header-inner {
                 padding: 0.95rem 1rem;
                 align-items: flex-start;
