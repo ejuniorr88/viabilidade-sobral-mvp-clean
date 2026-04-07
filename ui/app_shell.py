@@ -44,8 +44,14 @@ def inject_global_styles() -> None:
         }
 
         .vf-header-wrap {
-            width: calc(100% + 2rem);
-            margin: 0 -1rem 1rem -1rem;
+            display: block !important;
+            box-sizing: border-box !important;
+            width: calc(100% + 8rem) !important;
+            max-width: none !important;
+            margin: 0 0 1rem -4rem !important;
+            padding: 0 0.35rem !important;
+            position: relative !important;
+            z-index: 2;
         }
 
         .vf-header-bar {
@@ -133,6 +139,8 @@ def _clear_nav_query_param() -> None:
 
 
 def render_top_nav() -> None:
+
+    # Contrato preservado: antigo botão da Área do cliente usava key="vf_nav_client".
     nav = (safe_get_query_param("vf_nav") or "").strip().lower()
 
     if nav == "client":
