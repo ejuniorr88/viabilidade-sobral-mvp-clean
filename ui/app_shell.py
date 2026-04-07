@@ -28,6 +28,8 @@ def inject_global_styles() -> None:
     st.markdown(
         """
         <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@600;700;800&display=swap');
+
         .block-container {
             padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
@@ -45,38 +47,62 @@ def inject_global_styles() -> None:
         .vf-topbar-shell {
             width: 100%;
             margin: 0 0 1.4rem 0;
-            padding: 0;
-            border-bottom: 1px solid #e8e8e8;
+            padding: 1.1rem 1.4rem;
+            background: rgba(11, 19, 43, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 0 0 12px 12px;
         }
 
         .vf-brand {
-            font-size: 30px;
-            font-weight: 800;
-            color: #1f2a44;
-            letter-spacing: -0.02em;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 1px;
             line-height: 1.1;
             white-space: nowrap;
-            margin-top: 0.5rem;
-            margin-bottom: 0.65rem;
+            margin-top: 0.15rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .vf-brand span {
+            color: #D68910;
+        }
+
+        .vf-nav-btn {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            min-height: 100%;
+        }
+
+        .vf-nav-btn .stButton {
+            display: flex;
+            justify-content: flex-end;
         }
 
         .vf-nav-btn .stButton > button[kind="tertiary"] {
+            font-family: 'Inter', sans-serif !important;
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
-            color: #1f2a44 !important;
-            font-weight: 600 !important;
-            font-size: 15px !important;
+            color: rgba(255, 255, 255, 0.92) !important;
+            font-weight: 500 !important;
+            font-size: 14px !important;
             white-space: nowrap !important;
             padding: 0 !important;
             min-height: auto !important;
             line-height: 1.1 !important;
             justify-content: flex-end !important;
+            text-transform: uppercase !important;
+            letter-spacing: 1px !important;
         }
 
         .vf-nav-btn .stButton > button[kind="tertiary"]:hover {
-            color: #1f2a44 !important;
+            color: rgba(255, 255, 255, 0.92) !important;
             background: transparent !important;
+            opacity: 0.88 !important;
         }
 
         .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
@@ -86,15 +112,25 @@ def inject_global_styles() -> None:
             box-shadow: none !important;
             outline: none !important;
             background: transparent !important;
+            color: rgba(255, 255, 255, 0.92) !important;
         }
 
         .vf-nav-spacer {
-            height: 0.45rem;
+            height: 0.2rem;
         }
 
         @media (max-width: 900px) {
+            .vf-topbar-shell {
+                padding: 1rem 1rem;
+            }
+
             .vf-brand {
-                font-size: 24px;
+                font-size: 20px;
+            }
+
+            .vf-nav-btn .stButton > button[kind="tertiary"] {
+                font-size: 12px !important;
+                letter-spacing: 0.8px !important;
             }
         }
         </style>
@@ -109,7 +145,7 @@ def render_top_nav() -> None:
     brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.2, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with brand_col:
-        st.markdown('<div class="vf-brand">Viabilidade Fácil</div>', unsafe_allow_html=True)
+        st.markdown('<div class="vf-brand">Viabilidade-Fácil<span>.</span></div>', unsafe_allow_html=True)
 
     with nav1:
         st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
@@ -132,7 +168,7 @@ def render_top_nav() -> None:
 
     with nav4:
         st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
+        st.button("Dúvida e suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
