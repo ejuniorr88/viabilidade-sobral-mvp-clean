@@ -6,9 +6,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from core.auth import get_app_url, safe_get_query_param
+from ui.header_bar import build_header_bar_html
 from core.credits import get_credit_balance
 from ui.auth_panel import render_google_login_box
-from ui.header_bar import build_header_bar_html
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -30,7 +30,7 @@ def inject_global_styles() -> None:
         """
         <style>
         .block-container {
-            padding-top: 0.5rem !important;
+            padding-top: 0.55rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }
@@ -45,89 +45,71 @@ def inject_global_styles() -> None:
 
         .vf-header-wrap {
             width: 100%;
-            margin: 0 0 1.35rem 0;
+            margin: 0 0 1rem 0;
         }
 
         .vf-header-bar {
-            position: sticky;
-            top: 0.5rem;
-            z-index: 20;
+            width: 100%;
+            background: #0b1f4d;
+            border-radius: 18px;
+            min-height: 72px;
+            padding: 1rem 1.5rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 1.5rem;
-            width: 100%;
-            padding: 1.05rem 1.4rem;
-            border-radius: 18px;
-            background: #0d2a73;
-            box-shadow: 0 6px 20px rgba(13, 42, 115, 0.10);
+            gap: 1.2rem;
+            box-sizing: border-box;
         }
 
         .vf-header-brand {
             color: #ffffff;
-            font-size: 27px;
+            font-size: 1.7rem;
             font-weight: 800;
-            letter-spacing: -0.03em;
+            letter-spacing: -0.02em;
             line-height: 1;
             white-space: nowrap;
-            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
-        .vf-header-dot {
-            color: #ff8c2a;
+        .vf-header-brand span {
+            color: #ff7a00;
         }
 
-        .vf-header-nav {
+        .vf-header-links {
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 2.1rem;
+            gap: 1.5rem;
             flex-wrap: wrap;
         }
 
-        .vf-header-link,
-        .vf-header-link:link,
-        .vf-header-link:visited {
+        .vf-header-link, .vf-header-link:visited, .vf-header-link:hover, .vf-header-link:active {
             color: #ffffff !important;
             text-decoration: none !important;
-            font-size: 15px;
+            font-size: 0.98rem;
             font-weight: 600;
-            line-height: 1.1;
-            opacity: 0.98;
+            line-height: 1.2;
             white-space: nowrap;
-            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
-        .vf-header-link:hover,
-        .vf-header-link:active {
-            color: #ffffff !important;
-            text-decoration: none !important;
-            opacity: 1;
+        .vf-header-link:hover {
+            opacity: 0.88;
         }
 
-        @media (max-width: 1100px) {
+        @media (max-width: 980px) {
             .vf-header-bar {
+                padding: 0.95rem 1.1rem;
                 align-items: flex-start;
                 flex-direction: column;
-                gap: 1rem;
             }
 
-            .vf-header-nav {
+            .vf-header-brand {
+                font-size: 1.45rem;
+            }
+
+            .vf-header-links {
                 width: 100%;
                 justify-content: flex-start;
-                gap: 1.25rem 1.5rem;
-            }
-        }
-
-        @media (max-width: 700px) {
-            .vf-header-brand {
-                font-size: 23px;
-            }
-
-            .vf-header-link,
-            .vf-header-link:link,
-            .vf-header-link:visited {
-                font-size: 14px;
+                gap: 1rem;
             }
         }
         </style>
@@ -137,24 +119,42 @@ def inject_global_styles() -> None:
 
 
 
-def _consume_header_nav_action() -> None:
-    nav_action = safe_get_query_param("vf_nav") or ""
-    if nav_action != "client":
-        return
-
-    if st.session_state.get("_vf_last_nav_action") == nav_action:
-        return
-
-    st.session_state["_vf_last_nav_action"] = nav_action
-    st.session_state["show_client_area"] = True
-    if not st.session_state.get("auth_logged_in"):
-        st.session_state["post_login_action"] = "open_client_area"
+def _clear_nav_query_param() -> None:
+    try:
+        del st.query_params["vf_nav"]
+    except Exception:
+        try:
+            params = st.experimental_get_query_params()
+            params.pop("vf_nav", None)
+            st.experimental_set_query_params(**params)
+        except Exception:
+            pass
 
 
 
 def render_top_nav() -> None:
-    _consume_header_nav_action()
-    st.markdown(build_header_bar_html(app_url=get_app_url()), unsafe_allow_html=True)
+    nav = (safe_get_query_param("vf_nav") or "").strip().lower()
+
+    if nav == "client":
+        st.session_state["show_client_area"] = True
+        if not st.session_state.get("auth_logged_in"):
+            st.session_state["post_login_action"] = "open_client_area"
+        _clear_nav_query_param()
+        st.rerun()
+
+    if nav in {"how", "plans", "support"}:
+        st.session_state["vf_header_notice"] = nav
+        _clear_nav_query_param()
+
+    st.markdown(build_header_bar_html(get_app_url()), unsafe_allow_html=True)
+
+    notice = st.session_state.pop("vf_header_notice", None)
+    if notice == "how":
+        st.info("A seção 'Como funciona' será conectada ao fluxo definitivo na próxima etapa.")
+    elif notice == "plans":
+        st.info("A seção 'Planos' será conectada ao checkout definitivo na próxima etapa.")
+    elif notice == "support":
+        st.info("A seção 'Dúvida e suporte' será conectada ao canal oficial na próxima etapa.")
 
 
 
