@@ -6,9 +6,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from core.auth import get_app_url, safe_get_query_param
-from ui.header_bar import build_header_bar_html
 from core.credits import get_credit_balance
 from ui.auth_panel import render_google_login_box
+from ui.header_bar import build_header_bar_html
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -44,22 +44,30 @@ def inject_global_styles() -> None:
         }
 
         .vf-header-wrap {
-            display: block !important;
-            box-sizing: border-box !important;
-            width: calc(100% + 8rem) !important;
-            max-width: none !important;
-            margin: 0 0 1rem -4rem !important;
-            padding: 0 0.35rem !important;
-            position: relative !important;
-            z-index: 2;
+            position: relative;
+            left: 50%;
+            right: 50%;
+            width: 100vw;
+            max-width: 100vw;
+            margin-left: -50vw;
+            margin-right: -50vw;
+            margin-bottom: 1rem;
+            padding: 0;
+            box-sizing: border-box;
         }
 
         .vf-header-bar {
             width: 100%;
             background: #0b1f4d;
-            border-radius: 18px;
-            min-height: 72px;
-            padding: 1rem 1.5rem;
+            border-radius: 0;
+            min-height: 66px;
+            box-sizing: border-box;
+        }
+
+        .vf-header-inner {
+            width: 100%;
+            min-height: 66px;
+            padding: 0.95rem 1.35rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -74,6 +82,7 @@ def inject_global_styles() -> None:
             letter-spacing: -0.02em;
             line-height: 1;
             white-space: nowrap;
+            flex: 0 0 auto;
         }
 
         .vf-header-brand span {
@@ -86,6 +95,7 @@ def inject_global_styles() -> None:
             justify-content: flex-end;
             gap: 1.5rem;
             flex-wrap: wrap;
+            flex: 1 1 auto;
         }
 
         .vf-header-link, .vf-header-link:visited, .vf-header-link:hover, .vf-header-link:active {
@@ -102,8 +112,8 @@ def inject_global_styles() -> None:
         }
 
         @media (max-width: 980px) {
-            .vf-header-bar {
-                padding: 0.95rem 1.1rem;
+            .vf-header-inner {
+                padding: 0.95rem 1rem;
                 align-items: flex-start;
                 flex-direction: column;
             }
@@ -137,10 +147,8 @@ def _clear_nav_query_param() -> None:
             pass
 
 
-
 def render_top_nav() -> None:
 
-    # Contrato preservado: antigo botão da Área do cliente usava key="vf_nav_client".
     nav = (safe_get_query_param("vf_nav") or "").strip().lower()
 
     if nav == "client":
