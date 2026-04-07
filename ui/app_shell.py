@@ -28,7 +28,7 @@ def inject_global_styles() -> None:
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@500;600;700;800&display=swap');
 
         .block-container {
             padding-top: 0.4rem !important;
@@ -44,93 +44,71 @@ def inject_global_styles() -> None:
             background: transparent !important;
         }
 
-        .vf-topbar-shell {
-            width: 100%;
-            margin: 0 0 1.4rem 0;
-            padding: 1.1rem 1.4rem;
-            background: rgba(11, 19, 43, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 0 0 12px 12px;
+        div[data-testid="stVerticalBlock"]:has(#vf-top-nav-anchor) {
+            background: rgba(11, 19, 43, 0.96) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+            padding: 18px 26px 16px 26px !important;
+            margin: 0 0 1.45rem 0 !important;
+            border-radius: 0 !important;
+            box-shadow: 0 8px 22px rgba(11, 19, 43, 0.16) !important;
+        }
+
+        div[data-testid="stVerticalBlock"]:has(#vf-top-nav-anchor) [data-testid="column"] {
+            display: flex !important;
+            align-items: center !important;
         }
 
         .vf-brand {
-            font-family: 'Montserrat', sans-serif;
+            font-family: 'Montserrat', sans-serif !important;
             font-size: 24px;
             font-weight: 700;
             color: #ffffff;
             letter-spacing: 1px;
-            line-height: 1.1;
+            line-height: 1;
             white-space: nowrap;
-            margin-top: 0.15rem;
-            margin-bottom: 0.25rem;
         }
 
         .vf-brand span {
             color: #D68910;
         }
 
-        .vf-nav-btn {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            min-height: 100%;
-        }
-
-        .vf-nav-btn .stButton {
-            display: flex;
-            justify-content: flex-end;
-        }
-
-        .vf-nav-btn .stButton > button[kind="tertiary"] {
-            font-family: 'Inter', sans-serif !important;
+        div[data-testid="stVerticalBlock"]:has(#vf-top-nav-anchor) .vf-nav-btn .stButton > button[kind="tertiary"] {
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
-            color: rgba(255, 255, 255, 0.92) !important;
+            color: rgba(255,255,255,0.86) !important;
+            font-family: 'Inter', sans-serif !important;
             font-weight: 500 !important;
             font-size: 14px !important;
             white-space: nowrap !important;
             padding: 0 !important;
             min-height: auto !important;
             line-height: 1.1 !important;
-            justify-content: flex-end !important;
-            text-transform: uppercase !important;
-            letter-spacing: 1px !important;
+            justify-content: center !important;
+            letter-spacing: 0 !important;
         }
 
-        .vf-nav-btn .stButton > button[kind="tertiary"]:hover {
-            color: rgba(255, 255, 255, 0.92) !important;
+        div[data-testid="stVerticalBlock"]:has(#vf-top-nav-anchor) .vf-nav-btn .stButton > button[kind="tertiary"]:hover {
+            color: #ffffff !important;
             background: transparent !important;
-            opacity: 0.88 !important;
         }
 
-        .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:active {
+        div[data-testid="stVerticalBlock"]:has(#vf-top-nav-anchor) .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
+        div[data-testid="stVerticalBlock"]:has(#vf-top-nav-anchor) .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible,
+        div[data-testid="stVerticalBlock"]:has(#vf-top-nav-anchor) .vf-nav-btn .stButton > button[kind="tertiary"]:active {
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
             background: transparent !important;
-            color: rgba(255, 255, 255, 0.92) !important;
-        }
-
-        .vf-nav-spacer {
-            height: 0.2rem;
+            color: #ffffff !important;
         }
 
         @media (max-width: 900px) {
-            .vf-topbar-shell {
-                padding: 1rem 1rem;
+            div[data-testid="stVerticalBlock"]:has(#vf-top-nav-anchor) {
+                padding: 16px 18px 14px 18px !important;
             }
-
             .vf-brand {
                 font-size: 20px;
-            }
-
-            .vf-nav-btn .stButton > button[kind="tertiary"] {
-                font-size: 12px !important;
-                letter-spacing: 0.8px !important;
             }
         }
         </style>
@@ -141,38 +119,36 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
-    st.markdown('<div class="vf-topbar-shell">', unsafe_allow_html=True)
-    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.2, 1.35, 1.55, 0.95, 1.6], gap="small")
+    with st.container():
+        st.markdown('<div id="vf-top-nav-anchor"></div>', unsafe_allow_html=True)
+        brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.2, 2.0, 1.25, 1.55, 0.95, 1.55], gap="small")
 
-    with brand_col:
-        st.markdown('<div class="vf-brand">Viabilidade-Fácil<span>.</span></div>', unsafe_allow_html=True)
+        with brand_col:
+            st.markdown('<div class="vf-brand">Viabilidade-Fácil<span>.</span></div>', unsafe_allow_html=True)
 
-    with nav1:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=False)
-        st.markdown('</div>', unsafe_allow_html=True)
+        with nav1:
+            st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+            st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=False)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    with nav2:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
-        if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=False):
-            st.session_state["show_client_area"] = True
-            if not st.session_state.get("auth_logged_in"):
-                st.session_state["post_login_action"] = "open_client_area"
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+        with nav2:
+            st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+            if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=False):
+                st.session_state["show_client_area"] = True
+                if not st.session_state.get("auth_logged_in"):
+                    st.session_state["post_login_action"] = "open_client_area"
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    with nav3:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=False)
-        st.markdown('</div>', unsafe_allow_html=True)
+        with nav3:
+            st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+            st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=False)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    with nav4:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Dúvida e suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
+        with nav4:
+            st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+            st.button("Dúvida e suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
+            st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_wallet_summary() -> None:
