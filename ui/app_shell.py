@@ -8,6 +8,7 @@ import streamlit.components.v1 as components
 from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
 from ui.auth_panel import render_google_login_box
+from ui.header_bar import build_header_bar_html
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -29,7 +30,7 @@ def inject_global_styles() -> None:
         """
         <style>
         .block-container {
-            padding-top: 0.75rem !important;
+            padding-top: 0.5rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }
@@ -42,77 +43,91 @@ def inject_global_styles() -> None:
             background: transparent !important;
         }
 
-        .vf-topbar-anchor {
-            display: block;
-            height: 0;
-            margin: 0;
-            padding: 0;
+        .vf-header-wrap {
+            width: 100%;
+            margin: 0 0 1.35rem 0;
         }
 
-        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] {
+        .vf-header-bar {
             position: sticky;
-            top: 0.35rem;
-            z-index: 40;
-            margin: 0 0 1.2rem 0 !important;
-            padding: 1.15rem 1.45rem !important;
-            background: #0B246A !important;
-            border-radius: 18px !important;
-            box-shadow: 0 8px 22px rgba(11, 36, 106, 0.12);
-            align-items: center !important;
+            top: 0.5rem;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+            width: 100%;
+            padding: 1.05rem 1.4rem;
+            border-radius: 18px;
+            background: #0d2a73;
+            box-shadow: 0 6px 20px rgba(13, 42, 115, 0.10);
         }
 
-        .vf-brand {
-            font-family: "Montserrat", "Inter", sans-serif;
-            font-size: 30px;
-            font-weight: 800;
+        .vf-header-brand {
             color: #ffffff;
+            font-size: 27px;
+            font-weight: 800;
             letter-spacing: -0.03em;
             line-height: 1;
             white-space: nowrap;
-            margin: 0.05rem 0;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
-        .vf-brand .vf-dot {
-            color: #F59E0B;
+        .vf-header-dot {
+            color: #ff8c2a;
         }
 
-        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .vf-nav-btn .stButton > button[kind="tertiary"] {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
+        .vf-header-nav {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 2.1rem;
+            flex-wrap: wrap;
+        }
+
+        .vf-header-link,
+        .vf-header-link:link,
+        .vf-header-link:visited {
             color: #ffffff !important;
-            font-weight: 600 !important;
-            font-size: 15px !important;
-            white-space: nowrap !important;
-            padding: 0 !important;
-            min-height: auto !important;
-            line-height: 1.1 !important;
-            justify-content: flex-end !important;
+            text-decoration: none !important;
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1.1;
+            opacity: 0.98;
+            white-space: nowrap;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
-        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .vf-nav-btn .stButton > button[kind="tertiary"]:hover,
-        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .vf-nav-btn .stButton > button[kind="tertiary"]:active,
-        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
-        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible {
+        .vf-header-link:hover,
+        .vf-header-link:active {
             color: #ffffff !important;
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            outline: none !important;
+            text-decoration: none !important;
+            opacity: 1;
         }
 
-        .vf-nav-spacer {
-            height: 0.28rem;
-        }
-
-        @media (max-width: 900px) {
-            .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] {
-                padding: 0.95rem 1rem !important;
-                border-radius: 16px !important;
+        @media (max-width: 1100px) {
+            .vf-header-bar {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 1rem;
             }
 
-            .vf-brand {
-                font-size: 24px;
+            .vf-header-nav {
+                width: 100%;
+                justify-content: flex-start;
+                gap: 1.25rem 1.5rem;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .vf-header-brand {
+                font-size: 23px;
+            }
+
+            .vf-header-link,
+            .vf-header-link:link,
+            .vf-header-link:visited {
+                font-size: 14px;
             }
         }
         </style>
@@ -122,39 +137,24 @@ def inject_global_styles() -> None:
 
 
 
+def _consume_header_nav_action() -> None:
+    nav_action = safe_get_query_param("vf_nav") or ""
+    if nav_action != "client":
+        return
+
+    if st.session_state.get("_vf_last_nav_action") == nav_action:
+        return
+
+    st.session_state["_vf_last_nav_action"] = nav_action
+    st.session_state["show_client_area"] = True
+    if not st.session_state.get("auth_logged_in"):
+        st.session_state["post_login_action"] = "open_client_area"
+
+
+
 def render_top_nav() -> None:
-    st.markdown('<div class="vf-topbar-anchor"></div>', unsafe_allow_html=True)
-    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.0, 1.35, 1.55, 0.95, 1.6], gap="small")
-
-    with brand_col:
-        st.markdown('<div class="vf-brand">Viabilidade-Fácil<span class="vf-dot">.</span></div>', unsafe_allow_html=True)
-
-    with spacer_col:
-        st.empty()
-
-    with nav1:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=False)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with nav2:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
-        if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=False):
-            st.session_state["show_client_area"] = True
-            if not st.session_state.get("auth_logged_in"):
-                st.session_state["post_login_action"] = "open_client_area"
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with nav3:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=False)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with nav4:
-        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Dúvida e suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
-        st.markdown('</div>', unsafe_allow_html=True)
+    _consume_header_nav_action()
+    st.markdown(build_header_bar_html(app_url=get_app_url()), unsafe_allow_html=True)
 
 
 
