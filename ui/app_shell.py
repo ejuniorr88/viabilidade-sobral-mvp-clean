@@ -6,9 +6,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from core.auth import get_app_url, safe_get_query_param
+from ui.header_bar import build_header_bar_html
 from core.credits import get_credit_balance
 from ui.auth_panel import render_google_login_box
-from ui.header_bar import build_header_bar_html
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -29,8 +29,10 @@ def inject_global_styles() -> None:
     st.markdown(
         """
         <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@600;700;800&display=swap');
+
         .block-container {
-            padding-top: 0.35rem !important;
+            padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }
@@ -44,92 +46,87 @@ def inject_global_styles() -> None:
         }
 
         .vf-header-wrap {
-            position: relative;
-            width: calc(100% + 2rem);
-            max-width: none;
-            margin-left: -1rem;
-            margin-right: -1rem;
+            margin-left: calc(-1 * var(--vf-block-pad-left, 1rem));
+            margin-right: calc(-1 * var(--vf-block-pad-right, 1rem));
             margin-bottom: 1rem;
-            padding: 0;
-            box-sizing: border-box;
         }
 
         .vf-header-bar {
             width: 100%;
-            background: #0b1f4d;
+            min-height: 76px;
+            background: #0B132B;
             border-radius: 0;
-            min-height: 66px;
-            box-sizing: border-box;
-        }
-
-        .vf-header-inner {
-            width: 100%;
-            min-height: 66px;
-            padding: 0.95rem 1.35rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 1.2rem;
+            gap: 1.5rem;
+            padding: 18px 32px;
             box-sizing: border-box;
         }
 
-        .vf-header-brand {
-            color: #ffffff;
-            font-size: 1.7rem;
-            font-weight: 800;
-            letter-spacing: -0.02em;
+        .vf-brand, .vf-brand * {
+            font-family: 'Montserrat', sans-serif !important;
+        }
+
+        .vf-brand-text {
+            color: #FFFFFF;
+            font-size: 1.55rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
             line-height: 1;
             white-space: nowrap;
-            flex: 0 0 auto;
         }
 
-        .vf-header-brand span {
-            color: #ff7a00;
+        .vf-brand-dot {
+            color: #D68910;
         }
 
-        .vf-header-links {
+        .vf-header-nav {
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 1.5rem;
+            gap: 2rem;
             flex-wrap: wrap;
-            flex: 1 1 auto;
         }
 
-        .vf-header-link, .vf-header-link:visited, .vf-header-link:hover, .vf-header-link:active {
-            color: #ffffff !important;
+        .vf-header-link {
+            color: #FFFFFF !important;
             text-decoration: none !important;
-            font-size: 0.98rem;
-            font-weight: 600;
-            line-height: 1.2;
+            font-family: 'Inter', sans-serif !important;
+            font-size: 0.95rem;
+            font-weight: 500;
+            line-height: 1;
             white-space: nowrap;
+            opacity: 0.96;
+            transition: opacity 0.2s ease, color 0.2s ease;
         }
 
-        .vf-header-link:hover {
-            opacity: 0.88;
+        .vf-header-link:hover,
+        .vf-header-link:focus,
+        .vf-header-link:active,
+        .vf-header-link:visited {
+            color: #FFFFFF !important;
+            text-decoration: none !important;
+            opacity: 0.78;
         }
 
-        @media (max-width: 980px) {
-            .vf-header-wrap {
-                width: calc(100% + 1rem);
-                margin-left: -0.5rem;
-                margin-right: -0.5rem;
+        @media (max-width: 1050px) {
+            .vf-header-bar {
+                padding: 16px 20px;
+                gap: 1rem;
             }
+            .vf-header-nav {
+                gap: 1.2rem;
+            }
+        }
 
-            .vf-header-inner {
-                padding: 0.95rem 1rem;
+        @media (max-width: 820px) {
+            .vf-header-bar {
                 align-items: flex-start;
                 flex-direction: column;
             }
-
-            .vf-header-brand {
-                font-size: 1.45rem;
-            }
-
-            .vf-header-links {
-                width: 100%;
+            .vf-header-nav {
                 justify-content: flex-start;
-                gap: 1rem;
             }
         }
         </style>
@@ -137,45 +134,70 @@ def inject_global_styles() -> None:
         unsafe_allow_html=True,
     )
 
+    components.html(
+        """
+        <script>
+        (function() {
+          const parentWindow = window.parent;
+          const doc = parentWindow.document;
+          const root = doc.documentElement;
+
+          function syncVars() {
+            const block = doc.querySelector('.main .block-container');
+            if (!block) return;
+            const styles = parentWindow.getComputedStyle(block);
+            root.style.setProperty('--vf-block-pad-left', styles.paddingLeft || '1rem');
+            root.style.setProperty('--vf-block-pad-right', styles.paddingRight || '1rem');
+          }
+
+          syncVars();
+          parentWindow.addEventListener('resize', syncVars);
+          if (parentWindow.ResizeObserver) {
+            const observer = new parentWindow.ResizeObserver(syncVars);
+            const block = doc.querySelector('.main .block-container');
+            if (block) observer.observe(block);
+          }
+          setTimeout(syncVars, 50);
+          setTimeout(syncVars, 250);
+        })();
+        </script>
+        """,
+        height=0,
+    )
 
 
-def _clear_nav_query_param() -> None:
-    try:
-        del st.query_params["vf_nav"]
-    except Exception:
-        try:
-            params = st.experimental_get_query_params()
-            params.pop("vf_nav", None)
-            st.experimental_set_query_params(**params)
-        except Exception:
-            pass
 
+def _consume_header_nav() -> str | None:
+    nav = safe_get_query_param("vf_nav") or None
+    if not nav:
+        return None
 
-def render_top_nav() -> None:
-
-    nav = (safe_get_query_param("vf_nav") or "").strip().lower()
-
+    # legado do contrato de fluxo: key="vf_nav_client"
     if nav == "client":
         st.session_state["show_client_area"] = True
         if not st.session_state.get("auth_logged_in"):
             st.session_state["post_login_action"] = "open_client_area"
-        _clear_nav_query_param()
-        st.rerun()
+    elif nav == "how":
+        st.session_state["vf_header_notice"] = "A seção 'Como funciona' será conectada em seguida."
+    elif nav == "plans":
+        st.session_state["vf_header_notice"] = "A seção 'Planos' será conectada em seguida."
+    elif nav == "support":
+        st.session_state["vf_header_notice"] = "A seção 'Dúvida e suporte' será conectada em seguida."
 
-    if nav in {"how", "plans", "support"}:
-        st.session_state["vf_header_notice"] = nav
-        _clear_nav_query_param()
+    try:
+        del st.query_params["vf_nav"]
+    except Exception:
+        pass
 
+    return nav
+
+
+def render_top_nav() -> None:
+    _consume_header_nav()
     st.markdown(build_header_bar_html(get_app_url()), unsafe_allow_html=True)
-
     notice = st.session_state.pop("vf_header_notice", None)
-    if notice == "how":
-        st.info("A seção 'Como funciona' será conectada ao fluxo definitivo na próxima etapa.")
-    elif notice == "plans":
-        st.info("A seção 'Planos' será conectada ao checkout definitivo na próxima etapa.")
-    elif notice == "support":
-        st.info("A seção 'Dúvida e suporte' será conectada ao canal oficial na próxima etapa.")
-
+    if notice:
+        st.info(notice)
 
 
 def render_wallet_summary() -> None:
