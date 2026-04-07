@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from html import escape
 from typing import Any
 
 import streamlit as st
+import streamlit.components.v1 as components
+
 from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
 from ui.auth_panel import render_google_login_box
@@ -22,130 +23,78 @@ def card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
-# historical test anchor preserved: key="vf_nav_client"
+
 def inject_global_styles() -> None:
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@700;800&display=swap');
+        .block-container {
+            padding-top: 0.4rem !important;
+            padding-bottom: 2rem !important;
+            max-width: 100% !important;
+        }
 
         html, body, [data-testid="stAppViewContainer"], .main {
             overflow-x: hidden !important;
         }
 
-        [data-testid="stAppViewContainer"] {
-            background: #ffffff !important;
-        }
-
-        .block-container {
-            padding-top: 0rem !important;
-            padding-left: 0rem !important;
-            padding-right: 0rem !important;
-            padding-bottom: 2rem !important;
-            max-width: 100% !important;
-        }
-
         header[data-testid="stHeader"] {
             background: transparent !important;
-            z-index: 999999 !important;
-            pointer-events: none !important;
-        }
-
-        header[data-testid="stHeader"] [data-testid="stToolbar"],
-        header[data-testid="stHeader"] [data-testid="stToolbar"] *,
-        header[data-testid="stHeader"] button,
-        header[data-testid="stHeader"] a,
-        header[data-testid="stHeader"] svg {
-            pointer-events: auto !important;
         }
 
         .vf-topbar-shell {
             width: 100%;
-            background: #0B132B;
-            margin: 0 0 1.8rem 0;
-            min-height: 96px;
-            box-sizing: border-box;
-            position: relative;
-            z-index: 10;
+            margin: 0 0 1.4rem 0;
+            padding: 0;
+            border-bottom: 1px solid #e8e8e8;
         }
 
-        .vf-topbar-inner {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            min-height: 96px;
-            padding: 0 2rem;
-            box-sizing: border-box;
-        }
-
-        a.vf-brand,
-        a.vf-brand:visited,
-        a.vf-brand:hover,
-        a.vf-brand:active,
-        a.vf-brand:focus {
-            color: #FFFFFF !important;
-            text-decoration: none !important;
-            font-family: 'Montserrat', sans-serif !important;
-            font-size: 1.5rem;
-            font-weight: 700;
+        .vf-brand {
+            font-size: 30px;
+            font-weight: 800;
+            color: #1f2a44;
             letter-spacing: -0.02em;
-            line-height: 1;
-            display: inline-flex;
-            align-items: center;
-            height: 100%;
+            line-height: 1.1;
             white-space: nowrap;
+            margin-top: 0.5rem;
+            margin-bottom: 0.65rem;
         }
 
-        .vf-brand-dot {
-            color: #D68910 !important;
+        .vf-nav-btn .stButton > button[kind="tertiary"] {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: #1f2a44 !important;
+            font-weight: 600 !important;
+            font-size: 15px !important;
+            white-space: nowrap !important;
+            padding: 0 !important;
+            min-height: auto !important;
+            line-height: 1.1 !important;
+            justify-content: flex-end !important;
         }
 
-        .vf-header-nav {
-            position: relative;
-            z-index: 20;
-            pointer-events: auto;
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 2rem;
-            margin-right: 6.35rem;
-            flex-wrap: wrap;
+        .vf-nav-btn .stButton > button[kind="tertiary"]:hover {
+            color: #1f2a44 !important;
+            background: transparent !important;
         }
 
-        .vf-header-link,
-        .vf-header-link:visited,
-        .vf-header-link:hover,
-        .vf-header-link:active,
-        .vf-header-link:focus {
-            color: #FFFFFF !important;
-            text-decoration: none !important;
-            font-family: 'Inter', sans-serif !important;
-            font-size: 0.95rem;
-            font-weight: 500;
-            opacity: 0.92;
-            white-space: nowrap;
-            display: inline-flex;
-            align-items: center;
-            min-height: 96px;
+        .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
+        .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible,
+        .vf-nav-btn .stButton > button[kind="tertiary"]:active {
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            background: transparent !important;
         }
 
-        .vf-header-link:hover {
-            opacity: 0.72;
+        .vf-nav-spacer {
+            height: 0.45rem;
         }
 
-        @media (max-width: 1100px) {
-            .vf-topbar-inner {
-                padding: 1rem 1.25rem;
-                align-items: flex-start;
-                flex-direction: column;
-            }
-
-            .vf-header-nav {
-                gap: 1.2rem;
-                margin-right: 0;
-                justify-content: flex-start;
+        @media (max-width: 900px) {
+            .vf-brand {
+                font-size: 24px;
             }
         }
         </style>
@@ -153,71 +102,40 @@ def inject_global_styles() -> None:
         unsafe_allow_html=True,
     )
 
-def _clear_nav_query_param() -> None:
-    try:
-        del st.query_params["vf_nav"]
-    except Exception:
-        try:
-            params = st.experimental_get_query_params()
-            params.pop("vf_nav", None)
-            st.experimental_set_query_params(**params)
-        except Exception:
-            pass
-
-
-
-def _nav_href(app_url: str, nav: str) -> str:
-    base = (app_url or "").rstrip("/")
-    safe = escape(base, quote=True)
-    return f"{safe}/?vf_nav={nav}" if safe else f"/?vf_nav={nav}"
-
-
-
-def _build_top_nav_html(app_url: str) -> str:
-    links = [
-        ("Como funciona", "how"),
-        ("Área do cliente", "client"),
-        ("Planos", "plans"),
-        ("Dúvida e suporte", "support"),
-    ]
-    nav_html = ''.join(
-        f'<a class="vf-header-link" href="{_nav_href(app_url, key)}" target="_top">{escape(label)}</a>'
-        for label, key in links
-    )
-    return (
-        '<div class="vf-topbar-shell">'
-        '  <div class="vf-topbar-inner">'
-        '    <a class="vf-brand" href="/?" target="_top">Viabilidade-Fácil<span class="vf-brand-dot">.</span></a>'
-        f'    <nav class="vf-header-nav">{nav_html}</nav>'
-        '  </div>'
-        '</div>'
-    )
-
 
 
 def render_top_nav() -> None:
-    nav = (safe_get_query_param("vf_nav") or "").strip().lower()
+    st.markdown('<div class="vf-topbar-shell">', unsafe_allow_html=True)
+    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.2, 1.35, 1.55, 0.95, 1.6], gap="small")
 
-    if nav == "client":
-        st.session_state["show_client_area"] = True
-        if not st.session_state.get("auth_logged_in"):
-            st.session_state["post_login_action"] = "open_client_area"
-        _clear_nav_query_param()
-        st.rerun()
+    with brand_col:
+        st.markdown('<div class="vf-brand">Viabilidade Fácil</div>', unsafe_allow_html=True)
 
-    if nav in {"how", "plans", "support"}:
-        st.session_state["vf_header_notice"] = nav
-        _clear_nav_query_param()
+    with nav1:
+        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown(_build_top_nav_html(get_app_url()), unsafe_allow_html=True)
+    with nav2:
+        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
+        if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=False):
+            st.session_state["show_client_area"] = True
+            if not st.session_state.get("auth_logged_in"):
+                st.session_state["post_login_action"] = "open_client_area"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    notice = st.session_state.pop("vf_header_notice", None)
-    if notice == "how":
-        st.info("A seção 'Como funciona' será conectada ao fluxo definitivo na próxima etapa.")
-    elif notice == "plans":
-        st.info("A seção 'Planos' será conectada ao checkout definitivo na próxima etapa.")
-    elif notice == "support":
-        st.info("A seção 'Dúvida e suporte' será conectada ao canal oficial na próxima etapa.")
+    with nav3:
+        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with nav4:
+        st.markdown('<div class="vf-nav-spacer"></div><div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 
