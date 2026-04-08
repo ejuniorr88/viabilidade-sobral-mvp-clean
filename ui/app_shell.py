@@ -97,11 +97,8 @@ def inject_global_styles() -> None:
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton {{
-            width: 100%;
-            margin: 0;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
+            width: 100% !important;
+            margin: 0 !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
@@ -112,13 +109,19 @@ def inject_global_styles() -> None:
             font-weight: 600 !important;
             font-size: 15px !important;
             white-space: nowrap !important;
-            padding: 0 !important;
-            min-height: 72px !important;
-            line-height: 1 !important;
-            justify-content: center !important;
             width: 100% !important;
+            height: 72px !important;
+            line-height: 72px !important;
+            display: block !important;
+            padding: 0 10px !important;
+            cursor: pointer !important;
             border-radius: 0 !important;
             margin: 0 !important;
+            z-index: 10 !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] * {{
+            pointer-events: none !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:hover {{
@@ -150,7 +153,8 @@ def inject_global_styles() -> None:
 
             [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
-                min-height: 64px !important;
+                height: 64px !important;
+                line-height: 64px !important;
             }}
         }}
         </style>
