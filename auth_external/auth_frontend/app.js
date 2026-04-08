@@ -157,17 +157,13 @@
       localStorage.setItem("vf_auth_popup_token", accessToken);
     } catch (_err) {}
 
-    const acked = await waitForParentAck(4000);
-    if (acked) {
-      setStatus("Login concluído. Voltando para o sistema...", "ok");
-      window.setTimeout(() => {
-        try { window.close(); } catch (_err) {}
-      }, 120);
-      return true;
-    }
+    setStatus("Login concluído. Voltando para o sistema...", "ok");
 
-    setStatus("Login concluído. Se a janela principal não atualizar, volte manualmente ao sistema.", "ok");
-    return false;
+    window.setTimeout(() => {
+      try { window.close(); } catch (_err) {}
+    }, 200);
+
+    return true;
   }
 
   async function refreshState() {
