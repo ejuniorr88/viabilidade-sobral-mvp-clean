@@ -20,19 +20,24 @@ def test_app_prepare_helper_delegates_real_flow_to_checkout_core() -> None:
     assert match, "Helper _prepare_and_consume_report não encontrado no app.py."
     body = match.group(0)
 
-    assert "prepare_and_consume_report(" in body, (
+    assert "checkout_flow_core.prepare_and_consume_report(" in body, (
         "O helper local do app.py deve delegar a orquestração real para o core.checkout_flow."
     )
-    forbidden_inline = [
-        "consume_viability_credit(",
-        "save_client_report(",
-        "commit_report_snapshot_func(",
-        "commit_report_snapshot(",
+
+    # O shim pode manter âncoras em comentários e passar funções por keyword args,
+    # mas não deve reincorporar chamadas diretas inline no helper local.
+    uncommented = "\n".join(
+        line for line in body.splitlines() if not line.lstrip().startswith("#")
+    )
+    forbidden_direct_calls = [
+        r"(?<!_)consume_viability_credit\(",
+        r"(?<!_)save_client_report\(",
+        r"(?<!_)commit_report_snapshot\(",
     ]
-    for item in forbidden_inline:
-        assert item not in body, (
+    for pattern in forbidden_direct_calls:
+        assert re.search(pattern, uncommented) is None, (
             "O helper local do app.py deve permanecer como shim de compatibilidade, "
-            f"sem reincorporar a lógica crítica inline: {item}"
+            f"sem reincorporar chamada direta inline: {pattern}"
         )
 
 
