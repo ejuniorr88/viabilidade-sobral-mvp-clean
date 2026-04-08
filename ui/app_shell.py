@@ -57,7 +57,6 @@ def inject_global_styles() -> None:
             pointer-events: auto !important;
         }}
 
-        /* neutraliza a área invisível da toolbar do Streamlit */
         div[data-testid="stToolbar"] {{
             pointer-events: none !important;
         }}
@@ -71,7 +70,7 @@ def inject_global_styles() -> None:
         [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
             background: {BLUE} !important;
             border-bottom: 3px solid {ORANGE} !important;
-            min-height: 82px;
+            min-height: 92px;
             padding: 0 1.4rem !important;
             margin-bottom: 1.25rem !important;
             border-radius: 0 !important;
@@ -97,7 +96,7 @@ def inject_global_styles() -> None:
             line-height: 1;
             white-space: nowrap;
             margin: 0;
-            min-height: 82px;
+            min-height: 92px;
             display: flex;
             align-items: center;
         }}
@@ -124,7 +123,7 @@ def inject_global_styles() -> None:
             font-size: 15px !important;
             white-space: nowrap !important;
             padding: 0 12px !important;
-            min-height: 82px !important;
+            min-height: 92px !important;
             line-height: 1 !important;
             justify-content: center !important;
             width: 100% !important;
@@ -162,18 +161,18 @@ def inject_global_styles() -> None:
 
         @media (max-width: 900px) {{
             [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
-                min-height: 70px;
+                min-height: 76px;
                 padding: 0 0.9rem !important;
             }}
 
             .vf-brand {{
                 font-size: 24px;
-                min-height: 70px;
+                min-height: 76px;
             }}
 
             [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
-                min-height: 70px !important;
+                min-height: 76px !important;
             }}
         }}
         </style>
