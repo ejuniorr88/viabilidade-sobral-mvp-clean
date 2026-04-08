@@ -5,6 +5,16 @@ from copy import deepcopy
 from typing import Any, Callable, Dict, MutableMapping
 
 
+PENDING_REPORT_STATE_KEYS = (
+    "confirm_new_report",
+    "pending_report_calc",
+    "pending_report_session",
+    "pending_report_signature",
+    "report_review_open",
+    "report_terms_accepted",
+)
+
+
 def _safe_float(value: Any) -> float:
     try:
         return float(value)
@@ -83,6 +93,8 @@ def clear_pending_report(session_state: MutableMapping[str, Any]) -> None:
     session_state["pending_report_calc"] = None
     session_state["pending_report_session"] = None
     session_state["pending_report_signature"] = None
+    session_state["report_review_open"] = False
+    session_state["report_terms_accepted"] = False
 
 
 def clear_report_runtime_state(
@@ -166,3 +178,38 @@ def arm_new_report_confirmation(
     session_state["pending_report_calc"] = deepcopy(calc_ref)
     session_state["pending_report_session"] = deepcopy(current_report_session)
     session_state["pending_report_signature"] = current_report_signature
+
+
+def arm_report_review(
+    *,
+    session_state: MutableMapping[str, Any],
+    calc_ref: Dict[str, Any],
+    current_report_session: Dict[str, Any],
+    current_report_signature: str,
+    requires_new_credit: bool,
+) -> None:
+    clear_pending_report(session_state)
+    session_state["report_review_open"] = True
+    session_state["report_terms_accepted"] = False
+    session_state["pending_report_calc"] = deepcopy(calc_ref)
+    session_state["pending_report_session"] = deepcopy(current_report_session)
+    session_state["pending_report_signature"] = current_report_signature
+    if requires_new_credit:
+        arm_new_report_confirmation(
+            session_state=session_state,
+            calc_ref=calc_ref,
+            current_report_session=current_report_session,
+            current_report_signature=current_report_signature,
+        )
+
+
+def should_reset_pending_review(
+    *,
+    session_state: MutableMapping[str, Any],
+    current_report_signature: str,
+) -> bool:
+    pending_signature = session_state.get("pending_report_signature")
+    review_open = bool(session_state.get("report_review_open"))
+    if not review_open or not pending_signature:
+        return False
+    return str(pending_signature) != str(current_report_signature)
