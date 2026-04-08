@@ -12,54 +12,27 @@ def _fmt_num(value: Any) -> str:
         return "—"
 
 
-def _fmt_dims(front: Any, depth: Any, area: Any, irregular: bool) -> str:
-    if irregular:
-        return f"Terreno irregular • área informada: {_fmt_num(area)} m²"
-    if float(front or 0) > 0 and float(depth or 0) > 0:
-        return f"{_fmt_num(front)} m × {_fmt_num(depth)} m • área: {_fmt_num(area)} m²"
-    return f"Área do lote: {_fmt_num(area)} m²"
+def _pick_zone(calc: Dict[str, Any]) -> str:
+    return str(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_lookup") or "—")
 
 
-def build_review_summary(*, calc_ref: Dict[str, Any], session_snapshot: Dict[str, Any]) -> Dict[str, str]:
-    area_pretendida = session_snapshot.get("built_ground_m2") or calc_ref.get("built_ground_m2") or calc_ref.get("built_ground_input_m2")
-    has_area_pretendida = False
-    try:
-        has_area_pretendida = float(area_pretendida or 0) > 0
-    except Exception:
-        has_area_pretendida = False
-
-    zone_value = (
-        calc_ref.get("zone")
-        or calc_ref.get("zone_label_raw")
-        or calc_ref.get("zone_label")
-        or calc_ref.get("zone_sigla")
-        or "—"
-    )
-    street_value = calc_ref.get("via_nome") or calc_ref.get("street_name") or calc_ref.get("road_name") or calc_ref.get("logradouro") or "—"
-    dimensions_value = _fmt_dims(
-        session_snapshot.get("lot_front_m"),
-        session_snapshot.get("lot_depth_m"),
-        session_snapshot.get("lot_area_m2"),
-        bool(session_snapshot.get("lot_is_irregular")),
-    )
-    return {
-        "Zona do lote": str(zone_value),
-        "Rua": str(street_value),
-        "Dimensões do terreno": dimensions_value,
-        "Área pretendida": f"{_fmt_num(area_pretendida)} m²" if has_area_pretendida else "Não informada",
-    }
+def _pick_street(calc: Dict[str, Any]) -> str:
+    street = calc.get("street_name") or calc.get("via_name") or calc.get("road_name") or calc.get("logradouro")
+    return str(street or "—")
 
 
-def render_review_panel(*, calc_ref: Dict[str, Any], session_snapshot: Dict[str, Any]) -> None:
-    summary = build_review_summary(calc_ref=calc_ref, session_snapshot=session_snapshot)
+def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> None:
+    st.markdown("### Conferência dos dados do relatório")
+    st.caption("Revise as informações abaixo antes de seguir para a emissão do relatório.")
 
-    st.markdown("### Conferência dos dados")
-    st.caption("Revise as informações abaixo antes de seguir para a geração do relatório.")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"**Zona do lote:** {_pick_zone(calc)}")
+        st.markdown(f"**Rua/Via:** {_pick_street(calc)}")
+    with c2:
+        st.markdown(f"**Dimensões do terreno:** {_fmt_num(session_snapshot.get('lot_front_m'))} m × {_fmt_num(session_snapshot.get('lot_depth_m'))} m")
+        st.markdown(f"**Área do lote:** {_fmt_num(session_snapshot.get('lot_area_m2'))} m²")
 
-    col1, col2 = st.columns(2)
-    items = list(summary.items())
-    for idx, (label, value) in enumerate(items):
-        target = col1 if idx % 2 == 0 else col2
-        with target:
-            st.markdown(f"**{label}**")
-            st.write(value)
+    area_pretendida = calc.get("built_ground_input_m2")
+    if area_pretendida not in (None, "", 0, 0.0):
+        st.markdown(f"**Área pretendida informada:** {_fmt_num(area_pretendida)} m²")

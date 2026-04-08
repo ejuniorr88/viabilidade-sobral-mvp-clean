@@ -5,20 +5,19 @@ from typing import Tuple
 import streamlit as st
 
 
-def render_final_confirmation(
-    *,
-    title: str = "Confirmação final",
-    message: str = "Você confirma que os dados informados estão corretos e deseja gerar o relatório?",
-    confirm_label: str = "Sim, gerar relatório",
-    cancel_label: str = "Voltar",
-    confirm_key: str,
-    cancel_key: str,
-) -> Tuple[bool, bool]:
-    st.markdown(f"### {title}")
-    st.warning(message)
-    c1, c2 = st.columns(2)
-    with c1:
-        confirmed = st.button(confirm_label, key=confirm_key, use_container_width=True)
-    with c2:
-        canceled = st.button(cancel_label, key=cancel_key, use_container_width=True)
-    return confirmed, canceled
+def render_final_confirmation(*, is_new_report: bool) -> Tuple[bool, bool]:
+    if is_new_report:
+        st.warning("Você está prestes a gerar outro relatório. Isso consumirá mais 1 crédito.")
+    else:
+        st.info("Você confirma que os dados informados estão corretos e deseja gerar o relatório?")
+
+    col_yes, col_no = st.columns(2)
+    with col_yes:
+        confirm = st.button(
+            "Confirmar e gerar relatório" if not is_new_report else "Confirmar e gerar outro relatório",
+            key="btn_report_review_confirm",
+            use_container_width=True,
+        )
+    with col_no:
+        cancel = st.button("Cancelar", key="btn_report_review_cancel", use_container_width=True)
+    return bool(confirm), bool(cancel)
