@@ -12,12 +12,12 @@ _CARD_CSS = """
 }
 .report-review-hero {
     position: relative;
-    background: linear-gradient(135deg, #edf4ff 0%, #dbeafe 42%, #e0f2fe 100%);
-    border: 1px solid #bfd7ff;
-    border-left: 7px solid #2563eb;
+    background: linear-gradient(135deg, #fff7f3 0%, #ffeae4 52%, #fff3ef 100%);
+    border: 1px solid #f3c7ba;
+    border-left: 7px solid #e15b3d;
     border-radius: 20px;
     padding: 1.15rem 1.2rem 1.1rem 1.2rem;
-    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.10);
+    box-shadow: 0 12px 28px rgba(225, 91, 61, 0.10);
     overflow: hidden;
 }
 .report-review-hero::before {
@@ -28,7 +28,7 @@ _CARD_CSS = """
     width: 170px;
     height: 170px;
     border-radius: 999px;
-    background: radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.12) 58%, transparent 72%);
+    background: radial-gradient(circle, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.15) 58%, transparent 72%);
     pointer-events: none;
 }
 .report-review-hero::after {
@@ -39,16 +39,16 @@ _CARD_CSS = """
     width: 210px;
     height: 210px;
     border-radius: 999px;
-    background: radial-gradient(circle, rgba(59,130,246,0.10) 0%, rgba(59,130,246,0.04) 45%, transparent 72%);
+    background: radial-gradient(circle, rgba(251,146,60,0.10) 0%, rgba(251,146,60,0.04) 45%, transparent 72%);
     pointer-events: none;
 }
 .report-review-badge {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    background: rgba(255,255,255,0.90);
-    color: #1d4ed8;
-    border: 1px solid rgba(37,99,235,0.20);
+    background: rgba(255,255,255,0.92);
+    color: #c2410c;
+    border: 1px solid rgba(225,91,61,0.20);
     border-radius: 999px;
     padding: 0.34rem 0.78rem;
     font-size: 0.81rem;
@@ -61,20 +61,20 @@ _CARD_CSS = """
     font-size: 1.55rem;
     line-height: 1.18;
     font-weight: 800;
-    color: #0f172a;
+    color: #3b1d17;
 }
 .report-review-subtitle {
     margin: 0.5rem 0 0 0;
-    color: #1f3b64;
+    color: #6b2c22;
     font-size: 1rem;
 }
 .report-review-note {
     margin-top: 0.9rem;
-    background: rgba(255,255,255,0.86);
-    border: 1px dashed rgba(37,99,235,0.30);
+    background: rgba(255,255,255,0.88);
+    border: 1px dashed rgba(225,91,61,0.30);
     border-radius: 13px;
     padding: 0.78rem 0.9rem;
-    color: #0f172a;
+    color: #3b1d17;
     font-size: 0.94rem;
     font-weight: 700;
 }
@@ -82,18 +82,18 @@ _CARD_CSS = """
     height: 0.9rem;
 }
 .review-item {
-    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-    border: 1px solid #d7e6fb;
+    background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%);
+    border: 1px solid #f2d4cb;
     border-radius: 16px;
     padding: 1rem 1rem 0.95rem 1rem;
     min-height: 108px;
-    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    box-shadow: 0 6px 18px rgba(59, 23, 13, 0.04);
 }
 .review-item-label {
     display: inline-block;
     font-size: 0.79rem;
     font-weight: 800;
-    color: #1d4ed8;
+    color: #c2410c;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-bottom: 0.45rem;
@@ -102,7 +102,7 @@ _CARD_CSS = """
     display: block;
     font-size: 1.12rem;
     font-weight: 800;
-    color: #0f172a;
+    color: #2c1611;
     line-height: 1.42;
     word-break: break-word;
 }
@@ -110,23 +110,23 @@ _CARD_CSS = """
     display: block;
     margin-top: 0.35rem;
     font-size: 0.84rem;
-    color: #64748b;
+    color: #7c5b53;
 }
 .review-highlight {
     margin-top: 0.95rem;
-    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
-    border: 1px solid #fdba74;
-    border-left: 6px solid #f97316;
+    background: linear-gradient(135deg, #fff1ee 0%, #ffe2db 100%);
+    border: 1px solid #f5b6a6;
+    border-left: 6px solid #dc2626;
     border-radius: 16px;
     padding: 0.95rem 1rem;
-    box-shadow: 0 8px 20px rgba(249, 115, 22, 0.10);
+    box-shadow: 0 8px 20px rgba(220, 38, 38, 0.10);
 }
 .review-highlight .review-item-label {
-    color: #c2410c;
+    color: #b91c1c;
     margin-bottom: 0.25rem;
 }
 .review-highlight .review-item-value {
-    color: #7c2d12;
+    color: #7f1d1d;
 }
 </style>
 """
@@ -148,13 +148,29 @@ def _pick_street(calc: Dict[str, Any]) -> str:
     return str(street or "—")
 
 
+def _first_positive(*values: Any) -> float | None:
+    for value in values:
+        try:
+            if value is None or value == "":
+                continue
+            num = float(value)
+            if num > 0:
+                return num
+        except Exception:
+            continue
+    return None
+
+
 def _pick_built_area(calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> Any:
-    return (
-        session_snapshot.get("built_ground_m2")
-        or session_snapshot.get("built_ground_input_m2")
-        or calc.get("built_ground_m2")
-        or calc.get("built_ground_input_m2")
-        or 0
+    return _first_positive(
+        session_snapshot.get("built_ground_m2"),
+        session_snapshot.get("built_ground_input_m2"),
+        calc.get("built_ground_m2"),
+        calc.get("built_ground_input_m2"),
+        calc.get("built_ground_adopted_m2"),
+        st.session_state.get("built_ground_m2"),
+        st.session_state.get("built_ground_input_m2"),
+        st.session_state.get("built_ground_m2_input"),
     )
 
 
@@ -203,7 +219,7 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
         _render_item("Área do lote", f"{_fmt_num(session_snapshot.get('lot_area_m2'))} m²", "Área calculada a partir dos dados atuais do lote.")
 
     area_pretendida = _pick_built_area(calc, session_snapshot)
-    if area_pretendida not in (None, "", 0, 0.0):
+    if area_pretendida is not None:
         st.markdown(
             f"""
             <div class="review-highlight">
