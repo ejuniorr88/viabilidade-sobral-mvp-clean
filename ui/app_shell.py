@@ -102,8 +102,6 @@ def inject_global_styles() -> None:
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            position: relative !important;
-            z-index: 2 !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
@@ -118,18 +116,9 @@ def inject_global_styles() -> None:
             min-height: 72px !important;
             line-height: 1 !important;
             justify-content: center !important;
-            align-items: center !important;
             width: 100% !important;
             border-radius: 0 !important;
             margin: 0 !important;
-            position: relative !important;
-            z-index: 2 !important;
-            pointer-events: auto !important;
-            cursor: pointer !important;
-        }}
-
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] * {{
-            pointer-events: none !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:hover {{
