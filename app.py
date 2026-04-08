@@ -16,6 +16,7 @@ from ui.app_shell import (
     render_wallet_summary,
 )
 from ui.flow.primary_actions import render_primary_actions
+from ui.bloco_como_funciona import render_como_funciona
 from ui.flow.use_selector import render_use_selector
 from ui.legal import render_privacy_page, render_terms_page
 
@@ -243,6 +244,8 @@ with st.sidebar:
     st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
 
     lot_area, built_ground, permeable_area = render_lot_inputs()
+
+render_como_funciona()
 
 radius_m = render_mapa_section(zones_gj)
 
