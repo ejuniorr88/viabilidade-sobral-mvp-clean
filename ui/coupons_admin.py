@@ -84,6 +84,22 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
 
     critical_locked = mode == "edit" and bool(defaults["paid_usage_locked"])
 
+    benefit_state_key = f"coupon_admin_benefit_type_{mode}_{defaults['id'] or 'new'}"
+    valid_benefit_options = ["discount", "credit"]
+    default_benefit_type = defaults["benefit_type"] if defaults["benefit_type"] in valid_benefit_options else "discount"
+    if benefit_state_key not in st.session_state:
+        st.session_state[benefit_state_key] = default_benefit_type
+
+    st.selectbox(
+        "Benefício do cupom",
+        options=valid_benefit_options,
+        format_func=lambda v: "Desconto no valor" if v == "discount" else "Créditos extras",
+        key=benefit_state_key,
+        disabled=critical_locked,
+        help="Escolha se o cupom reduz o valor da compra ou se adiciona créditos bônus após o pagamento.",
+    )
+    benefit_type = st.session_state.get(benefit_state_key, default_benefit_type)
+
     with st.form(form_key, clear_on_submit=False):
         if critical_locked:
             st.warning("Este cupom já teve uso pago confirmado. Campos críticos ficam travados para preservar o histórico.")
@@ -98,12 +114,10 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
                 index=["manual", "referral", "public_discount", "campaign"].index(defaults["coupon_type"]),
                 disabled=critical_locked,
             )
-            benefit_type = st.selectbox(
-                "Benefício do cupom",
-                options=["discount", "credit"],
-                format_func=lambda v: "Desconto no valor" if v == "discount" else "Créditos extras",
-                index=["discount", "credit"].index(defaults["benefit_type"] if defaults["benefit_type"] in ["discount", "credit"] else "discount"),
-                disabled=critical_locked,
+            st.caption(
+                "Benefício selecionado: Desconto no valor"
+                if benefit_type == "discount"
+                else "Benefício selecionado: Créditos extras"
             )
             if benefit_type == "discount":
                 discount_type = st.selectbox(
