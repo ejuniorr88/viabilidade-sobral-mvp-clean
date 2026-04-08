@@ -57,6 +57,17 @@ def inject_global_styles() -> None:
             pointer-events: auto !important;
         }}
 
+        /* CORREÇÃO REAL: neutraliza a área invisível da toolbar do Streamlit */
+        div[data-testid="stToolbar"] {{
+            pointer-events: none !important;
+        }}
+
+        div[data-testid="stToolbar"] button,
+        div[data-testid="stToolbar"] a,
+        div[data-testid="stToolbar"] [role="button"] {{
+            pointer-events: auto !important;
+        }}
+
         [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
             background: {BLUE} !important;
             border-bottom: 3px solid {ORANGE} !important;
@@ -65,6 +76,8 @@ def inject_global_styles() -> None:
             margin-bottom: 1.25rem !important;
             border-radius: 0 !important;
             align-items: center !important;
+            position: relative !important;
+            z-index: 10 !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) > div {{
@@ -120,7 +133,7 @@ def inject_global_styles() -> None:
             pointer-events: auto !important;
             cursor: pointer !important;
             position: relative !important;
-            z-index: 10 !important;
+            z-index: 20 !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] p,
