@@ -88,7 +88,6 @@ def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) 
         "zone": _normalize_text(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_label")),
         "road_name": _normalize_text(calc.get("street_name") or calc.get("road_name") or calc.get("logradouro")),
         "road_type": _normalize_text(calc.get("road_type") or calc.get("via_type")),
-        "project_mode": _normalize_text(calc.get("project_mode")),
         "lot_area_m2": _normalize_number(_pick_value(session_state.get("lot_area_m2"), calc.get("lot_area_m2"))),
         "built_ground_m2": _normalize_number(
             _pick_value(
@@ -200,7 +199,6 @@ def save_client_report(
         "zone_label": zone,
         "road_name": road_name,
         "road_type": _normalize_text(calc.get("road_type") or calc.get("via_type")),
-        "project_mode": _normalize_text(calc.get("project_mode")),
         "lot_area_m2": _normalize_number(session_state.get("lot_area_m2") or calc.get("lot_area_m2")),
         "pdf_bucket": _BUCKET,
         "pdf_storage_path": storage_path,
@@ -244,6 +242,7 @@ def save_client_report(
                         calc.get("lot_profundidade_m"),
                     )
                 ),
+                "project_mode": _normalize_text(calc.get("project_mode")),
             },
         },
     }
