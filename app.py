@@ -1,434 +1,134 @@
-import json
-from copy import deepcopy
-from pathlib import Path
+from __future__ import annotations
+
 from typing import Any, Dict
 
 import streamlit as st
-import streamlit.components.v1 as components
 
-from core.session.bootstrap import bootstrap_session_state
 
-from ui.app_shell import (
-    card as _card,
-    inject_global_styles,
-    render_auth_callback_bridge,
-    render_top_nav,
-    render_wallet_summary,
-)
-from ui.flow.primary_actions import render_primary_actions
-from ui.flow.use_selector import render_use_selector
-from ui.legal import render_privacy_page, render_terms_page
-
-st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
-
-
-bootstrap_session_state(st.session_state)
-
-DATA_DIR = Path("data")
-ZONE_FILE = DATA_DIR / "zoneamento_light.json"
-
-try:
-    from core.zones_map import load_zones
-except Exception:
-    from core.zones_mapa import load_zones  # type: ignore
-
-try:
-    from core.supabase_rules import fetch_rule, pick_rule  # type: ignore
-except Exception:
-    from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
-
-from ui.map.section import render_mapa_section
-from ui.lot.inputs import render_lot_inputs
-from ui.location.section import render_localizacao_section
-from ui.indices.section import render_indices_section
-from ui.analysis.section import render_analise_section
-from ui.report.section import render_report_section
-from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
-from ui.relatorio import (
-    render_relatorio_section,
-    render_zone_description_section,
-    render_unifamiliar_inadequado_preview,
-    should_block_unifamiliar_preview,
-)
-from core.auth import handle_oauth_callback, safe_get_query_param
-from ui.auth_panel import render_google_login_top
-from ui.access_gates import (
-    render_login_gate_block,
-    render_client_area_gate,
-    resolve_calculate_access,
-    render_login_gate_if_needed,
-)
-from ui.payments_panel import render_payments_panel
-from ui.relatorio_blocks.multifamiliar_guia import (
-    render_multifamiliar_inadequado_preview,
-    should_block_multifamiliar_preview,
-)
-from ui.client_area import render_client_area_page
-from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
-from core.report_pdf import generate_report_pdf_bytes
-from core.client_reports import save_client_report, build_report_signature
-from core import report_confirmation as report_confirmation_core
-
-
-@st.cache_data(show_spinner=False)
-def _zones_geojson() -> Dict[str, Any]:
-    with open(ZONE_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-@st.cache_resource(show_spinner=False)
-def _zones_prepared():
-    return load_zones(ZONE_FILE)
-
-
-
-def _current_report_session_snapshot(calc_ref, built_ground_value, permeable_area_value):
-    return report_confirmation_core.current_report_session_snapshot(
-        calc_ref=calc_ref,
-        built_ground_value=built_ground_value,
-        permeable_area_value=permeable_area_value,
-        session_state=st.session_state,
-    )
-
-
-def _commit_report_snapshot(calc_ref, session_snapshot, pdf_bytes, signature):
-    report_confirmation_core.commit_report_snapshot(
-        session_state=st.session_state,
-        calc_ref=calc_ref,
-        session_snapshot=session_snapshot,
-        pdf_bytes=pdf_bytes,
-        signature=signature,
-    )
-
-
-def _clear_pending_report():
-    report_confirmation_core.clear_pending_report(st.session_state)
-
-
-def _clear_report_runtime_state(
-    *,
-    clear_last_calc_signature: bool = False,
-    preserve_snapshot: bool = False,
-    preserve_pending: bool = False,
-) -> None:
-    report_confirmation_core.clear_report_runtime_state(
-        session_state=st.session_state,
-        clear_last_calc_signature=clear_last_calc_signature,
-        preserve_snapshot=preserve_snapshot,
-        preserve_pending=preserve_pending,
-    )
-
-
-def _build_current_report_signature(calc_ref, session_snapshot):
-    return build_report_signature(calc=calc_ref, session_state=session_snapshot)
-
-
-def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
-    if not isinstance(calc_ref, dict):
-        return False
-    if not calc_ref.get("ok") or not calc_ref.get("rule") or not (calc_ref.get("zone") or calc_ref.get("zone_sigla")) or calc_ref.get("err"):
-        return False
-    if str(calc_ref.get("use_type_code") or "").startswith("RES_MULTI_") and calc_ref.get("project_mode") == "GUIA_FASE_1":
-        return should_block_multifamiliar_preview(calc_ref, rule=calc_ref.get("rule") or {})
-    return should_block_unifamiliar_preview(calc_ref)
-
-
-def _render_blocked_report_preview(calc_ref: Dict[str, Any]) -> None:
-    rule_ref = calc_ref.get("rule") or {}
-    if str(calc_ref.get("use_type_code") or "").startswith("RES_MULTI_") and calc_ref.get("project_mode") == "GUIA_FASE_1":
-        render_multifamiliar_inadequado_preview(calc=calc_ref, rule=rule_ref)
-    else:
-        render_unifamiliar_inadequado_preview(calc_ref)
-
-
-def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, user_id_value, selected_use_label_value, categoria_label_value):
-    pdf_bytes = generate_report_pdf_bytes(calc=calc_ref, session_state=session_snapshot)
-    debit_result = consume_viability_credit(
-        user_id=user_id_value,
-        amount=1,
-        description="Geração de relatório de viabilidade",
-    )
-    if not debit_result.get("ok"):
-        raise RuntimeError(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
-    _commit_report_snapshot(calc_ref, session_snapshot, pdf_bytes, report_signature)
-    try:
-        if st.session_state.get("last_saved_report_signature") != report_signature:
-            save_result = save_client_report(
-                user_id=user_id_value,
-                user_email=st.session_state.get("auth_user_email") or "",
-                calc={**calc_ref, "selected_use_label": selected_use_label_value, "categoria_label": categoria_label_value},
-                session_state=session_snapshot,
-                pdf_bytes=pdf_bytes,
-                report_signature=report_signature,
-            )
-            if save_result.get("ok"):
-                st.session_state.last_saved_report_signature = report_signature
-    except Exception:
-        pass
-    return debit_result, pdf_bytes
-
-
-if safe_get_query_param("auth_flow") == "callback":
-    render_auth_callback_bridge()
-
-handle_oauth_callback()
-inject_global_styles()
-
-legal_view = safe_get_query_param("view")
-if legal_view == "terms":
-    render_terms_page()
-    st.stop()
-elif legal_view == "privacy":
-    render_privacy_page()
-    st.stop()
-
-render_top_nav()
-
-zones_gj = _zones_geojson()
-zones_prepared = _zones_prepared()
-
-user_logged_in = bool(st.session_state.get("auth_logged_in"))
-user_id = st.session_state.get("auth_user_id")
-user_email = st.session_state.get("auth_user_email")
-user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
-
-# Compatibilidade contratual: a resolução real foi modularizada em ui.runtime.flow_state.
-# if st.session_state.get("post_login_action") == "open_client_area" and user_logged_in and user_id:
-#     st.session_state["show_client_area"] = True
-#     st.session_state["post_login_action"] = None
-apply_post_login_runtime_flags(
-    st.session_state,
-    user_logged_in=user_logged_in,
-    user_id=user_id,
-)
-
-if st.session_state.get("show_client_area"):
-    credit_balance = None
-    if user_logged_in and user_id:
-        try:
-            credit_balance = get_credit_balance(user_id)
-        except Exception:
-            credit_balance = None
-    render_client_area_gate(
-        user_logged_in=user_logged_in,
-        user_id=user_id,
-        user_name=user_name,
-        user_email=user_email or "—",
-        credit_balance=credit_balance,
-    )
-    st.stop()
-
-if user_logged_in and user_id and user_email:
-    reconcile_key = f"{user_id}:{user_email}"
-    if st.session_state.get("wallet_reconcile_done_for") != reconcile_key:
-        try:
-            reconcile_result = reconcile_wallet_to_current_user(user_id, user_email)
-            st.session_state["wallet_reconcile_done_for"] = reconcile_key
-            st.session_state["wallet_reconcile_result"] = reconcile_result
-        except Exception as e:
-            st.session_state["wallet_reconcile_error"] = str(e)
-
-main_spacer_col, login_col = st.columns([2.4, 1.2], gap="large")
-with main_spacer_col:
-    st.write("")
-with login_col:
-    if user_logged_in and user_id:
-        render_wallet_summary()
-    render_google_login_top()
-
-with st.sidebar:
-    categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)
-    st.session_state.calc["use_type_code"] = selected_use_code
-
-    st.markdown("### 📐 3. Dados do Lote")
-    st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
-
-    lot_area, built_ground, permeable_area = render_lot_inputs()
-
-radius_m = render_mapa_section(zones_gj)
-
-clicked_calcular = render_primary_actions(
-    session_state=st.session_state,
-    clear_report_runtime_state=_clear_report_runtime_state,
-)
-
-# Compatibilidade contratual: a limpeza real continua delegada em ui.flow.primary_actions.
-limpar_tudo = False
-if limpar_tudo:
-    _clear_report_runtime_state(clear_last_calc_signature=True)
-    st.session_state.free_calc_done = False
-    st.session_state.post_login_action = None
-
-st.session_state.calc["lot_area_m2"] = float(lot_area)
-st.session_state.calc["lot_front_m"] = float(st.session_state.get("lot_front_m") or st.session_state.calc.get("lot_testada_m") or 0.0)
-st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m") or st.session_state.calc.get("lot_profundidade_m") or 0.0)
-st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
-st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
-
-current_signature = report_confirmation_core.build_calc_signature(
-    selected_lat=st.session_state.get("selected_lat"),
-    selected_lon=st.session_state.get("selected_lon"),
-    use_type_code=st.session_state.calc.get("use_type_code"),
-    project_mode=st.session_state.calc.get("project_mode"),
-    categoria_label=categoria_label,
-)
-
-if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
-    _clear_report_runtime_state(preserve_snapshot=True, preserve_pending=True)
-    st.session_state.free_calc_done = False
-    st.session_state.calc.pop("err", None)
-    st.session_state.calc.pop("rule", None)
-
-calc = st.session_state.calc
-
-st.markdown('<div id="login-gate-start"></div>', unsafe_allow_html=True)
-
-run_free_calc_now = resolve_calculate_access(
-    clicked_calcular=clicked_calcular,
-    categoria_label=categoria_label,
-    user_logged_in=user_logged_in,
-    user_id=user_id,
-    session_state=st.session_state,
-)
-
-render_login_gate_if_needed(
-    user_logged_in=user_logged_in,
-    user_id=user_id,
-    show_login_gate=bool(st.session_state.get("show_login_gate")),
-)
-
-st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
-
-show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
-
-if run_free_calc_now:
-    _clear_report_runtime_state(preserve_snapshot=True)
-    st.session_state.free_calc_done = False
-    st.session_state.last_calc_signature = current_signature
-
-    calc.pop("err", None)
-    calc.pop("rule", None)
-
-    _ = render_localizacao_section(True, zones_prepared, radius_m)
-
-    if calc.get("zone") and not calc.get("rule"):
-        try:
-            rule = fetch_rule(calc.get("zone_sigla") or calc["zone"], calc.get("use_type_code") or "RES_UNI", calc.get("subzone_code") or "PADRAO", calc.get("zone_label_raw") or calc.get("zone"))
-            if rule:
-                calc["rule"] = rule
-                st.session_state.free_calc_done = True
-            else:
-                calc["err"] = (
-                    f"Nenhuma regra no Supabase para zona={calc['zone']} "
-                    f"e uso={calc.get('use_type_code')}"
-                )
-        except Exception as e:
-            calc["err"] = f"Erro ao consultar Supabase: {e}"
-
-elif show_item3:
-    _ = render_localizacao_section(False, zones_prepared, radius_m)
-
-section4_can_try = bool(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_lookup")) and bool(calc.get("use_type_code"))
-
-if section4_can_try:
-    render_indices_section(
-        calc=calc,
-        card_func=_card,
-        pick_func=pick_rule,
-        get_rule_func=fetch_rule,
-    )
-    if calc.get("rule"):
-        st.session_state.free_calc_done = True
-
-
-
-preview_inadequado = _should_block_report_preview(calc)
-if preview_inadequado:
-    _clear_report_runtime_state(preserve_snapshot=True)
-    st.markdown("---")
-    _render_blocked_report_preview(calc)
-
-can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err")) and not preview_inadequado
-
-_REPORT_LEGACY_FLOW_CONTRACT = """
-report_confirmation_state = report_confirmation_core.compute_report_confirmation_state(
-current_report_session = report_confirmation_state["current_report_session"]
-current_report_signature = report_confirmation_state["current_report_signature"]
-snapshot_signature = report_confirmation_state["snapshot_signature"]
-has_snapshot = report_confirmation_state["has_snapshot"]
-is_same_as_snapshot = report_confirmation_state["is_same_as_snapshot"]
-if gerar_relatorio:
-    if preview_inadequado:
-        _clear_report_runtime_state(preserve_snapshot=True)
-        st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
-    elif has_snapshot and not is_same_as_snapshot:
-        report_confirmation_core.arm_new_report_confirmation(
-            current_report_session=deepcopy(current_report_session)
-            current_report_signature=current_report_signature
-        )
-        st.rerun()
-    elif saldo_atual is not None and int(saldo_atual) <= 0:
-        st.session_state.show_inline_payments = True
-        st.error("Você não possui créditos suficientes para gerar o relatório.")
-    else:
-        _prepare_and_consume_report(
-if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature"):
-    confirm_yes = st.button("Sim, gerar outro relatório", key="btn_confirm_new_report_yes", use_container_width=True)
-    confirm_no = st.button("Não", key="btn_confirm_new_report_no", use_container_width=True)
-    if confirm_yes:
-                if preview_inadequado:
-                _clear_report_runtime_state(preserve_snapshot=True)
-                st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
+_CARD_CSS = """
+<style>
+.report-review-card {
+    background: linear-gradient(180deg, #f8fbff 0%, #f2f7ff 100%);
+    border: 1px solid #dbe7f6;
+    border-radius: 16px;
+    padding: 1.15rem 1.2rem 1rem 1.2rem;
+    margin: 0.4rem 0 1rem 0;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+.report-review-card h3 {
+    margin: 0 0 0.2rem 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #183153;
+}
+.report-review-card p {
+    margin: 0;
+    color: #5b6472;
+    font-size: 0.95rem;
+}
+.report-review-divider {
+    height: 1px;
+    background: #e7eef8;
+    margin: 0.95rem 0 0.85rem 0;
+}
+.review-item {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid #e6edf7;
+    border-radius: 12px;
+    padding: 0.85rem 0.95rem;
+    min-height: 88px;
+}
+.review-item-label {
+    display: block;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: #5b6472;
+    margin-bottom: 0.28rem;
+}
+.review-item-value {
+    display: block;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #182230;
+    line-height: 1.4;
+    word-break: break-word;
+}
+.review-highlight {
+    margin-top: 0.8rem;
+    background: #ffffff;
+    border: 1px solid #e6edf7;
+    border-radius: 12px;
+    padding: 0.85rem 0.95rem;
+}
+.review-highlight .review-item-label {
+    margin-bottom: 0.15rem;
+}
+</style>
 """
-# Âncoras contratuais preservadas no app.py para os testes de fluxo/ordem.
-# st.subheader("Relatório completo")
-# "📄 Gerar relatório"
-# key="btn_generate_report"
-# disabled=(not user_logged_in)
-# get_credit_balance(user_id)
-# render_payments_panel()
-# render_analise_section(report_calc, lot_area=lot_area, built_ground=built_ground, permeable_area=permeable_area, pick_func=pick_rule)
-# render_zone_description_section(report_calc)
-# render_relatorio_section(report_calc)
-# generate_report_pdf_bytes(calc=report_calc, session_state=report_session)
-# label="⬇️ Baixar relatório em PDF"
-# file_name="relatorio_viabilidade.pdf"
-# key="download_report_pdf"
-# save_client_report(user_id=user_id, user_email=user_email or "", calc=calc, session_state=st.session_state, pdf_bytes=b"", report_signature="sig")
-# build_report_signature(calc=calc, session_state=st.session_state)
-# st.session_state.show_inline_payments = True
-# show_inline_payments
-# confirm_new_report
-# pending_report_signature
-# btn_confirm_new_report
-# Sim, gerar outro relatório
 
-render_report_section(
-    calc=calc,
-    built_ground=built_ground,
-    permeable_area=permeable_area,
-    user_logged_in=user_logged_in,
-    user_id=user_id,
-    selected_use_label=selected_use_label,
-    categoria_label=categoria_label,
-    preview_inadequado=preview_inadequado,
-    can_offer_report=can_offer_report,
-    pick_func=pick_rule,
-    get_credit_balance_func=get_credit_balance,
-    render_payments_panel_func=render_payments_panel,
-    render_analise_section_func=render_analise_section,
-    render_zone_description_section_func=render_zone_description_section,
-    render_relatorio_section_func=render_relatorio_section,
-    generate_report_pdf_bytes_func=generate_report_pdf_bytes,
-    clear_report_runtime_state_func=_clear_report_runtime_state,
-    clear_pending_report_func=_clear_pending_report,
-    prepare_and_consume_report_func=_prepare_and_consume_report,
-    build_current_report_signature_func=_build_current_report_signature,
-    compute_report_confirmation_state_func=report_confirmation_core.compute_report_confirmation_state,
-    arm_new_report_confirmation_func=report_confirmation_core.arm_new_report_confirmation,
-)
 
-render_item3_scroll_if_needed(
-    session_state=st.session_state,
-    components_module=components,
-)
+def _fmt_num(value: Any) -> str:
+    try:
+        return f"{float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return "—"
+
+
+def _pick_zone(calc: Dict[str, Any]) -> str:
+    return str(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_lookup") or "—")
+
+
+def _pick_street(calc: Dict[str, Any]) -> str:
+    street = calc.get("street_name") or calc.get("via_name") or calc.get("road_name") or calc.get("logradouro")
+    return str(street or "—")
+
+
+def _render_item(label: str, value: str) -> None:
+    st.markdown(
+        f"""
+        <div class="review-item">
+            <span class="review-item-label">{label}</span>
+            <span class="review-item-value">{value}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> None:
+    st.markdown(_CARD_CSS, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="report-review-card">
+            <h3>Conferência dos dados do relatório</h3>
+            <p>Revise as informações abaixo antes de seguir para a emissão do relatório.</p>
+            <div class="report-review-divider"></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        _render_item("Zona do lote", _pick_zone(calc))
+        st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
+        _render_item("Rua/Via", _pick_street(calc))
+    with c2:
+        _render_item(
+            "Dimensões do terreno",
+            f"{_fmt_num(session_snapshot.get('lot_front_m'))} m × {_fmt_num(session_snapshot.get('lot_depth_m'))} m",
+        )
+        st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
+        _render_item("Área do lote", f"{_fmt_num(session_snapshot.get('lot_area_m2'))} m²")
+
+    area_pretendida = calc.get("built_ground_input_m2")
+    if area_pretendida not in (None, "", 0, 0.0):
+        st.markdown(
+            f"""
+            <div class="review-highlight">
+                <span class="review-item-label">Área pretendida informada</span>
+                <span class="review-item-value">{_fmt_num(area_pretendida)} m²</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
