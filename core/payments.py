@@ -528,7 +528,18 @@ def _apply_coupon_bonus_credit_for_payment(*, payment_row: Dict[str, Any], targe
     if existing_credit:
         existing_user_id = str(existing_credit.get("user_id") or "")
         if existing_user_id == user_id:
-            return {"credited": False, "reason": "already_credited"}
+            try:
+                credited_amount = int(existing_credit.get("amount") or bonus_credits)
+            except Exception:
+                credited_amount = bonus_credits
+            current_balance = _read_balance(user_id=user_id)
+            return {
+                "credited": True,
+                "reason": "already_credited",
+                "credits": credited_amount,
+                "new_balance": current_balance,
+                "idempotent": True,
+            }
         return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
 
     current_balance = _read_balance(user_id=user_id)
@@ -559,7 +570,18 @@ def _apply_coupon_bonus_credit_for_payment(*, payment_row: Dict[str, Any], targe
         if existing_credit:
             existing_user_id = str(existing_credit.get("user_id") or "")
             if existing_user_id == user_id:
-                return {"credited": False, "reason": "already_credited"}
+                try:
+                    credited_amount = int(existing_credit.get("amount") or bonus_credits)
+                except Exception:
+                    credited_amount = bonus_credits
+                current_balance = _read_balance(user_id=user_id)
+                return {
+                    "credited": True,
+                    "reason": "already_credited",
+                    "credits": credited_amount,
+                    "new_balance": current_balance,
+                    "idempotent": True,
+                }
             return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
         raise
     if payment_user_id != user_id:
