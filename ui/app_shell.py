@@ -35,7 +35,8 @@ def inject_global_styles() -> None:
         f"""
         <style>
         .block-container {{
-            padding-top: 0.35rem !important;
+            position: relative;
+            padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }}
@@ -50,29 +51,34 @@ def inject_global_styles() -> None:
 
         header[data-testid="stHeader"] {{
             background: transparent !important;
-            z-index: 999999 !important;
+            z-index: 0 !important;
             pointer-events: none !important;
+            height: 0 !important;
         }}
 
         header[data-testid="stHeader"] * {{
             pointer-events: auto !important;
         }}
 
-        /* Pinta apenas o bloco horizontal que contém a marca. */
         [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
             background: {BLUE} !important;
             border-bottom: 3px solid {ORANGE} !important;
             min-height: 72px;
             padding: 0 1.4rem !important;
             margin-bottom: 1.25rem !important;
-            border-radius: 0 !important;
+            position: relative !important;
+            z-index: 999999 !important;
+            pointer-events: auto !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) > div {{
             display: block !important;
+            pointer-events: auto !important;
         }}
 
         .vf-brand {{
+            position: relative;
+            z-index: 1000000;
             font-size: 30px;
             font-weight: 800;
             color: {WHITE};
@@ -81,8 +87,8 @@ def inject_global_styles() -> None:
             white-space: nowrap;
             margin: 0;
             min-height: 72px;
-            display: flex !important;
-            align-items: center !important;
+            display: flex;
+            align-items: center;
         }}
 
         .vf-brand-dot {{
@@ -90,12 +96,23 @@ def inject_global_styles() -> None:
             margin-left: 2px;
         }}
 
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton {{
+        .vf-nav-btn {
+            position: relative;
+            z-index: 1000000;
+            min-height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        .vf-nav-btn .stButton {{
             width: 100%;
             margin: 0;
         }}
 
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
+        .vf-nav-btn .stButton > button[kind="tertiary"] {
+            position: relative !important;
+            z-index: 1000001 !important;
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
@@ -110,23 +127,18 @@ def inject_global_styles() -> None:
             align-items: center !important;
             justify-content: center !important;
             border-radius: 0 !important;
-            margin: 0 !important;
             cursor: pointer !important;
-        }}
+        }
 
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] * {{
-            pointer-events: none !important;
-        }}
-
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:hover {{
+        .vf-nav-btn .stButton > button[kind="tertiary"]:hover {{
             color: {WHITE} !important;
-            background: rgba(255,255,255,0.08) !important;
-            opacity: .92;
+            background: transparent !important;
+            opacity: .82;
         }}
 
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:focus,
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:focus-visible,
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:active {{
+        .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
+        .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible,
+        .vf-nav-btn .stButton > button[kind="tertiary"]:active {{
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
@@ -134,18 +146,21 @@ def inject_global_styles() -> None:
             color: {WHITE} !important;
         }}
 
-        @media (max-width: 900px) {{
-            [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
-                min-height: 64px;
-                padding: 0 0.9rem !important;
-            }}
+        .vf-nav-spacer {{
+            display: none;
+        }}
 
+        @media (max-width: 900px) {{
             .vf-brand {{
                 font-size: 24px;
                 min-height: 64px;
             }}
 
-            [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
+            .vf-nav-btn {{
+                min-height: 64px;
+            }}
+
+            .vf-nav-btn .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
                 height: 64px !important;
             }}
@@ -156,30 +171,40 @@ def inject_global_styles() -> None:
     )
 
 
-def render_top_nav() -> None:
-    cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
-    with cols[0]:
+def render_top_nav() -> None:
+    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.2, 1.35, 1.55, 0.95, 1.6], gap="small")
+
+    with brand_col:
         st.markdown(
-            '''<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>''',
+            '<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
             unsafe_allow_html=True,
         )
 
-    with cols[2]:
-        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=True)
+    with nav1:
+        st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    with cols[3]:
-        if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=True):
+    with nav2:
+        st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+        if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=False):
             st.session_state["show_client_area"] = True
             if not st.session_state.get("auth_logged_in"):
                 st.session_state["post_login_action"] = "open_client_area"
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    with cols[4]:
-        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=True)
+    with nav3:
+        st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    with cols[5]:
-        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)
+    with nav4:
+        st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 def render_wallet_summary() -> None:
