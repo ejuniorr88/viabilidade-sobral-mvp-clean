@@ -29,7 +29,6 @@ def card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
-
 def inject_global_styles() -> None:
     st.markdown(
         f'''
@@ -58,7 +57,6 @@ def inject_global_styles() -> None:
             pointer-events: auto !important;
         }}
 
-        /* Pinta apenas o bloco horizontal que contém a marca. */
         [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
             background: {BLUE} !important;
             border-bottom: 3px solid {ORANGE} !important;
@@ -119,6 +117,17 @@ def inject_global_styles() -> None:
             width: 100% !important;
             border-radius: 0 !important;
             margin: 0 !important;
+            pointer-events: auto !important;
+            cursor: pointer !important;
+            position: relative !important;
+            z-index: 10 !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] p,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] span,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] div {{
+            pointer-events: none !important;
+            background: transparent !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:hover {{
@@ -207,14 +216,12 @@ def render_wallet_summary() -> None:
         card("Saldo de créditos", balance)
 
 
-
 def render_login_gate_block() -> None:
     render_google_login_box(
         title="Faça login para continuar",
         message="Para liberar a pesquisa de viabilidade, entre com sua conta Google.",
         context="shell_gate",
     )
-
 
 
 def render_auth_callback_bridge() -> None:
