@@ -82,10 +82,24 @@ def inject_global_styles() -> None:
         [data-testid="stHorizontalBlock"]:has(.vf-brand) > div {{
             display: flex !important;
             align-items: center !important;
+            min-height: 92px !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child {{
             justify-content: flex-start !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) [data-testid="stColumn"] {{
+            display: flex !important;
+            align-items: center !important;
+            min-height: 92px !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) [data-testid="stColumn"] > div {{
+            width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            min-height: 92px !important;
         }}
 
         .vf-brand {{
@@ -112,6 +126,7 @@ def inject_global_styles() -> None:
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
+            min-height: 92px !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
@@ -126,6 +141,7 @@ def inject_global_styles() -> None:
             min-height: 92px !important;
             line-height: 1 !important;
             justify-content: center !important;
+            align-items: center !important;
             width: 100% !important;
             border-radius: 8px !important;
             margin: 0 !important;
@@ -134,6 +150,7 @@ def inject_global_styles() -> None:
             position: relative !important;
             z-index: 20 !important;
             transition: background 0.18s ease, opacity 0.18s ease !important;
+            display: flex !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] p,
@@ -165,11 +182,18 @@ def inject_global_styles() -> None:
                 padding: 0 0.9rem !important;
             }}
 
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) > div,
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) [data-testid="stColumn"],
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) [data-testid="stColumn"] > div {{
+                min-height: 76px !important;
+            }}
+
             .vf-brand {{
                 font-size: 24px;
                 min-height: 76px;
             }}
 
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton,
             [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
                 min-height: 76px !important;
