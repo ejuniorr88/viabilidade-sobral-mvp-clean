@@ -28,9 +28,18 @@ def get_supabase_admin_client() -> Client:
 
 app = FastAPI(title=APP_NAME)
 
+def _default_allowed_origins() -> str:
+    return ",".join([
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://viabilidade-sobral-mvp-clean.vercel.app",
+        "https://viabilidadeteste.streamlit.app",
+    ])
+
+
 allowed_origins = [
     origin.strip()
-    for origin in os.getenv("AUTH_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+    for origin in os.getenv("AUTH_ALLOWED_ORIGINS", _default_allowed_origins()).split(",")
     if origin.strip()
 ]
 
