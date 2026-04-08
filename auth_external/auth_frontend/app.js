@@ -31,21 +31,84 @@
     if (els.continueBtn) els.continueBtn.hidden = false;
   }
 
-  async function verifyWithGateway(accessToken) {
-    const response = await fetch(`${cfg.GATEWAY_BASE_URL}/api/auth/session/verify`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ access_token: accessToken }),
-    });
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
 
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Falha ao validar sessão no gateway: ${detail}`);
+  async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), Number(timeoutMs || 12000));
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  async function wakeGateway() {
+    const wakeUrl = `${cfg.GATEWAY_BASE_URL}/api/auth/session/verify`;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await fetchWithTimeout(
+          wakeUrl,
+          {
+            method: "OPTIONS",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+          8000
+        );
+        return true;
+      } catch (err) {
+        lastError = err;
+        await sleep(1200 * attempt);
+      }
     }
 
-    return response.json();
+    if (lastError) {
+      console.warn("Falha ao acordar gateway antes do login:", lastError);
+    }
+    return false;
+  }
+
+  async function verifyWithGateway(accessToken) {
+    const verifyUrl = `${cfg.GATEWAY_BASE_URL}/api/auth/session/verify`;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const response = await fetchWithTimeout(
+          verifyUrl,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ access_token: accessToken }),
+          },
+          12000
+        );
+
+        if (!response.ok) {
+          const detail = await response.text();
+          throw new Error(`Falha ao validar sessão no gateway: ${detail}`);
+        }
+
+        return await response.json();
+      } catch (err) {
+        lastError = err;
+        if (attempt < 3) {
+          setStatus(`Aguardando o gateway iniciar... tentativa ${attempt + 1}/3`, "muted");
+          await sleep(1500 * attempt);
+          continue;
+        }
+      }
+    }
+
+    throw lastError || new Error("Não foi possível validar sessão no gateway.");
   }
 
   function isPopupFlow() {
@@ -157,20 +220,29 @@
 
   if (els.loginBtn) {
     els.loginBtn.addEventListener("click", async () => {
-      setStatus("Redirecionando para o Google...", "muted");
+      try {
+        setStatus("Preparando gateway de autenticação...", "muted");
+        if (els.loginBtn) els.loginBtn.disabled = true;
 
-      const { error } = await supabaseClient.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: cfg.LOGIN_REDIRECT_URL,
-          queryParams: {
-            prompt: "select_account",
+        await wakeGateway();
+
+        setStatus("Redirecionando para o Google...", "muted");
+        const { error } = await supabaseClient.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: cfg.LOGIN_REDIRECT_URL,
+            queryParams: {
+              prompt: "select_account",
+            },
           },
-        },
-      });
+        });
 
-      if (error) {
+        if (error) {
+          throw error;
+        }
+      } catch (error) {
         setStatus(`Falha ao iniciar login: ${error.message}`, "error");
+        if (els.loginBtn) els.loginBtn.disabled = false;
       }
     });
   }
