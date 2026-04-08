@@ -268,7 +268,12 @@ def _find_matching_generic_credit_row(*, payment_row: Dict[str, Any]) -> Optiona
     return None
 
 
-def _get_payment_credit_row(*, payment_id: Optional[str] = None, payment_row: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+def _get_credit_ledger_row_for_payment(
+    *,
+    payment_id: Optional[str] = None,
+    payment_row: Optional[Dict[str, Any]] = None,
+    source: str = "pix_purchase",
+) -> Optional[Dict[str, Any]]:
     supabase = get_supabase_server_client()
 
     if payment_row is None and payment_id:
@@ -282,7 +287,7 @@ def _get_payment_credit_row(*, payment_id: Optional[str] = None, payment_row: Op
         return None
 
     user_id = str((payment_row or {}).get("user_id") or "")
-    query = supabase.table("credit_ledger").select("*").eq("source", "pix_purchase")
+    query = supabase.table("credit_ledger").select("*").eq("source", source)
     if user_id:
         query = query.eq("user_id", user_id)
 
@@ -293,6 +298,14 @@ def _get_payment_credit_row(*, payment_id: Optional[str] = None, payment_row: Op
             return row
 
     return None
+
+
+def _get_payment_credit_row(*, payment_id: Optional[str] = None, payment_row: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    return _get_credit_ledger_row_for_payment(payment_id=payment_id, payment_row=payment_row, source="pix_purchase")
+
+
+def _get_coupon_bonus_credit_row(*, payment_id: Optional[str] = None, payment_row: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    return _get_credit_ledger_row_for_payment(payment_id=payment_id, payment_row=payment_row, source="coupon_bonus_credit")
 
 
 def _coerce_coupon_usage_payment_id(payment_id: Any) -> Optional[int]:
@@ -491,6 +504,70 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Op
     return {"credited": True, "credits": credits, "new_balance": new_balance}
 
 
+def _apply_coupon_bonus_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Optional[str] = None) -> Dict[str, Any]:
+    payment_status = str(payment_row.get("status") or "").strip().lower()
+    if payment_status != "paid":
+        return {"credited": False, "reason": "payment_not_paid"}
+
+    snapshot = payment_row.get("coupon_snapshot") if isinstance(payment_row.get("coupon_snapshot"), dict) else {}
+    benefit_type = str(snapshot.get("benefit_type") or "discount").strip().lower()
+    if benefit_type != "credit":
+        return {"credited": False, "reason": "coupon_without_bonus_credit"}
+
+    bonus_credits = int(snapshot.get("bonus_credits") or 0)
+    if bonus_credits <= 0:
+        return {"credited": False, "reason": "invalid_bonus_credits"}
+
+    payment_user_id = str(payment_row.get("user_id") or "")
+    user_id = str(target_user_id or payment_user_id or "")
+    payment_id = str(payment_row.get("id") or "")
+    if not user_id or not payment_id:
+        return {"credited": False, "reason": "payment_missing_fields"}
+
+    existing_credit = _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
+    if existing_credit:
+        existing_user_id = str(existing_credit.get("user_id") or "")
+        if existing_user_id == user_id:
+            return {"credited": False, "reason": "already_credited"}
+        return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
+
+    current_balance = _read_balance(user_id=user_id)
+    new_balance = current_balance + bonus_credits
+    _write_balance(user_id=user_id, balance=new_balance)
+
+    supabase = get_supabase_server_client()
+    ledger_payload = {
+        "user_id": user_id,
+        "amount": bonus_credits,
+        "entry_type": "credit",
+        "source": "coupon_bonus_credit",
+        "reference_id": payment_id,
+        "idempotency_key": f"coupon_bonus_credit_{payment_id}",
+        "description": f"Crédito bônus por cupom no pagamento Pix {payment_id}",
+        "metadata": {
+            "payment_id": payment_id,
+            "external_reference": payment_row.get("external_reference"),
+            "coupon_id": payment_row.get("coupon_id"),
+            "coupon_code": payment_row.get("coupon_code"),
+            "bonus_credits": bonus_credits,
+        },
+    }
+    try:
+        supabase.table("credit_ledger").insert(ledger_payload).execute()
+    except Exception:
+        existing_credit = _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
+        if existing_credit:
+            existing_user_id = str(existing_credit.get("user_id") or "")
+            if existing_user_id == user_id:
+                return {"credited": False, "reason": "already_credited"}
+            return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
+        raise
+    if payment_user_id != user_id:
+        supabase.table("payments").update({"user_id": user_id}).eq("id", payment_id).execute()
+
+    return {"credited": True, "credits": bonus_credits, "new_balance": new_balance}
+
+
 def ensure_paid_payment_is_credited(*, payment_id: str, target_user_id: Optional[str] = None) -> Dict[str, Any]:
     """Reprocessa um pagamento já marcado como paid para garantir crédito na carteira."""
     payment_row = _fetch_payment_row(payment_id=payment_id)
@@ -499,12 +576,14 @@ def ensure_paid_payment_is_credited(*, payment_id: str, target_user_id: Optional
         return {"ok": False, "message": "Pagamento ainda não está pago.", "payment": payment_row}
 
     credit_result = _apply_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
+    coupon_bonus_result = _apply_coupon_bonus_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
     coupon_result = _record_coupon_usage_for_paid_payment(payment_row=payment_row)
     return {
         "ok": True,
         "message": "Pagamento reprocessado para crédito.",
         "payment": payment_row,
         "credit_result": credit_result,
+        "coupon_bonus_result": coupon_bonus_result,
         "coupon_result": coupon_result,
     }
 
@@ -529,9 +608,11 @@ def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Option
     updated_payment = data[0] if data else {**payment_row, **update_payload}
 
     credit_result = {"credited": False, "reason": "not_paid"}
+    coupon_bonus_result = {"credited": False, "reason": "not_paid"}
     coupon_result = {"recorded": False, "reason": "not_paid"}
     if normalized_status == "paid":
         credit_result = _apply_credit_for_payment(payment_row=updated_payment, target_user_id=target_user_id)
+        coupon_bonus_result = _apply_coupon_bonus_credit_for_payment(payment_row=updated_payment, target_user_id=target_user_id)
         coupon_result = _record_coupon_usage_for_paid_payment(payment_row=updated_payment)
 
     return {
@@ -539,6 +620,7 @@ def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Option
         "message": "Pagamento atualizado.",
         "payment": updated_payment,
         "credit_result": credit_result,
+        "coupon_bonus_result": coupon_bonus_result,
         "coupon_result": coupon_result,
         "gateway_status": mp_status,
     }
