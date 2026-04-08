@@ -10,6 +10,12 @@ from core.credits import get_credit_balance
 from ui.auth_panel import render_google_login_box
 
 
+BLUE = "#071b53"
+ORANGE = "#d28a16"
+WHITE = "#ffffff"
+TEXT = "#1f2a44"
+
+
 def card(title: str, value: Any, suffix: str = "") -> None:
     rendered = "—" if value is None or value == "" else f"{value}{suffix}"
     st.markdown(
@@ -26,109 +32,118 @@ def card(title: str, value: Any, suffix: str = "") -> None:
 
 def inject_global_styles() -> None:
     st.markdown(
-        """
+        f"""
         <style>
-        .block-container {
+        .block-container {{
             padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
-        }
+        }}
 
-        html, body, [data-testid="stAppViewContainer"], .main {
+        html, body, [data-testid="stAppViewContainer"], .main {{
             overflow-x: hidden !important;
-        }
+        }}
 
-        header[data-testid="stHeader"] {
+        header[data-testid="stHeader"] {{
             background: transparent !important;
-            z-index: 999 !important;
-        }
+            z-index: 999999 !important;
+            pointer-events: none;
+        }}
 
-        .vf-topbar-shell {
-            width: 100%;
-            margin: 0.1rem 0 1.4rem 0;
-            padding: 1rem 1.8rem;
-            background: #071847;
+        header[data-testid="stHeader"] * {{
+            pointer-events: auto;
+        }}
+
+        /* Header visual: target only the first columns block rendered right after the anchor. */
+        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"],
+        .vf-topbar-anchor + div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] {{
+            background: {BLUE};
+            min-height: 82px;
+            padding: 0.85rem 1.6rem;
+            margin: 0 0 1.35rem 0;
             box-sizing: border-box;
-        }
+            align-items: center;
+        }}
 
-        .vf-brand {
+        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] > div,
+        .vf-topbar-anchor + div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div {{
+            display: flex;
+            align-items: center;
+        }}
+
+        .vf-brand {{
             font-size: 30px;
             font-weight: 800;
-            color: #ffffff;
+            color: {WHITE};
             letter-spacing: -0.02em;
-            line-height: 1.1;
+            line-height: 1;
             white-space: nowrap;
             margin: 0;
-            min-height: 40px;
             display: flex;
             align-items: center;
-        }
+            min-height: 48px;
+        }}
 
-        .vf-brand-dot {
-            color: #d68910;
-        }
+        .vf-brand-dot {{
+            color: {ORANGE};
+            margin-left: 2px;
+        }}
 
-        .vf-nav-btn {
-            min-height: 40px;
+        .vf-nav-btn {{
             display: flex;
             align-items: center;
-        }
+            justify-content: flex-end;
+            min-height: 48px;
+        }}
 
-        .vf-nav-btn .stButton {
+        .vf-nav-btn .stButton {{
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
             width: 100%;
             margin: 0;
-        }
+        }}
 
-        .vf-nav-btn .stButton > button[kind="tertiary"] {
+        .vf-nav-btn .stButton > button[kind="tertiary"] {{
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
-            color: #ffffff !important;
+            color: {WHITE} !important;
             font-weight: 600 !important;
             font-size: 15px !important;
             white-space: nowrap !important;
             padding: 0 !important;
-            min-height: 40px !important;
-            line-height: 1.1 !important;
-            justify-content: center !important;
-            width: 100% !important;
-            border-radius: 0 !important;
-        }
+            min-height: 48px !important;
+            line-height: 1 !important;
+            justify-content: flex-end !important;
+            align-items: center !important;
+            margin: 0 !important;
+        }}
 
-        .vf-nav-btn .stButton > button[kind="tertiary"]:hover {
-            color: #ffffff !important;
-            background: transparent !important;
-            opacity: .82;
-        }
-
+        .vf-nav-btn .stButton > button[kind="tertiary"]:hover,
+        .vf-nav-btn .stButton > button[kind="tertiary"]:active,
         .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:active {
+        .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible {{
+            color: {WHITE} !important;
+            background: transparent !important;
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
-            background: transparent !important;
-            color: #ffffff !important;
-        }
+        }}
 
-        .vf-nav-spacer {
-            display: none;
-        }
+        .vf-nav-spacer {{
+            height: 0;
+        }}
 
-        @media (max-width: 900px) {
-            .vf-topbar-shell {
-                padding: 0.8rem 1rem;
-            }
-
-            .vf-brand {
+        @media (max-width: 900px) {{
+            .vf-brand {{
                 font-size: 24px;
-            }
+            }}
 
-            .vf-nav-btn .stButton > button[kind="tertiary"] {
+            .vf-nav-btn .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
-                min-height: 36px !important;
-            }
-        }
+            }}
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -137,11 +152,14 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
-    st.markdown('<div class="vf-topbar-shell">', unsafe_allow_html=True)
+    st.markdown('<div class="vf-topbar-anchor"></div>', unsafe_allow_html=True)
     brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.2, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with brand_col:
-        st.markdown('<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
+            unsafe_allow_html=True,
+        )
 
     with nav1:
         st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
@@ -166,8 +184,6 @@ def render_top_nav() -> None:
         st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
         st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
         st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
 
 
