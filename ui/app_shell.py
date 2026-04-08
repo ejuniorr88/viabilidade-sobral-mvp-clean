@@ -10,8 +10,8 @@ from core.credits import get_credit_balance
 from ui.auth_panel import render_google_login_box
 
 
-BLUE = "#071b53"
-ORANGE = "#d28a16"
+BLUE = "#071847"
+ORANGE = "#d68910"
 WHITE = "#ffffff"
 TEXT = "#1f2a44"
 
@@ -35,6 +35,7 @@ def inject_global_styles() -> None:
         f"""
         <style>
         .block-container {{
+            position: relative;
             padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
@@ -44,34 +45,36 @@ def inject_global_styles() -> None:
             overflow-x: hidden !important;
         }}
 
+        [data-testid="stAppViewContainer"] {{
+            background: #ffffff !important;
+        }}
+
         header[data-testid="stHeader"] {{
             background: transparent !important;
             z-index: 999999 !important;
-            pointer-events: none;
+            pointer-events: none !important;
         }}
 
         header[data-testid="stHeader"] * {{
-            pointer-events: auto;
+            pointer-events: auto !important;
         }}
 
-        /* Header visual: target only the first columns block rendered right after the anchor. */
-        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"],
-        .vf-topbar-anchor + div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] {{
+        /* Blue band behind only the stable top row. */
+        .block-container::before {{
+            content: "";
+            position: absolute;
+            top: 0.32rem;
+            left: 0;
+            right: 0;
+            height: 72px;
             background: {BLUE};
-            min-height: 82px;
-            padding: 0.85rem 1.6rem;
-            margin: 0 0 1.35rem 0;
-            box-sizing: border-box;
-            align-items: center;
-        }}
-
-        .vf-topbar-anchor + div[data-testid="stHorizontalBlock"] > div,
-        .vf-topbar-anchor + div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div {{
-            display: flex;
-            align-items: center;
+            z-index: 0;
+            pointer-events: none;
         }}
 
         .vf-brand {{
+            position: relative;
+            z-index: 2;
             font-size: 30px;
             font-weight: 800;
             color: {WHITE};
@@ -79,9 +82,9 @@ def inject_global_styles() -> None:
             line-height: 1;
             white-space: nowrap;
             margin: 0;
+            min-height: 72px;
             display: flex;
             align-items: center;
-            min-height: 48px;
         }}
 
         .vf-brand-dot {{
@@ -90,16 +93,15 @@ def inject_global_styles() -> None:
         }}
 
         .vf-nav-btn {{
+            position: relative;
+            z-index: 2;
+            min-height: 72px;
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            min-height: 48px;
         }}
 
         .vf-nav-btn .stButton {{
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
             width: 100%;
             margin: 0;
         }}
@@ -113,35 +115,50 @@ def inject_global_styles() -> None:
             font-size: 15px !important;
             white-space: nowrap !important;
             padding: 0 !important;
-            min-height: 48px !important;
+            min-height: 72px !important;
             line-height: 1 !important;
-            justify-content: flex-end !important;
-            align-items: center !important;
-            margin: 0 !important;
+            justify-content: center !important;
+            width: 100% !important;
+            border-radius: 0 !important;
         }}
 
-        .vf-nav-btn .stButton > button[kind="tertiary"]:hover,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:active,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
-        .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible {{
+        .vf-nav-btn .stButton > button[kind="tertiary"]:hover {{
             color: {WHITE} !important;
             background: transparent !important;
+            opacity: .82;
+        }}
+
+        .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
+        .vf-nav-btn .stButton > button[kind="tertiary"]:focus-visible,
+        .vf-nav-btn .stButton > button[kind="tertiary"]:active {{
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
+            background: transparent !important;
+            color: {WHITE} !important;
         }}
 
         .vf-nav-spacer {{
-            height: 0;
+            display: none;
         }}
 
         @media (max-width: 900px) {{
+            .block-container::before {{
+                height: 64px;
+            }}
+
             .vf-brand {{
                 font-size: 24px;
+                min-height: 64px;
+            }}
+
+            .vf-nav-btn {{
+                min-height: 64px;
             }}
 
             .vf-nav-btn .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
+                min-height: 64px !important;
             }}
         }}
         </style>
@@ -152,7 +169,6 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
-    st.markdown('<div class="vf-topbar-anchor"></div>', unsafe_allow_html=True)
     brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.2, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with brand_col:
