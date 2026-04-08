@@ -66,16 +66,10 @@ def inject_global_styles() -> None:
             padding: 0 1.4rem !important;
             margin-bottom: 1.25rem !important;
             border-radius: 0 !important;
-            align-items: center !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) > div {{
-            display: flex !important;
-            align-items: center !important;
-        }}
-
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child {{
-            justify-content: flex-start !important;
+            display: block !important;
         }}
 
         .vf-brand {{
@@ -87,8 +81,8 @@ def inject_global_styles() -> None:
             white-space: nowrap;
             margin: 0;
             min-height: 72px;
-            display: flex;
-            align-items: center;
+            display: flex !important;
+            align-items: center !important;
         }}
 
         .vf-brand-dot {{
@@ -97,8 +91,8 @@ def inject_global_styles() -> None:
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton {{
-            width: 100% !important;
-            margin: 0 !important;
+            width: 100%;
+            margin: 0;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
@@ -111,13 +105,13 @@ def inject_global_styles() -> None:
             white-space: nowrap !important;
             width: 100% !important;
             height: 72px !important;
-            line-height: 72px !important;
-            display: block !important;
             padding: 0 10px !important;
-            cursor: pointer !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
             border-radius: 0 !important;
             margin: 0 !important;
-            z-index: 10 !important;
+            cursor: pointer !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] * {{
@@ -154,7 +148,6 @@ def inject_global_styles() -> None:
             [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
                 height: 64px !important;
-                line-height: 64px !important;
             }}
         }}
         </style>
