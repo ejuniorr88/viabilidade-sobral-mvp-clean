@@ -3,8 +3,23 @@ from __future__ import annotations
 from typing import Any, MutableMapping
 
 
-def prepare_and_consume_report(*, calc_ref, session_snapshot, report_signature, user_id_value, selected_use_label_value, categoria_label_value, session_state: MutableMapping[str, Any], generate_report_pdf_bytes_func, consume_viability_credit_func, commit_report_snapshot_func, save_client_report_func):
+def prepare_and_consume_report(
+    *,
+    calc_ref,
+    session_snapshot,
+    report_signature,
+    user_id_value,
+    selected_use_label_value,
+    categoria_label_value,
+    session_state: MutableMapping[str, Any],
+    generate_report_pdf_bytes_func,
+    consume_viability_credit_func,
+    refund_viability_credit_func,
+    commit_report_snapshot_func,
+    save_client_report_func,
+):
     pdf_bytes = generate_report_pdf_bytes_func(calc=calc_ref, session_state=session_snapshot)
+
     debit_result = consume_viability_credit_func(
         user_id=user_id_value,
         amount=1,
@@ -12,19 +27,45 @@ def prepare_and_consume_report(*, calc_ref, session_snapshot, report_signature, 
     )
     if not debit_result.get("ok"):
         raise RuntimeError(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
-    commit_report_snapshot_func(calc_ref, session_snapshot, pdf_bytes, report_signature)
+
+    save_result = None
     try:
-        if session_state.get("last_saved_report_signature") != report_signature:
-            save_result = save_client_report_func(
-                user_id=user_id_value,
-                user_email=session_state.get("auth_user_email") or "",
-                calc={**calc_ref, "selected_use_label": selected_use_label_value, "categoria_label": categoria_label_value},
-                session_state=session_snapshot,
-                pdf_bytes=pdf_bytes,
-                report_signature=report_signature,
-            )
-            if save_result.get("ok"):
-                session_state["last_saved_report_signature"] = report_signature
-    except Exception:
-        pass
+        save_result = save_client_report_func(
+            user_id=user_id_value,
+            user_email=session_state.get("auth_user_email") or "",
+            calc={**calc_ref, "selected_use_label": selected_use_label_value, "categoria_label": categoria_label_value},
+            session_state=session_snapshot,
+            pdf_bytes=pdf_bytes,
+            report_signature=report_signature,
+        )
+    except Exception as e:
+        refund_result = refund_viability_credit_func(
+            user_id=user_id_value,
+            amount=1,
+            description="Estorno automático por falha ao armazenar relatório",
+            reference_id=report_signature,
+            metadata={"report_signature": report_signature, "stage": "save_client_report_exception"},
+        )
+        session_state["last_report_storage_error"] = str(e)
+        session_state["last_report_refund_result"] = refund_result
+        raise RuntimeError(f"Falha ao armazenar o relatório na Área do Cliente: {e}")
+
+    if save_result and save_result.get("already_exists"):
+        refund_result = refund_viability_credit_func(
+            user_id=user_id_value,
+            amount=1,
+            description="Estorno automático por relatório já armazenado",
+            reference_id=report_signature,
+            metadata={"report_signature": report_signature, "stage": "already_exists"},
+        )
+        session_state["last_report_refund_result"] = refund_result
+        session_state["last_saved_report_signature"] = report_signature
+        commit_report_snapshot_func(calc_ref, session_snapshot, pdf_bytes, report_signature)
+        return debit_result, pdf_bytes
+
+    if save_result and save_result.get("ok"):
+        session_state["last_saved_report_signature"] = report_signature
+
+    commit_report_snapshot_func(calc_ref, session_snapshot, pdf_bytes, report_signature)
+    session_state["last_report_storage_error"] = None
     return debit_result, pdf_bytes
