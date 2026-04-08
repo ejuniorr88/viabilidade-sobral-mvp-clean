@@ -455,13 +455,22 @@ def _render_buy_section(
             current_coupon = _get_current_coupon_application(package, coupon_input_value)
 
             original_amount = _to_float(_safe_get(package, 'price_brl', 0))
+            package_credits = int(_to_float(_safe_get(package, 'credits', 0)))
             if current_coupon:
-                st.write(f"Preço original: {_fmt_brl(current_coupon.get('original_amount', original_amount))}")
-                st.write(f"Desconto: {_fmt_brl(current_coupon.get('discount_amount', 0))}")
-                st.write(f"Preço final: {_fmt_brl(current_coupon.get('final_amount', original_amount))}")
+                benefit_type = str(current_coupon.get("benefit_type") or "discount").strip().lower()
+                if benefit_type == "credit":
+                    bonus_credits = int(_to_float(current_coupon.get("bonus_credits", 0)))
+                    st.write(f"Preço: {_fmt_brl(current_coupon.get('final_amount', original_amount))}")
+                    st.write(f"Bônus do cupom: +{bonus_credits} crédito(s)")
+                    st.write(f"Créditos totais após pagamento: {package_credits + bonus_credits}")
+                else:
+                    st.write(f"Preço original: {_fmt_brl(current_coupon.get('original_amount', original_amount))}")
+                    st.write(f"Desconto: {_fmt_brl(current_coupon.get('discount_amount', 0))}")
+                    st.write(f"Preço final: {_fmt_brl(current_coupon.get('final_amount', original_amount))}")
+                    st.write(f"Créditos: {package_credits}")
             else:
                 st.write(f"Preço: {_fmt_brl(original_amount)}")
-            st.write(f"Créditos: {int(_to_float(_safe_get(package, 'credits', 0)))}")
+                st.write(f"Créditos: {package_credits}")
 
             apply_col, clear_col = st.columns(2)
             with apply_col:
