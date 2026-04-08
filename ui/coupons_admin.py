@@ -123,7 +123,9 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
                 discount_type = st.selectbox(
                     "Tipo de desconto",
                     options=["fixed", "percent"],
-                    index=["fixed", "percent"].index(defaults["discount_type"] if defaults["discount_type"] in ["fixed", "percent"] else "fixed"),
+                    index=["fixed", "percent"].index(
+                        defaults["discount_type"] if defaults["discount_type"] in ["fixed", "percent"] else "fixed"
+                    ),
                     disabled=critical_locked,
                 )
                 discount_value = st.number_input(
@@ -131,12 +133,15 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
                     min_value=0.01,
                     step=0.01,
                     format="%.2f",
-                    value=float(defaults["discount_value"]),
+                    value=float(defaults["discount_value"] or 0.01),
                     disabled=critical_locked,
                 )
                 bonus_credits = 0
             else:
-                st.caption("Cupom de crédito não altera o valor do pagamento. Ele adiciona créditos bônus após a confirmação do Pix.")
+                st.caption(
+                    "Cupom de crédito não altera o valor do pagamento. "
+                    "Ele adiciona créditos bônus após a confirmação do Pix."
+                )
                 bonus_credits = st.number_input(
                     "Créditos extras gerados",
                     min_value=1,
@@ -189,6 +194,13 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
         valid_until = None
         if valid_until_date:
             valid_until = datetime.combine(valid_until_date, time.max)
+
+        if benefit_type == "credit":
+            discount_type = "fixed"
+            discount_value = 0.0
+            bonus_credits = max(1, int(bonus_credits or 1))
+        else:
+            bonus_credits = 0
 
         if mode == "create":
             saved = create_coupon_code(
