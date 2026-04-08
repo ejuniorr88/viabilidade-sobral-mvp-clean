@@ -57,7 +57,7 @@ def inject_global_styles() -> None:
             pointer-events: auto !important;
         }}
 
-        /* CORREÇÃO REAL: neutraliza a área invisível da toolbar do Streamlit */
+        /* neutraliza a área invisível da toolbar do Streamlit */
         div[data-testid="stToolbar"] {{
             pointer-events: none !important;
         }}
@@ -71,7 +71,7 @@ def inject_global_styles() -> None:
         [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
             background: {BLUE} !important;
             border-bottom: 3px solid {ORANGE} !important;
-            min-height: 72px;
+            min-height: 82px;
             padding: 0 1.4rem !important;
             margin-bottom: 1.25rem !important;
             border-radius: 0 !important;
@@ -97,7 +97,7 @@ def inject_global_styles() -> None:
             line-height: 1;
             white-space: nowrap;
             margin: 0;
-            min-height: 72px;
+            min-height: 82px;
             display: flex;
             align-items: center;
         }}
@@ -123,17 +123,18 @@ def inject_global_styles() -> None:
             font-weight: 600 !important;
             font-size: 15px !important;
             white-space: nowrap !important;
-            padding: 0 !important;
-            min-height: 72px !important;
+            padding: 0 12px !important;
+            min-height: 82px !important;
             line-height: 1 !important;
             justify-content: center !important;
             width: 100% !important;
-            border-radius: 0 !important;
+            border-radius: 8px !important;
             margin: 0 !important;
             pointer-events: auto !important;
             cursor: pointer !important;
             position: relative !important;
             z-index: 20 !important;
+            transition: background 0.18s ease, opacity 0.18s ease !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] p,
@@ -145,8 +146,8 @@ def inject_global_styles() -> None:
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:hover {{
             color: {WHITE} !important;
-            background: rgba(255,255,255,0.08) !important;
-            opacity: .92;
+            background: rgba(255,255,255,0.14) !important;
+            opacity: 1 !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:focus,
@@ -155,24 +156,24 @@ def inject_global_styles() -> None:
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
-            background: transparent !important;
+            background: rgba(255,255,255,0.12) !important;
             color: {WHITE} !important;
         }}
 
         @media (max-width: 900px) {{
             [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
-                min-height: 64px;
+                min-height: 70px;
                 padding: 0 0.9rem !important;
             }}
 
             .vf-brand {{
                 font-size: 24px;
-                min-height: 64px;
+                min-height: 70px;
             }}
 
             [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
-                min-height: 64px !important;
+                min-height: 70px !important;
             }}
         }}
         </style>
