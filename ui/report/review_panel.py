@@ -101,22 +101,6 @@ _CARD_CSS = """
     font-size: 0.84rem;
     color: #6b7280;
 }
-.review-highlight {
-    margin-top: 0.95rem;
-    background: linear-gradient(135deg, #fff3ef 0%, #ffe8e1 100%);
-    border: 1px solid #f5b6a6;
-    border-left: 6px solid #dc2626;
-    border-radius: 16px;
-    padding: 0.95rem 1rem;
-    box-shadow: 0 8px 20px rgba(220, 38, 38, 0.10);
-}
-.review-highlight .review-item-label {
-    color: #111827;
-    margin-bottom: 0.25rem;
-}
-.review-highlight .review-item-value {
-    color: #111827;
-}
 </style>
 """
 
@@ -161,7 +145,7 @@ def _pick_built_area(calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> 
     ]
     for value in candidates:
         num = _to_float(value)
-        if num is not None:
+        if num is not None and num > 0:
             return num
     return None
 
@@ -218,13 +202,5 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
         area_value = f"{_fmt_num(area_pretendida)} m²"
         area_hint = "Valor informado pelo usuário para a área construída pretendida."
 
-    st.markdown(
-        f"""
-        <div class="review-highlight">
-            <span class="review-item-label">Área construída pretendida</span>
-            <span class="review-item-value">{area_value}</span>
-            <span class="review-item-hint">{area_hint}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("<div class='review-grid-gap'></div>", unsafe_allow_html=True)
+    _render_item("Área construída pretendida", area_value, area_hint)
