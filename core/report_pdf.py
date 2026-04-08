@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import sys
 import tempfile
+import types
 from datetime import datetime
 from ui.relatorio_blocks.dicas_valiosas import get_dicas_valiosas
 from ui.relatorio_blocks.figuras_anexo_v import filter_figuras_by_lot_type
+from ui.relatorio import _build_unifamiliar_preview_context, should_block_unifamiliar_preview
+from ui.relatorio_blocks.unifamiliar_items import UNIFAMILIAR_ITEM_RENDERERS
 from .zone_descriptions import fetch_zone_description
 from typing import Any, Dict, List, Optional, Sequence
 from urllib.request import urlopen
@@ -788,6 +793,291 @@ def _render_figuras(pdf: _ReportPDF, figures: List[Dict[str, Any]]) -> None:
                 pass
 
 
+
+
+UNIFAMILIAR_ITEM_HEADINGS: List[tuple[str, str]] = [
+    ("item_01", "1. Onde está localizado o terreno?"),
+    ("item_02", "2. O uso residencial unifamiliar é viável neste terreno?"),
+    ("item_03", "3. Como funciona a leitura da adequabilidade no unifamiliar?"),
+    ("item_04", "4. O que essa zona permite neste terreno?"),
+    ("item_05", "5. Regras principais para este terreno"),
+    ("item_06", "6. Quanto posso ocupar no térreo?"),
+    ("item_07", "7. Quanto preciso deixar livre?"),
+    ("item_08", "8. Tipos de piso: o que conta como permeável?"),
+    ("item_09", "9. Posso construir mais andares?"),
+    ("item_10", "10. Preciso de vagas de estacionamento?"),
+    ("item_11", "11. Quais medidas mínimas os ambientes precisam ter?"),
+    ("item_12", "12. O que preciso saber sobre a calçada?"),
+    ("item_13", "13. Dicas valiosas"),
+    ("item_14", "14. Resumo rápido final"),
+    ("item_15", "15. O que acontece depois desta etapa?"),
+    ("item_16", "16. Fechamento final"),
+]
+
+
+class _CollectorColumn:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class _PDFContentCollector:
+    def __init__(self) -> None:
+        self.blocks: List[Dict[str, Any]] = []
+
+    def heading(self, text: str) -> None:
+        self.blocks.append({"type": "heading", "text": text})
+
+    def markdown(self, text: str) -> None:
+        text = str(text or "").strip()
+        if text:
+            self.blocks.append({"type": "markdown", "text": text})
+
+    def status(self, level: str, text: str) -> None:
+        text = str(text or "").strip()
+        if text:
+            self.blocks.append({"type": "status", "level": level, "text": text})
+
+    def special(self, kind: str, payload: Any = None) -> None:
+        self.blocks.append({"type": "special", "kind": kind, "payload": payload})
+
+
+class _FakeStreamlitRuntime:
+    def __init__(self, collector: _PDFContentCollector) -> None:
+        self._collector = collector
+
+    def markdown(self, text: str, *args, **kwargs) -> None:
+        self._collector.markdown(text)
+
+    def warning(self, text: str, *args, **kwargs) -> None:
+        self._collector.status("warning", text)
+
+    def info(self, text: str, *args, **kwargs) -> None:
+        self._collector.status("info", text)
+
+    def success(self, text: str, *args, **kwargs) -> None:
+        self._collector.status("success", text)
+
+    def error(self, text: str, *args, **kwargs) -> None:
+        self._collector.status("error", text)
+
+    def columns(self, n: int, *args, **kwargs):
+        return [_CollectorColumn() for _ in range(int(n or 0))]
+
+    def subheader(self, text: str, *args, **kwargs) -> None:
+        self._collector.heading(text)
+
+    def json(self, *args, **kwargs) -> None:
+        return None
+
+    def expander(self, *args, **kwargs):
+        return _CollectorColumn()
+
+
+def _strip_markdown_inline(text: str) -> str:
+    out = str(text or "")
+    out = re.sub(r"\*\*(.*?)\*\*", r"\1", out)
+    out = re.sub(r"__(.*?)__", r"\1", out)
+    out = re.sub(r"`([^`]*)`", r"\1", out)
+    out = re.sub(r"^#{1,6}\s*", "", out)
+    out = out.replace("👉", "")
+    out = out.replace("✅", "")
+    out = out.replace("⚠️", "")
+    out = out.replace("📄", "")
+    out = out.replace("📌", "")
+    out = out.replace("🏗️", "")
+    out = out.replace("🏡", "")
+    out = out.replace("🚗", "")
+    out = out.replace("🧱", "")
+    out = out.replace("🌿", "")
+    out = out.replace("📐", "")
+    out = out.replace("📏", "")
+    out = out.replace("🧭", "")
+    out = out.replace("📘", "")
+    out = out.replace("📍", "")
+    out = out.strip()
+    return out
+
+
+def _is_markdown_table(text: str) -> bool:
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    return len(lines) >= 2 and all("|" in line for line in lines[:2])
+
+
+def _parse_markdown_table(text: str) -> tuple[List[str], List[List[str]]]:
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    if len(lines) < 2:
+        return [], []
+    header = [c.strip() for c in lines[0].strip("|").split("|")]
+    rows: List[List[str]] = []
+    for line in lines[2:]:
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < len(header):
+            cells += [""] * (len(header) - len(cells))
+        rows.append(cells[: len(header)])
+    return header, rows
+
+
+def _render_markdown_block(pdf: _ReportPDF, text: str) -> None:
+    text = str(text or "").strip()
+    if not text:
+        return
+    if _is_markdown_table(text):
+        headers, rows = _parse_markdown_table(text)
+        if headers and rows:
+            usable_w = _full_width(pdf)
+            widths = [usable_w / max(1, len(headers)) for _ in headers]
+            _simple_table(pdf, headers, rows, widths, font_size=9)
+            pdf.ln(1)
+            return
+
+    paragraphs = [part.strip() for part in text.split("\n\n") if part.strip()]
+    for paragraph in paragraphs:
+        lines = [ln.rstrip() for ln in paragraph.splitlines() if ln.strip()]
+        if not lines:
+            continue
+        if all(ln.lstrip().startswith(("- ", "[ ] ")) for ln in lines):
+            bullets = []
+            for ln in lines:
+                cleaned = ln.lstrip()
+                if cleaned.startswith("[ ] "):
+                    cleaned = cleaned[4:]
+                elif cleaned.startswith("- "):
+                    cleaned = cleaned[2:]
+                bullets.append(_strip_markdown_inline(cleaned))
+            _bullet_list(pdf, bullets)
+            pdf.ln(1)
+            continue
+        if len(lines) == 1 and lines[0].lstrip().startswith("####"):
+            _section_title(pdf, _strip_markdown_inline(lines[0]), small=True)
+            continue
+        merged = "\n".join(_strip_markdown_inline(ln) for ln in lines)
+        _paragraph(pdf, merged)
+        pdf.ln(1)
+
+
+def _render_status_block(pdf: _ReportPDF, level: str, text: str) -> None:
+    cleaned = _strip_markdown_inline(text)
+    ok = str(level).lower() == "success"
+    if str(level).lower() == "info":
+        ok = True
+    _status_box(pdf, cleaned, ok=ok)
+
+
+def _collect_unifamiliar_report_blocks(calc: Dict[str, Any], session_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    collector = _PDFContentCollector()
+    fake_st = _FakeStreamlitRuntime(collector)
+
+    relatorio_mod = sys.modules.get("ui.relatorio")
+    original_relatorio_st = getattr(relatorio_mod, "st", None) if relatorio_mod else None
+    if relatorio_mod is not None:
+        relatorio_mod.st = types.SimpleNamespace(session_state=session_state)
+    try:
+        ctx = _build_unifamiliar_preview_context(calc)
+    finally:
+        if relatorio_mod is not None and original_relatorio_st is not None:
+            relatorio_mod.st = original_relatorio_st
+    if not ctx:
+        return []
+
+    figures = filter_figuras_by_lot_type(
+        _extract_figures_from_rule(calc.get("rule") or {}),
+        is_corner=bool(ctx.get("is_corner")),
+    )
+    ctx = dict(ctx)
+    ctx["render_quadro_tecnico"] = lambda *a, **k: collector.special("quadro_tecnico")
+    ctx["render_figuras_anexo_v"] = lambda rule, is_corner=False: collector.special(
+        "figuras", filter_figuras_by_lot_type(_extract_figures_from_rule(rule or {}), is_corner=bool(is_corner))
+    )
+
+    collector.heading("RELATÓRIO URBANÍSTICO")
+    collector.markdown(
+        "Este relatório mostra, de forma simples, o que pode ou não pode ser feito no terreno informado, "
+        "com base na zona, na via e nas regras urbanísticas do município.\n\n"
+        "A ideia aqui é facilitar a leitura: primeiro mostramos onde o terreno está, depois se o uso é viável, "
+        "e em seguida explicamos os principais limites do lote, como ocupação, área livre, altura, vagas, ambientes mínimos e calçada.\n\n"
+        "**Importante:** este relatório é uma análise inicial. A aprovação final depende da conferência completa no licenciamento."
+    )
+
+    item_keys = [key for key, _ in UNIFAMILIAR_ITEM_HEADINGS]
+    if should_block_unifamiliar_preview(calc):
+        item_keys = ["item_01", "item_02"]
+
+    patched_modules = []
+    originals = []
+    common_mod = sys.modules.get("ui.relatorio_blocks.unifamiliar_items.common")
+    if common_mod is not None:
+        patched_modules.append((common_mod, "md", getattr(common_mod, "md", None), collector.markdown))
+
+    for item_key in item_keys:
+        renderer = UNIFAMILIAR_ITEM_RENDERERS[item_key]
+        mod = sys.modules.get(renderer.__module__)
+        if mod is None:
+            continue
+        if hasattr(mod, "md"):
+            patched_modules.append((mod, "md", getattr(mod, "md"), collector.markdown))
+        if hasattr(mod, "st"):
+            patched_modules.append((mod, "st", getattr(mod, "st"), fake_st))
+
+    try:
+        for mod, attr, old, new in patched_modules:
+            originals.append((mod, attr, old))
+            setattr(mod, attr, new)
+
+        for item_key, heading in UNIFAMILIAR_ITEM_HEADINGS:
+            if item_key not in item_keys:
+                continue
+            collector.heading(heading)
+            UNIFAMILIAR_ITEM_RENDERERS[item_key](ctx)
+
+        if item_keys == ["item_01", "item_02"]:
+            collector.heading("Situação do estudo")
+            collector.status("warning", "A análise de adequabilidade resultou em NÃO PERMITE para a condição atual deste terreno.")
+            collector.markdown("Por isso, o relatório completo não será continuado, já que não há viabilidade urbanística para este caso na forma analisada.")
+            collector.status("info", "Seu crédito foi preservado, para que você possa realizar um novo estudo em outra condição.")
+    finally:
+        for mod, attr, old in reversed(originals):
+            setattr(mod, attr, old)
+
+    if figures and not any(b.get("type") == "special" and b.get("kind") == "figuras" for b in collector.blocks):
+        collector.special("figuras", figures)
+
+    return collector.blocks
+
+
+def _render_unified_unifamiliar_pdf(pdf: _ReportPDF, calc: Dict[str, Any], session_state: Dict[str, Any], generated_at: str) -> bool:
+    blocks = _collect_unifamiliar_report_blocks(calc, session_state)
+    if not blocks:
+        return False
+
+    ctx = _extract_context(calc, session_state)
+    _meta_header(pdf, ctx, generated_at)
+
+    for block in blocks:
+        kind = block.get("type")
+        if kind == "heading":
+            _section_title(pdf, _strip_markdown_inline(block.get("text") or ""), small=True)
+        elif kind == "markdown":
+            _render_markdown_block(pdf, block.get("text") or "")
+        elif kind == "status":
+            _render_status_block(pdf, block.get("level") or "info", block.get("text") or "")
+        elif kind == "special":
+            special_kind = block.get("kind")
+            if special_kind == "quadro_tecnico":
+                quadro_renderer = _render_quadro_tecnico
+                quadro_renderer(pdf)
+            elif special_kind == "figuras":
+                figuras_renderer = _render_figuras
+                figuras_renderer(pdf, block.get("payload") or [])
+
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(120, 120, 120)
+    pdf.multi_cell(_full_width(pdf), 4.2, _sanitize("Documento gerado pelo Viabilidade Facil com base no mesmo conteúdo exibido na tela do relatório urbanístico."))
+    return True
+
 def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
     rule = calc.get("rule") or {}
     return {
@@ -805,19 +1095,24 @@ def generate_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any
     pdf.set_margins(14, 24, 14)
     pdf.add_page()
 
-    ctx = _extract_context(calc, session_state)
-    _meta_header(pdf, ctx, payload["generated_at"])
-    _render_localizacao_indices_analise(pdf, ctx)
-    _render_zone_description_block(pdf, ctx)
-    _render_relatorio_narrativo(pdf, ctx)
-    _render_quadro_tecnico(pdf)
-    _render_dicas_valiosas(pdf, is_corner=bool(ctx["is_corner"]))
-    _render_figuras(pdf, payload.get("figures", []))
+    used_unified = False
+    if str(calc.get("use_type_code") or "").startswith("RES_UNI"):
+        used_unified = _render_unified_unifamiliar_pdf(pdf, calc, session_state, payload["generated_at"])
 
-    pdf.ln(2)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_text_color(120, 120, 120)
-    pdf.multi_cell(_full_width(pdf), 4.2, _sanitize("Documento gerado pelo Viabilidade Facil com base nos parametros urbanisticos exibidos no relatorio do sistema."))
+    if not used_unified:
+        ctx = _extract_context(calc, session_state)
+        _meta_header(pdf, ctx, payload["generated_at"])
+        _render_localizacao_indices_analise(pdf, ctx)
+        _render_zone_description_block(pdf, ctx)
+        _render_relatorio_narrativo(pdf, ctx)
+        _render_quadro_tecnico(pdf)
+        _render_dicas_valiosas(pdf, is_corner=bool(ctx["is_corner"]))
+        _render_figuras(pdf, payload.get("figures", []))
+
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(120, 120, 120)
+        pdf.multi_cell(_full_width(pdf), 4.2, _sanitize("Documento gerado pelo Viabilidade Facil com base nos parametros urbanisticos exibidos no relatorio do sistema."))
     result = pdf.output(dest="S")
     if isinstance(result, bytearray):
         return bytes(result)
