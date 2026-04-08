@@ -63,26 +63,13 @@ def inject_global_styles() -> None:
         .block-container::before {{
             content: "";
             position: absolute;
-            top: 0.22rem;
-            left: -1.6rem;
-            right: -1.6rem;
+            top: 0.26rem;
+            left: 0;
+            right: 0;
             height: 76px;
-            background: linear-gradient(180deg, {BLUE} 0%, #0a215f 100%);
-            border-radius: 18px;
-            z-index: 0;
-            pointer-events: none;
-            box-shadow: 0 10px 26px rgba(7, 24, 71, 0.16);
-        }}
-
-        .block-container::after {{
-            content: "";
-            position: absolute;
-            top: calc(0.22rem + 76px);
-            left: -1.6rem;
-            right: -1.6rem;
-            height: 4px;
-            background: linear-gradient(90deg, {ORANGE} 0%, rgba(214, 137, 16, 0.15) 100%);
-            border-radius: 999px;
+            background: linear-gradient(180deg, #0a1d57 0%, {BLUE} 100%);
+            border-bottom: 3px solid {ORANGE};
+            box-shadow: 0 10px 22px rgba(7, 24, 71, 0.10);
             z-index: 0;
             pointer-events: none;
         }}
@@ -90,18 +77,18 @@ def inject_global_styles() -> None:
         .vf-brand {{
             position: relative;
             z-index: 2;
-            font-size: 31px;
+            font-size: 30px;
             font-weight: 800;
             color: {WHITE};
-            letter-spacing: -0.025em;
+            letter-spacing: -0.02em;
             line-height: 1;
             white-space: nowrap;
             margin: 0;
             min-height: 76px;
             display: flex;
             align-items: center;
-            padding-left: 0.4rem;
-            text-shadow: 0 1px 0 rgba(0,0,0,0.06);
+            padding-left: .15rem;
+            text-shadow: 0 1px 0 rgba(0,0,0,.08);
         }}
 
         .vf-brand-dot {{
@@ -115,7 +102,7 @@ def inject_global_styles() -> None:
             min-height: 76px;
             display: flex;
             align-items: center;
-            justify-content: flex-end;
+            justify-content: center;
         }}
 
         .vf-nav-btn .stButton {{
@@ -129,26 +116,21 @@ def inject_global_styles() -> None:
             box-shadow: none !important;
             color: {WHITE} !important;
             font-weight: 600 !important;
-            font-size: 14px !important;
+            font-size: 15px !important;
             white-space: nowrap !important;
-            padding: 0 0.35rem !important;
+            padding: 0 !important;
             min-height: 76px !important;
             line-height: 1 !important;
             justify-content: center !important;
             width: 100% !important;
             border-radius: 0 !important;
-            transition: opacity .15s ease;
+            letter-spacing: -0.01em !important;
         }}
 
         .vf-nav-btn .stButton > button[kind="tertiary"]:hover {{
             color: {WHITE} !important;
-            background: transparent !important;
-            opacity: .82;
-        }}
-
-        .vf-nav-btn .stButton > button[kind="tertiary"] p {{
-            font-size: inherit !important;
-            font-weight: 600 !important;
+            background: rgba(255,255,255,0.06) !important;
+            opacity: 1;
         }}
 
         .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
@@ -167,32 +149,21 @@ def inject_global_styles() -> None:
 
         @media (max-width: 900px) {{
             .block-container::before {{
-                left: -0.75rem;
-                right: -0.75rem;
-                height: 66px;
-                border-radius: 14px;
-            }}
-
-            .block-container::after {{
-                left: -0.75rem;
-                right: -0.75rem;
-                top: calc(0.22rem + 66px);
+                height: 68px;
             }}
 
             .vf-brand {{
                 font-size: 24px;
-                min-height: 66px;
-                padding-left: 0.15rem;
+                min-height: 68px;
             }}
 
             .vf-nav-btn {{
-                min-height: 66px;
+                min-height: 68px;
             }}
 
             .vf-nav-btn .stButton > button[kind="tertiary"] {{
-                font-size: 12px !important;
-                min-height: 66px !important;
-                padding: 0 0.15rem !important;
+                font-size: 13px !important;
+                min-height: 68px !important;
             }}
         }}
         </style>
@@ -203,7 +174,7 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
-    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.6, 1.35, 1.45, 1.65, 1.0, 1.8], gap="small")
+    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.7, 1.7, 1.45, 1.7, 1.05, 1.8], gap="small")
 
     with brand_col:
         st.markdown(
@@ -213,12 +184,12 @@ def render_top_nav() -> None:
 
     with nav1:
         st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=True)
+        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=False)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with nav2:
         st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
-        if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=True):
+        if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=False):
             st.session_state["show_client_area"] = True
             if not st.session_state.get("auth_logged_in"):
                 st.session_state["post_login_action"] = "open_client_area"
@@ -227,12 +198,12 @@ def render_top_nav() -> None:
 
     with nav3:
         st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=True)
+        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=False)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with nav4:
         st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
-        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)
+        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
         st.markdown('</div>', unsafe_allow_html=True)
 
 
