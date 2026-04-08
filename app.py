@@ -17,6 +17,7 @@ from ui.app_shell import (
 )
 from ui.flow.primary_actions import render_primary_actions
 from ui.flow.use_selector import render_use_selector
+from ui.legal import render_privacy_page, render_terms_page
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
@@ -172,6 +173,15 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
+
+legal_view = safe_get_query_param("view")
+if legal_view == "terms":
+    render_terms_page()
+    st.stop()
+elif legal_view == "privacy":
+    render_privacy_page()
+    st.stop()
+
 render_top_nav()
 
 zones_gj = _zones_geojson()
@@ -416,8 +426,6 @@ render_report_section(
     build_current_report_signature_func=_build_current_report_signature,
     compute_report_confirmation_state_func=report_confirmation_core.compute_report_confirmation_state,
     arm_new_report_confirmation_func=report_confirmation_core.arm_new_report_confirmation,
-    arm_report_review_func=report_confirmation_core.arm_report_review,
-    should_reset_pending_review_func=report_confirmation_core.should_reset_pending_review,
 )
 
 render_item3_scroll_if_needed(
