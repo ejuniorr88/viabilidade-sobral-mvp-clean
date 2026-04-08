@@ -121,7 +121,9 @@ def render_report_section(
                 # novo fluxo de revisão modularizado.
                 arm_new_report_confirmation_func(
                     session_state=st.session_state,
-                    pending_signature=current_report_signature,
+                    calc_ref=calc,
+                    current_report_session=current_report_session,
+                    current_report_signature=current_report_signature,
                 )
                 _arm_review_state(
                     calc=calc,
