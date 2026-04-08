@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 from supabase import Client, create_client
 
+from core.coupon_credit_logic import build_credit_coupon_application
+from core.coupon_discount_logic import build_discount_coupon_application
+
 
 @st.cache_resource(show_spinner=False)
 def get_supabase_server_client() -> Client:
@@ -125,6 +128,30 @@ def _allowed_for_plan(coupon_row: Dict[str, Any], plan_code: str) -> bool:
     return not normalized_allowed or plan_code in normalized_allowed
 
 
+
+
+def _resolve_coupon_benefit_type(coupon_row: Dict[str, Any]) -> str:
+    value = str(coupon_row.get("benefit_type") or coupon_row.get("reward_type") or "discount").strip().lower()
+    return value if value in {"discount", "credit"} else "discount"
+
+
+def _normalize_discount_fields(*, benefit_type: str, discount_type: Optional[str], discount_value: Any) -> tuple[Optional[str], float]:
+    normalized_benefit = str(benefit_type or "discount").strip().lower()
+    if normalized_benefit == "credit":
+        return None, 0.0
+    normalized_discount_type = str(discount_type or "fixed").strip().lower()
+    if normalized_discount_type not in {"fixed", "percent"}:
+        normalized_discount_type = "fixed"
+    return normalized_discount_type, round(_to_float(discount_value, 0.0), 2)
+
+
+def _normalize_bonus_credits(*, benefit_type: str, bonus_credits: Any) -> int:
+    normalized_benefit = str(benefit_type or "discount").strip().lower()
+    if normalized_benefit != "credit":
+        return 0
+    credits = _to_int(bonus_credits, 0)
+    return max(0, credits)
+
 def _resolve_owner_user_id_by_email(owner_email: Optional[str]) -> Optional[str]:
     normalized = _normalize_email(owner_email)
     if not normalized:
@@ -222,47 +249,25 @@ def validate_coupon_for_checkout(
         if owner_email and normalized_user_email and owner_email == normalized_user_email:
             return {"ok": False, "message": "O dono do cupom não pode usar o próprio cupom."}
 
-    discount_type = str(coupon.get("discount_type") or "").strip().lower()
-    discount_value = round(_to_float(coupon.get("discount_value"), 0.0), 2)
-    if discount_type == "percent":
-        discount_amount = round(original_amount * (discount_value / 100.0), 2)
-    elif discount_type == "fixed":
-        discount_amount = round(discount_value, 2)
-    else:
-        return {"ok": False, "message": "Tipo de desconto inválido no cupom."}
+    benefit_type = _resolve_coupon_benefit_type(coupon)
+    if benefit_type == "credit":
+        return build_credit_coupon_application(
+            coupon=coupon,
+            normalized_code=normalized_code,
+            original_amount=original_amount,
+            plan_code=plan_code,
+            user_id=user_id,
+            user_email=user_email,
+        )
 
-    discount_amount = min(discount_amount, original_amount)
-    final_amount = round(max(0.0, original_amount - discount_amount), 2)
-
-    snapshot = {
-        "id": coupon.get("id"),
-        "code": normalized_code,
-        "coupon_type": coupon.get("coupon_type"),
-        "discount_type": discount_type,
-        "discount_value": discount_value,
-        "owner_user_id": coupon.get("owner_user_id"),
-        "owner_email": coupon.get("owner_email"),
-        "used_by_user_id": user_id,
-        "used_by_email": user_email,
-        "plan_code": plan_code,
-    }
-
-    return {
-        "ok": True,
-        "message": "Cupom aplicado com sucesso.",
-        "coupon": coupon,
-        "coupon_id": coupon.get("id"),
-        "coupon_code": normalized_code,
-        "coupon_owner_user_id": coupon.get("owner_user_id"),
-        "discount_type": discount_type,
-        "discount_value": discount_value,
-        "original_amount": original_amount,
-        "discount_amount": discount_amount,
-        "final_amount": final_amount,
-        "plan_code": plan_code,
-        "snapshot": snapshot,
-        "normalized_code": normalized_code,
-    }
+    return build_discount_coupon_application(
+        coupon=coupon,
+        normalized_code=normalized_code,
+        original_amount=original_amount,
+        plan_code=plan_code,
+        user_id=user_id,
+        user_email=user_email,
+    )
 
 
 def user_can_manage_coupons(user_email: Optional[str]) -> bool:
@@ -300,8 +305,10 @@ def _locked_coupon_payload_if_paid_usage(*, existing_row: Dict[str, Any], payloa
         "owner_email",
         "owner_user_id",
         "coupon_type",
+        "benefit_type",
         "discount_type",
         "discount_value",
+        "bonus_credits",
     ]
     protected = dict(payload)
     for field in locked_fields:
@@ -314,8 +321,10 @@ def create_coupon_code(
     code: str,
     owner_email: Optional[str],
     coupon_type: str,
-    discount_type: str,
-    discount_value: float,
+    benefit_type: str = "discount",
+    discount_type: Optional[str] = "fixed",
+    discount_value: float = 0.0,
+    bonus_credits: Optional[int] = None,
     is_active: bool = True,
     valid_from: Optional[datetime] = None,
     valid_until: Optional[datetime] = None,
@@ -341,13 +350,23 @@ def create_coupon_code(
         if _normalize_coupon_code(row.get("code")) == normalized_code:
             raise ValueError("Já existe um cupom com esse código.")
 
+    normalized_benefit_type = _resolve_coupon_benefit_type({"benefit_type": benefit_type})
+    normalized_discount_type, normalized_discount_value = _normalize_discount_fields(
+        benefit_type=normalized_benefit_type,
+        discount_type=discount_type,
+        discount_value=discount_value,
+    )
+    normalized_bonus_credits = _normalize_bonus_credits(benefit_type=normalized_benefit_type, bonus_credits=bonus_credits)
+
     payload = {
         "code": normalized_code,
         "owner_user_id": owner_user_id,
         "owner_email": normalized_owner_email or None,
         "coupon_type": coupon_type,
-        "discount_type": discount_type,
-        "discount_value": round(float(discount_value), 2),
+        "benefit_type": normalized_benefit_type,
+        "discount_type": normalized_discount_type,
+        "discount_value": normalized_discount_value,
+        "bonus_credits": normalized_bonus_credits,
         "is_active": bool(is_active),
         "valid_from": valid_from.isoformat() if isinstance(valid_from, datetime) else valid_from,
         "valid_until": valid_until.isoformat() if isinstance(valid_until, datetime) else valid_until,
@@ -370,8 +389,10 @@ def update_coupon_code(
     code: str,
     owner_email: Optional[str],
     coupon_type: str,
-    discount_type: str,
-    discount_value: float,
+    benefit_type: str = "discount",
+    discount_type: Optional[str] = "fixed",
+    discount_value: float = 0.0,
+    bonus_credits: Optional[int] = None,
     is_active: bool = True,
     valid_from: Optional[datetime] = None,
     valid_until: Optional[datetime] = None,
@@ -398,13 +419,23 @@ def update_coupon_code(
         if str(row.get("id")) != str(coupon_id) and _normalize_coupon_code(row.get("code")) == normalized_code:
             raise ValueError("Já existe um cupom com esse código.")
 
+    normalized_benefit_type = _resolve_coupon_benefit_type({"benefit_type": benefit_type})
+    normalized_discount_type, normalized_discount_value = _normalize_discount_fields(
+        benefit_type=normalized_benefit_type,
+        discount_type=discount_type,
+        discount_value=discount_value,
+    )
+    normalized_bonus_credits = _normalize_bonus_credits(benefit_type=normalized_benefit_type, bonus_credits=bonus_credits)
+
     payload = {
         "code": normalized_code,
         "owner_user_id": owner_user_id,
         "owner_email": normalized_owner_email or None,
         "coupon_type": coupon_type,
-        "discount_type": discount_type,
-        "discount_value": round(float(discount_value), 2),
+        "benefit_type": normalized_benefit_type,
+        "discount_type": normalized_discount_type,
+        "discount_value": normalized_discount_value,
+        "bonus_credits": normalized_bonus_credits,
         "is_active": bool(is_active),
         "valid_from": valid_from.isoformat() if isinstance(valid_from, datetime) else valid_from,
         "valid_until": valid_until.isoformat() if isinstance(valid_until, datetime) else valid_until,
@@ -543,6 +574,8 @@ def list_coupon_codes_enriched(*, limit: int = 100) -> List[Dict[str, Any]]:
         current["paid_uses"] = stats.get("paid_uses", 0)
         current["total_uses"] = stats.get("total_uses", 0)
         current["last_confirmed_at"] = stats.get("last_confirmed_at")
+        current["benefit_type"] = _resolve_coupon_benefit_type(current)
+        current["bonus_credits"] = _to_int(current.get("bonus_credits"), 0)
 
         valid_until = _parse_dt(row.get("valid_until"))
         is_expired = bool(valid_until and now > valid_until)
