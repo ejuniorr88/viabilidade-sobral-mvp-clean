@@ -34,11 +34,9 @@ def inject_global_styles() -> None:
     st.markdown(
         f"""
         <style>
-        /* 1. RESET ESTRUTURAL GLOBAL */
         .block-container {{
-            padding-top: 0rem !important;
-            padding-left: 0rem !important;
-            padding-right: 0rem !important;
+            position: relative;
+            padding-top: 0.4rem !important;
             padding-bottom: 2rem !important;
             max-width: 100% !important;
         }}
@@ -51,13 +49,6 @@ def inject_global_styles() -> None:
             background: #ffffff !important;
         }}
 
-        /* 2. PROTEÇÃO DO CONTEÚDO (mantém o respiro do app abaixo do header) */
-        .block-container > div:not(:first-child) {{
-            padding-left: 1.5rem !important;
-            padding-right: 1.5rem !important;
-        }}
-
-        /* 3. COEXISTÊNCIA COM TOOLBAR NATIVA */
         header[data-testid="stHeader"] {{
             background: transparent !important;
             z-index: 999999 !important;
@@ -68,28 +59,32 @@ def inject_global_styles() -> None:
             pointer-events: auto !important;
         }}
 
-        /* 4. ESTRUTURA REAL DO HEADER */
-        .vf-header-wrapper {{
-            background-color: {BLUE};
-            border-bottom: 3px solid {ORANGE};
-            width: 100%;
-            padding: 0 2rem;
-            box-sizing: border-box;
-            margin-bottom: 2rem;
-            position: relative;
-            z-index: 100;
+        /* Blue band behind only the stable top row. */
+        .block-container::before {{
+            content: "";
+            position: absolute;
+            top: 0.32rem;
+            left: 0;
+            right: 0;
+            height: 72px;
+            background: {BLUE};
+            z-index: 0;
+            pointer-events: none;
         }}
 
         .vf-brand {{
-            font-size: 28px;
+            position: relative;
+            z-index: 2;
+            font-size: 30px;
             font-weight: 800;
             color: {WHITE};
-            min-height: 80px;
-            display: flex;
-            align-items: center;
-            white-space: nowrap;
             letter-spacing: -0.02em;
             line-height: 1;
+            white-space: nowrap;
+            margin: 0;
+            min-height: 72px;
+            display: flex;
+            align-items: center;
         }}
 
         .vf-brand-dot {{
@@ -97,33 +92,40 @@ def inject_global_styles() -> None:
             margin-left: 2px;
         }}
 
-        /* 5. MENU E NAVEGAÇÃO */
-        .vf-nav-container {{
+        .vf-nav-btn {{
+            position: relative;
+            z-index: 2;
+            min-height: 72px;
             display: flex;
-            justify-content: flex-end;
             align-items: center;
-            min-height: 80px;
-            gap: 1.5rem;
-            margin-right: 5rem;
+            justify-content: flex-end;
+        }}
+
+        .vf-nav-btn .stButton {{
+            width: 100%;
+            margin: 0;
         }}
 
         .vf-nav-btn .stButton > button[kind="tertiary"] {{
             background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
             color: {WHITE} !important;
             font-weight: 600 !important;
             font-size: 15px !important;
-            border: none !important;
-            padding: 0.5rem 1rem !important;
-            min-height: 48px !important;
-            width: 100% !important;
             white-space: nowrap !important;
-            box-shadow: none !important;
+            padding: 0 !important;
+            min-height: 72px !important;
+            line-height: 1 !important;
+            justify-content: center !important;
+            width: 100% !important;
+            border-radius: 0 !important;
         }}
 
         .vf-nav-btn .stButton > button[kind="tertiary"]:hover {{
-            background: rgba(255,255,255,0.1) !important;
             color: {WHITE} !important;
-            opacity: 0.8;
+            background: transparent !important;
+            opacity: .82;
         }}
 
         .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
@@ -132,22 +134,31 @@ def inject_global_styles() -> None:
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
-            background: rgba(255,255,255,0.1) !important;
+            background: transparent !important;
             color: {WHITE} !important;
         }}
 
-        @media (max-width: 900px) {{
-            .vf-nav-container {{
-                display: none;
-            }}
+        .vf-nav-spacer {{
+            display: none;
+        }}
 
-            .vf-header-wrapper {{
-                padding: 0 1rem;
+        @media (max-width: 900px) {{
+            .block-container::before {{
+                height: 64px;
             }}
 
             .vf-brand {{
-                min-height: 72px;
                 font-size: 24px;
+                min-height: 64px;
+            }}
+
+            .vf-nav-btn {{
+                min-height: 64px;
+            }}
+
+            .vf-nav-btn .stButton > button[kind="tertiary"] {{
+                font-size: 13px !important;
+                min-height: 64px !important;
             }}
         }}
         </style>
@@ -156,10 +167,9 @@ def inject_global_styles() -> None:
     )
 
 
-def render_top_nav() -> None:
-    st.markdown('<div class="vf-header-wrapper">', unsafe_allow_html=True)
 
-    brand_col, nav_col = st.columns([1, 2.5])
+def render_top_nav() -> None:
+    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.2, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with brand_col:
         st.markdown(
@@ -167,38 +177,30 @@ def render_top_nav() -> None:
             unsafe_allow_html=True,
         )
 
-    with nav_col:
-        st.markdown('<div class="vf-nav-container">', unsafe_allow_html=True)
-
-        cols = st.columns(4)
-
-        with cols[0]:
-            st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
-            st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        with cols[1]:
-            st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
-            if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=True):
-                st.session_state["show_client_area"] = True
-                if not st.session_state.get("auth_logged_in"):
-                    st.session_state["post_login_action"] = "open_client_area"
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        with cols[2]:
-            st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
-            st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        with cols[3]:
-            st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
-            st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
+    with nav1:
+        st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=False)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    with nav2:
+        st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+        if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=False):
+            st.session_state["show_client_area"] = True
+            if not st.session_state.get("auth_logged_in"):
+                st.session_state["post_login_action"] = "open_client_area"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with nav3:
+        st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with nav4:
+        st.markdown('<div class="vf-nav-btn">', unsafe_allow_html=True)
+        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 def render_wallet_summary() -> None:
