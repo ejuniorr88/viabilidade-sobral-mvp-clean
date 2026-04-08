@@ -322,3 +322,45 @@ def reconcile_wallet_to_current_user(current_user_id: Optional[str], current_ema
         "moved_from": moved_from,
         "balance": total_balance,
     }
+
+
+def refund_viability_credit(
+    user_id: str,
+    amount: int = 1,
+    description: str = "Estorno de crédito de viabilidade",
+    *,
+    reference_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Compensa um débito anterior de crédito quando a persistência do relatório falha."""
+    if not user_id:
+        return {"ok": False, "message": "Usuário não identificado para estorno."}
+
+    server = get_supabase_server_client()
+    current_balance = get_credit_balance(user_id)
+    new_balance = int(current_balance) + int(amount)
+
+    try:
+        existing = _safe_data(server.table("credit_balance").select("user_id").eq("user_id", user_id).limit(1).execute()) or []
+        if existing:
+            server.table("credit_balance").update({"balance": new_balance}).eq("user_id", user_id).execute()
+        else:
+            server.table("credit_balance").insert({"user_id": user_id, "balance": new_balance}).execute()
+
+        ledger_payload = {
+            "user_id": user_id,
+            "amount": int(amount),
+            "entry_type": "credit",
+            "source": "platform_usage",
+            "reference_id": reference_id or "report_storage_refund",
+            "description": description,
+            "metadata": metadata or {},
+        }
+        try:
+            server.table("credit_ledger").insert(ledger_payload).execute()
+        except Exception:
+            pass
+
+        return {"ok": True, "new_balance": new_balance, "amount": int(amount)}
+    except Exception as e:
+        return {"ok": False, "message": f"Erro ao estornar crédito: {e}"}

@@ -83,6 +83,7 @@ def clear_pending_report(session_state: MutableMapping[str, Any]) -> None:
     session_state["pending_report_calc"] = None
     session_state["pending_report_session"] = None
     session_state["pending_report_signature"] = None
+    session_state["report_review_open"] = False
 
 
 def clear_report_runtime_state(
@@ -166,3 +167,32 @@ def arm_new_report_confirmation(
     session_state["pending_report_calc"] = deepcopy(calc_ref)
     session_state["pending_report_session"] = deepcopy(current_report_session)
     session_state["pending_report_signature"] = current_report_signature
+
+
+def arm_report_review(
+    *,
+    session_state: MutableMapping[str, Any],
+    calc_ref: Dict[str, Any],
+    current_report_session: Dict[str, Any],
+    current_report_signature: str,
+    requires_new_credit: bool,
+) -> None:
+    clear_pending_report(session_state)
+    session_state["report_review_open"] = True
+    session_state["pending_report_calc"] = deepcopy(calc_ref)
+    session_state["pending_report_session"] = deepcopy(current_report_session)
+    session_state["pending_report_signature"] = current_report_signature
+    if requires_new_credit:
+        session_state["confirm_new_report"] = True
+
+
+def should_reset_pending_review(
+    *,
+    session_state: MutableMapping[str, Any],
+    current_report_signature: str,
+) -> bool:
+    pending_signature = session_state.get("pending_report_signature")
+    review_open = bool(session_state.get("report_review_open"))
+    if not review_open or not pending_signature:
+        return False
+    return str(pending_signature) != str(current_report_signature)

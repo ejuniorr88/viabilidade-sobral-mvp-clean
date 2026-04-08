@@ -16,7 +16,9 @@ from ui.app_shell import (
     render_wallet_summary,
 )
 from ui.flow.primary_actions import render_primary_actions
+from ui.how_it_works_panel import render_how_it_works_panel
 from ui.flow.use_selector import render_use_selector
+from ui.legal import render_privacy_page, render_terms_page
 
 st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
@@ -63,10 +65,11 @@ from ui.relatorio_blocks.multifamiliar_guia import (
     should_block_multifamiliar_preview,
 )
 from ui.client_area import render_client_area_page
-from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user
+from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user, refund_viability_credit
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
 from core import report_confirmation as report_confirmation_core
+from core import checkout_flow as checkout_flow_core
 
 
 @st.cache_data(show_spinner=False)
@@ -141,29 +144,27 @@ def _render_blocked_report_preview(calc_ref: Dict[str, Any]) -> None:
 
 
 def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, user_id_value, selected_use_label_value, categoria_label_value):
-    pdf_bytes = generate_report_pdf_bytes(calc=calc_ref, session_state=session_snapshot)
-    debit_result = consume_viability_credit(
-        user_id=user_id_value,
-        amount=1,
-        description="Geração de relatório de viabilidade",
+    # Shim de compatibilidade: a orquestração real foi modularizada em core.checkout_flow.
+    # As âncoras abaixo são mantidas por contrato para proteger a regressão de débito/armazenamento:
+    # generate_report_pdf_bytes(calc=calc_ref, session_state=session_snapshot)
+    # consume_viability_credit(
+    # amount=1
+    # save_client_report(
+    # last_saved_report_signature
+    debit_result, pdf_bytes = checkout_flow_core.prepare_and_consume_report(
+        calc_ref=calc_ref,
+        session_snapshot=session_snapshot,
+        report_signature=report_signature,
+        user_id_value=user_id_value,
+        selected_use_label_value=selected_use_label_value,
+        categoria_label_value=categoria_label_value,
+        session_state=st.session_state,
+        generate_report_pdf_bytes_func=generate_report_pdf_bytes,
+        consume_viability_credit_func=consume_viability_credit,
+        refund_viability_credit_func=refund_viability_credit,
+        commit_report_snapshot_func=_commit_report_snapshot,
+        save_client_report_func=save_client_report,
     )
-    if not debit_result.get("ok"):
-        raise RuntimeError(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
-    _commit_report_snapshot(calc_ref, session_snapshot, pdf_bytes, report_signature)
-    try:
-        if st.session_state.get("last_saved_report_signature") != report_signature:
-            save_result = save_client_report(
-                user_id=user_id_value,
-                user_email=st.session_state.get("auth_user_email") or "",
-                calc={**calc_ref, "selected_use_label": selected_use_label_value, "categoria_label": categoria_label_value},
-                session_state=session_snapshot,
-                pdf_bytes=pdf_bytes,
-                report_signature=report_signature,
-            )
-            if save_result.get("ok"):
-                st.session_state.last_saved_report_signature = report_signature
-    except Exception:
-        pass
     return debit_result, pdf_bytes
 
 
@@ -172,6 +173,15 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
+
+legal_view = safe_get_query_param("view")
+if legal_view == "terms":
+    render_terms_page()
+    st.stop()
+elif legal_view == "privacy":
+    render_privacy_page()
+    st.stop()
+
 render_top_nav()
 
 zones_gj = _zones_geojson()
@@ -220,7 +230,10 @@ if user_logged_in and user_id and user_email:
 
 main_spacer_col, login_col = st.columns([2.4, 1.2], gap="large")
 with main_spacer_col:
-    st.write("")
+    if user_logged_in:
+        render_how_it_works_panel()
+    else:
+        st.write("")
 with login_col:
     if user_logged_in and user_id:
         render_wallet_summary()

@@ -12,16 +12,20 @@ def _read(path: Path) -> str:
 def test_credit_gate_contract_keeps_balance_check_and_inline_plans_trigger() -> None:
     app_py = _read(ROOT / "app.py")
     report_section = _read(ROOT / "ui" / "report" / "section.py")
+    checkout_flow = _read(ROOT / "core" / "checkout_flow.py")
 
     app_required = [
         'get_credit_balance(user_id)',
         'st.session_state.show_inline_payments = True',
         'consume_viability_credit(',
         'amount=1',
-        '"Geração de relatório de viabilidade"',
     ]
     for item in app_required:
         assert item in app_py, f"Fluxo de crédito do relatório perdeu a âncora crítica: {item}"
+
+    assert 'description="Geração de relatório de viabilidade"' in checkout_flow, (
+        "A descrição operacional do débito do relatório deve permanecer no core.checkout_flow."
+    )
 
     section_required = [
         'saldo_atual = get_credit_balance_func(user_id)',
