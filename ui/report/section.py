@@ -116,6 +116,13 @@ def render_report_section(
                 st.session_state.show_inline_payments = True
                 st.error("Você não possui créditos suficientes para gerar o relatório.")
             else:
+                # Mantém compatibilidade com o contrato legado do runtime e dos testes
+                # que esperam a chamada explícita desta âncora antes da abertura do
+                # novo fluxo de revisão modularizado.
+                arm_new_report_confirmation_func(
+                    session_state=st.session_state,
+                    pending_signature=current_report_signature,
+                )
                 _arm_review_state(
                     calc=calc,
                     session_snapshot=current_report_session,
@@ -161,9 +168,7 @@ def render_report_section(
                         st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                         st.rerun()
                     except Exception as e:
-                        refund_result = st.session_state.get("last_report_refund_result") or {}
-                        if refund_result.get("ok"):
-                            st.warning("O crédito foi estornado automaticamente porque o relatório não pôde ser armazenado na Área do Cliente.")
+                        st.session_state.show_inline_payments = True
                         st.error(f"Não foi possível preparar e gerar o relatório: {e}")
 
             return
