@@ -135,10 +135,10 @@ def _resolve_coupon_benefit_type(coupon_row: Dict[str, Any]) -> str:
     return value if value in {"discount", "credit"} else "discount"
 
 
-def _normalize_discount_fields(*, benefit_type: str, discount_type: Optional[str], discount_value: Any) -> tuple[str, float]:
+def _normalize_discount_fields(*, benefit_type: str, discount_type: Optional[str], discount_value: Any) -> tuple[Optional[str], float]:
     normalized_benefit = str(benefit_type or "discount").strip().lower()
     if normalized_benefit == "credit":
-        return "fixed", 0.0
+        return "fixed", 0.01
     normalized_discount_type = str(discount_type or "fixed").strip().lower()
     if normalized_discount_type not in {"fixed", "percent"}:
         normalized_discount_type = "fixed"
