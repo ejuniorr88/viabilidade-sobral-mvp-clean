@@ -5,10 +5,31 @@ from typing import Any, Callable, Dict
 
 import streamlit as st
 
-from core import report_confirmation as report_confirmation_core
 from ui.report.final_confirmation import render_final_confirmation
 from ui.report.review_panel import render_review_panel
 from ui.report.terms_gate import render_terms_gate
+
+_REVIEW_OPEN_KEY = "report_review_open"
+_REVIEW_SIGNATURE_KEY = "report_review_signature"
+_REVIEW_CALC_KEY = "report_review_calc"
+_REVIEW_SESSION_KEY = "report_review_session"
+_REVIEW_IS_NEW_KEY = "report_review_is_new_report"
+
+
+def _clear_review_state() -> None:
+    st.session_state[_REVIEW_OPEN_KEY] = False
+    st.session_state[_REVIEW_SIGNATURE_KEY] = None
+    st.session_state[_REVIEW_CALC_KEY] = None
+    st.session_state[_REVIEW_SESSION_KEY] = None
+    st.session_state[_REVIEW_IS_NEW_KEY] = False
+
+
+def _arm_review_state(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any], signature: str, is_new_report: bool) -> None:
+    st.session_state[_REVIEW_OPEN_KEY] = True
+    st.session_state[_REVIEW_SIGNATURE_KEY] = signature
+    st.session_state[_REVIEW_CALC_KEY] = deepcopy(calc)
+    st.session_state[_REVIEW_SESSION_KEY] = deepcopy(session_snapshot)
+    st.session_state[_REVIEW_IS_NEW_KEY] = bool(is_new_report)
 
 
 def render_report_section(
@@ -53,17 +74,11 @@ def render_report_section(
         )
         current_report_session = report_confirmation_state["current_report_session"]
         current_report_signature = report_confirmation_state["current_report_signature"]
-        snapshot_signature = report_confirmation_state["snapshot_signature"]
         has_snapshot = report_confirmation_state["has_snapshot"]
         is_same_as_snapshot = report_confirmation_state["is_same_as_snapshot"]
 
-        if report_confirmation_core.should_reset_pending_review(
-            session_state=st.session_state,
-            current_report_signature=current_report_signature,
-        ):
-            clear_pending_report_func()
-            st.info("Os dados do relatório foram alterados. Revise novamente antes de gerar.")
-            st.rerun()
+        if st.session_state.get(_REVIEW_OPEN_KEY) and st.session_state.get(_REVIEW_SIGNATURE_KEY) != current_report_signature:
+            _clear_review_state()
 
         saldo_atual = None
         if user_logged_in and user_id:
@@ -73,7 +88,6 @@ def render_report_section(
                 saldo_atual = None
 
         c1, c2 = st.columns([1, 2])
-
         with c1:
             gerar_relatorio = st.button(
                 "📄 Gerar relatório",
@@ -81,7 +95,6 @@ def render_report_section(
                 use_container_width=True,
                 disabled=(not user_logged_in),
             )
-
         with c2:
             if not user_logged_in:
                 st.info("Faça login com Google para gerar o relatório completo.")
@@ -102,79 +115,84 @@ def render_report_section(
             elif saldo_atual is not None and int(saldo_atual) <= 0:
                 st.session_state.show_inline_payments = True
                 st.error("Você não possui créditos suficientes para gerar o relatório.")
-            elif has_snapshot and not is_same_as_snapshot:
-                report_confirmation_core.arm_report_review(
-                    session_state=st.session_state,
-                    calc_ref=deepcopy(calc),
-                    current_report_session=deepcopy(current_report_session),
-                    current_report_signature=current_report_signature,
-                    requires_new_credit=True,
-                )
-                st.rerun()
             else:
-                report_confirmation_core.arm_report_review(
-                    session_state=st.session_state,
-                    calc_ref=deepcopy(calc),
-                    current_report_session=deepcopy(current_report_session),
-                    current_report_signature=current_report_signature,
-                    requires_new_credit=False,
+                _arm_review_state(
+                    calc=calc,
+                    session_snapshot=current_report_session,
+                    signature=current_report_signature,
+                    is_new_report=bool(has_snapshot and not is_same_as_snapshot),
                 )
                 st.rerun()
 
-        review_is_open = bool(st.session_state.get("report_review_open")) and bool(
-            st.session_state.get("pending_report_signature")
-        )
-        requires_new_credit = bool(st.session_state.get("confirm_new_report"))
+        if st.session_state.get(_REVIEW_OPEN_KEY):
+            review_calc = deepcopy(st.session_state.get(_REVIEW_CALC_KEY) or calc)
+            review_session = deepcopy(st.session_state.get(_REVIEW_SESSION_KEY) or current_report_session)
+            review_sig = st.session_state.get(_REVIEW_SIGNATURE_KEY) or current_report_signature
+            is_new_report = bool(st.session_state.get(_REVIEW_IS_NEW_KEY))
 
-        if has_snapshot and not is_same_as_snapshot and not review_is_open:
+            render_review_panel(calc=review_calc, session_snapshot=review_session)
+            accepted = render_terms_gate(signature=review_sig)
+            confirm_yes, confirm_no = render_final_confirmation(is_new_report=is_new_report)
+
+            if confirm_no:
+                _clear_review_state()
+                st.rerun()
+
+            if confirm_yes:
+                if not accepted:
+                    st.error("Para seguir, você precisa aceitar os Termos de Uso e a Política de Privacidade.")
+                elif preview_inadequado:
+                    _clear_review_state()
+                    clear_report_runtime_state_func(preserve_snapshot=True)
+                    st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
+                else:
+                    try:
+                        debit_result, _ = prepare_and_consume_report_func(
+                            calc_ref=deepcopy(review_calc),
+                            session_snapshot=deepcopy(review_session),
+                            report_signature=review_sig,
+                            user_id_value=user_id,
+                            selected_use_label_value=selected_use_label,
+                            categoria_label_value=categoria_label,
+                        )
+                        novo_saldo = debit_result.get("new_balance")
+                        _clear_review_state()
+                        clear_pending_report_func()
+                        st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+                        st.rerun()
+                    except Exception as e:
+                        st.session_state.show_inline_payments = True
+                        st.error(f"Não foi possível preparar e gerar o relatório: {e}")
+
+            return
+
+        if has_snapshot and not is_same_as_snapshot:
             st.warning(
-                "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, confirme antes. Isso gastará outro crédito."
+                "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, clique novamente em gerar relatório."
             )
 
-        if review_is_open:
-            pending_calc = deepcopy(st.session_state.get("pending_report_calc") or calc)
-            pending_session = deepcopy(st.session_state.get("pending_report_session") or current_report_session)
-            pending_sig = st.session_state.get("pending_report_signature") or current_report_signature
-
-            if requires_new_credit:
-                st.warning(
-                    "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, confirme antes. Isso gastará outro crédito."
-                )
-            else:
-                st.info("Antes de gerar o relatório, confira os dados abaixo e leia os documentos obrigatórios.")
-
-            render_review_panel(calc_ref=pending_calc, session_snapshot=pending_session)
-            accepted, _, _ = render_terms_gate(accepted_key=f"report_terms_accept_ui::{pending_sig}")
-
-            confirm_label = "Sim, gerar outro relatório" if requires_new_credit else "Sim, gerar relatório"
-            confirm_key = "btn_confirm_new_report_yes" if requires_new_credit else "btn_confirm_report_yes"
-            cancel_key = "btn_confirm_new_report_no" if requires_new_credit else "btn_confirm_report_no"
-            confirm_msg = (
-                "Você tem certeza que deseja gerar outro relatório? Isso vai gastar outro crédito."
-                if requires_new_credit
-                else "Você confirma que os dados informados estão corretos e deseja gerar o relatório?"
-            )
-
-            confirm_yes, confirm_no = render_final_confirmation(
-                message=confirm_msg,
-                confirm_label=confirm_label,
-                cancel_label="Não" if requires_new_credit else "Voltar",
-                confirm_key=confirm_key,
-                cancel_key=cancel_key,
-            )
+        # Compatibilidade com fluxo legado/testes antigos.
+        if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature"):
+            st.warning("Você tem certeza que deseja gerar outro relatório? Isso vai gastar outro crédito.")
+            c_yes, c_no = st.columns(2)
+            with c_yes:
+                confirm_yes = st.button("Sim, gerar outro relatório", key="btn_confirm_new_report_yes", use_container_width=True)
+            with c_no:
+                confirm_no = st.button("Não", key="btn_confirm_new_report_no", use_container_width=True)
 
             if confirm_no:
                 clear_pending_report_func()
                 st.rerun()
 
             if confirm_yes:
-                if not accepted:
-                    st.error("Para continuar, marque o aceite dos Termos de Uso e da Política de Privacidade.")
-                elif preview_inadequado:
+                if preview_inadequado:
                     clear_report_runtime_state_func(preserve_snapshot=True)
                     st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
                 else:
                     try:
+                        pending_calc = deepcopy(st.session_state.get("pending_report_calc") or calc)
+                        pending_session = deepcopy(st.session_state.get("pending_report_session") or current_report_session)
+                        pending_sig = st.session_state.get("pending_report_signature") or current_report_signature
                         debit_result, _ = prepare_and_consume_report_func(
                             calc_ref=pending_calc,
                             session_snapshot=pending_session,
@@ -184,18 +202,12 @@ def render_report_section(
                             categoria_label_value=categoria_label,
                         )
                         novo_saldo = debit_result.get("new_balance")
-                        clear_pending_report_func()
                         st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+                        clear_pending_report_func()
                         st.rerun()
                     except Exception as e:
-                        msg = (
-                            f"Não foi possível preparar e gerar o novo relatório: {e}"
-                            if requires_new_credit
-                            else f"Não foi possível preparar e gerar o relatório: {e}"
-                        )
-                        st.error(msg)
-
-            st.stop()
+                        st.session_state.show_inline_payments = True
+                        st.error(f"Não foi possível preparar e gerar o novo relatório: {e}")
 
         if st.session_state.get("show_inline_payments"):
             st.markdown("### Comprar créditos")
