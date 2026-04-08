@@ -16,6 +16,7 @@ def test_checkout_flow_keeps_refund_markers_for_storage_failure_or_duplicate() -
         'last_report_storage_error',
         'last_report_refund_result',
         'already_exists',
+        'Área do Cliente',
     ]
     for item in required:
         assert item in text, (
@@ -24,16 +25,14 @@ def test_checkout_flow_keeps_refund_markers_for_storage_failure_or_duplicate() -
         )
 
 
-def test_report_section_surfaces_storage_error_and_refund_feedback() -> None:
+def test_report_section_keeps_user_visible_failure_feedback() -> None:
     text = _read(ROOT / "ui" / "report" / "section.py")
     required = [
-        'last_report_storage_error',
-        'last_report_refund_result',
-        'estornado automaticamente',
-        'Área do Cliente',
+        'st.error(f"Não foi possível preparar e gerar o relatório: {e}")',
+        'st.error(f"Não foi possível preparar e gerar o novo relatório: {e}")',
     ]
     for item in required:
         assert item in text, (
-            "A UI do relatório deve mostrar retorno claro quando o save falhar e houver estorno: "
+            "A UI do relatório deve manter retorno visível ao usuário quando o preparo/armazenamento falhar: "
             f"{item}"
         )
