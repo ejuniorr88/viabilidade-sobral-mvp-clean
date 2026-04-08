@@ -1,5 +1,12 @@
+import sys
+from unittest.mock import MagicMock
+
+# Mock do streamlit para ambiente de teste/CI
+sys.modules["streamlit"] = MagicMock()
+sys.modules["streamlit.components"] = MagicMock()
+sys.modules["streamlit.components.v1"] = MagicMock()
+
 import inspect
-import re
 
 from ui import app_shell
 
@@ -36,11 +43,9 @@ def test_header_selector_remains_scoped_to_brand_block():
 
 def test_header_visual_height_contract_is_preserved():
     src = _src()
-    # Blindagem da altura atual aprovada do header
     assert 'min-height: 92px;' in src
     assert 'min-height: 92px !important;' in src
     assert '.vf-brand {{' in src
-    assert 'min-height: 92px;' in src
     assert 'padding: 0 1.4rem !important;' in src
 
 
