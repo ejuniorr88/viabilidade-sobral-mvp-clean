@@ -63,13 +63,12 @@ def inject_global_styles() -> None:
         .block-container::before {{
             content: "";
             position: absolute;
-            top: 0.26rem;
+            top: 0.32rem;
             left: 0;
             right: 0;
-            height: 76px;
-            background: linear-gradient(180deg, #0a1d57 0%, {BLUE} 100%);
+            height: 72px;
+            background: {BLUE};
             border-bottom: 3px solid {ORANGE};
-            box-shadow: 0 10px 22px rgba(7, 24, 71, 0.10);
             z-index: 0;
             pointer-events: none;
         }}
@@ -84,11 +83,9 @@ def inject_global_styles() -> None:
             line-height: 1;
             white-space: nowrap;
             margin: 0;
-            min-height: 76px;
+            min-height: 72px;
             display: flex;
             align-items: center;
-            padding-left: .15rem;
-            text-shadow: 0 1px 0 rgba(0,0,0,.08);
         }}
 
         .vf-brand-dot {{
@@ -99,10 +96,10 @@ def inject_global_styles() -> None:
         .vf-nav-btn {{
             position: relative;
             z-index: 2;
-            min-height: 76px;
+            min-height: 72px;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-end;
         }}
 
         .vf-nav-btn .stButton {{
@@ -119,18 +116,17 @@ def inject_global_styles() -> None:
             font-size: 15px !important;
             white-space: nowrap !important;
             padding: 0 !important;
-            min-height: 76px !important;
+            min-height: 72px !important;
             line-height: 1 !important;
             justify-content: center !important;
             width: 100% !important;
             border-radius: 0 !important;
-            letter-spacing: -0.01em !important;
         }}
 
         .vf-nav-btn .stButton > button[kind="tertiary"]:hover {{
             color: {WHITE} !important;
-            background: rgba(255,255,255,0.06) !important;
-            opacity: 1;
+            background: transparent !important;
+            opacity: .82;
         }}
 
         .vf-nav-btn .stButton > button[kind="tertiary"]:focus,
@@ -149,21 +145,21 @@ def inject_global_styles() -> None:
 
         @media (max-width: 900px) {{
             .block-container::before {{
-                height: 68px;
+                height: 64px;
             }}
 
             .vf-brand {{
                 font-size: 24px;
-                min-height: 68px;
+                min-height: 64px;
             }}
 
             .vf-nav-btn {{
-                min-height: 68px;
+                min-height: 64px;
             }}
 
             .vf-nav-btn .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
-                min-height: 68px !important;
+                min-height: 64px !important;
             }}
         }}
         </style>
@@ -174,7 +170,7 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
-    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.7, 1.7, 1.45, 1.7, 1.05, 1.8], gap="small")
+    brand_col, spacer_col, nav1, nav2, nav3, nav4 = st.columns([4.8, 2.2, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with brand_col:
         st.markdown(
