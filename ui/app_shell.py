@@ -58,8 +58,8 @@ def inject_global_styles() -> None:
             pointer-events: auto !important;
         }}
 
-        /* Header real: pinta o primeiro bloco horizontal renderizado pelo Streamlit. */
-        .block-container > div:first-child [data-testid="stHorizontalBlock"] {{
+        /* Pinta apenas o bloco horizontal que contém a marca. */
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
             background: {BLUE} !important;
             border-bottom: 3px solid {ORANGE} !important;
             min-height: 72px;
@@ -69,12 +69,12 @@ def inject_global_styles() -> None:
             align-items: center !important;
         }}
 
-        .block-container > div:first-child [data-testid="stHorizontalBlock"] > div {{
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div {{
             display: flex !important;
             align-items: center !important;
         }}
 
-        .block-container > div:first-child [data-testid="stHorizontalBlock"] > div:first-child {{
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child {{
             justify-content: flex-start !important;
         }}
 
@@ -96,7 +96,7 @@ def inject_global_styles() -> None:
             margin-left: 2px;
         }}
 
-        .block-container > div:first-child [data-testid="stHorizontalBlock"] .stButton {{
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton {{
             width: 100%;
             margin: 0;
             display: flex !important;
@@ -104,7 +104,7 @@ def inject_global_styles() -> None:
             justify-content: center !important;
         }}
 
-        .block-container > div:first-child [data-testid="stHorizontalBlock"] .stButton > button[kind="tertiary"] {{
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
@@ -121,15 +121,15 @@ def inject_global_styles() -> None:
             margin: 0 !important;
         }}
 
-        .block-container > div:first-child [data-testid="stHorizontalBlock"] .stButton > button[kind="tertiary"]:hover {{
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:hover {{
             color: {WHITE} !important;
             background: rgba(255,255,255,0.08) !important;
             opacity: .92;
         }}
 
-        .block-container > div:first-child [data-testid="stHorizontalBlock"] .stButton > button[kind="tertiary"]:focus,
-        .block-container > div:first-child [data-testid="stHorizontalBlock"] .stButton > button[kind="tertiary"]:focus-visible,
-        .block-container > div:first-child [data-testid="stHorizontalBlock"] .stButton > button[kind="tertiary"]:active {{
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:focus,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:focus-visible,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"]:active {{
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
@@ -138,7 +138,7 @@ def inject_global_styles() -> None:
         }}
 
         @media (max-width: 900px) {{
-            .block-container > div:first-child [data-testid="stHorizontalBlock"] {{
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
                 min-height: 64px;
                 padding: 0 0.9rem !important;
             }}
@@ -148,7 +148,7 @@ def inject_global_styles() -> None:
                 min-height: 64px;
             }}
 
-            .block-container > div:first-child [data-testid="stHorizontalBlock"] .stButton > button[kind="tertiary"] {{
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
                 font-size: 13px !important;
                 min-height: 64px !important;
             }}
@@ -164,7 +164,7 @@ def render_top_nav() -> None:
 
     with cols[0]:
         st.markdown(
-            '<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
+            '''<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>''',
             unsafe_allow_html=True,
         )
 
