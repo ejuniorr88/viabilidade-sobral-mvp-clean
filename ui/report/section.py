@@ -161,7 +161,9 @@ def render_report_section(
                         st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                         st.rerun()
                     except Exception as e:
-                        st.session_state.show_inline_payments = True
+                        refund_result = st.session_state.get("last_report_refund_result") or {}
+                        if refund_result.get("ok"):
+                            st.warning("O crédito foi estornado automaticamente porque o relatório não pôde ser armazenado na Área do Cliente.")
                         st.error(f"Não foi possível preparar e gerar o relatório: {e}")
 
             return
