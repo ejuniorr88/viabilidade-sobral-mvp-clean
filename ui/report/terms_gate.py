@@ -242,7 +242,7 @@ h1 {{ margin-bottom: 16px; }}
     return f"data:text/html;base64,{encoded}"
 
 
-def render_terms_gate(*, accepted_key: str = "report_terms_accepted") -> Tuple[bool, str, str]:
+def render_terms_gate(*, accepted_key: str) -> Tuple[bool, str, str]:
     terms_href = _document_href("Termos de Uso", TERMS_OF_USE_TEXT)
     privacy_href = _document_href("Política de Privacidade", PRIVACY_POLICY_TEXT)
 
