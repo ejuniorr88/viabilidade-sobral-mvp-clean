@@ -8,66 +8,78 @@ import streamlit as st
 _CARD_CSS = """
 <style>
 .report-review-shell {
-    margin: 0.45rem 0 1rem 0;
+    margin: 0.55rem 0 1.05rem 0;
 }
 .report-review-hero {
     position: relative;
-    background: linear-gradient(135deg, #eef6ff 0%, #dbeafe 55%, #fde68a 160%);
-    border: 1px solid #c9ddfb;
-    border-left: 6px solid #2563eb;
-    border-radius: 18px;
-    padding: 1.1rem 1.2rem 1.05rem 1.2rem;
-    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+    background: linear-gradient(135deg, #edf4ff 0%, #dbeafe 42%, #e0f2fe 100%);
+    border: 1px solid #bfd7ff;
+    border-left: 7px solid #2563eb;
+    border-radius: 20px;
+    padding: 1.15rem 1.2rem 1.1rem 1.2rem;
+    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.10);
     overflow: hidden;
+}
+.report-review-hero::before {
+    content: "";
+    position: absolute;
+    top: -42px;
+    right: -32px;
+    width: 170px;
+    height: 170px;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.12) 58%, transparent 72%);
+    pointer-events: none;
 }
 .report-review-hero::after {
     content: "";
     position: absolute;
-    inset: auto -40px -40px auto;
-    width: 140px;
-    height: 140px;
+    bottom: -52px;
+    left: 42%;
+    width: 210px;
+    height: 210px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.25);
+    background: radial-gradient(circle, rgba(59,130,246,0.10) 0%, rgba(59,130,246,0.04) 45%, transparent 72%);
     pointer-events: none;
 }
 .report-review-badge {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    background: rgba(255,255,255,0.86);
+    background: rgba(255,255,255,0.90);
     color: #1d4ed8;
-    border: 1px solid rgba(37,99,235,0.18);
+    border: 1px solid rgba(37,99,235,0.20);
     border-radius: 999px;
-    padding: 0.3rem 0.7rem;
-    font-size: 0.8rem;
-    font-weight: 700;
+    padding: 0.34rem 0.78rem;
+    font-size: 0.81rem;
+    font-weight: 800;
     letter-spacing: 0.01em;
-    margin-bottom: 0.65rem;
+    margin-bottom: 0.72rem;
 }
 .report-review-title {
     margin: 0;
-    font-size: 1.45rem;
-    line-height: 1.2;
+    font-size: 1.55rem;
+    line-height: 1.18;
     font-weight: 800;
     color: #0f172a;
 }
 .report-review-subtitle {
-    margin: 0.45rem 0 0 0;
-    color: #334155;
-    font-size: 0.98rem;
+    margin: 0.5rem 0 0 0;
+    color: #1f3b64;
+    font-size: 1rem;
 }
 .report-review-note {
-    margin-top: 0.85rem;
-    background: rgba(255,255,255,0.78);
-    border: 1px dashed rgba(37,99,235,0.26);
-    border-radius: 12px;
-    padding: 0.7rem 0.85rem;
-    color: #1e293b;
-    font-size: 0.93rem;
-    font-weight: 600;
+    margin-top: 0.9rem;
+    background: rgba(255,255,255,0.86);
+    border: 1px dashed rgba(37,99,235,0.30);
+    border-radius: 13px;
+    padding: 0.78rem 0.9rem;
+    color: #0f172a;
+    font-size: 0.94rem;
+    font-weight: 700;
 }
 .review-grid-gap {
-    height: 0.85rem;
+    height: 0.9rem;
 }
 .review-item {
     background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
@@ -102,15 +114,15 @@ _CARD_CSS = """
 }
 .review-highlight {
     margin-top: 0.95rem;
-    background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
-    border: 1px solid #fed7aa;
-    border-left: 6px solid #f59e0b;
+    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+    border: 1px solid #fdba74;
+    border-left: 6px solid #f97316;
     border-radius: 16px;
     padding: 0.95rem 1rem;
-    box-shadow: 0 8px 20px rgba(245, 158, 11, 0.08);
+    box-shadow: 0 8px 20px rgba(249, 115, 22, 0.10);
 }
 .review-highlight .review-item-label {
-    color: #b45309;
+    color: #c2410c;
     margin-bottom: 0.25rem;
 }
 .review-highlight .review-item-value {
@@ -134,6 +146,16 @@ def _pick_zone(calc: Dict[str, Any]) -> str:
 def _pick_street(calc: Dict[str, Any]) -> str:
     street = calc.get("street_name") or calc.get("via_name") or calc.get("road_name") or calc.get("logradouro")
     return str(street or "—")
+
+
+def _pick_built_area(calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> Any:
+    return (
+        session_snapshot.get("built_ground_m2")
+        or session_snapshot.get("built_ground_input_m2")
+        or calc.get("built_ground_m2")
+        or calc.get("built_ground_input_m2")
+        or 0
+    )
 
 
 def _render_item(label: str, value: str, hint: str | None = None) -> None:
@@ -180,12 +202,12 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
         st.markdown("<div class='review-grid-gap'></div>", unsafe_allow_html=True)
         _render_item("Área do lote", f"{_fmt_num(session_snapshot.get('lot_area_m2'))} m²", "Área calculada a partir dos dados atuais do lote.")
 
-    area_pretendida = calc.get("built_ground_input_m2")
+    area_pretendida = _pick_built_area(calc, session_snapshot)
     if area_pretendida not in (None, "", 0, 0.0):
         st.markdown(
             f"""
             <div class="review-highlight">
-                <span class="review-item-label">Área pretendida informada</span>
+                <span class="review-item-label">Área construída pretendida</span>
                 <span class="review-item-value">{_fmt_num(area_pretendida)} m²</span>
             </div>
             """,
