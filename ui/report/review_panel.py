@@ -12,7 +12,7 @@ _CARD_CSS = """
 }
 .report-review-hero {
     position: relative;
-    background: linear-gradient(135deg, #fff7f3 0%, #ffeae4 52%, #fff3ef 100%);
+    background: linear-gradient(135deg, #fff8f5 0%, #ffefe9 52%, #fff7f4 100%);
     border: 1px solid #f3c7ba;
     border-left: 7px solid #e15b3d;
     border-radius: 20px;
@@ -31,23 +31,12 @@ _CARD_CSS = """
     background: radial-gradient(circle, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.15) 58%, transparent 72%);
     pointer-events: none;
 }
-.report-review-hero::after {
-    content: "";
-    position: absolute;
-    bottom: -52px;
-    left: 42%;
-    width: 210px;
-    height: 210px;
-    border-radius: 999px;
-    background: radial-gradient(circle, rgba(251,146,60,0.10) 0%, rgba(251,146,60,0.04) 45%, transparent 72%);
-    pointer-events: none;
-}
 .report-review-badge {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
     background: rgba(255,255,255,0.92);
-    color: #c2410c;
+    color: #111827;
     border: 1px solid rgba(225,91,61,0.20);
     border-radius: 999px;
     padding: 0.34rem 0.78rem;
@@ -61,20 +50,20 @@ _CARD_CSS = """
     font-size: 1.55rem;
     line-height: 1.18;
     font-weight: 800;
-    color: #3b1d17;
+    color: #2c1611;
 }
 .report-review-subtitle {
     margin: 0.5rem 0 0 0;
-    color: #6b2c22;
+    color: #5b3a33;
     font-size: 1rem;
 }
 .report-review-note {
     margin-top: 0.9rem;
-    background: rgba(255,255,255,0.88);
+    background: rgba(255,255,255,0.90);
     border: 1px dashed rgba(225,91,61,0.30);
     border-radius: 13px;
     padding: 0.78rem 0.9rem;
-    color: #3b1d17;
+    color: #2c1611;
     font-size: 0.94rem;
     font-weight: 700;
 }
@@ -93,7 +82,7 @@ _CARD_CSS = """
     display: inline-block;
     font-size: 0.79rem;
     font-weight: 800;
-    color: #c2410c;
+    color: #111827;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-bottom: 0.45rem;
@@ -102,7 +91,7 @@ _CARD_CSS = """
     display: block;
     font-size: 1.12rem;
     font-weight: 800;
-    color: #2c1611;
+    color: #111827;
     line-height: 1.42;
     word-break: break-word;
 }
@@ -110,11 +99,11 @@ _CARD_CSS = """
     display: block;
     margin-top: 0.35rem;
     font-size: 0.84rem;
-    color: #7c5b53;
+    color: #6b7280;
 }
 .review-highlight {
     margin-top: 0.95rem;
-    background: linear-gradient(135deg, #fff1ee 0%, #ffe2db 100%);
+    background: linear-gradient(135deg, #fff3ef 0%, #ffe8e1 100%);
     border: 1px solid #f5b6a6;
     border-left: 6px solid #dc2626;
     border-radius: 16px;
@@ -122,11 +111,11 @@ _CARD_CSS = """
     box-shadow: 0 8px 20px rgba(220, 38, 38, 0.10);
 }
 .review-highlight .review-item-label {
-    color: #b91c1c;
+    color: #111827;
     margin-bottom: 0.25rem;
 }
 .review-highlight .review-item-value {
-    color: #7f1d1d;
+    color: #111827;
 }
 </style>
 """
@@ -148,30 +137,33 @@ def _pick_street(calc: Dict[str, Any]) -> str:
     return str(street or "—")
 
 
-def _first_positive(*values: Any) -> float | None:
-    for value in values:
-        try:
-            if value is None or value == "":
-                continue
-            num = float(value)
-            if num > 0:
-                return num
-        except Exception:
-            continue
-    return None
+def _to_float(value: Any) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except Exception:
+        return None
 
 
-def _pick_built_area(calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> Any:
-    return _first_positive(
+def _pick_built_area(calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> float | None:
+    candidates = [
         session_snapshot.get("built_ground_m2"),
         session_snapshot.get("built_ground_input_m2"),
+        session_snapshot.get("built_ground_m2_input"),
         calc.get("built_ground_m2"),
         calc.get("built_ground_input_m2"),
         calc.get("built_ground_adopted_m2"),
+        calc.get("built_ground"),
         st.session_state.get("built_ground_m2"),
         st.session_state.get("built_ground_input_m2"),
         st.session_state.get("built_ground_m2_input"),
-    )
+    ]
+    for value in candidates:
+        num = _to_float(value)
+        if num is not None:
+            return num
+    return None
 
 
 def _render_item(label: str, value: str, hint: str | None = None) -> None:
@@ -219,13 +211,20 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
         _render_item("Área do lote", f"{_fmt_num(session_snapshot.get('lot_area_m2'))} m²", "Área calculada a partir dos dados atuais do lote.")
 
     area_pretendida = _pick_built_area(calc, session_snapshot)
-    if area_pretendida is not None:
-        st.markdown(
-            f"""
-            <div class="review-highlight">
-                <span class="review-item-label">Área construída pretendida</span>
-                <span class="review-item-value">{_fmt_num(area_pretendida)} m²</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    if area_pretendida is None:
+        area_value = "Não informada"
+        area_hint = "Nenhuma área construída pretendida foi preenchida para este cenário."
+    else:
+        area_value = f"{_fmt_num(area_pretendida)} m²"
+        area_hint = "Valor informado pelo usuário para a área construída pretendida."
+
+    st.markdown(
+        f"""
+        <div class="review-highlight">
+            <span class="review-item-label">Área construída pretendida</span>
+            <span class="review-item-value">{area_value}</span>
+            <span class="review-item-hint">{area_hint}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
