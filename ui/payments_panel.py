@@ -570,6 +570,8 @@ def _sync_current_payment_state(supabase, current_user_id: str) -> None:
     if status != "paid":
         return
 
+    wallet_refresh_flag_key = f"wallet_balance_refresh_after_credit_{payment_id}"
+
     try:
         result = ensure_paid_payment_is_credited(payment_id=payment_id, target_user_id=current_user_id)
         latest_payment = (result or {}).get("payment") or _fetch_payment_by_id(supabase, payment_id) or current_payment
@@ -577,9 +579,15 @@ def _sync_current_payment_state(supabase, current_user_id: str) -> None:
         merged.update(latest_payment)
         st.session_state["current_payment_snapshot"] = merged
         st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
+
         is_fully_done = bool((result or {}).get("fully_credited"))
         if is_fully_done:
             st.session_state["payments_focus_mode"] = False
+            if not st.session_state.get(wallet_refresh_flag_key):
+                st.session_state[wallet_refresh_flag_key] = True
+                st.rerun()
+        else:
+            st.session_state.pop(wallet_refresh_flag_key, None)
     except Exception:
         # Não interromper a renderização do painel; a área visual mostra o erro depois.
         return
@@ -647,6 +655,7 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
             st.session_state.pop("current_payment_id", None)
             st.session_state.pop("current_payment_snapshot", None)
             st.session_state.pop(rerun_flag_key, None)
+            st.session_state.pop(f"wallet_balance_refresh_after_credit_{payment_id}", None)
             st.rerun()
     else:
         if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
