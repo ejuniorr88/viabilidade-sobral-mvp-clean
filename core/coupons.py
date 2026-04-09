@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+
+ADMIN_HIDDEN_NOTES_TAG = "[ADMIN_HIDDEN]"
 from typing import Any, Dict, List, Optional
 
 import streamlit as st
@@ -296,19 +298,6 @@ def coupon_has_paid_usage(*, coupon_id: Any) -> bool:
     return _paid_coupon_usage_count(coupon_id=coupon_id) > 0
 
 
-def coupon_has_any_usage(*, coupon_id: Any) -> bool:
-    supabase = get_supabase_server_client()
-
-    usage_resp = supabase.table("coupon_usages").select("id").eq("coupon_id", coupon_id).limit(1).execute()
-    usage_rows = _safe_data(usage_resp) or []
-    if usage_rows:
-        return True
-
-    payments_resp = supabase.table("payments").select("id").eq("coupon_id", coupon_id).limit(1).execute()
-    payment_rows = _safe_data(payments_resp) or []
-    return bool(payment_rows)
-
-
 def _locked_coupon_payload_if_paid_usage(*, existing_row: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
     if not coupon_has_paid_usage(coupon_id=existing_row.get("id")):
         return payload
@@ -474,6 +463,45 @@ def update_coupon_code(
     return data[0] if data else payload
 
 
+def _notes_mark_admin_hidden(notes: Optional[str]) -> str:
+    raw = str(notes or "").strip()
+    if ADMIN_HIDDEN_NOTES_TAG in raw:
+        return raw
+    return f"{ADMIN_HIDDEN_NOTES_TAG} {raw}".strip()
+
+
+def _notes_unmark_admin_hidden(notes: Optional[str]) -> Optional[str]:
+    raw = str(notes or "")
+    cleaned = raw.replace(ADMIN_HIDDEN_NOTES_TAG, "").strip()
+    return cleaned or None
+
+
+def is_coupon_hidden_in_admin(row: Optional[Dict[str, Any]]) -> bool:
+    notes = str((row or {}).get("notes") or "")
+    return ADMIN_HIDDEN_NOTES_TAG in notes
+
+
+def set_coupon_hidden_in_admin(*, coupon_id: Any, hidden: bool) -> Dict[str, Any]:
+    supabase = get_supabase_server_client()
+    existing_resp = supabase.table("coupon_codes").select("*").eq("id", coupon_id).execute()
+    existing_rows = _safe_data(existing_resp) or []
+    existing_row = existing_rows[0] if existing_rows else None
+    if not existing_row:
+        raise ValueError("Cupom não encontrado.")
+
+    current_notes = existing_row.get("notes")
+    next_notes = _notes_mark_admin_hidden(current_notes) if hidden else _notes_unmark_admin_hidden(current_notes)
+
+    response = (
+        supabase.table("coupon_codes")
+        .update({"notes": next_notes})
+        .eq("id", coupon_id)
+        .execute()
+    )
+    data = _safe_data(response) or []
+    return data[0] if data else {**existing_row, "notes": next_notes}
+
+
 def set_coupon_active(*, coupon_id: Any, is_active: bool) -> Dict[str, Any]:
     supabase = get_supabase_server_client()
     response = (
@@ -487,16 +515,31 @@ def set_coupon_active(*, coupon_id: Any, is_active: bool) -> Dict[str, Any]:
 
 
 def delete_coupon_code(*, coupon_id: Any) -> Dict[str, Any]:
-    if coupon_has_any_usage(coupon_id=coupon_id):
-        raise ValueError("Não é possível apagar um cupom que já possui histórico de uso. Inative-o em vez de apagar.")
+    """Exclui permanentemente um cupom sem histórico de uso.
 
+    Regras de segurança:
+    - não excluir se existir qualquer registro em coupon_usages
+    - devolver payload simples quando a exclusão ocorrer
+    """
     supabase = get_supabase_server_client()
-    existing_resp = supabase.table("coupon_codes").select("id,code").eq("id", coupon_id).limit(1).execute()
-    existing_rows = _safe_data(existing_resp) or []
-    existing_row = existing_rows[0] if existing_rows else {"id": coupon_id}
 
-    supabase.table("coupon_codes").delete().eq("id", coupon_id).execute()
-    return {"id": existing_row.get("id", coupon_id), "code": existing_row.get("code"), "deleted": True}
+    existing_resp = supabase.table("coupon_codes").select("*").eq("id", coupon_id).execute()
+    existing_rows = _safe_data(existing_resp) or []
+    existing_row = existing_rows[0] if existing_rows else None
+    if not existing_row:
+        raise ValueError("Cupom não encontrado.")
+
+    total_uses = _count_coupon_usages(coupon_id=coupon_id)
+    if total_uses > 0:
+        raise ValueError("Não é permitido apagar cupom com histórico de uso. Inative o cupom para preservar o histórico.")
+
+    (
+        supabase.table("coupon_codes")
+        .delete()
+        .eq("id", coupon_id)
+        .execute()
+    )
+    return {"id": coupon_id, "deleted": True, "code": existing_row.get("code")}
 
 
 def list_coupon_codes(*, limit: int = 100) -> List[Dict[str, Any]]:
@@ -608,6 +651,7 @@ def list_coupon_codes_enriched(*, limit: int = 100) -> List[Dict[str, Any]]:
         current["is_expired"] = is_expired
         current["owner_resolved"] = bool(row.get("owner_user_id"))
         current["paid_usage_locked"] = bool(stats.get("paid_uses", 0) > 0)
+        current["admin_hidden"] = is_coupon_hidden_in_admin(current)
         enriched.append(current)
 
     return enriched
