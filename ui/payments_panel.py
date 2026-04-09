@@ -577,8 +577,8 @@ def _sync_current_payment_state(supabase, current_user_id: str) -> None:
         merged.update(latest_payment)
         st.session_state["current_payment_snapshot"] = merged
         st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
-        credit_result = (result or {}).get("credit_result") or {}
-        if credit_result.get("credited") or credit_result.get("reason") == "already_credited":
+        is_fully_done = bool((result or {}).get("fully_credited"))
+        if is_fully_done:
             st.session_state["payments_focus_mode"] = False
     except Exception:
         # Não interromper a renderização do painel; a área visual mostra o erro depois.
@@ -620,7 +620,11 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
         credit_result = (inspect or {}).get("credit_result") or {}
         rerun_flag_key = f"paid_credit_sync_{payment_id_str}"
 
-        if not fully_credited and not st.session_state.get(rerun_flag_key):
+        if (
+            not fully_credited
+            and credit_result.get("reason") != "credited_to_other_user"
+            and not st.session_state.get(rerun_flag_key)
+        ):
             try:
                 ensure_paid_payment_is_credited(payment_id=payment_id_str, target_user_id=current_user_id)
                 st.session_state[rerun_flag_key] = True
@@ -630,12 +634,10 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
         elif fully_credited:
             st.session_state.pop(rerun_flag_key, None)
 
-        if credit_result.get("reason") == "already_credited" or fully_credited:
+        if credit_result.get("reason") == "credited_to_other_user":
+            st.error("Atenção: Os créditos deste pagamento já foram vinculados a outra conta. Entre em contato com o suporte para resolver esta inconsistência.")
+        elif credit_result.get("reason") == "already_credited" or fully_credited:
             st.success("Este pagamento já foi confirmado e os créditos já estão na carteira.")
-            if st.session_state.get("payments_focus_mode"):
-                st.session_state["payments_focus_mode"] = False
-        elif credit_result.get("reason") == "credited_to_other_user":
-            st.success("Este pagamento já foi confirmado e os créditos já foram reconciliados para a sua carteira.")
             if st.session_state.get("payments_focus_mode"):
                 st.session_state["payments_focus_mode"] = False
         else:
