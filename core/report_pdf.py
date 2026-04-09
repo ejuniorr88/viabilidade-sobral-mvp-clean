@@ -1,5 +1,4 @@
 print("🔥 REPORT_PDF NOVO RODANDO 🔥")
-
 from __future__ import annotations
 
 import json
