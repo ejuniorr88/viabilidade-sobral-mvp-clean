@@ -1011,7 +1011,7 @@ def _table_html(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     body_rows = []
     for row in rows:
         body_rows.append('<tr>' + ''.join(f'<td>{_html(cell)}</td>' for cell in row) + '</tr>')
-    return '<div class="table-wrap no-break"><table><thead><tr>' + thead + '</tr></thead><tbody>' + ''.join(body_rows) + '</tbody></table></div>'
+    return '<div class="table-wrap"><table><thead><tr>' + thead + '</tr></thead><tbody>' + ''.join(body_rows) + '</tbody></table></div>'
 
 
 def _formula_box_html(text: str) -> str:
@@ -1019,7 +1019,7 @@ def _formula_box_html(text: str) -> str:
 
 
 def _info_box_html(title: str, content: str, tone: str = "default") -> str:
-    return f'<div class="info-box {tone} no-break"><div class="info-title">{_html(title)}</div><div class="info-content">{content}</div></div>'
+    return f'<div class="info-box {tone}"><div class="info-title">{_html(title)}</div><div class="info-content">{content}</div></div>'
 
 
 def _section_card(title: str, body_html: str, number: int, accent: str = "") -> str:
@@ -1030,27 +1030,6 @@ def _section_card(title: str, body_html: str, number: int, accent: str = "") -> 
         f'<div class="section-title-wrap"><h2>{accent_html}{_html(title)}</h2></div></div>'
         f'<div class="section-body">{body_html}</div></section>'
     )
-
-
-def _figure_cards_html(figures: Sequence[Dict[str, Any]]) -> str:
-    cards: List[str] = []
-    for fig in figures:
-        url = str(fig.get("url") or "").strip()
-        title = str(fig.get("title") or "Figura").strip()
-        caption = str(fig.get("caption") or "Anexo V - LC 90/2023").strip()
-        if url:
-            media = f'<img src="{_html(url)}" alt="{_html(title)}">'
-        else:
-            media = '<div class="info-box warning"><div class="info-title">Figura indisponível</div><div class="info-content">Não foi possível carregar a imagem desta figura no modo HTML.</div></div>'
-        cards.append(
-            '<div class="figure-card">'
-            + media +
-            '<div class="figure-meta">'
-            f'<div class="figure-title">{_html(title)}</div>'
-            f'<div class="muted">{_html(caption)}</div>'
-            '</div></div>'
-        )
-    return ''.join(cards)
 
 
 def _render_unifamiliar_report_html(ctx: Dict[str, Any], payload: Dict[str, Any]) -> str:
@@ -1075,10 +1054,8 @@ def _render_unifamiliar_report_html(ctx: Dict[str, Any], payload: Dict[str, Any]
         return a_rest, a_imperm
 
     figures = payload.get("figures", []) or []
-    label_uso = "Residencial Unifamiliar" if str(ctx.get("uso") or "").startswith("RES_UNI") else str(ctx.get("uso") or "-")
-
     cover_summary = ''.join([
-        _summary_box('Uso', label_uso, 'default'),
+        _summary_box('Uso', 'Residencial Unifamiliar', 'default'),
         _summary_box('Zona', str(ctx.get('zone') or '-'), 'default'),
         _summary_box('Via', str(ctx.get('via') or '-'), 'default'),
         _summary_box('Resultado', status_curto or '-', status_kind),
@@ -1090,291 +1067,149 @@ def _render_unifamiliar_report_html(ctx: Dict[str, Any], payload: Dict[str, Any]
 <head>
 <meta charset="utf-8">
 <style>
-@page {{ size: A4; margin: 14mm 12mm 16mm 12mm; @bottom-center {{ content: "Página " counter(page); color: #7c8797; font-size: 9px; }} }}
-:root {{
-  --bg:#f4f6fb;
-  --surface:#ffffff;
-  --surface-soft:#f8fbff;
-  --line:#dde5f0;
-  --line-strong:#cad6e5;
-  --text:#243447;
-  --muted:#6b7280;
-  --brand:#1f3b69;
-  --brand-2:#2f6fd6;
-  --brand-soft:#edf4ff;
-  --success:#1b6f3d;
-  --success-bg:#e8f6ee;
-  --success-line:#b8e0c5;
-  --warning:#9a6700;
-  --warning-bg:#fff7e8;
-  --warning-line:#f3d49a;
-  --danger:#a63d40;
-  --danger-bg:#fdeeee;
-  --danger-line:#efc4c4;
-}}
+@page {{ size: A4; margin: 18mm 14mm 18mm 14mm; @bottom-center {{ content: "Página " counter(page); color: #6b7280; font-size: 9px; }} }}
+:root {{ --ink:#1f2937; --muted:#6b7280; --line:#dbe3ee; --brand:#1d4ed8; --brand2:#2563eb; --navy:#1f3b69; --success:#166534; --success-bg:#e9f7ee; --warning:#92400e; --warning-bg:#fff7e6; --danger:#991b1b; --danger-bg:#fdecec; }}
 * {{ box-sizing: border-box; }}
-html, body {{ margin:0; padding:0; }}
-body {{ font-family: DejaVu Sans, Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 10pt; line-height: 1.5; }}
-p, h1, h2, h3, h4 {{ margin:0; }}
-.page-shell {{ background: transparent; }}
-.report-card {{ background: var(--surface); border:1px solid var(--line); border-radius: 20px; padding: 22px; box-shadow: 0 8px 26px rgba(31,59,105,.05); }}
-.header-kicker {{ color: var(--brand-2); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 6px; }}
-.header-grid {{ display:grid; grid-template-columns: 1.35fr .75fr; gap: 18px; align-items:flex-start; }}
-.header-main h1 {{ color: var(--brand); font-size: 24px; line-height: 1.1; font-weight: 800; margin-bottom: 6px; }}
-.header-subtitle {{ color: var(--muted); font-size: 10.2px; }}
-.header-meta {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 16px; padding: 14px 15px; text-align: right; }}
-.header-meta .meta-label {{ color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }}
-.header-meta .meta-value {{ color: var(--brand); font-size: 11.5px; font-weight: 800; }}
-.hero-status {{ margin-top: 16px; display:grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }}
-.status-banner {{ border-radius: 18px; border:1px solid var(--line); padding: 16px 17px; }}
-.status-banner.success {{ background: var(--success-bg); border-color: var(--success-line); }}
-.status-banner.warning {{ background: var(--warning-bg); border-color: var(--warning-line); }}
-.status-banner.danger {{ background: var(--danger-bg); border-color: var(--danger-line); }}
-.status-banner .status-top {{ font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }}
-.status-banner .status-value {{ font-size: 20px; line-height: 1.1; font-weight: 800; margin-bottom: 8px; }}
-.status-banner.success .status-value {{ color: var(--success); }}
-.status-banner.warning .status-value {{ color: var(--warning); }}
-.status-banner.danger .status-value {{ color: var(--danger); }}
-.status-banner .status-desc {{ font-size: 10px; color: #374151; }}
-.summary-grid {{ display:grid; grid-template-columns: repeat(2,1fr); gap: 10px; }}
-.summary-card {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 14px; padding: 12px 13px; min-height: 66px; }}
-.summary-card.success {{ background: var(--success-bg); border-color: var(--success-line); }}
-.summary-card.warning {{ background: var(--warning-bg); border-color: var(--warning-line); }}
-.summary-card.danger {{ background: var(--danger-bg); border-color: var(--danger-line); }}
-.summary-label {{ color: var(--muted); font-size: 8.8px; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 6px; }}
-.summary-value {{ color: var(--brand); font-size: 12.2px; font-weight: 800; line-height: 1.25; }}
-.summary-card.success .summary-value {{ color: var(--success); }}
-.summary-card.warning .summary-value {{ color: var(--warning); }}
-.summary-card.danger .summary-value {{ color: var(--danger); }}
-.intro-card {{ margin-top: 16px; background: var(--surface); border:1px solid var(--line); border-radius: 18px; padding: 16px 18px; }}
-.intro-title {{ color: var(--brand); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }}
-.intro-grid {{ display:grid; grid-template-columns: 1.25fr .95fr; gap: 14px; margin-top: 12px; }}
-.panel {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 16px; padding: 14px; }}
-.panel-title {{ color: var(--brand); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }}
-.kv-grid {{ display:grid; grid-template-columns: repeat(2,1fr); gap: 9px; }}
-.kv-item {{ background: var(--surface); border:1px solid var(--line); border-radius: 12px; padding: 10px 11px; min-height: 56px; }}
-.kv-label {{ color: var(--muted); font-size: 8.8px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }}
-.kv-value {{ color: #0f172a; font-size: 10.6px; font-weight: 800; line-height: 1.35; }}
-.rule-chip-row {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }}
-.rule-chip {{ background: var(--surface); border:1px solid var(--line); border-radius: 999px; padding: 6px 10px; color: var(--brand); font-size: 8.8px; font-weight: 700; }}
-.section-card {{ margin-top: 14px; background: var(--surface); border:1px solid var(--line); border-radius: 18px; padding: 16px 18px; page-break-inside: avoid; box-shadow: 0 4px 18px rgba(31,59,105,.03); }}
-.section-head {{ display:flex; gap: 11px; align-items:center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e8eef6; }}
-.section-badge {{ width: 31px; height: 31px; border-radius: 50%; background: linear-gradient(135deg, var(--brand-2) 0%, var(--brand) 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size: 10px; font-weight: 800; }}
-.section-title-wrap h2 {{ color: var(--brand); font-size: 16px; line-height: 1.2; font-weight: 800; }}
-.section-accent {{ margin-right: 4px; }}
-.lead {{ color: #3a4758; font-size: 10.2px; margin-bottom: 8px; }}
-.formula-box {{ margin: 10px 0; background: var(--brand-soft); border:1px solid #d3e2ff; border-left:4px solid var(--brand-2); border-radius: 12px; padding: 11px 13px; font-size: 12.4px; font-weight: 800; color: var(--brand); }}
-.info-box {{ margin-top: 10px; background: var(--surface-soft); border:1px solid var(--line); border-radius: 14px; padding: 12px 13px; }}
-.info-box.success {{ background: var(--success-bg); border-color: var(--success-line); }}
-.info-box.warning {{ background: var(--warning-bg); border-color: var(--warning-line); }}
-.info-box.danger {{ background: var(--danger-bg); border-color: var(--danger-line); }}
-.info-title {{ color: var(--brand); font-size: 10px; font-weight: 800; margin-bottom: 6px; }}
-.info-content {{ color:#334155; font-size: 10px; }}
-.metric-grid {{ display:grid; grid-template-columns: repeat(3,1fr); gap: 10px; }}
-.metric-card {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 14px; padding: 12px 13px; }}
-.metric-label {{ color: var(--muted); font-size: 8.6px; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 6px; }}
-.metric-value {{ color: var(--brand); font-size: 16px; font-weight: 800; line-height: 1.1; }}
-.table-wrap {{ margin-top: 10px; overflow: hidden; border:1px solid var(--line); border-radius: 14px; }}
-.table-wrap table {{ width:100%; border-collapse: collapse; font-size: 9.2px; }}
-.table-wrap thead th {{ background: var(--brand-soft); color: var(--brand); text-align:left; padding: 9px 10px; font-weight: 800; border-bottom:1px solid var(--line); }}
-.table-wrap tbody td {{ padding: 8px 10px; border-bottom:1px solid #edf1f5; vertical-align: top; }}
-.table-wrap tbody tr:nth-child(even) td {{ background: #fbfdff; }}
-.bullet-list {{ margin: 8px 0 0 18px; padding:0; }}
-.bullet-list li {{ margin-bottom: 4px; }}
-.legend-grid {{ display:grid; grid-template-columns: 1fr 1.2fr 1.8fr; gap:0; }}
-.legend-grid .legend-row {{ display: contents; }}
-.legend-grid .legend-head {{ background: var(--brand-soft); color: var(--brand); font-weight: 800; font-size: 9px; padding: 9px 10px; border-bottom:1px solid var(--line); }}
-.legend-grid .legend-cell {{ background: white; padding: 9px 10px; font-size: 9.4px; border-bottom:1px solid #edf1f5; }}
-.legend-grid .legend-row:nth-child(even) .legend-cell {{ background:#fbfdff; }}
-.figure-stack {{ display:flex; flex-direction:column; gap: 14px; margin-top: 10px; }}
-.figure-card {{ border:1px solid var(--line); border-radius: 16px; overflow:hidden; background:#fff; page-break-inside: avoid; }}
-.figure-card img {{ display:block; width:100%; height:auto; }}
-.figure-meta {{ padding: 12px 14px; }}
-.figure-title {{ color: var(--brand); font-size: 12px; font-weight: 800; margin-bottom: 4px; }}
-.resumo-grid {{ display:grid; grid-template-columns: repeat(4,1fr); gap: 10px; }}
-.checklist-box {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 16px; padding: 14px; }}
-.checklist-title {{ color: var(--brand); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing:.08em; margin-bottom: 8px; }}
-.footer-note {{ margin-top: 18px; text-align:center; color: var(--muted); font-size: 9px; }}
-.muted {{ color: var(--muted); font-size: 9.2px; }}
-.page-break-before {{ break-before: page; page-break-before: always; }}
-.no-break {{ break-inside: avoid; page-break-inside: avoid; }}
+body {{ font-family: DejaVu Sans, Arial, sans-serif; color: var(--ink); font-size: 10.2pt; line-height: 1.55; }}
+h1,h2,h3,h4,p {{ margin: 0; }}
+.hero {{ background: linear-gradient(135deg, #1f3b69 0%, #2563eb 100%); color: white; border-radius: 18px; padding: 20px 22px; box-shadow: 0 10px 28px rgba(31,59,105,.18); }}
+.hero-top {{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }}
+.eyebrow {{ font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .78; margin-bottom: 6px; }}
+.hero h1 {{ font-size: 25px; line-height:1.1; font-weight: 800; margin-bottom: 4px; }}
+.hero .subtitle {{ font-size: 11px; opacity:.88; }}
+.hero .issued {{ font-size: 10px; opacity:.82; text-align:right; }}
+.hero-grid {{ display:grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-top: 16px; }}
+.summary-card {{ background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.20); border-radius: 14px; padding: 12px 13px; }}
+.summary-card.success {{ background: rgba(9, 87, 42, .22); }} .summary-card.warning {{ background: rgba(146, 64, 14, .24); }} .summary-card.danger {{ background: rgba(153, 27, 27, .24); }}
+.summary-label {{ font-size: 9px; text-transform: uppercase; letter-spacing: .09em; opacity: .78; margin-bottom: 7px; }}
+.summary-value {{ font-size: 13.5px; font-weight: 700; line-height: 1.3; }}
+.intro-card {{ margin-top: 14px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: 0 8px 24px rgba(15,23,42,.05); }}
+.intro-grid {{ display:grid; grid-template-columns: 1.3fr .9fr; gap: 14px; margin-top: 14px; }}
+.mini-panel {{ background: #f8fbff; border:1px solid var(--line); border-radius: 14px; padding: 14px; }}
+.mini-title {{ color:var(--navy); font-weight:800; font-size:11px; margin-bottom:10px; text-transform:uppercase; letter-spacing:.06em; }}
+.kv-grid {{ display:grid; grid-template-columns: repeat(2,1fr); gap: 10px; }}
+.kv-item {{ background:#fff; border:1px solid var(--line); border-radius: 12px; padding: 10px 11px; }}
+.kv-label {{ color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }}
+.kv-value {{ color:#0f172a; font-size:11.2px; font-weight:700; line-height:1.35; }}
+.status-panel {{ border-radius: 16px; padding: 14px 15px; border: 1px solid var(--line); }}
+.status-panel.success {{ background: var(--success-bg); color: var(--success); border-color:#b7e2c5; }} .status-panel.warning {{ background: var(--warning-bg); color: var(--warning); border-color:#f2d3a4; }} .status-panel.danger {{ background: var(--danger-bg); color: var(--danger); border-color:#efc1c1; }}
+.status-kicker {{ font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; margin-bottom:5px; }} .status-text {{ font-size: 14px; font-weight: 800; margin-bottom: 6px; }} .status-desc {{ font-size: 10.2px; line-height: 1.5; }}
+.section-card {{ margin-top: 16px; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; box-shadow: 0 8px 24px rgba(15,23,42,.04); page-break-inside: avoid; }}
+.section-head {{ display:flex; gap:12px; align-items:center; margin-bottom: 12px; padding-bottom: 10px; border-bottom:1px solid #e8eef6; }}
+.section-badge {{ width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,#2563eb 0%,#1f3b69 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; }}
+.section-title-wrap h2 {{ color:var(--navy); font-size: 16px; font-weight:800; line-height:1.2; }} .lead {{ font-size: 11px; color:#334155; }}
+.bullet-list {{ margin: 8px 0 0 18px; padding:0; }} .bullet-list li {{ margin-bottom: 5px; }}
+.formula-box {{ margin: 10px 0; padding: 11px 12px; border-left: 4px solid var(--brand2); background: #f8fafc; border-radius: 10px; font-size: 13px; font-weight: 800; color:#0f172a; }}
+.info-box {{ margin-top: 10px; padding: 12px 13px; border-radius: 12px; border:1px solid var(--line); background:#f8fbff; }} .info-box.success {{ background: var(--success-bg); border-color:#b7e2c5; }} .info-box.warning {{ background: var(--warning-bg); border-color:#f2d3a4; }} .info-box.danger {{ background: var(--danger-bg); border-color:#efc1c1; }}
+.info-title {{ font-weight: 800; color:var(--navy); margin-bottom: 6px; }} .info-content {{ color:#334155; }}
+.chip-row {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }} .chip {{ border-radius:999px; padding:6px 10px; background:#eef4ff; border:1px solid #d5e2ff; color:#1e3a8a; font-size:9.5px; font-weight:700; }}
+.rule-grid {{ display:grid; grid-template-columns: repeat(3,1fr); gap: 10px; }}
+.table-wrap {{ margin-top: 10px; overflow: hidden; border:1px solid var(--line); border-radius: 14px; }} table {{ width:100%; border-collapse: collapse; font-size: 9.5px; }} thead th {{ background:#edf4ff; color:#1f3b69; text-align:left; font-weight:800; padding: 9px 10px; border-bottom:1px solid var(--line); }} tbody td {{ padding: 8px 10px; border-bottom:1px solid #edf1f5; vertical-align: top; }} tbody tr:nth-child(even) td {{ background:#fbfdff; }}
+.fig-grid {{ display:grid; grid-template-columns: 1fr; gap: 14px; margin-top: 10px; }} .figure-card {{ border:1px solid var(--line); border-radius: 16px; overflow:hidden; background:#fff; page-break-inside: avoid; }} .figure-card img {{ display:block; width:100%; height:auto; }} .figure-meta {{ padding: 12px 14px; }} .figure-title {{ color:var(--navy); font-size: 12px; font-weight:800; margin-bottom: 4px; }} .muted {{ color: var(--muted); }} .footer-note {{ margin-top: 18px; color: var(--muted); font-size: 9.2px; text-align:center; }}
 </style>
 </head>
 <body>
-<div class="page-shell">
-  <div class="report-card">
-    <div class="header-kicker">Relatório urbanístico</div>
-    <div class="header-grid">
-      <div class="header-main">
-        <h1>{_html(label_uso)}</h1>
-        <div class="header-subtitle">Viabilidade Fácil / Viabilidade Urbana Sobral</div>
-      </div>
-      <div class="header-meta">
-        <div class="meta-label">Emitido em</div>
-        <div class="meta-value">{_html(payload.get('generated_at') or '-')}</div>
-      </div>
-    </div>
-    <div class="hero-status">
-      <div class="status-banner {status_kind}">
-        <div class="status-top">Resultado da adequabilidade</div>
-        <div class="status-value">{_html(status_curto or '-')}</div>
-        <div class="status-desc">{_html(str(ctx.get('explicacao') or ''))}</div>
-      </div>
-      <div class="summary-grid">{cover_summary}</div>
-    </div>
-    <div class="intro-card">
-      <div class="intro-title">Visão geral do estudo</div>
-      <p>Este relatório mostra, de forma simples, o que pode ou não pode ser feito no terreno informado, com base na zona, na via e nas regras urbanísticas do município. A ideia aqui é facilitar a leitura: primeiro mostramos onde o terreno está, depois se o uso é viável, e em seguida explicamos os principais limites do lote, como ocupação, área livre, altura, vagas, ambientes mínimos e calçada.</p>
-      <div class="intro-grid">
-        <div class="panel">
-          <div class="panel-title">Dados principais do estudo</div>
-          <div class="kv-grid">
-            {_kv_item('Área do terreno', _fmt_area(ctx.get('area')))}
-            {_kv_item('Dimensões', f"{_fmt_m(ctx.get('front'))} × {_fmt_m(ctx.get('depth'))}")}
-            {_kv_item('Tipo de lote', str(ctx.get('tipo_lote') or '-'))}
-            {_kv_item('Subzona / setor', str(ctx.get('subzona') or '-'))}
-            {_kv_item('Via', str(ctx.get('via') or '-'))}
-            {_kv_item('Tipo de via', str(ctx.get('via_tipo') or '-'))}
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-title">Leitura rápida</div>
-          <div class="rule-chip-row">
-            <div class="rule-chip">Uso: { _html(label_uso) }</div>
-            <div class="rule-chip">Zona: { _html(str(ctx.get('zone') or '-')) }</div>
-            <div class="rule-chip">Via: { _html(str(ctx.get('via') or '-')) }</div>
-            <div class="rule-chip">Resultado: { _html(status_curto or '-') }</div>
-          </div>
-        </div>
-      </div>
-    </div>
-""")
-
-    sec1 = ''.join([
-        '<p class="lead">Aqui estão os dados principais usados nesta análise.</p>',
-        '<div class="kv-grid">',
-        _kv_item('Uso informado', label_uso),
-        _kv_item('Área do terreno', _fmt_area(ctx.get('area'))),
+<div class="hero">
+  <div class="hero-top">
+    <div><div class="eyebrow">Viabilidade Fácil</div><h1>Relatório Urbanístico</h1><div class="subtitle">Viabilidade Fácil / Viabilidade Urbana Sobral</div></div>
+    <div class="issued">Emitido em<br><strong>{_html(payload.get('generated_at') or '-')}</strong></div>
+  </div>
+  <div class="hero-grid">{cover_summary}</div>
+</div>
+<div class="intro-card">
+  <p class="lead">Este relatório mostra, de forma simples, o que pode ou não pode ser feito no terreno informado, com base na zona, na via e nas regras urbanísticas do município. A ideia aqui é facilitar a leitura: primeiro mostramos onde o terreno está, depois se o uso é viável, e em seguida explicamos os principais limites do lote, como ocupação, área livre, altura, vagas, ambientes mínimos e calçada.</p>
+  <div class="intro-grid">
+    <div class="mini-panel"><div class="mini-title">Dados principais do estudo</div><div class="kv-grid">{''.join([
+        _kv_item('Área do terreno', _fmt_area(area)),
         _kv_item('Dimensões', f"{_fmt_m(ctx.get('front'))} × {_fmt_m(ctx.get('depth'))}"),
-        _kv_item('Zona', str(ctx.get('zone') or '-')),
-        _kv_item('Subzona / setor', str(ctx.get('subzona') or '-')),
         _kv_item('Tipo de lote', str(ctx.get('tipo_lote') or '-')),
+        _kv_item('Subzona / setor', str(ctx.get('subzona') or '-')),
         _kv_item('Via', str(ctx.get('via') or '-')),
         _kv_item('Tipo de via', str(ctx.get('via_tipo') or '-')),
-        '</div>',
-    ])
-    body.append(_section_card('Onde está localizado o terreno?', sec1, 1))
+    ])}</div></div>
+    <div class="status-panel {status_kind}"><div class="status-kicker">Resultado da adequabilidade</div><div class="status-text">{_html(ctx.get('icon') or '')} {_html(status_curto or '-')}</div><div class="status-desc">{_html(str(ctx.get('explicacao') or ''))}</div></div>
+  </div>
+</div>
+""")
 
-    sec2 = ''.join([
-        '<p class="lead">Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.</p>',
-        '<div class="metric-grid">',
-        f'<div class="metric-card"><div class="metric-label">Por zona</div><div class="metric-value">{_html((ctx.get("zone_class") or "-") + ((" (" + _sigla_nome(ctx.get("zone_class")) + ")") if ctx.get("zone_class") else ""))}</div></div>',
-        f'<div class="metric-card"><div class="metric-label">Por via</div><div class="metric-value">{_html((ctx.get("via_class") or ctx.get("via_tipo") or "-" ) + ((" (" + _sigla_nome(ctx.get("via_class")) + ")") if ctx.get("via_class") else ""))}</div></div>',
-        f'<div class="metric-card"><div class="metric-label">Resumo final</div><div class="metric-value">{_html(status_curto or "-")}</div></div>',
-        '</div>',
-        _info_box_html('Resultado', _html(str(ctx.get('explicacao') or '')), status_kind),
-        '<p class="lead" style="margin-top:10px">Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.</p>',
-    ])
-    body.append(_section_card('O uso residencial unifamiliar é viável neste terreno?', sec2, 2))
+    body.append(_section_card('Onde está localizado o terreno?', '<p class="lead">Aqui estão os dados principais usados nesta análise.</p><div class="kv-grid" style="margin-top:12px">' + ''.join([
+        _kv_item('Uso informado', 'Residência unifamiliar'), _kv_item('Área do terreno', _fmt_area(area)), _kv_item('Dimensões', f"{_fmt_m(ctx.get('front'))} × {_fmt_m(ctx.get('depth'))}"), _kv_item('Zona', str(ctx.get('zone') or '-')), _kv_item('Subzona / setor', str(ctx.get('subzona') or '-')), _kv_item('Tipo de lote', str(ctx.get('tipo_lote') or '-')), _kv_item('Via', str(ctx.get('via') or '-')), _kv_item('Tipo de via', str(ctx.get('via_tipo') or '-')),
+    ]) + '</div>', 1, '📍 '))
 
-    porte_rows = [
-        ['Pequeno', 'até 250 m²', 'Pode se enquadrar em leituras AP.'],
-        ['Médio', '250,01 m² até 1.000 m²', 'Pode se enquadrar em leituras AM.'],
-        ['Grande', '1.000,01 m² até 5.000 m²', 'Pode depender da zona/via e do licenciamento.'],
-        ['Projeto especial', 'acima de 5.000,01 m²', 'Pode exigir análise específica e condições extras.'],
+    via_line = f"{ctx.get('via_class')} ({_sigla_nome(str(ctx.get('via_class') or ''))})" if ctx.get('via_norm') and ctx.get('via_class') else str(ctx.get('via_tipo') or 'via local')
+    sec2 = [
+        '<p class="lead"><strong>Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.</strong></p>',
+        _bullet_items([
+            f"Por zona: {ctx.get('zone_class') or 'não encontrado'}" + (f" ({_sigla_nome(str(ctx.get('zone_class') or ''))})" if ctx.get('zone_class') else ''),
+            f"Por via: {via_line}", f"Resumo final: {status_curto or '-'}",
+        ]),
+        _info_box_html(f"Resumo final: {status_curto or '-'}", _html(str(ctx.get('explicacao') or '')), status_kind),
+        '<p class="lead" style="margin-top:10px"><strong>Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.</strong></p>'
     ]
-    sec3 = '<p class="lead">No unifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o tipo da via.</p>' + _table_html(['Porte', 'Faixa de área', 'Leitura prática'], porte_rows)
-    body.append(_section_card('Como funciona a leitura da adequabilidade no unifamiliar?', sec3, 3))
+    body.append(_section_card('O uso residencial unifamiliar é viável neste terreno?', ''.join(sec2), 2, '✅ '))
 
-    legenda_rows = [
-        ['A', 'Adequado / permitido', 'Pode seguir com o projeto, respeitando as demais regras.'],
-        ['I', 'Inadequado / não permitido', 'Em regra, não pode nesse local/condição.'],
-        ['AP', 'Adequado (pequeno porte)', 'Pode, mas normalmente limitado a porte pequeno.'],
-        ['AM', 'Adequado (médio porte)', 'Pode, mas normalmente limitado a porte médio.'],
-        ['AP/AM', 'Depende do porte', 'Pode, mas depende se o caso é pequeno ou médio.'],
-        ['PE', 'Projeto especial', 'Pode exigir análise específica e condições extras no licenciamento.'],
-    ]
-    sec4 = ''.join([
-        '<p class="lead">Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação.</p>',
-        _info_box_html(str(ctx.get('zone') or '-'), f'<p><strong>{_html(zone_desc_title)}</strong></p><p style="margin-top:6px">{_html(zone_desc_text)}</p>'),
-        _table_html(['Sigla', 'O que significa', 'Como interpretar'], legenda_rows),
-    ])
-    body.append(_section_card('O que essa zona permite neste terreno?', sec4, 4))
+    sec3 = ['<p class="lead">No unifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o tipo da via.</p>', _table_html(['Sigla', 'O que significa', 'Como interpretar'], [['A', 'Adequado / permitido', 'Pode seguir com o projeto, respeitando as demais regras.'], ['I', 'Inadequado / não permitido', 'Em regra, não pode nesse local/condição.'], ['AP', 'Adequado (pequeno porte)', 'Pode, mas normalmente limitado a porte pequeno.'], ['AM', 'Adequado (médio porte)', 'Pode, mas normalmente limitado a porte médio.'], ['AP/AM', 'Depende do porte', 'Pode, mas depende se o caso é pequeno ou médio.'], ['PE', 'Projeto especial', 'Pode exigir análise específica e condições extras no licenciamento.']]), '<div class="chip-row">' + ''.join(f'<span class="chip">{_html(label)}</span>' for label in ['Pequeno: até 250 m²', 'Médio: 250,01 m² até 1.000 m²', 'Grande: 1.000,01 m² até 5.000 m²', 'Projeto especial: acima de 5.000 m²']) + '</div>']
+    body.append(_section_card('Como funciona a leitura da adequabilidade no unifamiliar?', ''.join(sec3), 3, '📘 '))
 
-    regras_cards = ''.join([
-        _summary_box('TO máxima', _fmt_pct(ctx.get('to_max')), 'default'),
-        _summary_box('TP mínima', _fmt_pct(ctx.get('tp_min')), 'default'),
-        _summary_box('IA máximo', _fmt_int_or_num(ctx.get('ia_max')), 'default'),
-        _summary_box('IA mínimo', ia_min_texto, 'default'),
-        _summary_box('Recuos', f'F: {_fmt_m(ctx.get("rec_fr"))} | L: {_fmt_m(ctx.get("rec_lat"))} | Fu: {_fmt_m(ctx.get("rec_fun"))}', 'default'),
-        _summary_box('Altura máxima', _fmt_m(ctx.get('gabarito')), 'default'),
-    ])
-    sec5 = '<p class="lead">Depois de entender a zona, o próximo passo é ver as regras básicas do lote.</p><div class="resumo-grid">' + regras_cards + '</div>'
-    body.append(_section_card('Regras principais para este terreno', sec5, 5))
+    body.append(_section_card('O que essa zona permite neste terreno?', '<p class="lead">Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação.</p>' + _info_box_html(str(ctx.get('zone') or '-'), f'<p><strong>{_html(zone_desc_title)}</strong></p><p style="margin-top:6px">{_html(zone_desc_text)}</p>'), 4, '🧭 '))
+
+    body.append(_section_card('Regras principais para este terreno', '<p class="lead">Depois de entender a zona, o próximo passo é ver as regras básicas do lote.</p><div class="rule-grid" style="margin-top:12px">' + ''.join([
+        _summary_box('TO máxima', _fmt_pct(ctx.get('to_max')), 'default'), _summary_box('TP mínima', _fmt_pct(ctx.get('tp_min')), 'default'), _summary_box('IA máximo', _fmt_int_or_num(ctx.get('ia_max')), 'default'), _summary_box('IA mínimo', ia_min_texto, 'default'), _summary_box('Recuos', f"F: {_fmt_m(ctx.get('rec_fr'))} | L: {_fmt_m(ctx.get('rec_lat'))} | Fu: {_fmt_m(ctx.get('rec_fun'))}", 'default'), _summary_box('Altura máxima', _fmt_m(ctx.get('gabarito')), 'default')
+    ]) + '</div>', 5, '📏 '))
 
     sec6: List[str] = []
-    if ctx.get('to_max') is not None and a_to is not None:
-        sec6 += [
-            f'<p class="lead">A zona permite ocupar até <strong>{_html(_fmt_pct(ctx.get("to_max")))}</strong> do terreno no térreo.</p>',
-            _formula_box_html(f'{_fmt_area(area)} × {_fmt_pct(ctx.get("to_max"))} = {_fmt_area(a_to)}'),
-            '<p class="lead">Esse é o limite máximo permitido pela Taxa de Ocupação (TO).</p>',
-        ]
-    if ctx.get('is_irregular'):
-        sec6.append(_info_box_html('Terreno irregular', 'Como o lote não é retangular, este relatório não calcula a implantação por recuos. Aqui são apresentados os limites legais por TO, TP e IA.', 'warning'))
+    if ctx.get('to_max') is None or a_to is None:
+        sec6.append(_info_box_html('Sem dado', 'Sem TO máxima cadastrada para esta zona/uso.', 'warning'))
     else:
-        op_cards = ''.join([
-            _summary_box('Frontal', _fmt_m(ctx.get('rec_fr')), 'default'),
-            _summary_box('Laterais', f'{_fmt_m(ctx.get("rec_lat"))} cada', 'default'),
-            _summary_box('Fundo', _fmt_m(ctx.get('rec_fun')), 'default'),
-            _summary_box('Largura útil', _fmt_m(ctx.get('w_util')), 'default'),
-            _summary_box('Profundidade útil', _fmt_m(ctx.get('d_util')), 'default'),
-            _summary_box('Área útil estimada', _fmt_area(a_recuos), 'default'),
-        ])
-        sec6.append(_info_box_html('Opção alternativa — adotando os recuos da zona', '<div class="resumo-grid">' + op_cards + '</div>' + (f'<div class="formula-box">{_html(_fmt_m(ctx.get("w_util")))} × {_html(_fmt_m(ctx.get("d_util")))} = {_html(_fmt_area(a_recuos))}</div>' if a_recuos is not None else '')))
-    sec6.append(_info_box_html('Opção principal — aproveitando a flexibilidade da lei', 'Para residência unifamiliar, a legislação admite zerar o recuo frontal e os recuos laterais, desde que o projeto continue respeitando a TO máxima e a TP mínima.' + (f'<div class="formula-box">Térreo máximo nesta opção: {_html(_fmt_area(a_op2_max))}</div>' if a_op2_max is not None else ''), 'success'))
-    body.append(_section_card('Quanto posso ocupar no térreo?', ''.join(sec6), 6))
+        sec6 += [f'<p class="lead">A zona permite ocupar até <strong>{_html(_fmt_pct(ctx.get("to_max")))}</strong> do terreno no térreo.</p>', _formula_box_html(f'{_fmt_area(area)} × {_fmt_pct(ctx.get("to_max"))} = {_fmt_area(a_to)}'), '<p class="lead">Esse é o limite máximo permitido pela Taxa de Ocupação (TO).</p>']
+        if ctx.get('built_ground') is not None and ctx.get('a_adotada') is not None:
+            if ctx.get('a_adotada') < ctx.get('built_ground'):
+                sec6.append(_info_box_html('Área pretendida ajustada', f'Você informou {_html(_fmt_area(ctx.get("built_ground")))} no térreo, mas o máximo permitido para este estudo é {_html(_fmt_area(ctx.get("a_adotada")))}.', 'warning'))
+            else:
+                sec6.append(_info_box_html('Área pretendida considerada', f'A área construída pretendida usada no estudo foi {_html(_fmt_area(ctx.get("a_adotada")))}.', 'success'))
+        if not ctx.get('is_irregular'):
+            sec6.append(_info_box_html('Opção principal — aproveitando a flexibilidade da lei', 'Para residência unifamiliar, a legislação admite zerar o recuo frontal e os recuos laterais, desde que o projeto continue respeitando a TO máxima e a TP mínima.'))
+            if a_op2_max is not None:
+                sec6.append(_formula_box_html(f'Térreo máximo nesta opção: {_fmt_area(a_op2_max)}'))
+            sec6.append(_info_box_html('Opção alternativa — adotando os recuos da zona', ''.join([f'<p>Frontal: <strong>{_html(_fmt_m(ctx.get("rec_fr")))}</strong></p>', f'<p>Laterais: <strong>{_html(_fmt_m(ctx.get("rec_lat")))}</strong> cada</p>', f'<p>Fundo: <strong>{_html(_fmt_m(ctx.get("rec_fun")))}</strong></p>', _formula_box_html(f'Largura útil: {_fmt_m(ctx.get("w_util"))} | Profundidade útil: {_fmt_m(ctx.get("d_util"))}'), _formula_box_html(f'{_fmt_m(ctx.get("w_util"))} × {_fmt_m(ctx.get("d_util"))} = {_fmt_area(a_recuos)}') if a_recuos is not None else ''])))
+        else:
+            sec6.append(_info_box_html('Terreno irregular', 'Como o lote não é retangular, o relatório não calcula a implantação por recuos. Aqui são apresentados os limites legais por TO, TP e IA.', 'warning'))
+    body.append(_section_card('Quanto posso ocupar no térreo?', ''.join(sec6), 6, '📐 '))
 
     sec7: List[str] = []
-    if ctx.get('tp_min') is not None and a_perm_min is not None:
-        sec7 += [
-            f'<p class="lead">A zona exige <strong>{_html(_fmt_pct(ctx.get("tp_min")))}</strong> de área permeável.</p>',
-            _formula_box_html(f'{_fmt_area(area)} × {_fmt_pct(ctx.get("tp_min"))} = {_fmt_area(a_perm_min)} obrigatórios permeáveis'),
-        ]
-    tp2 = tp_scenario(a_op2_max)
-    if tp2:
-        a_rest, a_imperm = tp2
-        sec7.append(_info_box_html('Cenário pela opção principal', f'<p>Usando <strong>{_html(_fmt_area(a_op2_max))}</strong> no térreo, sobra <strong>{_html(_fmt_area(a_rest))}</strong> no lote.</p><p style="margin-top:6px">Desses, <strong>{_html(_fmt_area(a_perm_min))}</strong> devem permitir infiltração no solo e <strong>{_html(_fmt_area(a_imperm))}</strong> podem receber piso impermeável.</p>'))
-    if a_recuos is not None:
-        tp_recuos = tp_scenario(a_recuos)
-        if tp_recuos:
-            a_rest, a_imperm = tp_recuos
-            sec7.append(_info_box_html('Cenário pela opção com recuos da zona', f'<p>Usando <strong>{_html(_fmt_area(a_recuos))}</strong> no térreo, sobra <strong>{_html(_fmt_area(a_rest))}</strong> no lote.</p><p style="margin-top:6px">Desses, <strong>{_html(_fmt_area(a_perm_min))}</strong> devem permitir infiltração no solo e <strong>{_html(_fmt_area(a_imperm))}</strong> podem receber piso impermeável.</p>'))
-    body.append(_section_card('Quanto preciso deixar livre?', ''.join(sec7), 7))
+    if ctx.get('tp_min') is None or a_perm_min is None:
+        sec7.append(_info_box_html('Sem dado', 'Sem TP mínima cadastrada para esta zona/uso.', 'warning'))
+    else:
+        sec7 += [f'<p class="lead">A zona exige <strong>{_html(_fmt_pct(ctx.get("tp_min")))}</strong> de área permeável.</p>', _formula_box_html(f'{_fmt_area(area)} × {_fmt_pct(ctx.get("tp_min"))} = {_fmt_area(a_perm_min)} obrigatórios permeáveis')]
+        tp2 = tp_scenario(a_op2_max)
+        if tp2:
+            a_rest, a_imperm = tp2
+            sec7.append(_info_box_html('Cenário pela opção principal', f'<p>Usando <strong>{_html(_fmt_area(a_op2_max))}</strong> no térreo, sobra <strong>{_html(_fmt_area(a_rest))}</strong> no lote.</p><p style="margin-top:6px">Desses, <strong>{_html(_fmt_area(a_perm_min))}</strong> devem permitir infiltração no solo e <strong>{_html(_fmt_area(a_imperm))}</strong> podem receber piso impermeável.</p>'))
+        tp1 = tp_scenario(ctx.get('a_op1_max'))
+        if tp1 and ctx.get('a_op1_max') is not None:
+            a_rest, a_imperm = tp1
+            sec7.append(_info_box_html('Cenário pela opção com recuos da zona', f'<p>Usando <strong>{_html(_fmt_area(ctx.get("a_op1_max")))}</strong> no térreo, sobra <strong>{_html(_fmt_area(a_rest))}</strong> no lote.</p><p style="margin-top:6px">Desses, <strong>{_html(_fmt_area(a_perm_min))}</strong> devem permitir infiltração no solo e <strong>{_html(_fmt_area(a_imperm))}</strong> podem receber piso impermeável.</p>'))
+    body.append(_section_card('Quanto preciso deixar livre?', ''.join(sec7), 7, '🌿 '))
 
-    body.append(_section_card('Tipos de piso: o que conta como permeável?', '<p class="lead">Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:</p>' + _table_html(['Tipo de Piso', 'Percentual considerado permeável'], [[a, b] for a, b in PERMEABILIDADE_ROWS]) + '<p class="lead" style="margin-top:10px">Isso ajuda a entender que nem toda área “livre” do lote conta 100% como permeável.</p>', 8))
+    body.append(_section_card('Tipos de piso: o que conta como permeável?', '<p class="lead">Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:</p>' + _table_html(['Tipo de Piso', 'Percentual considerado permeável'], [[a, b] for a, b in PERMEABILIDADE_ROWS]) + '<p class="lead" style="margin-top:10px">Isso ajuda a entender que nem toda área “livre” do lote conta 100% como permeável.</p>', 8, '🧱 '))
 
     sec9: List[str] = []
     if ctx.get('ia_max') is not None and a_total is not None:
-        sec9 += [
-            '<p class="lead">Além da ocupação no térreo, a zona também define o potencial construtivo total do lote por meio do Índice de Aproveitamento (IA).</p>',
-            _formula_box_html(f'{_fmt_area(area)} × {_fmt_int_or_num(ctx.get("ia_max"))} = {_fmt_area(a_total)}'),
-            '<p class="lead">Esse é o total que pode ser distribuído entre térreo e pavimentos superiores, respeitando também os demais parâmetros urbanísticos.</p>',
-        ]
+        sec9 += ['<p class="lead">Além da ocupação no térreo, a zona também define o potencial construtivo total do lote por meio do Índice de Aproveitamento (IA).</p>', _formula_box_html(f'{_fmt_area(area)} × {_fmt_int_or_num(ctx.get("ia_max"))} = {_fmt_area(a_total)}'), '<p class="lead">Esse é o total que pode ser distribuído entre térreo e pavimentos superiores, respeitando também os demais parâmetros urbanísticos.</p>']
     if ctx.get('gabarito') is not None:
         sec9.append(_info_box_html('Altura máxima da zona', f'<p><strong>{_html(_fmt_m(ctx.get("gabarito")))}</strong></p><p style="margin-top:6px">Exemplo simples: adotando pé-direito médio de 3,00 m por pavimento, isso pode permitir algo próximo de <strong>{_html(str(ctx.get("pav_est") or "-"))} pavimentos</strong>, apenas como referência inicial.</p>'))
-    body.append(_section_card('Posso construir mais andares?', ''.join(sec9), 9))
+    body.append(_section_card('Posso construir mais andares?', ''.join(sec9), 9, '🏢 '))
 
-    body.append(_section_card('Preciso de vagas de estacionamento?', _info_box_html('Estacionamento', 'Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento. Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.', 'success'), 10))
+    body.append(_section_card('Preciso de vagas de estacionamento?', _info_box_html('Estacionamento', 'Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento. Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.', 'success'), 10, '🚗 '))
 
-    quadro_rows = [[row[h] for h in ['AMBIENTE', 'CIRCULO INSCRITO', 'AREA MINIMA', 'ILUMINACAO', 'VENTILACAO', 'PE-DIREITO', 'OBS.']] for row in QUADRO_ROWS]
-    body.append(_section_card('Quais medidas mínimas os ambientes precisam ter?', '<p class="lead">Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação.</p>' + _table_html(['Ambiente', 'Círculo inscrito', 'Área mínima', 'Iluminação', 'Ventilação', 'Pé-direito', 'Obs.'], quadro_rows) + _info_box_html('Observações aplicáveis', _bullet_items(QUADRO_OBS)), 11))
+    body.append(_section_card('Quais medidas mínimas os ambientes precisam ter?', '<p class="lead">Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação.</p>' + _table_html(['Ambiente', 'Círculo inscrito', 'Área mínima', 'Iluminação', 'Ventilação', 'Pé-direito', 'Obs.'], [[row[h] for h in ['AMBIENTE', 'CIRCULO INSCRITO', 'AREA MINIMA', 'ILUMINACAO', 'VENTILACAO', 'PE-DIREITO', 'OBS.']] for row in QUADRO_ROWS]) + _info_box_html('Observações aplicáveis', _bullet_items(QUADRO_OBS)), 11, '📋 '))
 
     sec12 = ['<p class="lead">A análise não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação do lote com a rua.</p>']
     if figures:
-        sec12.append('<div class="figure-stack">' + _figure_cards_html(figures) + '</div>')
+        sec12.append('<div class="fig-grid">' + ''.join([f'<div class="figure-card"><img src="{_html(fig.get("url") or "")}" alt="{_html(fig.get("title") or "Figura")}"><div class="figure-meta"><div class="figure-title">{_html(fig.get("title") or "Figura")}</div><div class="muted">{_html(fig.get("caption") or "Anexo V - LC 90/2023")}</div></div></div>' for fig in figures]) + '</div>')
     else:
         sec12.append(_info_box_html('Figuras do Anexo V', 'As figuras do Anexo V não estavam disponíveis para este estudo.', 'warning'))
-    body.append(_section_card('O que preciso saber sobre a calçada?', ''.join(sec12), 12))
+    body.append(_section_card('O que preciso saber sobre a calçada?', ''.join(sec12), 12, '🚶 '))
 
     dicas_html: List[str] = []
     for item in get_dicas_valiosas(is_corner=bool(ctx.get('is_corner'))):
@@ -1384,31 +1219,17 @@ p, h1, h2, h3, h4 {{ margin:0; }}
             texto = str(item or '').strip()
             if texto:
                 dicas_html.append(_info_box_html('Dica', _html(texto)))
-    body.append(_section_card('Dicas valiosas', ''.join(dicas_html), 13))
+    body.append(_section_card('Dicas valiosas', ''.join(dicas_html), 13, '💡 '))
 
-    resumo_cards = ''.join([
-        _summary_box('Zona', f"{ctx.get('zone')} — {zone_desc_title}", 'default'),
-        _summary_box('TO máxima', _fmt_pct(ctx.get('to_max')), 'default'),
-        _summary_box('TP mínima', _fmt_pct(ctx.get('tp_min')), 'default'),
-        _summary_box('IA máximo', _fmt_int_or_num(ctx.get('ia_max')), 'default'),
-        _summary_box('Altura máxima', _fmt_m(ctx.get('gabarito')), 'default'),
-        _summary_box('Área máxima no térreo', _fmt_area(a_to), 'default'),
-        _summary_box('Área permeável mínima', _fmt_area(a_perm_min), 'default'),
-        _summary_box('Área total máxima', _fmt_area(a_total), 'default'),
-    ])
-    body.append(_section_card('Resumo rápido final', '<div class="resumo-grid">' + resumo_cards + '</div><p class="lead" style="margin-top:12px">Em resumo: você pode ocupar até a TO máxima da zona no térreo, precisa manter a TP mínima do terreno permeável, pode construir até o IA máximo no total e deve respeitar os limites de altura, recuos e demais exigências urbanísticas.</p>', 14))
+    body.append(_section_card('Resumo rápido final', '<div class="rule-grid">' + ''.join([
+        _summary_box('Zona', f"{ctx.get('zone')} — {zone_desc_title}", 'default'), _summary_box('TO máxima', _fmt_pct(ctx.get('to_max')), 'default'), _summary_box('TP mínima', _fmt_pct(ctx.get('tp_min')), 'default'), _summary_box('IA máximo', _fmt_int_or_num(ctx.get('ia_max')), 'default'), _summary_box('Altura máxima', _fmt_m(ctx.get('gabarito')), 'default'), _summary_box('Área máxima no térreo', _fmt_area(a_to), 'default'), _summary_box('Área permeável mínima', _fmt_area(a_perm_min), 'default'), _summary_box('Área total máxima', _fmt_area(a_total), 'default')
+    ]) + '</div><p class="lead" style="margin-top:12px">Em resumo: você pode ocupar até a TO máxima da zona no térreo, precisa manter a TP mínima do terreno permeável, pode construir até o IA máximo no total e deve respeitar os limites de altura, recuos e demais exigências urbanísticas.</p>', 14, '📌 '))
 
-    sec15 = ''.join([
-        '<p class="lead">Após a finalização dos projetos, será necessário dar entrada na documentação junto à Prefeitura para obter o alvará de construção.</p>',
-        '<div class="intro-grid">',
-        '<div class="checklist-box"><div class="checklist-title">Alvará de Construção Simplificado</div>' + _bullet_items(['Documento de identidade do requerente ou representante legal', 'CPF ou CNPJ', 'Matrícula atualizada do imóvel ou documento equivalente', 'Certidão negativa de IPTU', 'Parecer favorável de Adequabilidade Locacional', 'Tabela com índices urbanísticos e áreas da edificação', 'Projeto arquitetônico em arquivo digital', 'ART/RRT do responsável técnico', 'Termo de responsabilidade do responsável técnico', 'Termo de responsabilidade do proprietário', 'Isenção da licença ambiental']) + '</div>',
-        '<div class="checklist-box"><div class="checklist-title">Alvará de Construção (Obra Nova)</div>' + _bullet_items(['Requerimento único', 'Documento de identidade do requerente ou representante legal', 'CPF ou CNPJ', 'Matrícula atualizada do imóvel', 'Autorização do proprietário, quando necessária', 'BCI', 'ART/RRT com comprovante de pagamento', 'Projeto arquitetônico assinado', 'Projeto hidrossanitário', 'Memorial de cálculo e drenagem pluvial', 'Declaração do SAAE sobre rede de esgoto, quando necessária', 'Aprovação do Corpo de Bombeiros, IPHAN, licenciamento ambiental, PGRSCC, COMAR, DNIT/SOP ou EIV, quando aplicável']) + '</div>',
-        '</div>',
-    ])
-    body.append(_section_card('O que acontece depois desta etapa?', sec15, 15))
+    sec15 = ['<p class="lead">Após a finalização dos projetos, será necessário dar entrada na documentação junto à Prefeitura para obter o alvará de construção.</p>', _info_box_html('Alvará de Construção Simplificado', _bullet_items(['Documento de identidade do requerente ou representante legal', 'CPF ou CNPJ', 'Matrícula atualizada do imóvel ou documento equivalente', 'Certidão negativa de IPTU', 'Parecer favorável de Adequabilidade Locacional', 'Tabela com índices urbanísticos e áreas da edificação', 'Projeto arquitetônico em arquivo digital', 'ART/RRT do responsável técnico', 'Termo de responsabilidade do responsável técnico', 'Termo de responsabilidade do proprietário', 'Isenção da licença ambiental'])), _info_box_html('Alvará de Construção (Obra Nova)', _bullet_items(['Requerimento único', 'Documento de identidade do requerente ou representante legal', 'CPF ou CNPJ', 'Matrícula atualizada do imóvel', 'Autorização do proprietário, quando necessária', 'BCI', 'ART/RRT com comprovante de pagamento', 'Projeto arquitetônico assinado', 'Projeto hidrossanitário', 'Memorial de cálculo e drenagem pluvial', 'Declaração do SAAE sobre rede de esgoto, quando necessária', 'Aprovação do Corpo de Bombeiros, IPHAN, licenciamento ambiental, PGRSCC, COMAR, DNIT/SOP ou EIV, quando aplicável']))]
+    body.append(_section_card('O que acontece depois desta etapa?', ''.join(sec15), 15, '🏛️ '))
 
-    body.append(_section_card('Fechamento final', _info_box_html('Fechamento final', 'Este relatório foi pensado para ajudar a entender o terreno de forma mais simples. Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no setor de licenciamento de obras da Prefeitura.'), 16))
-    body.append('</div><div class="footer-note">Documento gerado pelo Viabilidade Fácil com base no mesmo conteúdo exibido na tela do relatório urbanístico.</div></div></body></html>')
+    body.append(_section_card('Fechamento final', _info_box_html('Fechamento final', 'Este relatório foi pensado para ajudar a entender o terreno de forma mais simples. Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no setor de licenciamento de obras da Prefeitura.'), 16, '✅ '))
+    body.append('<div class="footer-note">Documento gerado pelo Viabilidade Fácil com base no mesmo conteúdo exibido na tela do relatório urbanístico.</div></body></html>')
     return ''.join(body)
 
 
