@@ -20,3 +20,4 @@ supabase
 python-dotenv
 requests
 fpdf2==2.8.3
+weasyprint==62.3
