@@ -20,19 +20,13 @@
   }
 
   function setLoggedOutView() {
-    if (els.loginBtn) {
-      els.loginBtn.hidden = false;
-      els.loginBtn.disabled = false;
-    }
+    if (els.loginBtn) els.loginBtn.hidden = false;
     if (els.logoutBtn) els.logoutBtn.hidden = true;
     if (els.continueBtn) els.continueBtn.hidden = true;
   }
 
-  function setLoggedInView() {
-    if (els.loginBtn) {
-      els.loginBtn.hidden = true;
-      els.loginBtn.disabled = false;
-    }
+  function setLoggedInView(user) {
+    if (els.loginBtn) els.loginBtn.hidden = true;
     if (els.logoutBtn) els.logoutBtn.hidden = false;
     if (els.continueBtn) els.continueBtn.hidden = false;
   }
@@ -67,7 +61,6 @@
           },
           8000
         );
-
         if (!response.ok) {
           throw new Error(`Healthcheck retornou status ${response.status}`);
         }
@@ -129,12 +122,6 @@
     return !!(window.location.hash && window.location.hash.includes("access_token="));
   }
 
-  function buildStreamlitUrlWithToken(accessToken) {
-    const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
-    streamlitUrl.searchParams.set("ext_access_token", accessToken);
-    return streamlitUrl.toString();
-  }
-
   async function notifyParentAndMaybeClose(accessToken) {
     try {
       if (window.opener && typeof window.opener.postMessage === "function") {
@@ -154,10 +141,9 @@
 
     try {
       if (window.opener && cfg.STREAMLIT_APP_URL) {
-        window.opener.location.href = buildStreamlitUrlWithToken(accessToken);
-        if (typeof window.opener.focus === "function") {
-          window.opener.focus();
-        }
+        const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
+        streamlitUrl.searchParams.set("ext_access_token", accessToken);
+        window.opener.location.href = streamlitUrl.toString();
       }
     } catch (_err) {}
 
@@ -190,8 +176,8 @@
       setStatus("Validando login no gateway...", "muted");
       const verified = await verifyWithGateway(session.access_token);
       localStorage.setItem("vf_access_token", session.access_token);
-      localStorage.setItem("vf_user", JSON.stringify(verified.user || {}));
-      setLoggedInView();
+      localStorage.setItem("vf_user", JSON.stringify(verified.user));
+      setLoggedInView(verified.user);
       setStatus("Login validado com sucesso. Agora você já pode seguir para o sistema.", "ok");
 
       if (hasOAuthCallbackHash()) {
@@ -253,7 +239,6 @@
       await supabaseClient.auth.signOut();
       localStorage.removeItem("vf_access_token");
       localStorage.removeItem("vf_user");
-      localStorage.removeItem("vf_auth_popup_token");
       setLoggedOutView();
       setStatus("Sessão encerrada.", "muted");
     });
@@ -272,7 +257,9 @@
           return;
         }
 
-        window.location.href = buildStreamlitUrlWithToken(data.session.access_token);
+        const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
+        streamlitUrl.searchParams.set("ext_access_token", data.session.access_token);
+        window.location.href = streamlitUrl.toString();
       } catch (err) {
         setStatus(err.message || String(err), "error");
       }
