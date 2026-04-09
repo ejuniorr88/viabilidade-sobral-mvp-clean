@@ -362,11 +362,6 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
                 st.session_state["current_payment_id"] = _safe_get(payment, "id", payment_id)
 
             if (payment or {}).get("status") == "paid":
-                try:
-                    ensure_paid_payment_is_credited(payment_id=payment_id, target_user_id=current_user_id)
-                except Exception as credit_exc:
-                    st.warning(f"Pagamento confirmado, mas houve erro ao garantir os créditos: {credit_exc}")
-
                 st.session_state[finalized_flag_key] = True
                 st.success("Pagamento confirmado e créditos adicionados à carteira.")
             return payment
@@ -408,10 +403,6 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
 
     if status == "paid":
         if not st.session_state.get(finalized_flag_key):
-            try:
-                ensure_paid_payment_is_credited(payment_id=payment_id, target_user_id=current_user_id)
-            except Exception as credit_exc:
-                st.warning(f"Pagamento confirmado, mas houve erro ao garantir os créditos: {credit_exc}")
             st.session_state[finalized_flag_key] = True
             st.rerun()
         st.success("Pagamento confirmado e créditos adicionados à carteira.")
