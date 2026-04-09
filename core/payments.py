@@ -597,8 +597,19 @@ def ensure_paid_payment_is_credited(*, payment_id: str, target_user_id: Optional
     if status != "paid":
         return {"ok": False, "message": "Pagamento ainda não está pago.", "payment": payment_row}
 
-    credit_result = _apply_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
-    coupon_bonus_result = _apply_coupon_bonus_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
+    existing_credit = _get_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
+    existing_bonus = _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
+
+    if existing_credit:
+        credit_result = {"credited": False, "reason": "already_credited", "credit_row": existing_credit}
+    else:
+        credit_result = _apply_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
+
+    if existing_bonus:
+        coupon_bonus_result = {"credited": False, "reason": "already_credited", "credit_row": existing_bonus}
+    else:
+        coupon_bonus_result = _apply_coupon_bonus_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
+
     coupon_result = _record_coupon_usage_for_paid_payment(payment_row=payment_row)
     return {
         "ok": True,
