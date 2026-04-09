@@ -296,6 +296,19 @@ def coupon_has_paid_usage(*, coupon_id: Any) -> bool:
     return _paid_coupon_usage_count(coupon_id=coupon_id) > 0
 
 
+def coupon_has_any_usage(*, coupon_id: Any) -> bool:
+    supabase = get_supabase_server_client()
+
+    usage_resp = supabase.table("coupon_usages").select("id").eq("coupon_id", coupon_id).limit(1).execute()
+    usage_rows = _safe_data(usage_resp) or []
+    if usage_rows:
+        return True
+
+    payments_resp = supabase.table("payments").select("id").eq("coupon_id", coupon_id).limit(1).execute()
+    payment_rows = _safe_data(payments_resp) or []
+    return bool(payment_rows)
+
+
 def _locked_coupon_payload_if_paid_usage(*, existing_row: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
     if not coupon_has_paid_usage(coupon_id=existing_row.get("id")):
         return payload
@@ -471,6 +484,19 @@ def set_coupon_active(*, coupon_id: Any, is_active: bool) -> Dict[str, Any]:
     )
     data = _safe_data(response) or []
     return data[0] if data else {"id": coupon_id, "is_active": bool(is_active)}
+
+
+def delete_coupon_code(*, coupon_id: Any) -> Dict[str, Any]:
+    if coupon_has_any_usage(coupon_id=coupon_id):
+        raise ValueError("Não é possível apagar um cupom que já possui histórico de uso. Inative-o em vez de apagar.")
+
+    supabase = get_supabase_server_client()
+    existing_resp = supabase.table("coupon_codes").select("id,code").eq("id", coupon_id).limit(1).execute()
+    existing_rows = _safe_data(existing_resp) or []
+    existing_row = existing_rows[0] if existing_rows else {"id": coupon_id}
+
+    supabase.table("coupon_codes").delete().eq("id", coupon_id).execute()
+    return {"id": existing_row.get("id", coupon_id), "code": existing_row.get("code"), "deleted": True}
 
 
 def list_coupon_codes(*, limit: int = 100) -> List[Dict[str, Any]]:
