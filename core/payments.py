@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -184,7 +185,40 @@ def _parse_dt(value: Any) -> Optional[datetime]:
 def _parse_json_like(value: Any) -> Dict[str, Any]:
     if isinstance(value, dict):
         return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
     return {}
+
+
+def _lookup_payment_credit_row(*, payment_id: str, payment_row: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    try:
+        return _get_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
+    except TypeError:
+        try:
+            return _get_payment_credit_row(payment_id=payment_id)
+        except Exception:
+            return None
+    except Exception:
+        return None
+
+
+def _lookup_coupon_bonus_credit_row(*, payment_id: str, payment_row: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    try:
+        return _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
+    except TypeError:
+        try:
+            return _get_coupon_bonus_credit_row(payment_id=payment_id)
+        except Exception:
+            return None
+    except Exception:
+        return None
 
 
 def _coerce_uuid_text(value: Any) -> str:
@@ -389,7 +423,7 @@ def _record_coupon_usage_for_paid_payment(*, payment_row: Dict[str, Any]) -> Dic
         "coupon_code": coupon_code,
         "owner_user_id": payment_row.get("coupon_owner_user_id"),
         "used_by_user_id": payment_row.get("user_id"),
-        "used_by_email": ((payment_row.get("coupon_snapshot") or {}).get("used_by_email") if isinstance(payment_row.get("coupon_snapshot"), dict) else None),
+        "used_by_email": _parse_json_like(payment_row.get("coupon_snapshot")).get("used_by_email"),
         "payment_id": _coerce_coupon_usage_payment_id(payment_row.get("id")),
         "payment_external_reference": payment_row.get("external_reference"),
         "plan_code": str(payment_row.get("package_id") or ""),
@@ -445,11 +479,17 @@ def inspect_payment_credit_status(*, payment_id: str, target_user_id: Optional[s
     payment_row = _fetch_payment_row(payment_id=payment_id)
     payment_user_id = str(payment_row.get("user_id") or "")
     resolved_user_id = str(target_user_id or payment_user_id or "")
-    existing_credit = _get_payment_credit_row(payment_id=str(payment_row.get("id") or ""))
+    payment_snapshot = _parse_json_like(payment_row.get("coupon_snapshot"))
+    benefit_type = str(payment_snapshot.get("benefit_type") or "discount").strip().lower()
+    existing_credit = _lookup_payment_credit_row(payment_id=str(payment_row.get("id") or ""), payment_row=payment_row)
+    existing_bonus = _lookup_coupon_bonus_credit_row(payment_id=str(payment_row.get("id") or ""), payment_row=payment_row)
+
     if existing_credit:
         credit_user_id = str(existing_credit.get("user_id") or "")
         if resolved_user_id and credit_user_id and credit_user_id != resolved_user_id:
             reason = "credited_to_other_user"
+        elif benefit_type == "credit" and not existing_bonus:
+            reason = "bonus_not_credited_yet"
         else:
             reason = "already_credited"
         return {
@@ -459,6 +499,7 @@ def inspect_payment_credit_status(*, payment_id: str, target_user_id: Optional[s
                 "credited": False,
                 "reason": reason,
                 "credit_row": existing_credit,
+                "bonus_credit_row": existing_bonus,
             },
         }
     return {
@@ -467,6 +508,7 @@ def inspect_payment_credit_status(*, payment_id: str, target_user_id: Optional[s
         "credit_result": {
             "credited": False,
             "reason": "not_credited_yet",
+            "bonus_credit_row": existing_bonus,
         },
     }
 
@@ -480,18 +522,11 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Op
     if not user_id or not payment_id or not package_id:
         return {"credited": False, "reason": "payment_missing_fields"}
 
-    existing_credit = _get_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
+    existing_credit = _lookup_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
     if existing_credit:
         existing_user_id = str(existing_credit.get("user_id") or "")
         if existing_user_id == user_id:
-            return {
-                "credited": True,
-                "reason": "already_credited",
-                "credit_row": existing_credit,
-                "credits": int(existing_credit.get("amount") or 0),
-                "new_balance": _read_balance(user_id=user_id),
-                "idempotent": True,
-            }
+            return {"credited": False, "reason": "already_credited"}
         return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
 
     credits = _fetch_package_credits(package_id=package_id)
@@ -516,18 +551,11 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Op
     try:
         supabase.table("credit_ledger").insert(ledger_payload).execute()
     except Exception:
-        existing_credit = _get_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
+        existing_credit = _lookup_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
         if existing_credit:
             existing_user_id = str(existing_credit.get("user_id") or "")
             if existing_user_id == user_id:
-                return {
-                    "credited": True,
-                    "reason": "already_credited",
-                    "credit_row": existing_credit,
-                    "credits": int(existing_credit.get("amount") or credits),
-                    "new_balance": _read_balance(user_id=user_id),
-                    "idempotent": True,
-                }
+                return {"credited": False, "reason": "already_credited"}
             return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
         raise
 
@@ -546,7 +574,7 @@ def _apply_coupon_bonus_credit_for_payment(*, payment_row: Dict[str, Any], targe
     if payment_status != "paid":
         return {"credited": False, "reason": "payment_not_paid"}
 
-    snapshot = payment_row.get("coupon_snapshot") if isinstance(payment_row.get("coupon_snapshot"), dict) else {}
+    snapshot = _parse_json_like(payment_row.get("coupon_snapshot"))
     benefit_type = str(snapshot.get("benefit_type") or "discount").strip().lower()
     if benefit_type != "credit":
         return {"credited": False, "reason": "coupon_without_bonus_credit"}
@@ -561,19 +589,11 @@ def _apply_coupon_bonus_credit_for_payment(*, payment_row: Dict[str, Any], targe
     if not user_id or not payment_id:
         return {"credited": False, "reason": "payment_missing_fields"}
 
-    existing_credit = _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
+    existing_credit = _lookup_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
     if existing_credit:
         existing_user_id = str(existing_credit.get("user_id") or "")
         if existing_user_id == user_id:
-            credited_amount = int(existing_credit.get("amount") or bonus_credits)
-            return {
-                "credited": True,
-                "reason": "already_credited",
-                "credits": credited_amount,
-                "new_balance": _read_balance(user_id=user_id),
-                "idempotent": True,
-                "credit_row": existing_credit,
-            }
+            return {"credited": False, "reason": "already_credited"}
         return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
 
     supabase = get_supabase_server_client()
@@ -596,19 +616,11 @@ def _apply_coupon_bonus_credit_for_payment(*, payment_row: Dict[str, Any], targe
     try:
         supabase.table("credit_ledger").insert(ledger_payload).execute()
     except Exception:
-        existing_credit = _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
+        existing_credit = _lookup_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
         if existing_credit:
             existing_user_id = str(existing_credit.get("user_id") or "")
             if existing_user_id == user_id:
-                credited_amount = int(existing_credit.get("amount") or bonus_credits)
-                return {
-                    "credited": True,
-                    "reason": "already_credited",
-                    "credits": credited_amount,
-                    "new_balance": _read_balance(user_id=user_id),
-                    "idempotent": True,
-                    "credit_row": existing_credit,
-                }
+                return {"credited": False, "reason": "already_credited"}
             return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
         raise
 
@@ -629,8 +641,8 @@ def ensure_paid_payment_is_credited(*, payment_id: str, target_user_id: Optional
     if status != "paid":
         return {"ok": False, "message": "Pagamento ainda não está pago.", "payment": payment_row}
 
-    existing_credit = _get_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
-    existing_bonus = _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
+    existing_credit = _lookup_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
+    existing_bonus = _lookup_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
 
     if existing_credit:
         credit_result = {
@@ -690,8 +702,8 @@ def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Option
     coupon_bonus_result = {"credited": False, "reason": "not_paid"}
     coupon_result = {"recorded": False, "reason": "not_paid"}
     if normalized_status == "paid":
-        existing_credit = _get_payment_credit_row(payment_id=payment_id, payment_row=updated_payment)
-        existing_bonus = _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=updated_payment)
+        existing_credit = _lookup_payment_credit_row(payment_id=payment_id, payment_row=updated_payment)
+        existing_bonus = _lookup_coupon_bonus_credit_row(payment_id=payment_id, payment_row=updated_payment)
 
         if existing_credit:
             credit_result = {
