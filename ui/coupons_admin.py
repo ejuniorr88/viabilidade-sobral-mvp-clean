@@ -8,6 +8,7 @@ import streamlit as st
 from core.coupons import (
     coupon_has_paid_usage,
     create_coupon_code,
+    delete_coupon_code,
     filter_coupon_usages,
     list_coupon_codes_enriched,
     list_coupon_usages_enriched,
@@ -258,28 +259,53 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
 
 
 def _render_coupon_actions(row: Dict[str, Any]) -> None:
-    c1, c2, c3 = st.columns([1, 1, 1])
+    coupon_id = row.get("id")
+    delete_confirm_id = st.session_state.get("coupon_delete_confirm_id")
+    has_any_usage = int(row.get("total_uses") or 0) > 0
+
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1.4])
 
     with c1:
-        if st.button("Editar", key=f"coupon_edit_{row.get('id')}"):
-            st.session_state["coupon_editing_id"] = row.get("id")
+        if st.button("Editar", key=f"coupon_edit_{coupon_id}"):
+            st.session_state["coupon_editing_id"] = coupon_id
             st.rerun()
 
     with c2:
         target_state = not bool(row.get("is_active"))
         label = "Inativar" if bool(row.get("is_active")) else "Ativar"
-        if st.button(label, key=f"coupon_toggle_{row.get('id')}"):
+        if st.button(label, key=f"coupon_toggle_{coupon_id}"):
             try:
-                set_coupon_active(coupon_id=row.get("id"), is_active=target_state)
+                set_coupon_active(coupon_id=coupon_id, is_active=target_state)
                 st.success(f"Cupom {'ativado' if target_state else 'inativado'} com sucesso.")
                 st.rerun()
             except Exception as exc:
                 st.error(f"Não foi possível alterar o status do cupom: {exc}")
 
     with c3:
+        if delete_confirm_id == coupon_id:
+            if st.button("Confirmar exclusão", key=f"coupon_delete_confirm_{coupon_id}", disabled=has_any_usage, type="primary"):
+                try:
+                    deleted = delete_coupon_code(coupon_id=coupon_id)
+                    st.session_state.pop("coupon_delete_confirm_id", None)
+                    st.session_state.pop("coupon_editing_id", None)
+                    st.success(f"Cupom apagado com sucesso: {deleted.get('code') or coupon_id}")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Não foi possível apagar o cupom: {exc}")
+            if st.button("Cancelar", key=f"coupon_delete_cancel_{coupon_id}"):
+                st.session_state.pop("coupon_delete_confirm_id", None)
+                st.rerun()
+        else:
+            if st.button("Apagar", key=f"coupon_delete_{coupon_id}", disabled=has_any_usage):
+                st.session_state["coupon_delete_confirm_id"] = coupon_id
+                st.rerun()
+
+    with c4:
         owner_status = "Resolvido" if row.get("owner_user_id") else "Pendente"
         lock_status = " | Uso pago: Sim" if row.get("paid_usage_locked") else " | Uso pago: Não"
         st.caption(f"owner_user_id: {owner_status}{lock_status}")
+        if has_any_usage:
+            st.caption("Exclusão bloqueada: cupom já possui histórico de uso.")
 
 
 def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:
