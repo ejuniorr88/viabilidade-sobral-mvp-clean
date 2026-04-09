@@ -1258,7 +1258,7 @@ def _render_html_fallback_warning(pdf: _ReportPDF, reason: str) -> None:
 
 def _generate_legacy_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any], *, html_failure_reason: str | None = None) -> bytes:
     payload = build_report_payload(calc, session_state)
-    pdf = _ReportPDF(orientation="P", unit="mm", format="A4")
+    pdf = _ReportPDF()
     pdf.set_auto_page_break(auto=True, margin=12)
     pdf.set_margins(14, 24, 14)
     pdf.add_page()
