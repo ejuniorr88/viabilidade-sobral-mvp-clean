@@ -10,6 +10,7 @@ from core.coupons import (
     create_coupon_code,
     delete_coupon_code,
     filter_coupon_usages,
+    set_coupon_hidden_in_admin,
     list_coupon_codes_enriched,
     list_coupon_usages_enriched,
     set_coupon_active,
@@ -53,6 +54,8 @@ def _coupon_status_badges(row: Dict[str, Any]) -> str:
     badges.append(_badge("Owner resolvido" if row.get("owner_resolved") else "Owner pendente", "info" if row.get("owner_resolved") else "warning"))
     if int(row.get("paid_uses") or 0) > 0:
         badges.append(_badge(f"Uso pago: {int(row.get('paid_uses') or 0)}", "success"))
+    if row.get("admin_hidden"):
+        badges.append(_badge("Oculto no admin", "muted"))
     return "".join(badges)
 
 
@@ -259,53 +262,83 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
 
 
 def _render_coupon_actions(row: Dict[str, Any]) -> None:
-    coupon_id = row.get("id")
-    delete_confirm_id = st.session_state.get("coupon_delete_confirm_id")
-    has_any_usage = int(row.get("total_uses") or 0) > 0
-
-    c1, c2, c3, c4 = st.columns([1, 1, 1, 1.4])
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1.3])
 
     with c1:
-        if st.button("Editar", key=f"coupon_edit_{coupon_id}"):
-            st.session_state["coupon_editing_id"] = coupon_id
+        if st.button("Editar", key=f"coupon_edit_{row.get('id')}"):
+            st.session_state["coupon_editing_id"] = row.get("id")
             st.rerun()
 
     with c2:
         target_state = not bool(row.get("is_active"))
         label = "Inativar" if bool(row.get("is_active")) else "Ativar"
-        if st.button(label, key=f"coupon_toggle_{coupon_id}"):
+        if st.button(label, key=f"coupon_toggle_{row.get('id')}"):
             try:
-                set_coupon_active(coupon_id=coupon_id, is_active=target_state)
+                set_coupon_active(coupon_id=row.get("id"), is_active=target_state)
                 st.success(f"Cupom {'ativado' if target_state else 'inativado'} com sucesso.")
                 st.rerun()
             except Exception as exc:
                 st.error(f"Não foi possível alterar o status do cupom: {exc}")
 
     with c3:
-        if delete_confirm_id == coupon_id:
-            if st.button("Confirmar exclusão", key=f"coupon_delete_confirm_{coupon_id}", disabled=has_any_usage, type="primary"):
-                try:
-                    deleted = delete_coupon_code(coupon_id=coupon_id)
-                    st.session_state.pop("coupon_delete_confirm_id", None)
-                    st.session_state.pop("coupon_editing_id", None)
-                    st.success(f"Cupom apagado com sucesso: {deleted.get('code') or coupon_id}")
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Não foi possível apagar o cupom: {exc}")
-            if st.button("Cancelar", key=f"coupon_delete_cancel_{coupon_id}"):
-                st.session_state.pop("coupon_delete_confirm_id", None)
-                st.rerun()
+        delete_key = f"coupon_delete_confirm_{row.get('id')}"
+        archive_key = f"coupon_archive_confirm_{row.get('id')}"
+        has_any_usage = int(row.get("total_uses") or 0) > 0
+        is_hidden = bool(row.get("admin_hidden"))
+        if has_any_usage:
+            if is_hidden:
+                if st.button("Mostrar na lista", key=f"coupon_unarchive_{row.get('id')}"):
+                    try:
+                        set_coupon_hidden_in_admin(coupon_id=row.get("id"), hidden=False)
+                        st.success("Cupom voltou para a lista principal.")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Não foi possível restaurar o cupom na lista: {exc}")
+            else:
+                if not st.session_state.get(archive_key):
+                    if st.button("Apagar da lista", key=f"coupon_archive_{row.get('id')}"):
+                        st.session_state[archive_key] = True
+                        st.rerun()
+                else:
+                    if st.button("Confirmar remoção da lista", key=f"coupon_archive_confirm_btn_{row.get('id')}"):
+                        try:
+                            set_coupon_hidden_in_admin(coupon_id=row.get("id"), hidden=True)
+                            st.session_state.pop(archive_key, None)
+                            if st.session_state.get("coupon_editing_id") == row.get("id"):
+                                st.session_state.pop("coupon_editing_id", None)
+                            st.success("Cupom removido da lista principal do admin.")
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"Não foi possível remover o cupom da lista: {exc}")
+                    if st.button("Cancelar", key=f"coupon_archive_cancel_{row.get('id')}"):
+                        st.session_state.pop(archive_key, None)
+                        st.rerun()
         else:
-            if st.button("Apagar", key=f"coupon_delete_{coupon_id}", disabled=has_any_usage):
-                st.session_state["coupon_delete_confirm_id"] = coupon_id
-                st.rerun()
+            if not st.session_state.get(delete_key):
+                if st.button("Apagar", key=f"coupon_delete_{row.get('id')}"):
+                    st.session_state[delete_key] = True
+                    st.rerun()
+            else:
+                if st.button("Confirmar exclusão", key=f"coupon_delete_confirm_btn_{row.get('id')}"):
+                    try:
+                        deleted = delete_coupon_code(coupon_id=row.get("id"))
+                        st.session_state.pop(delete_key, None)
+                        if st.session_state.get("coupon_editing_id") == row.get("id"):
+                            st.session_state.pop("coupon_editing_id", None)
+                        st.success(f"Cupom apagado com sucesso: {deleted.get('code') or row.get('code')}")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Não foi possível apagar o cupom: {exc}")
+                if st.button("Cancelar", key=f"coupon_delete_cancel_{row.get('id')}"):
+                    st.session_state.pop(delete_key, None)
+                    st.rerun()
 
     with c4:
         owner_status = "Resolvido" if row.get("owner_user_id") else "Pendente"
+        usage_status = "Uso: Sim" if int(row.get("total_uses") or 0) > 0 else "Uso: Não"
         lock_status = " | Uso pago: Sim" if row.get("paid_usage_locked") else " | Uso pago: Não"
-        st.caption(f"owner_user_id: {owner_status}{lock_status}")
-        if has_any_usage:
-            st.caption("Exclusão bloqueada: cupom já possui histórico de uso.")
+        hidden_status = " | Oculto no admin: Sim" if row.get("admin_hidden") else " | Oculto no admin: Não"
+        st.caption(f"owner_user_id: {owner_status} | {usage_status}{lock_status}{hidden_status}")
 
 
 def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:
@@ -314,9 +347,16 @@ def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:
         st.info("Nenhum cupom cadastrado ainda.")
         return
 
+    show_hidden = st.checkbox("Mostrar cupons removidos da lista", value=False, key="coupon_admin_show_hidden")
+    visible_rows = rows if show_hidden else [row for row in rows if not row.get("admin_hidden")]
+
+    if not visible_rows:
+        st.info("Nenhum cupom visível na lista principal com o filtro atual.")
+        return
+
     editing_id = st.session_state.get("coupon_editing_id")
 
-    for row in rows:
+    for row in visible_rows:
         with st.container(border=True):
             st.markdown(f"**{row.get('code') or '—'}**", unsafe_allow_html=True)
             st.markdown(_coupon_status_badges(row), unsafe_allow_html=True)
@@ -338,6 +378,10 @@ def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:
             )
 
             _render_coupon_actions(row)
+            if int(row.get("total_uses") or 0) > 0 and not row.get("admin_hidden"):
+                st.caption("Este cupom já tem histórico. Use 'Apagar da lista' para ocultá-lo do admin sem perder o histórico.")
+            elif row.get("admin_hidden"):
+                st.caption("Este cupom foi removido da lista principal do admin, mas o histórico foi preservado.")
 
             if editing_id == row.get("id"):
                 st.markdown("##### Editar cupom")
