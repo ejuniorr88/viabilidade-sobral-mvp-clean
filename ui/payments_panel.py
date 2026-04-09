@@ -351,6 +351,8 @@ def _render_pix_block(payment_row: Dict[str, Any]) -> None:
 def _render_pending_payment_status(supabase, payment_id: str, current_user_id: Optional[str] = None) -> None:
     st.info("Aguardando confirmação do pagamento...")
 
+    finalized_flag_key = f"payment_finalized_ui_{payment_id}"
+
     def _do_refresh() -> Optional[Dict[str, Any]]:
         try:
             result = refresh_payment_status_and_credit(payment_id=payment_id, target_user_id=current_user_id)
@@ -358,12 +360,15 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
             if payment:
                 st.session_state["current_payment_snapshot"] = payment
                 st.session_state["current_payment_id"] = _safe_get(payment, "id", payment_id)
-            credit_result = (result or {}).get("credit_result") or {}
+
             if (payment or {}).get("status") == "paid":
-                if credit_result.get("credited"):
-                    st.success("Pagamento confirmado e créditos adicionados à carteira.")
-                else:
-                    st.success("Pagamento confirmado com sucesso.")
+                try:
+                    ensure_paid_payment_is_credited(payment_id=payment_id, target_user_id=current_user_id)
+                except Exception as credit_exc:
+                    st.warning(f"Pagamento confirmado, mas houve erro ao garantir os créditos: {credit_exc}")
+
+                st.session_state[finalized_flag_key] = True
+                st.success("Pagamento confirmado e créditos adicionados à carteira.")
             return payment
         except Exception as e:
             st.warning(f"Não foi possível atualizar o pagamento agora: {e}")
@@ -402,10 +407,19 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
             st.rerun()
 
     if status == "paid":
-        st.success("Pagamento confirmado com sucesso.")
+        if not st.session_state.get(finalized_flag_key):
+            try:
+                ensure_paid_payment_is_credited(payment_id=payment_id, target_user_id=current_user_id)
+            except Exception as credit_exc:
+                st.warning(f"Pagamento confirmado, mas houve erro ao garantir os créditos: {credit_exc}")
+            st.session_state[finalized_flag_key] = True
+            st.rerun()
+        st.success("Pagamento confirmado e créditos adicionados à carteira.")
     elif status == "pending":
+        st.session_state.pop(finalized_flag_key, None)
         st.warning("Pagamento ainda pendente.")
     elif status in ("failed", "cancelled", "refunded"):
+        st.session_state.pop(finalized_flag_key, None)
         st.error(f"Pagamento com status: {status}")
     else:
         st.caption(f"Status atual: {status}")
