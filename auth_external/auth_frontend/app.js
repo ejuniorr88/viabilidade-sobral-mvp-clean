@@ -46,21 +46,24 @@
   }
 
   async function wakeGateway() {
-    const wakeUrl = `${cfg.GATEWAY_BASE_URL}/api/auth/session/verify`;
+    const wakeUrl = `${cfg.GATEWAY_BASE_URL}/health`;
     let lastError = null;
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        await fetchWithTimeout(
+        const response = await fetchWithTimeout(
           wakeUrl,
           {
-            method: "OPTIONS",
+            method: "GET",
             headers: {
-              "Content-Type": "application/json",
+              "Accept": "application/json",
             },
           },
           8000
         );
+        if (!response.ok) {
+          throw new Error(`Healthcheck retornou status ${response.status}`);
+        }
         return true;
       } catch (err) {
         lastError = err;
@@ -119,27 +122,6 @@
     return !!(window.location.hash && window.location.hash.includes("access_token="));
   }
 
-  function waitForParentAck(timeoutMs) {
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = (value) => {
-        if (done) return;
-        done = true;
-        window.removeEventListener("message", onMessage);
-        window.clearTimeout(timer);
-        resolve(value);
-      };
-      const onMessage = (event) => {
-        const data = event && event.data ? event.data : null;
-        if (data && data.type === "vf_auth_ack") {
-          finish(true);
-        }
-      };
-      const timer = window.setTimeout(() => finish(false), Number(timeoutMs || 4000));
-      window.addEventListener("message", onMessage);
-    });
-  }
-
   async function notifyParentAndMaybeClose(accessToken) {
     try {
       if (window.opener && typeof window.opener.postMessage === "function") {
@@ -157,11 +139,19 @@
       localStorage.setItem("vf_auth_popup_token", accessToken);
     } catch (_err) {}
 
+    try {
+      if (window.opener && cfg.STREAMLIT_APP_URL) {
+        const streamlitUrl = new URL(cfg.STREAMLIT_APP_URL);
+        streamlitUrl.searchParams.set("ext_access_token", accessToken);
+        window.opener.location.href = streamlitUrl.toString();
+      }
+    } catch (_err) {}
+
     setStatus("Login concluído. Voltando para o sistema...", "ok");
 
     window.setTimeout(() => {
       try { window.close(); } catch (_err) {}
-    }, 200);
+    }, 300);
 
     return true;
   }
