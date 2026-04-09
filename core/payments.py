@@ -286,13 +286,35 @@ def _get_credit_ledger_row_for_payment(
     if not payment_id:
         return None
 
-    user_id = str((payment_row or {}).get("user_id") or "")
-    query = supabase.table("credit_ledger").select("*").eq("source", source)
-    if user_id:
-        query = query.eq("user_id", user_id)
+    # 1) caminho principal: reference_id = payment_id
+    try:
+        response = (
+            supabase.table("credit_ledger")
+            .select("*")
+            .eq("source", source)
+            .eq("reference_id", payment_id)
+            .limit(1)
+            .execute()
+        )
+        rows = _safe_data(response) or []
+        if rows:
+            return rows[0]
+    except Exception:
+        pass
 
-    response = query.execute()
-    rows = _safe_data(response) or []
+    # 2) fallback por idempotency_key, sem depender de user_id
+    try:
+        response = (
+            supabase.table("credit_ledger")
+            .select("*")
+            .eq("source", source)
+            .limit(200)
+            .execute()
+        )
+        rows = _safe_data(response) or []
+    except Exception:
+        rows = []
+
     for row in rows:
         if _payment_credit_identity_matches(ledger_row=row, payment_row=payment_row, payment_id=payment_id):
             return row
@@ -399,7 +421,6 @@ def _write_balance(*, user_id: str, balance: int) -> None:
         supabase.table("credit_balance").insert({"user_id": user_id, "balance": balance}).execute()
 
 
-
 def _move_credit_to_user(*, payment_row: Dict[str, Any], credit_row: Dict[str, Any], target_user_id: str) -> Dict[str, Any]:
     supabase = get_supabase_server_client()
     old_user_id = str(credit_row.get("user_id") or "")
@@ -459,18 +480,16 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Op
     if not user_id or not payment_id or not package_id:
         return {"credited": False, "reason": "payment_missing_fields"}
 
-    existing_credit = _get_payment_credit_row(payment_id=str(payment_row.get("id") or ""), payment_row=payment_row)
+    existing_credit = _get_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
     if existing_credit:
         existing_user_id = str(existing_credit.get("user_id") or "")
         if existing_user_id == user_id:
-            credited_amount = int(existing_credit.get("amount") or 0)
-            current_balance = _read_balance(user_id=user_id)
             return {
                 "credited": True,
                 "reason": "already_credited",
                 "credit_row": existing_credit,
-                "credits": credited_amount,
-                "new_balance": current_balance,
+                "credits": int(existing_credit.get("amount") or 0),
+                "new_balance": _read_balance(user_id=user_id),
                 "idempotent": True,
             }
         return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
@@ -497,18 +516,16 @@ def _apply_credit_for_payment(*, payment_row: Dict[str, Any], target_user_id: Op
     try:
         supabase.table("credit_ledger").insert(ledger_payload).execute()
     except Exception:
-        existing_credit = _get_payment_credit_row(payment_id=str(payment_row.get("id") or ""), payment_row=payment_row)
+        existing_credit = _get_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
         if existing_credit:
             existing_user_id = str(existing_credit.get("user_id") or "")
             if existing_user_id == user_id:
-                credited_amount = int(existing_credit.get("amount") or credits or 0)
-                current_balance = _read_balance(user_id=user_id)
                 return {
                     "credited": True,
                     "reason": "already_credited",
                     "credit_row": existing_credit,
-                    "credits": credited_amount,
-                    "new_balance": current_balance,
+                    "credits": int(existing_credit.get("amount") or credits),
+                    "new_balance": _read_balance(user_id=user_id),
                     "idempotent": True,
                 }
             return _move_credit_to_user(payment_row=payment_row, credit_row=existing_credit, target_user_id=user_id)
@@ -548,16 +565,12 @@ def _apply_coupon_bonus_credit_for_payment(*, payment_row: Dict[str, Any], targe
     if existing_credit:
         existing_user_id = str(existing_credit.get("user_id") or "")
         if existing_user_id == user_id:
-            try:
-                credited_amount = int(existing_credit.get("amount") or bonus_credits)
-            except Exception:
-                credited_amount = bonus_credits
-            current_balance = _read_balance(user_id=user_id)
+            credited_amount = int(existing_credit.get("amount") or bonus_credits)
             return {
                 "credited": True,
                 "reason": "already_credited",
                 "credits": credited_amount,
-                "new_balance": current_balance,
+                "new_balance": _read_balance(user_id=user_id),
                 "idempotent": True,
                 "credit_row": existing_credit,
             }
@@ -587,16 +600,12 @@ def _apply_coupon_bonus_credit_for_payment(*, payment_row: Dict[str, Any], targe
         if existing_credit:
             existing_user_id = str(existing_credit.get("user_id") or "")
             if existing_user_id == user_id:
-                try:
-                    credited_amount = int(existing_credit.get("amount") or bonus_credits)
-                except Exception:
-                    credited_amount = bonus_credits
-                current_balance = _read_balance(user_id=user_id)
+                credited_amount = int(existing_credit.get("amount") or bonus_credits)
                 return {
                     "credited": True,
                     "reason": "already_credited",
                     "credits": credited_amount,
-                    "new_balance": current_balance,
+                    "new_balance": _read_balance(user_id=user_id),
                     "idempotent": True,
                     "credit_row": existing_credit,
                 }
@@ -620,8 +629,33 @@ def ensure_paid_payment_is_credited(*, payment_id: str, target_user_id: Optional
     if status != "paid":
         return {"ok": False, "message": "Pagamento ainda não está pago.", "payment": payment_row}
 
-    credit_result = _apply_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
-    coupon_bonus_result = _apply_coupon_bonus_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
+    existing_credit = _get_payment_credit_row(payment_id=payment_id, payment_row=payment_row)
+    existing_bonus = _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=payment_row)
+
+    if existing_credit:
+        credit_result = {
+            "credited": True,
+            "reason": "already_credited",
+            "credit_row": existing_credit,
+            "credits": int(existing_credit.get("amount") or 0),
+            "new_balance": _read_balance(user_id=str(target_user_id or payment_row.get("user_id") or "")),
+            "idempotent": True,
+        }
+    else:
+        credit_result = _apply_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
+
+    if existing_bonus:
+        coupon_bonus_result = {
+            "credited": True,
+            "reason": "already_credited",
+            "credit_row": existing_bonus,
+            "credits": int(existing_bonus.get("amount") or 0),
+            "new_balance": _read_balance(user_id=str(target_user_id or payment_row.get("user_id") or "")),
+            "idempotent": True,
+        }
+    else:
+        coupon_bonus_result = _apply_coupon_bonus_credit_for_payment(payment_row=payment_row, target_user_id=target_user_id)
+
     coupon_result = _record_coupon_usage_for_paid_payment(payment_row=payment_row)
     return {
         "ok": True,
@@ -660,28 +694,24 @@ def refresh_payment_status_and_credit(*, payment_id: str, target_user_id: Option
         existing_bonus = _get_coupon_bonus_credit_row(payment_id=payment_id, payment_row=updated_payment)
 
         if existing_credit:
-            credited_amount = int(existing_credit.get("amount") or 0)
-            current_balance = _read_balance(user_id=str((target_user_id or updated_payment.get("user_id") or "")))
             credit_result = {
                 "credited": True,
                 "reason": "already_credited",
                 "credit_row": existing_credit,
-                "credits": credited_amount,
-                "new_balance": current_balance,
+                "credits": int(existing_credit.get("amount") or 0),
+                "new_balance": _read_balance(user_id=str(target_user_id or updated_payment.get("user_id") or "")),
                 "idempotent": True,
             }
         else:
             credit_result = _apply_credit_for_payment(payment_row=updated_payment, target_user_id=target_user_id)
 
         if existing_bonus:
-            credited_amount = int(existing_bonus.get("amount") or 0)
-            current_balance = _read_balance(user_id=str((target_user_id or updated_payment.get("user_id") or "")))
             coupon_bonus_result = {
                 "credited": True,
                 "reason": "already_credited",
                 "credit_row": existing_bonus,
-                "credits": credited_amount,
-                "new_balance": current_balance,
+                "credits": int(existing_bonus.get("amount") or 0),
+                "new_balance": _read_balance(user_id=str(target_user_id or updated_payment.get("user_id") or "")),
                 "idempotent": True,
             }
         else:
