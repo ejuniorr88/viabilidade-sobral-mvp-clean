@@ -7,6 +7,8 @@ from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
 
 import streamlit as st
+
+from core.env_secrets import get_secret, get_secret_str
 from supabase import Client, create_client
 
 _BUCKET = "client-reports"
@@ -14,14 +16,10 @@ _TZ = ZoneInfo("America/Fortaleza")
 
 
 def _read_secret(key: str) -> str:
-    value = None
-    try:
-        value = st.secrets.get(key)
-    except Exception:
-        value = None
+    value = get_secret(key)
     if value:
         return str(value)
-    raise RuntimeError(f"Secret ausente: {key}")
+    raise RuntimeError(f"Secret/variável ausente: {key}")
 
 
 @st.cache_resource(show_spinner=False)
@@ -29,7 +27,7 @@ def get_supabase_service_client() -> Client:
     url = _read_secret("SUPABASE_URL")
     key = None
     try:
-        key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
+        key = get_secret("SUPABASE_SERVICE_ROLE_KEY")
     except Exception:
         key = None
     if not key:
