@@ -9,32 +9,26 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 from supabase import Client, create_client
 
+from core.env_secrets import get_secret_str
+
 _BUCKET = "client-reports"
 _TZ = ZoneInfo("America/Fortaleza")
 
 
 def _read_secret(key: str) -> str:
-    value = None
-    try:
-        value = st.secrets.get(key)
-    except Exception:
-        value = None
+    value = get_secret_str(key, required=True)
     if value:
-        return str(value)
-    raise RuntimeError(f"Secret ausente: {key}")
+        return value
+    raise RuntimeError(f"Secret/variável ausente: {key}")
 
 
 @st.cache_resource(show_spinner=False)
 def get_supabase_service_client() -> Client:
     url = _read_secret("SUPABASE_URL")
-    key = None
-    try:
-        key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
-    except Exception:
-        key = None
+    key = get_secret_str("SUPABASE_SERVICE_ROLE_KEY")
     if not key:
         key = _read_secret("SUPABASE_ANON_KEY")
-    return create_client(url, str(key))
+    return create_client(url, key)
 
 
 def _normalize_text(value: Any) -> str:
