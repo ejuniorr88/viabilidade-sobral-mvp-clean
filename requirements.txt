@@ -20,3 +20,11 @@ supabase
 python-dotenv
 requests
 fpdf2==2.8.3
+
+# html -> pdf
+# trava pydyf para evitar quebra de compatibilidade com WeasyPrint 60.1
+weasyprint==60.1
+pydyf==0.10.0
+cffi>=1.15
+tinycss2>=1.2
+cssselect2>=0.7

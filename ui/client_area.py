@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict
 from zoneinfo import ZoneInfo
@@ -9,6 +10,7 @@ import streamlit as st
 from core.client_reports import build_download_signed_url, list_client_reports
 from core.coupons import user_can_manage_coupons
 from ui.coupons_admin import render_coupons_admin_section
+from ui.relatorio import render_relatorio_section
 
 _TZ = ZoneInfo("America/Fortaleza")
 
@@ -54,6 +56,48 @@ def _info_card(label: str, value: str) -> None:
     )
 
 
+_PREVIEW_REPORT_KEY = "client_area_preview_report_id"
+_PREVIEW_BACKUP_SENTINEL = object()
+
+
+def _apply_saved_session_snapshot(session_snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    backup: Dict[str, Any] = {}
+    for key, value in (session_snapshot or {}).items():
+        backup[key] = st.session_state.get(key, _PREVIEW_BACKUP_SENTINEL)
+        st.session_state[key] = deepcopy(value)
+    return backup
+
+
+def _restore_saved_session_snapshot(backup: Dict[str, Any]) -> None:
+    for key, value in (backup or {}).items():
+        if value is _PREVIEW_BACKUP_SENTINEL:
+            try:
+                del st.session_state[key]
+            except Exception:
+                pass
+        else:
+            st.session_state[key] = value
+
+
+def _render_saved_report_preview(item: Dict[str, Any]) -> None:
+    ctx = item.get("report_context") or {}
+    calc_snapshot = ctx.get("calc_snapshot") or {}
+    session_snapshot = ctx.get("session_snapshot") or {}
+    if not isinstance(calc_snapshot, dict) or not calc_snapshot:
+        st.info("Este relatório salvo ainda não possui snapshot visual disponível.")
+        return
+
+    st.markdown("### Visualização salva do relatório")
+    st.caption("Esta visualização usa o snapshot salvo no momento da geração para reproduzir o relatório dentro da Área do Cliente.")
+
+    backup = _apply_saved_session_snapshot(session_snapshot if isinstance(session_snapshot, dict) else {})
+    try:
+        render_relatorio_section(deepcopy(calc_snapshot))
+    finally:
+        _restore_saved_session_snapshot(backup)
+
+
+
 def _render_reports_tab(user_id: str) -> None:
     st.markdown("### Relatórios salvos")
     try:
@@ -84,7 +128,7 @@ def _render_reports_tab(user_id: str) -> None:
             unsafe_allow_html=True,
         )
 
-        a, b, c, d = st.columns([1.1, 1.3, 1.0, 4.0])
+        a, b, c, d, e = st.columns([1.1, 1.3, 1.0, 1.5, 2.5])
         with a:
             st.text_input("Zona", value=zone, disabled=True, key=f"zone_{item.get('id')}")
         with b:
@@ -92,6 +136,14 @@ def _render_reports_tab(user_id: str) -> None:
         with c:
             st.text_input("Horário", value=time_label, disabled=True, key=f"time_{item.get('id')}")
         with d:
+            is_open = st.session_state.get(_PREVIEW_REPORT_KEY) == item.get("id")
+            if is_open:
+                if st.button("Fechar visualização", use_container_width=True, key=f"preview_close_{item.get('id')}"):
+                    st.session_state[_PREVIEW_REPORT_KEY] = None
+            else:
+                if st.button("👁️ Visualizar", use_container_width=True, key=f"preview_open_{item.get('id')}"):
+                    st.session_state[_PREVIEW_REPORT_KEY] = item.get("id")
+        with e:
             signed_url = ""
             try:
                 signed_url = build_download_signed_url(path)
@@ -101,6 +153,9 @@ def _render_reports_tab(user_id: str) -> None:
                 st.link_button("⬇️ Fazer download", signed_url, use_container_width=True)
             else:
                 st.button("⬇️ Fazer download", disabled=True, use_container_width=True, key=f"download_disabled_{item.get('id')}")
+
+        if st.session_state.get(_PREVIEW_REPORT_KEY) == item.get("id"):
+            _render_saved_report_preview(item)
 
 
 

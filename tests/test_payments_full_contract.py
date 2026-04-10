@@ -393,7 +393,8 @@ def test_resolve_current_payment_preserves_snapshot_pix_fields(monkeypatch):
     assert payment["status"] == "pending"
 
 
-def test_sync_current_payment_state_turns_off_focus_mode_when_credit_is_added(monkeypatch):
+def test_sync_current_payment_state_turns_off_focus_mode_only_when_fully_credited(monkeypatch):
+    st_stub.calls.clear()
     st_stub.session_state.clear()
     st_stub.session_state.update({
         "current_payment_id": "p1",
@@ -404,13 +405,18 @@ def test_sync_current_payment_state_turns_off_focus_mode_when_credit_is_added(mo
     monkeypatch.setattr(
         payments_panel,
         "ensure_paid_payment_is_credited",
-        lambda payment_id, target_user_id=None: {"payment": {"id": "p1", "status": "paid"}, "credit_result": {"credited": True}},
+        lambda payment_id, target_user_id=None: {
+            "payment": {"id": "p1", "status": "paid"},
+            "credit_result": {"credited": True, "reason": "already_credited"},
+            "fully_credited": False,
+        },
     )
 
     payments_panel._sync_current_payment_state(object(), "u1")
 
-    assert st_stub.session_state["payments_focus_mode"] is False
+    assert st_stub.session_state["payments_focus_mode"] is True
     assert st_stub.session_state["current_payment_id"] == "p1"
+    assert not any(name == "rerun" for name, _, _ in st_stub.calls)
 
 
 def test_render_payments_panel_requires_login_message():
@@ -474,3 +480,243 @@ def test_apply_credit_for_payment_does_not_duplicate_when_gateway_credit_exists(
     assert result == {"credited": False, "reason": "already_credited"}
     assert db["credit_balance"][0]["balance"] == 2
     assert len(db["credit_ledger"]) == 1
+
+
+
+def test_parse_json_like_accepts_json_and_python_literal_strings() -> None:
+    json_value = '{"benefit_type": "credit", "bonus_credits": 2}'
+    literal_value = "{'benefit_type': 'credit', 'bonus_credits': 2}"
+
+    assert payments._parse_json_like(json_value) == {"benefit_type": "credit", "bonus_credits": 2}
+    assert payments._parse_json_like(literal_value) == {"benefit_type": "credit", "bonus_credits": 2}
+
+
+
+def test_apply_coupon_bonus_credit_for_payment_accepts_json_snapshot_and_updates_balance(monkeypatch):
+    db = {
+        "credit_balance": [{"user_id": "u1", "balance": 20}],
+        "credit_ledger": [],
+        "payments": [{"id": "p1", "user_id": "u1"}],
+    }
+    fake_sb = FakeSupabase(db)
+    monkeypatch.setattr(payments, "get_supabase_server_client", lambda: fake_sb)
+    monkeypatch.setattr(payments, "_resolve_existing_coupon_bonus_credit", lambda payment_id, payment_row=None: None)
+
+    result = payments._apply_coupon_bonus_credit_for_payment(
+        payment_row={
+            "id": "p1",
+            "user_id": "u1",
+            "status": "paid",
+            "coupon_snapshot": '{"benefit_type":"credit","bonus_credits":2}',
+            "coupon_id": 9,
+            "coupon_code": "VIA04",
+            "external_reference": "pkg_ref",
+        },
+        target_user_id="u1",
+    )
+
+    assert result["credited"] is True
+    assert result["credits"] == 2
+    assert result["new_balance"] == 22
+    assert db["credit_balance"][0]["balance"] == 22
+    assert len(db["credit_ledger"]) == 1
+    assert db["credit_ledger"][0]["source"] == "coupon_bonus_credit"
+    assert db["credit_ledger"][0]["reference_id"] == "p1"
+
+
+
+def test_inspect_payment_credit_status_marks_partial_when_bonus_is_missing(monkeypatch):
+    payment_row = {
+        "id": "p1",
+        "user_id": "u1",
+        "coupon_snapshot": '{"benefit_type":"credit","bonus_credits":2}',
+    }
+    monkeypatch.setattr(payments, "_fetch_payment_row", lambda payment_id: payment_row)
+    monkeypatch.setattr(payments, "_resolve_existing_payment_credit", lambda payment_id, payment_row=None: {"id": "l1", "user_id": "u1"})
+    monkeypatch.setattr(payments, "_resolve_existing_coupon_bonus_credit", lambda payment_id, payment_row=None: None)
+
+    result = payments.inspect_payment_credit_status(payment_id="p1", target_user_id="u1")
+
+    assert result["payment_credit_applied"] is True
+    assert result["coupon_bonus_expected"] is True
+    assert result["coupon_bonus_applied"] is False
+    assert result["fully_credited"] is False
+    assert result["is_partially_reconciled"] is True
+    assert result["credit_result"]["reason"] == "partial_credit"
+
+
+
+def test_inspect_payment_credit_status_never_reports_fully_credited_for_other_user(monkeypatch):
+    payment_row = {
+        "id": "p1",
+        "user_id": "u1",
+        "coupon_snapshot": '{"benefit_type":"credit","bonus_credits":2}',
+    }
+    monkeypatch.setattr(payments, "_fetch_payment_row", lambda payment_id: payment_row)
+    monkeypatch.setattr(payments, "_resolve_existing_payment_credit", lambda payment_id, payment_row=None: {"id": "l1", "user_id": "other"})
+    monkeypatch.setattr(payments, "_resolve_existing_coupon_bonus_credit", lambda payment_id, payment_row=None: {"id": "l2", "user_id": "other"})
+
+    result = payments.inspect_payment_credit_status(payment_id="p1", target_user_id="u1")
+
+    assert result["fully_credited"] is False
+    assert result["credit_result"]["reason"] == "credited_to_other_user"
+
+
+
+def test_ensure_paid_payment_is_credited_blocks_cross_user_fragmentation(monkeypatch):
+    payment_row = {"id": "p1", "user_id": "u1", "status": "paid"}
+    monkeypatch.setattr(payments, "_fetch_payment_row", lambda payment_id: payment_row)
+    monkeypatch.setattr(
+        payments,
+        "inspect_payment_credit_status",
+        lambda payment_id, target_user_id=None: {
+            "payment": payment_row,
+            "payment_credit_applied": True,
+            "coupon_bonus_expected": True,
+            "coupon_bonus_applied": False,
+            "credit_result": {"credited": False, "reason": "credited_to_other_user"},
+        },
+    )
+
+    result = payments.ensure_paid_payment_is_credited(payment_id="p1", target_user_id="u1")
+
+    assert result["ok"] is False
+    assert result["fully_credited"] is False
+    assert result["coupon_bonus_result"]["reason"] == "blocked_other_user"
+    assert result["coupon_result"]["reason"] == "blocked_other_user"
+
+
+
+def test_ensure_paid_payment_is_credited_applies_only_missing_bonus_and_returns_coupon_result(monkeypatch):
+    payment_row = {"id": "p1", "user_id": "u1", "status": "paid"}
+    inspect_calls = iter([
+        {
+            "payment": payment_row,
+            "payment_credit_applied": True,
+            "coupon_bonus_expected": True,
+            "coupon_bonus_applied": False,
+            "credit_result": {"credited": False, "reason": "partial_credit"},
+        },
+        {
+            "payment": payment_row,
+            "payment_credit_applied": True,
+            "coupon_bonus_expected": True,
+            "coupon_bonus_applied": True,
+            "credit_result": {"credited": True, "reason": "already_credited"},
+            "fully_credited": True,
+        },
+    ])
+    monkeypatch.setattr(payments, "_fetch_payment_row", lambda payment_id: payment_row)
+    monkeypatch.setattr(payments, "inspect_payment_credit_status", lambda payment_id, target_user_id=None: next(inspect_calls))
+
+    credit_calls = []
+    bonus_calls = []
+    monkeypatch.setattr(
+        payments,
+        "_apply_credit_for_payment",
+        lambda payment_row, target_user_id=None: credit_calls.append((payment_row, target_user_id)) or {"credited": True},
+    )
+    monkeypatch.setattr(
+        payments,
+        "_apply_coupon_bonus_credit_for_payment",
+        lambda payment_row, target_user_id=None: bonus_calls.append((payment_row, target_user_id)) or {"credited": True, "reason": "credited", "credits": 2},
+    )
+    monkeypatch.setattr(payments, "_record_coupon_usage_for_paid_payment", lambda payment_row: {"recorded": True, "reason": "confirmed"})
+
+    result = payments.ensure_paid_payment_is_credited(payment_id="p1", target_user_id="u1")
+
+    assert credit_calls == []
+    assert len(bonus_calls) == 1
+    assert result["coupon_result"] == {"recorded": True, "reason": "confirmed"}
+    assert result["fully_credited"] is True
+
+
+
+def test_sync_current_payment_state_triggers_single_wallet_refresh_rerun_when_fully_credited(monkeypatch):
+    st_stub.calls.clear()
+    st_stub.session_state.clear()
+    st_stub.session_state.update({
+        "current_payment_id": "p1",
+        "current_payment_snapshot": {"id": "p1", "status": "paid"},
+        "payments_focus_mode": True,
+    })
+    monkeypatch.setattr(payments_panel, "_resolve_current_payment", lambda supabase: {"id": "p1", "status": "paid"})
+    monkeypatch.setattr(
+        payments_panel,
+        "ensure_paid_payment_is_credited",
+        lambda payment_id, target_user_id=None: {
+            "payment": {"id": "p1", "status": "paid"},
+            "credit_result": {"credited": True, "reason": "already_credited"},
+            "fully_credited": True,
+        },
+    )
+
+    payments_panel._sync_current_payment_state(object(), "u1")
+    payments_panel._sync_current_payment_state(object(), "u1")
+
+    assert st_stub.session_state["payments_focus_mode"] is False
+    assert st_stub.session_state["wallet_balance_refresh_after_credit_p1"] is True
+    rerun_calls = [name for name, _, _ in st_stub.calls if name == "rerun"]
+    assert len(rerun_calls) == 1
+
+
+
+def test_render_current_payment_area_prioritizes_other_user_error_and_keeps_focus(monkeypatch):
+    st_stub.calls.clear()
+    st_stub.session_state.clear()
+    st_stub.session_state.update({
+        "current_payment_id": "p1",
+        "current_payment_snapshot": {"id": "p1", "status": "paid"},
+        "payments_focus_mode": True,
+    })
+    current_payment = {"id": "p1", "status": "paid"}
+    monkeypatch.setattr(payments_panel, "_resolve_current_payment", lambda supabase: current_payment)
+    monkeypatch.setattr(payments_panel, "_fetch_payment_by_id", lambda supabase, payment_id: current_payment)
+    monkeypatch.setattr(payments_panel, "_render_pix_block", lambda payment: None)
+    monkeypatch.setattr(
+        payments_panel,
+        "inspect_payment_credit_status",
+        lambda payment_id, target_user_id=None: {
+            "fully_credited": False,
+            "credit_result": {"reason": "credited_to_other_user"},
+        },
+    )
+
+    payments_panel._render_current_payment_area(object(), "u1")
+
+    assert any(name == "error" for name, _, _ in st_stub.calls)
+    assert not any(name == "success" for name, _, _ in st_stub.calls)
+    assert st_stub.session_state["payments_focus_mode"] is True
+
+
+
+def test_render_current_payment_area_reconciles_paid_bonus_gap_only_once(monkeypatch):
+    st_stub.calls.clear()
+    st_stub.session_state.clear()
+    st_stub.session_state.update({
+        "current_payment_id": "p1",
+        "current_payment_snapshot": {"id": "p1", "status": "paid"},
+        "payments_focus_mode": True,
+    })
+    current_payment = {"id": "p1", "status": "paid"}
+    monkeypatch.setattr(payments_panel, "_resolve_current_payment", lambda supabase: current_payment)
+    monkeypatch.setattr(payments_panel, "_fetch_payment_by_id", lambda supabase, payment_id: current_payment)
+    monkeypatch.setattr(payments_panel, "_render_pix_block", lambda payment: None)
+    monkeypatch.setattr(
+        payments_panel,
+        "inspect_payment_credit_status",
+        lambda payment_id, target_user_id=None: {
+            "fully_credited": False,
+            "credit_result": {"reason": "partial_credit"},
+        },
+    )
+    ensure_calls = []
+    monkeypatch.setattr(payments_panel, "ensure_paid_payment_is_credited", lambda payment_id, target_user_id=None: ensure_calls.append((payment_id, target_user_id)) or {"fully_credited": False})
+
+    payments_panel._render_current_payment_area(object(), "u1")
+    payments_panel._render_current_payment_area(object(), "u1")
+
+    assert len(ensure_calls) == 1
+    assert st_stub.session_state["paid_credit_sync_p1"] is True
+    rerun_calls = [name for name, _, _ in st_stub.calls if name == "rerun"]
+    assert len(rerun_calls) == 1

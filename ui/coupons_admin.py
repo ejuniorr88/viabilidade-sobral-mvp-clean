@@ -5,13 +5,17 @@ from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
+from core.env_secrets import get_secret, get_secret_str
+
 from core.coupons import (
     coupon_has_paid_usage,
     create_coupon_code,
+    delete_coupon_code,
     filter_coupon_usages,
     list_coupon_codes_enriched,
     list_coupon_usages_enriched,
     set_coupon_active,
+    set_coupon_hidden_in_admin,
     summarize_coupon_usages,
     update_coupon_code,
     user_can_manage_coupons,
@@ -62,8 +66,10 @@ def _coupon_form_defaults(row: Optional[Dict[str, Any]] = None) -> Dict[str, Any
         "code": row.get("code") or "",
         "owner_email": row.get("owner_email") or "",
         "coupon_type": row.get("coupon_type") or "manual",
+        "benefit_type": row.get("benefit_type") or row.get("reward_type") or "discount",
         "discount_type": row.get("discount_type") or "fixed",
         "discount_value": float(row.get("discount_value") or 0.01),
+        "bonus_credits": int(row.get("bonus_credits") or 0),
         "is_active": bool(row.get("is_active", True)),
         "max_uses_total": int(row.get("max_uses_total") or 0),
         "max_uses_per_user": int(row.get("max_uses_per_user") or 0),
@@ -82,6 +88,23 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
 
     critical_locked = mode == "edit" and bool(defaults["paid_usage_locked"])
 
+    # Streamlit forms não rerenderizam dinamicamente ao trocar widgets internos.
+    # Por isso, o seletor de benefício fica fora do form.
+    benefit_state_key = f"coupon_benefit_type_{mode}_{defaults['id'] or 'new'}"
+    if benefit_state_key not in st.session_state:
+        st.session_state[benefit_state_key] = (
+            defaults["benefit_type"] if defaults["benefit_type"] in ["discount", "credit"] else "discount"
+        )
+
+    benefit_type = st.selectbox(
+        "Benefício do cupom",
+        options=["discount", "credit"],
+        format_func=lambda v: "Desconto no valor" if v == "discount" else "Créditos extras",
+        index=["discount", "credit"].index(st.session_state[benefit_state_key]),
+        key=benefit_state_key,
+        disabled=critical_locked,
+    )
+
     with st.form(form_key, clear_on_submit=False):
         if critical_locked:
             st.warning("Este cupom já teve uso pago confirmado. Campos críticos ficam travados para preservar o histórico.")
@@ -91,25 +114,51 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
             owner_email = st.text_input("E-mail do dono do cupom", value=defaults["owner_email"], disabled=critical_locked)
             code = st.text_input("Código do cupom", value=defaults["code"], disabled=critical_locked).upper()
             coupon_type = st.selectbox(
-                "Tipo de cupom",
+                "Categoria do cupom",
                 options=["manual", "referral", "public_discount", "campaign"],
                 index=["manual", "referral", "public_discount", "campaign"].index(defaults["coupon_type"]),
                 disabled=critical_locked,
             )
-            discount_type = st.selectbox(
-                "Tipo de desconto",
-                options=["fixed", "percent"],
-                index=["fixed", "percent"].index(defaults["discount_type"]),
-                disabled=critical_locked,
+
+            st.caption(
+                f"Benefício selecionado: {'Desconto no valor' if benefit_type == 'discount' else 'Créditos extras'}"
             )
-            discount_value = st.number_input(
-                "Valor do desconto",
-                min_value=0.01,
-                step=0.01,
-                format="%.2f",
-                value=float(defaults["discount_value"]),
-                disabled=critical_locked,
-            )
+
+            if benefit_type == "discount":
+                discount_type = st.selectbox(
+                    "Tipo de desconto",
+                    options=["fixed", "percent"],
+                    index=["fixed", "percent"].index(
+                        defaults["discount_type"] if defaults["discount_type"] in ["fixed", "percent"] else "fixed"
+                    ),
+                    disabled=critical_locked,
+                )
+                discount_value = st.number_input(
+                    "Valor do desconto",
+                    min_value=0.01,
+                    step=0.01,
+                    format="%.2f",
+                    value=float(defaults["discount_value"] or 0.01),
+                    disabled=critical_locked,
+                )
+                bonus_credits = 0
+            else:
+                st.caption(
+                    "Cupom de crédito não altera o valor do pagamento. "
+                    "Ele adiciona créditos bônus após a confirmação do Pix."
+                )
+                bonus_credits = st.number_input(
+                    "Créditos extras gerados",
+                    min_value=1,
+                    step=1,
+                    value=max(1, int(defaults["bonus_credits"] or 1)),
+                    disabled=critical_locked,
+                )
+                # Compatibilidade com schema atual do banco:
+                # mesmo em cupom de crédito, a tabela ainda exige discount_type NOT NULL.
+                discount_type = "fixed"
+                discount_value = 0.0
+
             is_active = st.checkbox("Cupom ativo", value=defaults["is_active"])
         with c2:
             max_uses_total = st.number_input(
@@ -154,13 +203,23 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
         if valid_until_date:
             valid_until = datetime.combine(valid_until_date, time.max)
 
+        # NORMALIZAÇÃO FINAL (OBRIGATÓRIA)
+        if benefit_type == "credit":
+            discount_type = "fixed"
+            discount_value = 0.0
+            bonus_credits = max(1, int(bonus_credits or 1))
+        else:
+            bonus_credits = 0
+
         if mode == "create":
             saved = create_coupon_code(
                 code=code,
                 owner_email=owner_email,
                 coupon_type=coupon_type,
+                benefit_type=benefit_type,
                 discount_type=discount_type,
                 discount_value=discount_value,
+                bonus_credits=bonus_credits,
                 is_active=is_active,
                 valid_from=valid_from,
                 valid_until=valid_until,
@@ -179,8 +238,10 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
                 code=code,
                 owner_email=owner_email,
                 coupon_type=coupon_type,
+                benefit_type=benefit_type,
                 discount_type=discount_type,
                 discount_value=discount_value,
+                bonus_credits=bonus_credits,
                 is_active=is_active,
                 valid_from=valid_from,
                 valid_until=valid_until,
@@ -201,7 +262,7 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
 
 
 def _render_coupon_actions(row: Dict[str, Any]) -> None:
-    c1, c2, c3 = st.columns([1, 1, 1])
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
 
     with c1:
         if st.button("Editar", key=f"coupon_edit_{row.get('id')}"):
@@ -220,27 +281,55 @@ def _render_coupon_actions(row: Dict[str, Any]) -> None:
                 st.error(f"Não foi possível alterar o status do cupom: {exc}")
 
     with c3:
-        owner_status = "Resolvido" if row.get("owner_user_id") else "Pendente"
-        lock_status = " | Uso pago: Sim" if row.get("paid_usage_locked") else " | Uso pago: Não"
-        st.caption(f"owner_user_id: {owner_status}{lock_status}")
+        hide_label = "Mostrar na lista" if bool(row.get("admin_hidden")) else "Apagar da lista"
+        if st.button(hide_label, key=f"coupon_hide_{row.get('id')}"):
+            try:
+                set_coupon_hidden_in_admin(coupon_id=row.get("id"), hidden=not bool(row.get("admin_hidden")))
+                st.success("Confirmar remoção da lista" if not bool(row.get("admin_hidden")) else "Cupom restaurado para a lista.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Não foi possível alterar a visibilidade do cupom: {exc}")
+
+    with c4:
+        if st.button("Excluir", key=f"coupon_delete_{row.get('id')}"):
+            try:
+                delete_coupon_code(coupon_id=row.get("id"))
+                st.success("Cupom excluído com sucesso.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Não foi possível excluir o cupom: {exc}")
+
+    owner_status = "Resolvido" if row.get("owner_user_id") else "Pendente"
+    lock_status = " | Uso pago: Sim" if row.get("paid_usage_locked") else " | Uso pago: Não"
+    hidden_status = " | admin_hidden: Sim" if row.get("admin_hidden") else " | admin_hidden: Não"
+    st.caption(f"owner_user_id: {owner_status}{lock_status}{hidden_status}")
 
 
 def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:
     st.markdown("#### Cupons cadastrados")
-    if not rows:
+    show_hidden = st.checkbox("Mostrar cupons removidos da lista", value=False, key="show_hidden_coupons")
+    visible_rows = rows if show_hidden else [row for row in rows if not row.get("admin_hidden")]
+    if not visible_rows:
         st.info("Nenhum cupom cadastrado ainda.")
         return
 
     editing_id = st.session_state.get("coupon_editing_id")
 
-    for row in rows:
+    for row in visible_rows:
         with st.container(border=True):
             st.markdown(f"**{row.get('code') or '—'}**", unsafe_allow_html=True)
             st.markdown(_coupon_status_badges(row), unsafe_allow_html=True)
+            benefit_type = row.get("benefit_type") or row.get("reward_type") or "discount"
+            benefit_desc = (
+                f"Créditos bônus: +{int(row.get('bonus_credits') or 0)}"
+                if benefit_type == "credit"
+                else f"Desconto: {row.get('discount_value')} ({row.get('discount_type')})"
+            )
             st.caption(
                 f"Dono: {row.get('owner_email') or '—'} | "
-                f"Tipo: {row.get('coupon_type') or '—'} | "
-                f"Desconto: {row.get('discount_value')} ({row.get('discount_type')}) | "
+                f"Categoria: {row.get('coupon_type') or '—'} | "
+                f"Benefício: {'Crédito' if benefit_type == 'credit' else 'Desconto'} | "
+                f"{benefit_desc} | "
                 f"Usos: {int(row.get('total_uses') or 0)} | "
                 f"Usos pagos: {int(row.get('paid_uses') or 0)} | "
                 f"Último uso pago: {_fmt_dt(row.get('last_confirmed_at'))} | "
@@ -313,7 +402,7 @@ def render_coupons_admin_section(*, current_user_email: str) -> None:
         st.info("Seu usuário não tem permissão para gerir cupons.")
         return
 
-    configured = st.secrets.get("COUPONS_ADMIN_EMAILS", "")
+    configured = get_secret_str("COUPONS_ADMIN_EMAILS", "")
     if not configured:
         st.error("COUPONS_ADMIN_EMAILS não está configurado nos secrets. A área de cupons está bloqueada.")
         return

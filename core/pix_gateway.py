@@ -7,6 +7,8 @@ from typing import Any, Dict, Optional
 import requests
 import streamlit as st
 
+from core.env_secrets import get_secret, get_secret_str
+
 MERCADOPAGO_API_BASE = "https://api.mercadopago.com"
 
 
@@ -33,7 +35,7 @@ def _build_payer(email: str, full_name: str) -> Dict[str, Any]:
 
 
 def _get_access_token() -> str:
-    token = st.secrets.get("MERCADOPAGO_ACCESS_TOKEN")
+    token = get_secret("MERCADOPAGO_ACCESS_TOKEN")
     if not token:
         raise MercadoPagoPixError(
             "Falta configurar MERCADOPAGO_ACCESS_TOKEN nos Secrets do Streamlit."

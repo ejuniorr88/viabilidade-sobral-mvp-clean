@@ -6,12 +6,14 @@ from typing import Any, Dict
 
 import streamlit as st
 
+from core.env_secrets import get_secret, get_secret_str
+
 
 def _build_public_storage_url(bucket: str, path: str) -> str | None:
     base = os.getenv("SUPABASE_URL", "").rstrip("/")
     if not base:
         try:
-            base = (st.secrets.get("SUPABASE_URL") or "").rstrip("/")
+            base = (get_secret("SUPABASE_URL") or "").rstrip("/")
         except Exception:
             base = ""
     if not base or not bucket or not path:

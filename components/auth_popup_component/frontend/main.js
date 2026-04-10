@@ -1,7 +1,9 @@
 (function () {
   const root = document.getElementById("root");
+  const POPUP_TOKEN_KEY = "vf_auth_popup_token";
   let currentArgs = { auth_url: "", label: "Entrar com Google", subtle: false };
   let activeMessageHandler = null;
+  let activeBroadcastChannel = null;
 
   function sendMessageToStreamlitClient(type, data) {
     const outData = Object.assign(
@@ -45,10 +47,25 @@
     ].join(",");
   }
 
+  function consumePopupToken(rawValue) {
+    const token = (rawValue || "").trim();
+    if (!token) return;
+
+    setComponentValue(token);
+
+    try {
+      window.localStorage.removeItem(POPUP_TOKEN_KEY);
+    } catch (_err) {}
+  }
+
   function cleanupMessageHandler() {
     if (activeMessageHandler) {
       window.removeEventListener("message", activeMessageHandler);
       activeMessageHandler = null;
+    }
+    if (activeBroadcastChannel) {
+      try { activeBroadcastChannel.close(); } catch (_err) {}
+      activeBroadcastChannel = null;
     }
   }
 
@@ -58,7 +75,7 @@
       return;
     }
 
-    setComponentValue(data.access_token);
+    consumePopupToken(data.access_token);
 
     try {
       if (event.source && typeof event.source.postMessage === "function") {
@@ -69,10 +86,37 @@
     cleanupMessageHandler();
   }
 
-  function openPopup(url) {
+  function handleStorageEvent(event) {
+    if (!event || event.key !== POPUP_TOKEN_KEY || !event.newValue) {
+      return;
+    }
+    consumePopupToken(event.newValue);
+    cleanupMessageHandler();
+  }
+
+  function attachPopupListeners() {
     cleanupMessageHandler();
     activeMessageHandler = handleAuthSuccess;
     window.addEventListener("message", activeMessageHandler);
+    window.addEventListener("storage", handleStorageEvent);
+
+    try {
+      activeBroadcastChannel = new BroadcastChannel("vf-auth-popup");
+      activeBroadcastChannel.onmessage = function (event) {
+        const data = event && event.data ? event.data : null;
+        if (!data || data.type !== "vf_auth_success" || !data.access_token) {
+          return;
+        }
+        consumePopupToken(data.access_token);
+        cleanupMessageHandler();
+      };
+    } catch (_err) {
+      activeBroadcastChannel = null;
+    }
+  }
+
+  function openPopup(url) {
+    attachPopupListeners();
 
     const popup = window.open(url, "vfGoogleLoginPopup", popupFeatures(520, 760));
     if (popup && !popup.closed) {
@@ -113,6 +157,7 @@
   }
 
   window.addEventListener("message", onRenderEvent);
+  window.addEventListener("storage", handleStorageEvent);
   sendMessageToStreamlitClient("streamlit:componentReady", { apiVersion: 1 });
   setFrameHeight(54);
 })();

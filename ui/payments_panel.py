@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
+from core.env_secrets import get_secret, get_secret_str
+
 from core.auth import get_supabase_auth_client
 from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited, inspect_payment_credit_status
 from core.coupons import validate_coupon_for_checkout
@@ -214,7 +216,7 @@ def _create_pix_payment(
     coupon_applied: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     try:
-        notification_url = st.secrets.get(
+        notification_url = get_secret_str(
             "MERCADOPAGO_WEBHOOK_URL",
             "https://dvaskwtqrohfyzndtjwv.supabase.co/functions/v1/mercadopago-webhook",
         )
@@ -351,6 +353,8 @@ def _render_pix_block(payment_row: Dict[str, Any]) -> None:
 def _render_pending_payment_status(supabase, payment_id: str, current_user_id: Optional[str] = None) -> None:
     st.info("Aguardando confirmação do pagamento...")
 
+    finalized_flag_key = f"payment_finalized_ui_{payment_id}"
+
     def _do_refresh() -> Optional[Dict[str, Any]]:
         try:
             result = refresh_payment_status_and_credit(payment_id=payment_id, target_user_id=current_user_id)
@@ -358,12 +362,10 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
             if payment:
                 st.session_state["current_payment_snapshot"] = payment
                 st.session_state["current_payment_id"] = _safe_get(payment, "id", payment_id)
-            credit_result = (result or {}).get("credit_result") or {}
+
             if (payment or {}).get("status") == "paid":
-                if credit_result.get("credited"):
-                    st.success("Pagamento confirmado e créditos adicionados à carteira.")
-                else:
-                    st.success("Pagamento confirmado com sucesso.")
+                st.session_state[finalized_flag_key] = True
+                st.success("Pagamento confirmado e créditos adicionados à carteira.")
             return payment
         except Exception as e:
             st.warning(f"Não foi possível atualizar o pagamento agora: {e}")
@@ -402,10 +404,15 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
             st.rerun()
 
     if status == "paid":
-        st.success("Pagamento confirmado com sucesso.")
+        if not st.session_state.get(finalized_flag_key):
+            st.session_state[finalized_flag_key] = True
+            st.rerun()
+        st.success("Pagamento confirmado e créditos adicionados à carteira.")
     elif status == "pending":
+        st.session_state.pop(finalized_flag_key, None)
         st.warning("Pagamento ainda pendente.")
     elif status in ("failed", "cancelled", "refunded"):
+        st.session_state.pop(finalized_flag_key, None)
         st.error(f"Pagamento com status: {status}")
     else:
         st.caption(f"Status atual: {status}")
@@ -455,13 +462,22 @@ def _render_buy_section(
             current_coupon = _get_current_coupon_application(package, coupon_input_value)
 
             original_amount = _to_float(_safe_get(package, 'price_brl', 0))
+            package_credits = int(_to_float(_safe_get(package, 'credits', 0)))
             if current_coupon:
-                st.write(f"Preço original: {_fmt_brl(current_coupon.get('original_amount', original_amount))}")
-                st.write(f"Desconto: {_fmt_brl(current_coupon.get('discount_amount', 0))}")
-                st.write(f"Preço final: {_fmt_brl(current_coupon.get('final_amount', original_amount))}")
+                benefit_type = str(current_coupon.get("benefit_type") or "discount").strip().lower()
+                if benefit_type == "credit":
+                    bonus_credits = int(_to_float(current_coupon.get("bonus_credits", 0)))
+                    st.write(f"Preço: {_fmt_brl(current_coupon.get('final_amount', original_amount))}")
+                    st.write(f"Bônus do cupom: +{bonus_credits} crédito(s)")
+                    st.write(f"Créditos totais após pagamento: {package_credits + bonus_credits}")
+                else:
+                    st.write(f"Preço original: {_fmt_brl(current_coupon.get('original_amount', original_amount))}")
+                    st.write(f"Desconto: {_fmt_brl(current_coupon.get('discount_amount', 0))}")
+                    st.write(f"Preço final: {_fmt_brl(current_coupon.get('final_amount', original_amount))}")
+                    st.write(f"Créditos: {package_credits}")
             else:
                 st.write(f"Preço: {_fmt_brl(original_amount)}")
-            st.write(f"Créditos: {int(_to_float(_safe_get(package, 'credits', 0)))}")
+                st.write(f"Créditos: {package_credits}")
 
             apply_col, clear_col = st.columns(2)
             with apply_col:
@@ -563,11 +579,13 @@ def _sync_current_payment_state(supabase, current_user_id: str) -> None:
         merged.update(latest_payment)
         st.session_state["current_payment_snapshot"] = merged
         st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
-        credit_result = (result or {}).get("credit_result") or {}
-        if credit_result.get("credited") or credit_result.get("reason") == "already_credited":
+        if bool((result or {}).get("fully_credited")):
             st.session_state["payments_focus_mode"] = False
+            wallet_flag = f"wallet_balance_refresh_after_credit_{payment_id}"
+            if not st.session_state.get(wallet_flag):
+                st.session_state[wallet_flag] = True
+                st.rerun()
     except Exception:
-        # Não interromper a renderização do painel; a área visual mostra o erro depois.
         return
 
 
@@ -596,32 +614,39 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
     elif status == "paid":
         inspect = None
+        payment_id_str = str(_safe_get(current_payment, "id"))
         try:
-            inspect = inspect_payment_credit_status(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
+            inspect = inspect_payment_credit_status(payment_id=payment_id_str, target_user_id=current_user_id)
         except Exception as e:
             st.warning(f"Pagamento confirmado, mas não foi possível inspecionar os créditos agora: {e}")
 
+        fully_credited = bool((inspect or {}).get("fully_credited"))
         credit_result = (inspect or {}).get("credit_result") or {}
-        if credit_result.get("reason") == "already_credited":
+        rerun_flag_key = f"paid_credit_sync_{payment_id_str}"
+
+        if not fully_credited and not st.session_state.get(rerun_flag_key):
+            try:
+                ensure_paid_payment_is_credited(payment_id=payment_id_str, target_user_id=current_user_id)
+                st.session_state[rerun_flag_key] = True
+                st.rerun()
+            except Exception as e:
+                st.warning(f"Pagamento confirmado, mas não foi possível reconciliar os créditos agora: {e}")
+        elif fully_credited:
+            st.session_state.pop(rerun_flag_key, None)
+
+        if credit_result.get("reason") == "already_credited" or fully_credited:
             st.success("Este pagamento já foi confirmado e os créditos já estão na carteira.")
             if st.session_state.get("payments_focus_mode"):
                 st.session_state["payments_focus_mode"] = False
         elif credit_result.get("reason") == "credited_to_other_user":
-            st.success("Este pagamento já foi confirmado e os créditos já foram reconciliados para a sua carteira.")
-            if st.session_state.get("payments_focus_mode"):
-                st.session_state["payments_focus_mode"] = False
+            st.error("Este pagamento já foi confirmado, mas os créditos foram reconciliados para outro usuário.")
         else:
-            st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. Tentando reconciliar...")
-            if st.button("Reprocessar crédito deste pagamento", key=f"recredit_paid_{payment_id}"):
-                try:
-                    ensure_paid_payment_is_credited(payment_id=str(_safe_get(current_payment, "id")), target_user_id=current_user_id)
-                except Exception as e:
-                    st.error(f"Não foi possível reprocessar o crédito agora: {e}")
-                st.rerun()
+            st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. O sistema está tentando reconciliar automaticamente...")
 
         if st.button("Fechar pagamento atual", key=f"close_current_paid_{payment_id}"):
             st.session_state.pop("current_payment_id", None)
             st.session_state.pop("current_payment_snapshot", None)
+            st.session_state.pop(rerun_flag_key, None)
             st.rerun()
     else:
         if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):

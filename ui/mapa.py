@@ -5,6 +5,8 @@ from typing import Any, Dict, Optional
 
 import folium
 import streamlit as st
+
+from core.env_secrets import get_secret, get_secret_str
 from streamlit_folium import st_folium
 
 from components.google_map_component import render_google_map
@@ -12,7 +14,7 @@ from components.google_map_component import render_google_map
 
 def _get_map_provider() -> str:
     provider = (
-        st.secrets.get("MAP_PROVIDER")
+        get_secret("MAP_PROVIDER")
         or os.getenv("MAP_PROVIDER")
         or "folium"
     )
@@ -21,7 +23,7 @@ def _get_map_provider() -> str:
 
 def _get_google_maps_api_key() -> str:
     return str(
-        st.secrets.get("GOOGLE_MAPS_API_KEY")
+        get_secret("GOOGLE_MAPS_API_KEY")
         or os.getenv("GOOGLE_MAPS_API_KEY")
         or ""
     ).strip()
