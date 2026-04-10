@@ -8,6 +8,8 @@ from urllib.request import Request, urlopen
 import streamlit as st
 from supabase import Client, create_client
 
+from core.env_secrets import get_secret, get_secret_str
+
 
 AUTH_STATE_KEYS = [
     "auth_logged_in",
@@ -28,22 +30,17 @@ def get_supabase_auth_client() -> Client:
     client = st.session_state.get("_supabase_auth_client")
     if client is None:
         client = create_client(
-            st.secrets["SUPABASE_URL"],
-            st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
-            if st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
-            else st.secrets["SUPABASE_ANON_KEY"],
+            get_secret_str("SUPABASE_URL", required=True),
+            get_secret("SUPABASE_SERVICE_ROLE_KEY")
+            if get_secret("SUPABASE_SERVICE_ROLE_KEY")
+            else get_secret_str("SUPABASE_ANON_KEY", required=True),
         )
         st.session_state["_supabase_auth_client"] = client
     return client
 
 
 def get_app_url() -> str:
-    raw = str(
-        st.secrets.get(
-            "REDIRECT_URL",
-            st.secrets.get("APP_URL", "http://localhost:8501"),
-        )
-    ).strip()
+    raw = get_secret_str("REDIRECT_URL", get_secret_str("APP_URL", "http://localhost:8501")).strip()
     if not raw:
         raw = "http://localhost:8501"
 
@@ -55,22 +52,12 @@ def get_app_url() -> str:
 
 
 def get_external_login_url() -> str:
-    raw = str(
-        st.secrets.get(
-            "EXTERNAL_LOGIN_URL",
-            "https://viabilidade-sobral-mvp-clean.vercel.app",
-        )
-    ).strip()
+    raw = get_secret_str("EXTERNAL_LOGIN_URL", "https://viabilidade-sobral-mvp-clean.vercel.app").strip()
     return raw.rstrip("/") or "https://viabilidade-sobral-mvp-clean.vercel.app"
 
 
 def get_gateway_url() -> str:
-    raw = str(
-        st.secrets.get(
-            "AUTH_GATEWAY_URL",
-            "https://viabilidade-auth-gateway.onrender.com",
-        )
-    ).strip()
+    raw = get_secret_str("AUTH_GATEWAY_URL", "https://viabilidade-auth-gateway.onrender.com").strip()
     return raw.rstrip("/") or "https://viabilidade-auth-gateway.onrender.com"
 
 
