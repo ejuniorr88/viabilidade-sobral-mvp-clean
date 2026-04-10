@@ -7,6 +7,12 @@ from pathlib import Path
 from datetime import datetime
 from html import escape as _html_escape
 from ui.relatorio_blocks.dicas_valiosas import get_dicas_valiosas
+from ui.report_components import SHARED_CSS
+from ui.relatorio_blocks.unifamiliar_items.item_01_localizacao import get_item_html as get_item_01_html
+from ui.relatorio_blocks.unifamiliar_items.item_05_regras_principais import get_item_html as get_item_05_html
+from ui.relatorio_blocks.unifamiliar_items.item_06_ocupacao_terreo import get_item_html as get_item_06_html
+from ui.relatorio_blocks.unifamiliar_items.item_14_resumo import get_item_html as get_item_14_html
+from ui.relatorio_blocks.unifamiliar_items.item_15_pos_etapa import get_item_html as get_item_15_html
 from ui.relatorio_blocks.figuras_anexo_v import filter_figuras_by_lot_type
 from .zone_descriptions import fetch_zone_description
 from typing import Any, Dict, List, Optional, Sequence
@@ -1066,6 +1072,7 @@ def _render_unifamiliar_report_html(ctx: Dict[str, Any], payload: Dict[str, Any]
 <html>
 <head>
 <meta charset="utf-8">
+{SHARED_CSS}
 <style>
 @page {{ size: A4; margin: 18mm 14mm 18mm 14mm; @bottom-center {{ content: "Página " counter(page); color: #6b7280; font-size: 9px; }} }}
 :root {{ --ink:#1f2937; --muted:#6b7280; --line:#dbe3ee; --brand:#1d4ed8; --brand2:#2563eb; --navy:#1f3b69; --success:#166534; --success-bg:#e9f7ee; --warning:#92400e; --warning-bg:#fff7e6; --danger:#991b1b; --danger-bg:#fdecec; }}
@@ -1132,9 +1139,17 @@ h1,h2,h3,h4,p {{ margin: 0; }}
 </div>
 """)
 
-    body.append(_section_card('Onde está localizado o terreno?', '<p class="lead">Aqui estão os dados principais usados nesta análise.</p><div class="kv-grid" style="margin-top:12px">' + ''.join([
-        _kv_item('Uso informado', 'Residência unifamiliar'), _kv_item('Área do terreno', _fmt_area(area)), _kv_item('Dimensões', f"{_fmt_m(ctx.get('front'))} × {_fmt_m(ctx.get('depth'))}"), _kv_item('Zona', str(ctx.get('zone') or '-')), _kv_item('Subzona / setor', str(ctx.get('subzona') or '-')), _kv_item('Tipo de lote', str(ctx.get('tipo_lote') or '-')), _kv_item('Via', str(ctx.get('via') or '-')), _kv_item('Tipo de via', str(ctx.get('via_tipo') or '-')),
-    ]) + '</div>', 1, '📍 '))
+    body.append(get_item_01_html({
+        'uso_label': 'Residência unifamiliar',
+        'A': area,
+        'W': ctx.get('front'),
+        'D': ctx.get('depth'),
+        'zone': ctx.get('zone'),
+        'subzone_code': ctx.get('subzona'),
+        'tipo_lote': ctx.get('tipo_lote'),
+        'via': ctx.get('via'),
+        'via_tipo': ctx.get('via_tipo'),
+    }))
 
     via_line = f"{ctx.get('via_class')} ({_sigla_nome(str(ctx.get('via_class') or ''))})" if ctx.get('via_norm') and ctx.get('via_class') else str(ctx.get('via_tipo') or 'via local')
     sec2 = [
@@ -1174,7 +1189,7 @@ h1,h2,h3,h4,p {{ margin: 0; }}
             sec6.append(_info_box_html('Opção alternativa — adotando os recuos da zona', ''.join([f'<p>Frontal: <strong>{_html(_fmt_m(ctx.get("rec_fr")))}</strong></p>', f'<p>Laterais: <strong>{_html(_fmt_m(ctx.get("rec_lat")))}</strong> cada</p>', f'<p>Fundo: <strong>{_html(_fmt_m(ctx.get("rec_fun")))}</strong></p>', _formula_box_html(f'Largura útil: {_fmt_m(ctx.get("w_util"))} | Profundidade útil: {_fmt_m(ctx.get("d_util"))}'), _formula_box_html(f'{_fmt_m(ctx.get("w_util"))} × {_fmt_m(ctx.get("d_util"))} = {_fmt_area(a_recuos)}') if a_recuos is not None else ''])))
         else:
             sec6.append(_info_box_html('Terreno irregular', 'Como o lote não é retangular, o relatório não calcula a implantação por recuos. Aqui são apresentados os limites legais por TO, TP e IA.', 'warning'))
-    body.append(_section_card('Quanto posso ocupar no térreo?', ''.join(sec6), 6, '📐 '))
+    body.append(get_item_06_html({'to_max': ctx.get('to_max'), 'A_to': a_to, 'A': area, 'area_pedida': ctx.get('built_ground'), 'A_considerada': ctx.get('a_adotada'), 'excedeu_area': bool(ctx.get('built_ground') is not None and ctx.get('a_adotada') is not None and ctx.get('built_ground') > ctx.get('a_adotada')), 'rec_fr': ctx.get('rec_fr'), 'rec_lat': ctx.get('rec_lat'), 'rec_fun': ctx.get('rec_fun'), 'W_util': ctx.get('w_util'), 'D_util': ctx.get('d_util'), 'A_recuos': ctx.get('a_recuos')}))
 
     sec7: List[str] = []
     if ctx.get('tp_min') is None or a_perm_min is None:
@@ -1221,12 +1236,29 @@ h1,h2,h3,h4,p {{ margin: 0; }}
                 dicas_html.append(_info_box_html('Dica', _html(texto)))
     body.append(_section_card('Dicas valiosas', ''.join(dicas_html), 13, '💡 '))
 
-    body.append(_section_card('Resumo rápido final', '<div class="rule-grid">' + ''.join([
-        _summary_box('Zona', f"{ctx.get('zone')} — {zone_desc_title}", 'default'), _summary_box('TO máxima', _fmt_pct(ctx.get('to_max')), 'default'), _summary_box('TP mínima', _fmt_pct(ctx.get('tp_min')), 'default'), _summary_box('IA máximo', _fmt_int_or_num(ctx.get('ia_max')), 'default'), _summary_box('Altura máxima', _fmt_m(ctx.get('gabarito')), 'default'), _summary_box('Área máxima no térreo', _fmt_area(a_to), 'default'), _summary_box('Área permeável mínima', _fmt_area(a_perm_min), 'default'), _summary_box('Área total máxima', _fmt_area(a_total), 'default')
-    ]) + '</div><p class="lead" style="margin-top:12px">Em resumo: você pode ocupar até a TO máxima da zona no térreo, precisa manter a TP mínima do terreno permeável, pode construir até o IA máximo no total e deve respeitar os limites de altura, recuos e demais exigências urbanísticas.</p>', 14, '📌 '))
+    body.append(get_item_14_html({
+        'uso_label': 'Residência unifamiliar',
+        'zone_title': f"{ctx.get('zone')} — {zone_desc_title}",
+        'tipo_lote': ctx.get('tipo_lote'),
+        'via': ctx.get('via'),
+        'via_tipo': ctx.get('via_tipo'),
+        'to_max': ctx.get('to_max'),
+        'tp_min': ctx.get('tp_min'),
+        'ia_max': ctx.get('ia_max'),
+        'gabarito_m': ctx.get('gabarito'),
+        'A_to': a_to,
+        'A_perm_min': a_perm_min,
+        'A_total': a_total,
+        'area_pedida': ctx.get('built_ground'),
+        'A_considerada': ctx.get('a_adotada'),
+        'excedeu_area': bool(ctx.get('built_ground') is not None and ctx.get('a_adotada') is not None and ctx.get('built_ground') > ctx.get('a_adotada')),
+        'to_projeto_pct': ((ctx.get('a_adotada') / area) * 100.0) if (ctx.get('a_adotada') is not None and area not in (None, 0)) else None,
+        'A_livre': (area - ctx.get('a_adotada')) if (ctx.get('a_adotada') is not None and area is not None) else None,
+        'A_ia_saldo': (a_total - ctx.get('a_adotada')) if (a_total is not None and ctx.get('a_adotada') is not None) else None,
+    }))
 
     sec15 = ['<p class="lead">Após a finalização dos projetos, será necessário dar entrada na documentação junto à Prefeitura para obter o alvará de construção.</p>', _info_box_html('Alvará de Construção Simplificado', _bullet_items(['Documento de identidade do requerente ou representante legal', 'CPF ou CNPJ', 'Matrícula atualizada do imóvel ou documento equivalente', 'Certidão negativa de IPTU', 'Parecer favorável de Adequabilidade Locacional', 'Tabela com índices urbanísticos e áreas da edificação', 'Projeto arquitetônico em arquivo digital', 'ART/RRT do responsável técnico', 'Termo de responsabilidade do responsável técnico', 'Termo de responsabilidade do proprietário', 'Isenção da licença ambiental'])), _info_box_html('Alvará de Construção (Obra Nova)', _bullet_items(['Requerimento único', 'Documento de identidade do requerente ou representante legal', 'CPF ou CNPJ', 'Matrícula atualizada do imóvel', 'Autorização do proprietário, quando necessária', 'BCI', 'ART/RRT com comprovante de pagamento', 'Projeto arquitetônico assinado', 'Projeto hidrossanitário', 'Memorial de cálculo e drenagem pluvial', 'Declaração do SAAE sobre rede de esgoto, quando necessária', 'Aprovação do Corpo de Bombeiros, IPHAN, licenciamento ambiental, PGRSCC, COMAR, DNIT/SOP ou EIV, quando aplicável']))]
-    body.append(_section_card('O que acontece depois desta etapa?', ''.join(sec15), 15, '🏛️ '))
+    body.append(get_item_15_html({}))
 
     body.append(_section_card('Fechamento final', _info_box_html('Fechamento final', 'Este relatório foi pensado para ajudar a entender o terreno de forma mais simples. Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no setor de licenciamento de obras da Prefeitura.'), 16, '✅ '))
     body.append('<div class="footer-note">Documento gerado pelo Viabilidade Fácil com base no mesmo conteúdo exibido na tela do relatório urbanístico.</div></body></html>')
