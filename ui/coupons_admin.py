@@ -10,10 +10,12 @@ from core.env_secrets import get_secret, get_secret_str
 from core.coupons import (
     coupon_has_paid_usage,
     create_coupon_code,
+    delete_coupon_code,
     filter_coupon_usages,
     list_coupon_codes_enriched,
     list_coupon_usages_enriched,
     set_coupon_active,
+    set_coupon_hidden_in_admin,
     summarize_coupon_usages,
     update_coupon_code,
     user_can_manage_coupons,
@@ -260,7 +262,7 @@ def _render_coupon_form(*, mode: str, row: Optional[Dict[str, Any]] = None) -> N
 
 
 def _render_coupon_actions(row: Dict[str, Any]) -> None:
-    c1, c2, c3 = st.columns([1, 1, 1])
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
 
     with c1:
         if st.button("Editar", key=f"coupon_edit_{row.get('id')}"):
@@ -279,20 +281,41 @@ def _render_coupon_actions(row: Dict[str, Any]) -> None:
                 st.error(f"Não foi possível alterar o status do cupom: {exc}")
 
     with c3:
-        owner_status = "Resolvido" if row.get("owner_user_id") else "Pendente"
-        lock_status = " | Uso pago: Sim" if row.get("paid_usage_locked") else " | Uso pago: Não"
-        st.caption(f"owner_user_id: {owner_status}{lock_status}")
+        hide_label = "Mostrar na lista" if bool(row.get("admin_hidden")) else "Apagar da lista"
+        if st.button(hide_label, key=f"coupon_hide_{row.get('id')}"):
+            try:
+                set_coupon_hidden_in_admin(coupon_id=row.get("id"), hidden=not bool(row.get("admin_hidden")))
+                st.success("Confirmar remoção da lista" if not bool(row.get("admin_hidden")) else "Cupom restaurado para a lista.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Não foi possível alterar a visibilidade do cupom: {exc}")
+
+    with c4:
+        if st.button("Excluir", key=f"coupon_delete_{row.get('id')}"):
+            try:
+                delete_coupon_code(coupon_id=row.get("id"))
+                st.success("Cupom excluído com sucesso.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Não foi possível excluir o cupom: {exc}")
+
+    owner_status = "Resolvido" if row.get("owner_user_id") else "Pendente"
+    lock_status = " | Uso pago: Sim" if row.get("paid_usage_locked") else " | Uso pago: Não"
+    hidden_status = " | admin_hidden: Sim" if row.get("admin_hidden") else " | admin_hidden: Não"
+    st.caption(f"owner_user_id: {owner_status}{lock_status}{hidden_status}")
 
 
 def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:
     st.markdown("#### Cupons cadastrados")
-    if not rows:
+    show_hidden = st.checkbox("Mostrar cupons removidos da lista", value=False, key="show_hidden_coupons")
+    visible_rows = rows if show_hidden else [row for row in rows if not row.get("admin_hidden")]
+    if not visible_rows:
         st.info("Nenhum cupom cadastrado ainda.")
         return
 
     editing_id = st.session_state.get("coupon_editing_id")
 
-    for row in rows:
+    for row in visible_rows:
         with st.container(border=True):
             st.markdown(f"**{row.get('code') or '—'}**", unsafe_allow_html=True)
             st.markdown(_coupon_status_badges(row), unsafe_allow_html=True)
