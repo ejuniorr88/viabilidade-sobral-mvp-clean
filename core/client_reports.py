@@ -7,8 +7,6 @@ from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
 
 import streamlit as st
-
-from core.env_secrets import get_secret, get_secret_str
 from supabase import Client, create_client
 
 _BUCKET = "client-reports"
@@ -16,10 +14,14 @@ _TZ = ZoneInfo("America/Fortaleza")
 
 
 def _read_secret(key: str) -> str:
-    value = get_secret(key)
+    value = None
+    try:
+        value = st.secrets.get(key)
+    except Exception:
+        value = None
     if value:
         return str(value)
-    raise RuntimeError(f"Secret/variável ausente: {key}")
+    raise RuntimeError(f"Secret ausente: {key}")
 
 
 @st.cache_resource(show_spinner=False)
@@ -27,7 +29,7 @@ def get_supabase_service_client() -> Client:
     url = _read_secret("SUPABASE_URL")
     key = None
     try:
-        key = get_secret("SUPABASE_SERVICE_ROLE_KEY")
+        key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
     except Exception:
         key = None
     if not key:
@@ -68,6 +70,21 @@ def _pick_bool(*values: Any) -> bool:
 
 def _safe_local_now() -> datetime:
     return datetime.now(_TZ)
+
+
+
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    try:
+        json.dumps(value, ensure_ascii=False, default=str)
+        return value
+    except Exception:
+        return str(value)
 
 
 def _build_title(calc: Dict[str, Any], session_state: Dict[str, Any]) -> str:
@@ -208,6 +225,7 @@ def save_client_report(
         "report_context": {
             "saved_at_local": local_now.isoformat(),
             "saved_at_label": local_now.strftime("%d/%m/%Y %H:%M"),
+            "viewer_version": "inline_report_snapshot_v1",
             "inputs_snapshot": {
                 "project_mode": _normalize_text(calc.get("project_mode")),
                 "built_ground_m2": _normalize_number(_pick_value(session_state.get("built_ground_m2"), session_state.get("built_ground_input_m2"), calc.get("built_ground_m2"), calc.get("built_ground_input_m2"))),
@@ -215,6 +233,8 @@ def save_client_report(
                 "lot_front_m": _normalize_number(_pick_value(session_state.get("lot_front_m"), session_state.get("lot_testada_m"), calc.get("lot_front_m"), calc.get("lot_testada_m"))),
                 "lot_depth_m": _normalize_number(_pick_value(session_state.get("lot_depth_m"), session_state.get("lot_profundidade_m"), calc.get("lot_depth_m"), calc.get("lot_profundidade_m"))),
             },
+            "calc_snapshot": _json_safe(calc),
+            "session_snapshot": _json_safe(session_state),
         },
     }
 
