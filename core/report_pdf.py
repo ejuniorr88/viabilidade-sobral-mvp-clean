@@ -3,23 +3,14 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from pathlib import Path
 from datetime import datetime
-from html import escape as _html_escape
 from ui.relatorio_blocks.dicas_valiosas import get_dicas_valiosas
 from ui.relatorio_blocks.figuras_anexo_v import filter_figuras_by_lot_type
 from .zone_descriptions import fetch_zone_description
 from typing import Any, Dict, List, Optional, Sequence
 from urllib.request import urlopen
 
-from core.env_secrets import get_secret
-
 from fpdf import FPDF
-
-try:
-    from weasyprint import HTML
-except Exception:  # pragma: no cover
-    HTML = None
 
 try:
     from PIL import Image
@@ -82,16 +73,21 @@ class _ReportPDF(FPDF):
         self.rect(x, y, w, h, style=style)
 
     def header(self) -> None:
-        self.set_font("Helvetica", "B", 20)
-        self.set_text_color(24, 41, 74)
-        self.cell(0, 9, _sanitize("RELATORIO URBANISTICO"), new_x="LMARGIN", new_y="NEXT")
-        self.set_font("Helvetica", "", 10)
-        self.set_text_color(105, 105, 105)
-        self.cell(0, 5, _sanitize("Viabilidade Facil / Viabilidade Urbana Sobral"), new_x="LMARGIN", new_y="NEXT")
-        self.ln(2)
-        self.set_draw_color(220, 224, 230)
-        self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
-        self.ln(5)
+        # Cabeçalho mais limpo e profissional, sem alterar conteúdo do relatório.
+        self.set_fill_color(241, 245, 249)
+        self.rect(0, 0, self.w, 17, style="F")
+        self.set_draw_color(226, 232, 240)
+        self.line(self.l_margin, 16.4, self.w - self.r_margin, 16.4)
+
+        self.set_y(6.2)
+        self.set_font("Helvetica", "B", 17)
+        self.set_text_color(15, 23, 42)
+        self.cell(0, 6.8, _sanitize("RELATORIO URBANISTICO"), new_x="LMARGIN", new_y="NEXT")
+
+        self.set_font("Helvetica", "", 9)
+        self.set_text_color(71, 85, 105)
+        self.cell(0, 4.2, _sanitize("Viabilidade Facil / Viabilidade Urbana Sobral"), new_x="LMARGIN", new_y="NEXT")
+        self.ln(3)
         self.set_text_color(0, 0, 0)
 
     def footer(self) -> None:
@@ -194,11 +190,20 @@ def _ensure_space(pdf: _ReportPDF, needed_h: float) -> None:
 
 
 def _section_title(pdf: _ReportPDF, title: str, *, small: bool = False) -> None:
-    _ensure_space(pdf, 12)
+    _ensure_space(pdf, 14)
     pdf.ln(2)
-    pdf.set_font("Helvetica", "B", 13 if small else 16)
-    pdf.set_text_color(24, 41, 74)
-    pdf.multi_cell(_full_width(pdf), 7, _sanitize(title))
+    y = pdf.get_y()
+    x = pdf.l_margin
+    # barra lateral sutil para reforçar identidade visual
+    pdf.set_fill_color(30, 41, 59)
+    pdf.rounded_rect(x, y + 0.7, 3.2, 8.0 if small else 8.6, 0.8, style="F")
+    pdf.set_xy(x + 6.0, y)
+    pdf.set_font("Helvetica", "B", 12.2 if small else 15.2)
+    pdf.set_text_color(15, 23, 42)
+    pdf.multi_cell(_full_width(pdf) - 6.0, 6.6, _sanitize(title))
+    pdf.set_draw_color(226, 232, 240)
+    pdf.line(pdf.l_margin, pdf.get_y() + 1.0, pdf.w - pdf.r_margin, pdf.get_y() + 1.0)
+    pdf.ln(3)
     pdf.set_text_color(0, 0, 0)
 
 
@@ -294,24 +299,28 @@ def _simple_table(pdf: _ReportPDF, headers: List[str], rows: List[List[str]], wi
 
 
 def _status_box(pdf: _ReportPDF, text: str, ok: bool) -> None:
-    _ensure_space(pdf, 10)
+    _ensure_space(pdf, 12)
     y = pdf.get_y()
     x = pdf.l_margin
     w = _full_width(pdf)
-    pdf.set_draw_color(220, 224, 230)
-    if ok:
-        pdf.set_fill_color(231, 245, 236)
-        pdf.set_text_color(27, 112, 61)
-    else:
-        pdf.set_fill_color(252, 238, 238)
-        pdf.set_text_color(153, 52, 52)
-    pdf.rounded_rect(x, y, w, 8.5, 1.4, style="DF")
-    pdf.set_xy(x + 3, y + 2.2)
-    pdf.set_font("Helvetica", "B", 10.5)
-    prefix = "OK - " if ok else "ATENCAO - "
-    pdf.cell(w - 6, 4.0, _sanitize(prefix + text))
+    tone_fill = (236, 253, 245) if ok else (254, 242, 242)
+    tone_draw = (187, 247, 208) if ok else (254, 202, 202)
+    tone_text = (22, 101, 52) if ok else (153, 27, 27)
+    accent = (22, 101, 52) if ok else (185, 28, 28)
+
+    pdf.set_fill_color(*tone_fill)
+    pdf.set_draw_color(*tone_draw)
+    pdf.rounded_rect(x, y, w, 10.8, 1.8, style="DF")
+    pdf.set_fill_color(*accent)
+    pdf.rounded_rect(x, y, 4.5, 10.8, 1.8, style="F")
+
+    pdf.set_xy(x + 7, y + 2.0)
+    pdf.set_font("Helvetica", "B", 10.3)
+    pdf.set_text_color(*tone_text)
+    prefix = "ATENDE" if ok else "ATENCAO"
+    pdf.multi_cell(w - 11, 5.0, _sanitize(f"{prefix} - {text}"), border=0)
     pdf.set_text_color(0, 0, 0)
-    pdf.set_y(y + 11)
+    pdf.set_y(y + 13.2)
 
 
 def _build_public_storage_url(bucket: str, path: str) -> Optional[str]:
@@ -319,7 +328,7 @@ def _build_public_storage_url(bucket: str, path: str) -> Optional[str]:
     if not base:
         try:
             import streamlit as st
-            base = (get_secret("SUPABASE_URL") or "").rstrip("/")
+            base = (st.secrets.get("SUPABASE_URL") or "").rstrip("/")
         except Exception:
             base = ""
     if not base or not bucket or not path:
@@ -432,18 +441,6 @@ def _extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dic
     uso = _pick_text(calc.get("use_type_code"), default="RES_UNI")
     subzona = _pick_text(rule.get("subzona"), rule.get("subzone_code"), default="-")
 
-    zone_sigla = _pick_text(calc.get("zone_sigla"), zone)
-    subzone_code = _pick_text(calc.get("subzone_code"), rule.get("subzone_code"), default="PADRAO")
-    zone_label = _pick_text(calc.get("zone_label_raw"), zone)
-    zone_desc = _fetch_zone_description(
-        zone_sigla=zone_sigla,
-        subzone_code=subzone_code,
-        zone_label=zone_label,
-    )
-    zone_class, via_class, adeq_dbg = _fetch_adequabilidade_unifamiliar(zone_sigla=zone_sigla, via_tipo_texto=via_tipo)
-    via_norm = _via_tipo_norm(via_tipo)
-    icon, status_curto, explicacao = _summarize_adequabilidade(zone_class=zone_class, via_norm=via_norm, via_class=via_class)
-
     return {
         "rule": rule,
         "area": area,
@@ -462,7 +459,6 @@ def _extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dic
         "to_max": to_max,
         "tp_min": tp_min,
         "ia_max": ia_max,
-        "ia_min": _pick_number(rule.get("ia_min"), calc.get("ia_min")),
         "rec_fr": rec_fr,
         "rec_lat": rec_lat,
         "rec_fun": rec_fun,
@@ -476,187 +472,16 @@ def _extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dic
         "a_op1_max": a_op1_max,
         "a_op2_max": a_op2_max,
         "a_adotada": a_adotada,
-        "zone_description": zone_desc,
-        "zone_sigla": zone_sigla,
-        "subzone_code": subzone_code,
-        "zone_label": zone_label,
-        "zone_title": _pick_text((zone_desc or {}).get("title"), default=zone_sigla or zone),
-        "zone_class": zone_class,
-        "via_class": via_class,
-        "adeq_dbg": adeq_dbg,
-        "via_norm": via_norm,
-        "icon": icon,
-        "status_curto": status_curto,
-        "explicacao": explicacao,
-        "pav_est": max(1, int(gabarito // 3.0)) if gabarito is not None and gabarito > 0 else None,
+        "zone_description": _fetch_zone_description(
+            zone_sigla=_pick_text(calc.get("zone_sigla"), zone),
+            subzone_code=_pick_text(calc.get("subzone_code"), rule.get("subzone_code"), default="PADRAO"),
+            zone_label=_pick_text(calc.get("zone_label_raw"), zone),
+        ),
     }
 
 
 
 
-
-def _norm(s: Any) -> str:
-    return str(s or "").strip().upper()
-
-
-def _sigla_nome(sigla: str) -> str:
-    s = _norm(sigla)
-    mapa = {
-        "A": "Adequado",
-        "I": "Inadequado",
-        "AP": "Adequado (pequeno porte)",
-        "AM": "Adequado (medio porte)",
-        "AP/AM": "Depende do porte (pequeno/medio)",
-        "PE": "Projeto especial",
-    }
-    return mapa.get(s, "")
-
-
-def _zone_candidates(z: str) -> List[str]:
-    z0 = _norm(z)
-    cands = [z0]
-    if " " in z0:
-        cands.append(z0.replace(" ", ""))
-    else:
-        import re
-        z_sp = re.sub(r"(\D)(\d)", r"\1 \2", z0)
-        if z_sp != z0:
-            cands.append(z_sp)
-    cands.append(z0.replace("-", " "))
-    out: List[str] = []
-    for c in cands:
-        c = c.strip().upper()
-        if c and c not in out:
-            out.append(c)
-    return out
-
-
-def _via_tipo_norm(v: Any) -> Optional[str]:
-    s = str(v or "").strip().lower()
-    if not s:
-        return None
-    if "arterial" in s and "pais" in s:
-        return "ARTERIAL_PAISAGISTICA"
-    if "coletora" in s and "pais" in s:
-        return "COLETORA_PAISAGISTICA"
-    if "arterial" in s:
-        return "ARTERIAL"
-    if "coletora" in s:
-        return "COLETORA"
-    return None
-
-
-def _get_supabase():
-    try:
-        from core.supabase_client import get_supabase  # type: ignore
-        return get_supabase()
-    except Exception:
-        return None
-
-
-def _fetch_adequabilidade(*, zone_sigla: str, via_tipo_texto: Optional[str], use_type_code: str) -> tuple[Optional[str], Optional[str], Dict[str, Any]]:
-    sb = _get_supabase()
-    debug: Dict[str, Any] = {
-        "zone_sigla_in": zone_sigla,
-        "zone_candidates": [],
-        "use_type_code": use_type_code,
-        "via_tipo_in": via_tipo_texto,
-        "via_tipo_norm": None,
-    }
-    if sb is None:
-        debug["error"] = "supabase_client_not_available"
-        return None, None, debug
-
-    zona = _norm(zone_sigla)
-    use_code = _norm(use_type_code)
-    via_norm = _via_tipo_norm(via_tipo_texto)
-    debug["via_tipo_norm"] = via_norm
-
-    zone_class = None
-    via_class = None
-    try:
-        cands = _zone_candidates(zona)
-        debug["zone_candidates"] = cands
-        res = (
-            sb.table("adequab_zonas_sede")
-            .select("zone_sigla,classificacao")
-            .eq("use_type_code", use_code)
-            .in_("zone_sigla", cands)
-            .limit(1)
-            .execute()
-        )
-        data = getattr(res, "data", None) or []
-        if data:
-            zone_class = (data[0].get("classificacao") or "").strip()
-            debug["zone_hit"] = data[0].get("zone_sigla")
-    except Exception as e:
-        debug["zone_error"] = str(e)
-
-    if via_norm:
-        try:
-            res2 = (
-                sb.table("adequab_vias")
-                .select("classificacao")
-                .eq("use_type_code", use_code)
-                .eq("via_tipo", via_norm)
-                .limit(1)
-                .execute()
-            )
-            data2 = getattr(res2, "data", None) or []
-            if data2:
-                via_class = (data2[0].get("classificacao") or "").strip()
-        except Exception as e:
-            debug["via_error"] = str(e)
-
-    return zone_class, via_class, debug
-
-
-def _fetch_adequabilidade_unifamiliar(zone_sigla: str, via_tipo_texto: str | None) -> tuple[str | None, str | None, dict[str, Any]]:
-    attempts: list[tuple[str, str | None, str | None, dict[str, Any]]] = []
-    for use_code in ("RES_UNI", "RES_MULTI_R21", "RES_MULTI_R22", "RES_MULTI_R3"):
-        zc, vc, dbg = _fetch_adequabilidade(
-            zone_sigla=str(zone_sigla or ""),
-            via_tipo_texto=via_tipo_texto,
-            use_type_code=use_code,
-        )
-        attempts.append((use_code, zc, vc, dbg))
-        if zc or vc:
-            dbg = dict(dbg or {})
-            dbg["resolved_use_type_code"] = use_code
-            return zc, vc, dbg
-    final_dbg = dict(attempts[0][3] if attempts else {})
-    final_dbg["attempts"] = [{"use_type_code": u, "zone_class": z, "via_class": v} for u, z, v, _ in attempts]
-    return None, None, final_dbg
-
-
-def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, via_class: str | None) -> tuple[str, str, str]:
-    z = _norm(zone_class)
-    v = _norm(via_class)
-
-    if not via_norm:
-        if z == "I":
-            return ("❌", "NÃO PERMITE", "A zona indicou I (Inadequado / nao permitido). Em via local, normalmente vale a regra da zona.")
-        if z == "AP/AM":
-            return ("⚠️", "DEPENDE DO PORTE", "A zona indicou AP/AM (depende do porte). Em via local, normalmente vale a regra da zona.")
-        if z == "PE":
-            return ("⚠️", "PROJETO ESPECIAL", "A zona indicou PE (Projeto especial). Pode exigir analise/condicoes extras no licenciamento.")
-        if z in ("A", "AP", "AM"):
-            return ("✅", "PERMITE", "A zona permite. Ainda e obrigatorio cumprir TO, TP, IA, recuos, altura e as demais regras aplicaveis.")
-        return ("⚠️", "SEM DADO", "Nao foi possivel determinar o resultado por zona.")
-
-    if v == "I":
-        return ("❌", "NÃO PERMITE", "O tipo de via indicou I (nao permitido), mesmo que a zona permita.")
-    if z == "I" and v in ("A", "AP", "AM"):
-        return ("⚠️", "POSSÍVEL PELA VIA", "A zona deu I, mas o tipo de via permite. O licenciamento pode considerar o resultado por tipo de via.")
-    if z == "I" and v == "AP/AM":
-        return ("⚠️", "DEPENDE DO PORTE", "A zona deu I, mas o tipo de via deu AP/AM (depende do porte). Pode depender do licenciamento.")
-    if z == "I" and v == "PE":
-        return ("⚠️", "PROJETO ESPECIAL", "A zona deu I, mas o tipo de via indica PE (Projeto especial). Pode exigir analise/condicoes extras.")
-    if z == "AP/AM" or v == "AP/AM":
-        return ("⚠️", "DEPENDE DO PORTE", "Existe indicacao AP/AM (depende do porte). Confira se o empreendimento e pequeno ou medio.")
-    if z == "PE" or v == "PE":
-        return ("⚠️", "PROJETO ESPECIAL", "Existe indicacao PE (Projeto especial). Pode exigir analise/condicoes extras no licenciamento.")
-    return ("✅", "PERMITE", "Zona e/ou tipo de via permitem. Ainda e obrigatorio cumprir TO, TP, IA, recuos, altura e as demais regras aplicaveis.")
 def _fetch_zone_description(zone_sigla: str, subzone_code: str, zone_label: str = "") -> Optional[Dict[str, Any]]:
     try:
         return fetch_zone_description(zone_sigla or "", subzone_code or "PADRAO", zone_label or zone_sigla or "")
@@ -671,39 +496,92 @@ def _render_zone_description_block(pdf: _ReportPDF, ctx: Dict[str, Any]) -> None
         return
     title = _pick_text(desc.get("title"), default="Descricao da zona")
     _section_title(pdf, "DESCRICAO DA ZONA")
+    y = pdf.get_y()
+    x = pdf.l_margin
+    w = _full_width(pdf)
+    pdf.set_fill_color(248, 250, 252)
+    pdf.set_draw_color(226, 232, 240)
+    pdf.rounded_rect(x, y, w, 0.01, 1.5, style="")
+    pdf.rounded_rect(x, y, w, 23, 2.0, style="D")
+    pdf.set_fill_color(241, 245, 249)
+    pdf.rounded_rect(x, y, w, 6.8, 2.0, style="F")
+    pdf.set_xy(x + 3, y + 1.8)
     pdf.set_font("Helvetica", "B", 10.8)
-    pdf.multi_cell(_full_width(pdf), 5.4, _sanitize(title))
-    pdf.ln(0.6)
+    pdf.set_text_color(15, 23, 42)
+    pdf.multi_cell(w - 6, 4.8, _sanitize(title))
+    pdf.set_xy(x + 3, y + 8.8)
     pdf.set_font("Helvetica", "", 10)
-    pdf.multi_cell(_full_width(pdf), 5.3, _sanitize(text))
+    pdf.set_text_color(0, 0, 0)
+    pdf.multi_cell(w - 6, 5.2, _sanitize(text))
+    pdf.ln(2)
+
 
 def _meta_header(pdf: _ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None:
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(110, 110, 110)
-    pdf.cell(0, 5, _sanitize(f"Emitido em: {generated_at}"), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(1)
-
-    pdf.set_fill_color(248, 250, 252)
-    pdf.set_draw_color(225, 229, 235)
-    y = pdf.get_y()
-    pdf.rounded_rect(pdf.l_margin, y, _full_width(pdf), 22, 2.0, style="DF")
-    pdf.set_xy(pdf.l_margin + 3, y + 2.3)
-    pdf.set_font("Helvetica", "B", 12)
     label_uso = "Residencial Unifamiliar" if str(ctx["uso"]).startswith("RES_UNI") else str(ctx["uso"])
-    pdf.cell(0, 5, _sanitize(label_uso))
-    pdf.set_xy(pdf.l_margin + 3, y + 8)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.multi_cell(_full_width(pdf) - 6, 5.3, _sanitize(
-        f"Terreno: {_fmt_area(ctx['area'])}   Dimensoes: {_fmt_m(ctx['front'])} x {_fmt_m(ctx['depth'])}   Zona: {ctx['zone']}   Tipo: {ctx['tipo_lote']}"
+
+    # Hero principal
+    y = pdf.get_y()
+    x = pdf.l_margin
+    w = _full_width(pdf)
+    pdf.set_fill_color(30, 41, 59)
+    pdf.set_draw_color(30, 41, 59)
+    pdf.rounded_rect(x, y, w, 31, 2.4, style="DF")
+
+    pdf.set_xy(x + 4, y + 3)
+    pdf.set_font("Helvetica", "B", 17)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(0, 6, _sanitize(label_uso), new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_x(x + 4)
+    pdf.set_font("Helvetica", "", 9.5)
+    pdf.set_text_color(226, 232, 240)
+    pdf.multi_cell(w - 8, 4.8, _sanitize(
+        f"Zona {ctx['zone']}  |  Via: {ctx['via']}  |  Tipo de lote: {ctx['tipo_lote']}  |  Emitido em: {generated_at}"
     ))
-    pdf.set_x(pdf.l_margin + 3)
-    pdf.set_text_color(95, 95, 95)
-    pdf.multi_cell(_full_width(pdf) - 6, 5.1, _sanitize(
-        f"Via: {ctx['via']} | Tipo de via: {ctx['via_tipo']} | Uso: {ctx['uso']} | Subzona: {ctx['subzona']}"
-    ))
+
+    # Badge do resultado
+    status = _pick_text(ctx.get('rule', {}).get('adequabilidade_status'), ctx.get('rule', {}).get('status_curto'), default='PERMITE')
+    status = 'PERMITE' if 'NAO' not in status.upper() else 'NAO PERMITE'
+    badge_w = 34 if status == 'PERMITE' else 50
+    badge_x = x + w - badge_w - 4
+    badge_y = y + 4
+    if status == 'PERMITE':
+        pdf.set_fill_color(220, 252, 231)
+        pdf.set_text_color(22, 101, 52)
+    else:
+        pdf.set_fill_color(254, 226, 226)
+        pdf.set_text_color(153, 27, 27)
+    pdf.rounded_rect(badge_x, badge_y, badge_w, 8.2, 1.8, style='F')
+    pdf.set_xy(badge_x, badge_y + 2.2)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.cell(badge_w, 3.8, _sanitize(status), align='C')
+
+    # cards resumo
+    card_y = y + 17.2
+    gap = 3
+    card_w = (w - gap * 3) / 4
+    cards = [
+        ('Area do terreno', _fmt_area(ctx['area'])),
+        ('Dimensoes', f"{_fmt_m(ctx['front'])} x {_fmt_m(ctx['depth'])}"),
+        ('Subzona / Setor', ctx['subzona']),
+        ('Tipo de via', ctx['via_tipo']),
+    ]
+    for i, (label, value) in enumerate(cards):
+        cx = x + i * (card_w + gap)
+        pdf.set_fill_color(255, 255, 255)
+        pdf.set_draw_color(226, 232, 240)
+        pdf.rounded_rect(cx, card_y, card_w, 10, 1.6, style='DF')
+        pdf.set_xy(cx + 2.2, card_y + 1.4)
+        pdf.set_font('Helvetica', '', 7.8)
+        pdf.set_text_color(100, 116, 139)
+        pdf.cell(card_w - 4.4, 3.4, _sanitize(label))
+        pdf.set_xy(cx + 2.2, card_y + 4.9)
+        pdf.set_font('Helvetica', 'B', 9.2)
+        pdf.set_text_color(15, 23, 42)
+        pdf.multi_cell(card_w - 4.4, 3.8, _sanitize(value), border=0)
+
     pdf.set_text_color(0, 0, 0)
-    pdf.set_y(y + 25)
+    pdf.set_y(y + 35.5)
 
 
 def _render_localizacao_indices_analise(pdf: _ReportPDF, ctx: Dict[str, Any]) -> None:
@@ -788,21 +666,23 @@ def _render_relatorio_narrativo(pdf: _ReportPDF, ctx: Dict[str, Any]) -> None:
         return a_rest, a_imperm
 
     _section_title(pdf, "6) RELATORIO URBANISTICO", small=True)
-    pdf.set_fill_color(255, 255, 255)
-    pdf.set_draw_color(220, 224, 230)
+    pdf.set_fill_color(248, 250, 252)
+    pdf.set_draw_color(226, 232, 240)
     y = pdf.get_y()
-    pdf.rounded_rect(pdf.l_margin, y, _full_width(pdf), 16, 2.0, style="D")
-    pdf.set_xy(pdf.l_margin + 3, y + 2.5)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.set_text_color(24, 41, 74)
-    pdf.cell(0, 5, _sanitize("RELATORIO URBANISTICO"))
-    pdf.set_xy(pdf.l_margin + 3, y + 8.5)
+    pdf.rounded_rect(pdf.l_margin, y, _full_width(pdf), 18, 2.0, style="DF")
+    pdf.set_fill_color(241, 245, 249)
+    pdf.rounded_rect(pdf.l_margin, y, _full_width(pdf), 6.4, 2.0, style="F")
+    pdf.set_xy(pdf.l_margin + 3, y + 1.6)
+    pdf.set_font("Helvetica", "B", 11.8)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 4.8, _sanitize("LEITURA GUIADA DO TERRENO"))
+    pdf.set_xy(pdf.l_margin + 3, y + 8.0)
     pdf.set_font("Helvetica", "", 9.5)
     pdf.set_text_color(0, 0, 0)
     pdf.multi_cell(_full_width(pdf) - 6, 4.8, _sanitize(
         f"Terreno: {_fmt_area(area)} | Dimensoes: {_fmt_m(front)} x {_fmt_m(depth)} | Zona: {ctx['zone']} | Tipo: {ctx['tipo_lote']}"
     ))
-    pdf.set_y(y + 19)
+    pdf.set_y(y + 21)
 
     _section_title(pdf, "1. Quanto posso ocupar no chao?", small=True)
     if ctx["to_max"] is None or a_to is None:
@@ -912,20 +792,30 @@ def _render_dicas_valiosas(pdf: _ReportPDF, is_corner: bool = False) -> None:
         if isinstance(item, (list, tuple)) and len(item) >= 2:
             titulo = str(item[0] or "").strip()
             texto = str(item[1] or "").strip()
-            if titulo:
-                pdf.set_font("Helvetica", "B", 10.8)
-                pdf.multi_cell(_full_width(pdf), 5.4, _sanitize(titulo + ":"))
-            if texto:
-                pdf.set_font("Helvetica", "", 10)
-                pdf.multi_cell(_full_width(pdf), 5.3, _sanitize(texto))
-                pdf.ln(1)
-            continue
-        texto = str(item or "").strip()
+        else:
+            titulo = "Dica"
+            texto = str(item or "").strip()
         if not texto:
             continue
-        pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(_full_width(pdf), 5.3, _sanitize(texto))
-        pdf.ln(1)
+        _ensure_space(pdf, 18)
+        y = pdf.get_y()
+        x = pdf.l_margin
+        w = _full_width(pdf)
+        pdf.set_fill_color(248, 250, 252)
+        pdf.set_draw_color(226, 232, 240)
+        h = 14 if len(texto) < 140 else 18
+        pdf.rounded_rect(x, y, w, h, 1.8, style='DF')
+        pdf.set_fill_color(30, 41, 59)
+        pdf.rounded_rect(x, y, 4.0, h, 1.8, style='F')
+        pdf.set_xy(x + 7, y + 1.8)
+        pdf.set_font('Helvetica', 'B', 10.5)
+        pdf.set_text_color(15, 23, 42)
+        pdf.multi_cell(w - 10, 4.6, _sanitize(titulo))
+        pdf.set_x(x + 7)
+        pdf.set_font('Helvetica', '', 9.6)
+        pdf.set_text_color(0, 0, 0)
+        pdf.multi_cell(w - 10, 4.8, _sanitize(texto))
+        pdf.ln(2)
 
 
 def _render_figuras(pdf: _ReportPDF, figures: List[Dict[str, Any]]) -> None:
@@ -981,473 +871,25 @@ def _render_figuras(pdf: _ReportPDF, figures: List[Dict[str, Any]]) -> None:
                 pass
 
 
-
-def _html(v: Any) -> str:
-    return _html_escape(str(v if v is not None else ""), quote=True)
-
-
-def _status_kind(status_curto: str) -> str:
-    s = _norm(status_curto)
-    if s == "PERMITE":
-        return "success"
-    if s in {"DEPENDE DO PORTE", "PROJETO ESPECIAL", "POSSÍVEL PELA VIA", "SEM DADO"}:
-        return "warning"
-    return "danger"
+def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
+    rule = calc.get("rule") or {}
+    return {
+        "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "calc": calc,
+        "session_state": session_state,
+        "figures": filter_figuras_by_lot_type(_extract_figures_from_rule(rule), is_corner=bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner"))),
+    }
 
 
-def _summary_box(title: str, value: str, tone: str = "default") -> str:
-    return f'<div class="summary-card {tone}"><div class="summary-label">{_html(title)}</div><div class="summary-value">{_html(value)}</div></div>'
-
-
-def _kv_item(label: str, value: str) -> str:
-    return f'<div class="kv-item"><div class="kv-label">{_html(label)}</div><div class="kv-value">{_html(value)}</div></div>'
-
-
-def _bullet_items(items: Sequence[str]) -> str:
-    lis = ''.join(f'<li>{_html(item)}</li>' for item in items if str(item or '').strip())
-    return f'<ul class="bullet-list">{lis}</ul>' if lis else ''
-
-
-def _table_html(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
-    thead = ''.join(f'<th>{_html(h)}</th>' for h in headers)
-    body_rows = []
-    for row in rows:
-        body_rows.append('<tr>' + ''.join(f'<td>{_html(cell)}</td>' for cell in row) + '</tr>')
-    return '<div class="table-wrap no-break"><table><thead><tr>' + thead + '</tr></thead><tbody>' + ''.join(body_rows) + '</tbody></table></div>'
-
-
-def _formula_box_html(text: str) -> str:
-    return f'<div class="formula-box">👉 {_html(text)}</div>'
-
-
-def _info_box_html(title: str, content: str, tone: str = "default") -> str:
-    return f'<div class="info-box {tone} no-break"><div class="info-title">{_html(title)}</div><div class="info-content">{content}</div></div>'
-
-
-def _section_card(title: str, body_html: str, number: int, accent: str = "") -> str:
-    accent_html = f'<span class="section-accent">{_html(accent)}</span>' if accent else ''
-    return (
-        '<section class="section-card">'
-        f'<div class="section-head"><div class="section-badge">{number:02d}</div>'
-        f'<div class="section-title-wrap"><h2>{accent_html}{_html(title)}</h2></div></div>'
-        f'<div class="section-body">{body_html}</div></section>'
-    )
-
-
-def _figure_cards_html(figures: Sequence[Dict[str, Any]]) -> str:
-    cards: List[str] = []
-    for fig in figures:
-        url = str(fig.get("url") or "").strip()
-        title = str(fig.get("title") or "Figura").strip()
-        caption = str(fig.get("caption") or "Anexo V - LC 90/2023").strip()
-        if url:
-            media = f'<img src="{_html(url)}" alt="{_html(title)}">'
-        else:
-            media = '<div class="info-box warning"><div class="info-title">Figura indisponível</div><div class="info-content">Não foi possível carregar a imagem desta figura no modo HTML.</div></div>'
-        cards.append(
-            '<div class="figure-card">'
-            + media +
-            '<div class="figure-meta">'
-            f'<div class="figure-title">{_html(title)}</div>'
-            f'<div class="muted">{_html(caption)}</div>'
-            '</div></div>'
-        )
-    return ''.join(cards)
-
-
-def _render_unifamiliar_report_html(ctx: Dict[str, Any], payload: Dict[str, Any]) -> str:
-    area = ctx.get("area")
-    a_to = ctx.get("a_to")
-    a_perm_min = ctx.get("a_perm_min")
-    a_total = ctx.get("a_total")
-    a_recuos = ctx.get("a_recuos")
-    a_op2_max = ctx.get("a_op2_max")
-    status_curto = str(ctx.get("status_curto") or "")
-    status_kind = _status_kind(status_curto)
-    zone_desc = ctx.get("zone_description") or {}
-    zone_desc_title = _pick_text(zone_desc.get("title"), default=ctx.get("zone_title") or ctx.get("zone") or "-")
-    zone_desc_text = _pick_text(zone_desc.get("description_text"), default="Descrição da zona não encontrada.")
-    ia_min_texto = _fmt_num(ctx.get("ia_min")) if ctx.get("ia_min") is not None else "não informado"
-
-    def tp_scenario(a_terreo: float | None):
-        if a_terreo is None or a_perm_min is None or area in (None, 0):
-            return None
-        a_rest = area - a_terreo
-        a_imperm = a_rest - a_perm_min
-        return a_rest, a_imperm
-
-    figures = payload.get("figures", []) or []
-    label_uso = "Residencial Unifamiliar" if str(ctx.get("uso") or "").startswith("RES_UNI") else str(ctx.get("uso") or "-")
-
-    cover_summary = ''.join([
-        _summary_box('Uso', label_uso, 'default'),
-        _summary_box('Zona', str(ctx.get('zone') or '-'), 'default'),
-        _summary_box('Via', str(ctx.get('via') or '-'), 'default'),
-        _summary_box('Resultado', status_curto or '-', status_kind),
-    ])
-
-    body: List[str] = []
-    body.append(f"""
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-@page {{ size: A4; margin: 14mm 12mm 16mm 12mm; @bottom-center {{ content: "Página " counter(page); color: #7c8797; font-size: 9px; }} }}
-:root {{
-  --bg:#f4f6fb;
-  --surface:#ffffff;
-  --surface-soft:#f8fbff;
-  --line:#dde5f0;
-  --line-strong:#cad6e5;
-  --text:#243447;
-  --muted:#6b7280;
-  --brand:#1f3b69;
-  --brand-2:#2f6fd6;
-  --brand-soft:#edf4ff;
-  --success:#1b6f3d;
-  --success-bg:#e8f6ee;
-  --success-line:#b8e0c5;
-  --warning:#9a6700;
-  --warning-bg:#fff7e8;
-  --warning-line:#f3d49a;
-  --danger:#a63d40;
-  --danger-bg:#fdeeee;
-  --danger-line:#efc4c4;
-}}
-* {{ box-sizing: border-box; }}
-html, body {{ margin:0; padding:0; }}
-body {{ font-family: DejaVu Sans, Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 10pt; line-height: 1.5; }}
-p, h1, h2, h3, h4 {{ margin:0; }}
-.page-shell {{ background: transparent; }}
-.report-card {{ background: var(--surface); border:1px solid var(--line); border-radius: 20px; padding: 22px; box-shadow: 0 8px 26px rgba(31,59,105,.05); }}
-.header-kicker {{ color: var(--brand-2); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 6px; }}
-.header-grid {{ display:grid; grid-template-columns: 1.35fr .75fr; gap: 18px; align-items:flex-start; }}
-.header-main h1 {{ color: var(--brand); font-size: 24px; line-height: 1.1; font-weight: 800; margin-bottom: 6px; }}
-.header-subtitle {{ color: var(--muted); font-size: 10.2px; }}
-.header-meta {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 16px; padding: 14px 15px; text-align: right; }}
-.header-meta .meta-label {{ color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }}
-.header-meta .meta-value {{ color: var(--brand); font-size: 11.5px; font-weight: 800; }}
-.hero-status {{ margin-top: 16px; display:grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }}
-.status-banner {{ border-radius: 18px; border:1px solid var(--line); padding: 16px 17px; }}
-.status-banner.success {{ background: var(--success-bg); border-color: var(--success-line); }}
-.status-banner.warning {{ background: var(--warning-bg); border-color: var(--warning-line); }}
-.status-banner.danger {{ background: var(--danger-bg); border-color: var(--danger-line); }}
-.status-banner .status-top {{ font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }}
-.status-banner .status-value {{ font-size: 20px; line-height: 1.1; font-weight: 800; margin-bottom: 8px; }}
-.status-banner.success .status-value {{ color: var(--success); }}
-.status-banner.warning .status-value {{ color: var(--warning); }}
-.status-banner.danger .status-value {{ color: var(--danger); }}
-.status-banner .status-desc {{ font-size: 10px; color: #374151; }}
-.summary-grid {{ display:grid; grid-template-columns: repeat(2,1fr); gap: 10px; }}
-.summary-card {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 14px; padding: 12px 13px; min-height: 66px; }}
-.summary-card.success {{ background: var(--success-bg); border-color: var(--success-line); }}
-.summary-card.warning {{ background: var(--warning-bg); border-color: var(--warning-line); }}
-.summary-card.danger {{ background: var(--danger-bg); border-color: var(--danger-line); }}
-.summary-label {{ color: var(--muted); font-size: 8.8px; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 6px; }}
-.summary-value {{ color: var(--brand); font-size: 12.2px; font-weight: 800; line-height: 1.25; }}
-.summary-card.success .summary-value {{ color: var(--success); }}
-.summary-card.warning .summary-value {{ color: var(--warning); }}
-.summary-card.danger .summary-value {{ color: var(--danger); }}
-.intro-card {{ margin-top: 16px; background: var(--surface); border:1px solid var(--line); border-radius: 18px; padding: 16px 18px; }}
-.intro-title {{ color: var(--brand); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }}
-.intro-grid {{ display:grid; grid-template-columns: 1.25fr .95fr; gap: 14px; margin-top: 12px; }}
-.panel {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 16px; padding: 14px; }}
-.panel-title {{ color: var(--brand); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }}
-.kv-grid {{ display:grid; grid-template-columns: repeat(2,1fr); gap: 9px; }}
-.kv-item {{ background: var(--surface); border:1px solid var(--line); border-radius: 12px; padding: 10px 11px; min-height: 56px; }}
-.kv-label {{ color: var(--muted); font-size: 8.8px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }}
-.kv-value {{ color: #0f172a; font-size: 10.6px; font-weight: 800; line-height: 1.35; }}
-.rule-chip-row {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }}
-.rule-chip {{ background: var(--surface); border:1px solid var(--line); border-radius: 999px; padding: 6px 10px; color: var(--brand); font-size: 8.8px; font-weight: 700; }}
-.section-card {{ margin-top: 14px; background: var(--surface); border:1px solid var(--line); border-radius: 18px; padding: 16px 18px; page-break-inside: avoid; box-shadow: 0 4px 18px rgba(31,59,105,.03); }}
-.section-head {{ display:flex; gap: 11px; align-items:center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e8eef6; }}
-.section-badge {{ width: 31px; height: 31px; border-radius: 50%; background: linear-gradient(135deg, var(--brand-2) 0%, var(--brand) 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-size: 10px; font-weight: 800; }}
-.section-title-wrap h2 {{ color: var(--brand); font-size: 16px; line-height: 1.2; font-weight: 800; }}
-.section-accent {{ margin-right: 4px; }}
-.lead {{ color: #3a4758; font-size: 10.2px; margin-bottom: 8px; }}
-.formula-box {{ margin: 10px 0; background: var(--brand-soft); border:1px solid #d3e2ff; border-left:4px solid var(--brand-2); border-radius: 12px; padding: 11px 13px; font-size: 12.4px; font-weight: 800; color: var(--brand); }}
-.info-box {{ margin-top: 10px; background: var(--surface-soft); border:1px solid var(--line); border-radius: 14px; padding: 12px 13px; }}
-.info-box.success {{ background: var(--success-bg); border-color: var(--success-line); }}
-.info-box.warning {{ background: var(--warning-bg); border-color: var(--warning-line); }}
-.info-box.danger {{ background: var(--danger-bg); border-color: var(--danger-line); }}
-.info-title {{ color: var(--brand); font-size: 10px; font-weight: 800; margin-bottom: 6px; }}
-.info-content {{ color:#334155; font-size: 10px; }}
-.metric-grid {{ display:grid; grid-template-columns: repeat(3,1fr); gap: 10px; }}
-.metric-card {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 14px; padding: 12px 13px; }}
-.metric-label {{ color: var(--muted); font-size: 8.6px; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 6px; }}
-.metric-value {{ color: var(--brand); font-size: 16px; font-weight: 800; line-height: 1.1; }}
-.table-wrap {{ margin-top: 10px; overflow: hidden; border:1px solid var(--line); border-radius: 14px; }}
-.table-wrap table {{ width:100%; border-collapse: collapse; font-size: 9.2px; }}
-.table-wrap thead th {{ background: var(--brand-soft); color: var(--brand); text-align:left; padding: 9px 10px; font-weight: 800; border-bottom:1px solid var(--line); }}
-.table-wrap tbody td {{ padding: 8px 10px; border-bottom:1px solid #edf1f5; vertical-align: top; }}
-.table-wrap tbody tr:nth-child(even) td {{ background: #fbfdff; }}
-.bullet-list {{ margin: 8px 0 0 18px; padding:0; }}
-.bullet-list li {{ margin-bottom: 4px; }}
-.legend-grid {{ display:grid; grid-template-columns: 1fr 1.2fr 1.8fr; gap:0; }}
-.legend-grid .legend-row {{ display: contents; }}
-.legend-grid .legend-head {{ background: var(--brand-soft); color: var(--brand); font-weight: 800; font-size: 9px; padding: 9px 10px; border-bottom:1px solid var(--line); }}
-.legend-grid .legend-cell {{ background: white; padding: 9px 10px; font-size: 9.4px; border-bottom:1px solid #edf1f5; }}
-.legend-grid .legend-row:nth-child(even) .legend-cell {{ background:#fbfdff; }}
-.figure-stack {{ display:flex; flex-direction:column; gap: 14px; margin-top: 10px; }}
-.figure-card {{ border:1px solid var(--line); border-radius: 16px; overflow:hidden; background:#fff; page-break-inside: avoid; }}
-.figure-card img {{ display:block; width:100%; height:auto; }}
-.figure-meta {{ padding: 12px 14px; }}
-.figure-title {{ color: var(--brand); font-size: 12px; font-weight: 800; margin-bottom: 4px; }}
-.resumo-grid {{ display:grid; grid-template-columns: repeat(4,1fr); gap: 10px; }}
-.checklist-box {{ background: var(--surface-soft); border:1px solid var(--line); border-radius: 16px; padding: 14px; }}
-.checklist-title {{ color: var(--brand); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing:.08em; margin-bottom: 8px; }}
-.footer-note {{ margin-top: 18px; text-align:center; color: var(--muted); font-size: 9px; }}
-.muted {{ color: var(--muted); font-size: 9.2px; }}
-.page-break-before {{ break-before: page; page-break-before: always; }}
-.no-break {{ break-inside: avoid; page-break-inside: avoid; }}
-</style>
-</head>
-<body>
-<div class="page-shell">
-  <div class="report-card">
-    <div class="header-kicker">Relatório urbanístico</div>
-    <div class="header-grid">
-      <div class="header-main">
-        <h1>{_html(label_uso)}</h1>
-        <div class="header-subtitle">Viabilidade Fácil / Viabilidade Urbana Sobral</div>
-      </div>
-      <div class="header-meta">
-        <div class="meta-label">Emitido em</div>
-        <div class="meta-value">{_html(payload.get('generated_at') or '-')}</div>
-      </div>
-    </div>
-    <div class="hero-status">
-      <div class="status-banner {status_kind}">
-        <div class="status-top">Resultado da adequabilidade</div>
-        <div class="status-value">{_html(status_curto or '-')}</div>
-        <div class="status-desc">{_html(str(ctx.get('explicacao') or ''))}</div>
-      </div>
-      <div class="summary-grid">{cover_summary}</div>
-    </div>
-    <div class="intro-card">
-      <div class="intro-title">Visão geral do estudo</div>
-      <p>Este relatório mostra, de forma simples, o que pode ou não pode ser feito no terreno informado, com base na zona, na via e nas regras urbanísticas do município. A ideia aqui é facilitar a leitura: primeiro mostramos onde o terreno está, depois se o uso é viável, e em seguida explicamos os principais limites do lote, como ocupação, área livre, altura, vagas, ambientes mínimos e calçada.</p>
-      <div class="intro-grid">
-        <div class="panel">
-          <div class="panel-title">Dados principais do estudo</div>
-          <div class="kv-grid">
-            {_kv_item('Área do terreno', _fmt_area(ctx.get('area')))}
-            {_kv_item('Dimensões', f"{_fmt_m(ctx.get('front'))} × {_fmt_m(ctx.get('depth'))}")}
-            {_kv_item('Tipo de lote', str(ctx.get('tipo_lote') or '-'))}
-            {_kv_item('Subzona / setor', str(ctx.get('subzona') or '-'))}
-            {_kv_item('Via', str(ctx.get('via') or '-'))}
-            {_kv_item('Tipo de via', str(ctx.get('via_tipo') or '-'))}
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-title">Leitura rápida</div>
-          <div class="rule-chip-row">
-            <div class="rule-chip">Uso: { _html(label_uso) }</div>
-            <div class="rule-chip">Zona: { _html(str(ctx.get('zone') or '-')) }</div>
-            <div class="rule-chip">Via: { _html(str(ctx.get('via') or '-')) }</div>
-            <div class="rule-chip">Resultado: { _html(status_curto or '-') }</div>
-          </div>
-        </div>
-      </div>
-    </div>
-""")
-
-    sec1 = ''.join([
-        '<p class="lead">Aqui estão os dados principais usados nesta análise.</p>',
-        '<div class="kv-grid">',
-        _kv_item('Uso informado', label_uso),
-        _kv_item('Área do terreno', _fmt_area(ctx.get('area'))),
-        _kv_item('Dimensões', f"{_fmt_m(ctx.get('front'))} × {_fmt_m(ctx.get('depth'))}"),
-        _kv_item('Zona', str(ctx.get('zone') or '-')),
-        _kv_item('Subzona / setor', str(ctx.get('subzona') or '-')),
-        _kv_item('Tipo de lote', str(ctx.get('tipo_lote') or '-')),
-        _kv_item('Via', str(ctx.get('via') or '-')),
-        _kv_item('Tipo de via', str(ctx.get('via_tipo') or '-')),
-        '</div>',
-    ])
-    body.append(_section_card('Onde está localizado o terreno?', sec1, 1))
-
-    sec2 = ''.join([
-        '<p class="lead">Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.</p>',
-        '<div class="metric-grid">',
-        f'<div class="metric-card"><div class="metric-label">Por zona</div><div class="metric-value">{_html((ctx.get("zone_class") or "-") + ((" (" + _sigla_nome(ctx.get("zone_class")) + ")") if ctx.get("zone_class") else ""))}</div></div>',
-        f'<div class="metric-card"><div class="metric-label">Por via</div><div class="metric-value">{_html((ctx.get("via_class") or ctx.get("via_tipo") or "-" ) + ((" (" + _sigla_nome(ctx.get("via_class")) + ")") if ctx.get("via_class") else ""))}</div></div>',
-        f'<div class="metric-card"><div class="metric-label">Resumo final</div><div class="metric-value">{_html(status_curto or "-")}</div></div>',
-        '</div>',
-        _info_box_html('Resultado', _html(str(ctx.get('explicacao') or '')), status_kind),
-        '<p class="lead" style="margin-top:10px">Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.</p>',
-    ])
-    body.append(_section_card('O uso residencial unifamiliar é viável neste terreno?', sec2, 2))
-
-    porte_rows = [
-        ['Pequeno', 'até 250 m²', 'Pode se enquadrar em leituras AP.'],
-        ['Médio', '250,01 m² até 1.000 m²', 'Pode se enquadrar em leituras AM.'],
-        ['Grande', '1.000,01 m² até 5.000 m²', 'Pode depender da zona/via e do licenciamento.'],
-        ['Projeto especial', 'acima de 5.000,01 m²', 'Pode exigir análise específica e condições extras.'],
-    ]
-    sec3 = '<p class="lead">No unifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o tipo da via.</p>' + _table_html(['Porte', 'Faixa de área', 'Leitura prática'], porte_rows)
-    body.append(_section_card('Como funciona a leitura da adequabilidade no unifamiliar?', sec3, 3))
-
-    legenda_rows = [
-        ['A', 'Adequado / permitido', 'Pode seguir com o projeto, respeitando as demais regras.'],
-        ['I', 'Inadequado / não permitido', 'Em regra, não pode nesse local/condição.'],
-        ['AP', 'Adequado (pequeno porte)', 'Pode, mas normalmente limitado a porte pequeno.'],
-        ['AM', 'Adequado (médio porte)', 'Pode, mas normalmente limitado a porte médio.'],
-        ['AP/AM', 'Depende do porte', 'Pode, mas depende se o caso é pequeno ou médio.'],
-        ['PE', 'Projeto especial', 'Pode exigir análise específica e condições extras no licenciamento.'],
-    ]
-    sec4 = ''.join([
-        '<p class="lead">Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação.</p>',
-        _info_box_html(str(ctx.get('zone') or '-'), f'<p><strong>{_html(zone_desc_title)}</strong></p><p style="margin-top:6px">{_html(zone_desc_text)}</p>'),
-        _table_html(['Sigla', 'O que significa', 'Como interpretar'], legenda_rows),
-    ])
-    body.append(_section_card('O que essa zona permite neste terreno?', sec4, 4))
-
-    regras_cards = ''.join([
-        _summary_box('TO máxima', _fmt_pct(ctx.get('to_max')), 'default'),
-        _summary_box('TP mínima', _fmt_pct(ctx.get('tp_min')), 'default'),
-        _summary_box('IA máximo', _fmt_int_or_num(ctx.get('ia_max')), 'default'),
-        _summary_box('IA mínimo', ia_min_texto, 'default'),
-        _summary_box('Recuos', f'F: {_fmt_m(ctx.get("rec_fr"))} | L: {_fmt_m(ctx.get("rec_lat"))} | Fu: {_fmt_m(ctx.get("rec_fun"))}', 'default'),
-        _summary_box('Altura máxima', _fmt_m(ctx.get('gabarito')), 'default'),
-    ])
-    sec5 = '<p class="lead">Depois de entender a zona, o próximo passo é ver as regras básicas do lote.</p><div class="resumo-grid">' + regras_cards + '</div>'
-    body.append(_section_card('Regras principais para este terreno', sec5, 5))
-
-    sec6: List[str] = []
-    if ctx.get('to_max') is not None and a_to is not None:
-        sec6 += [
-            f'<p class="lead">A zona permite ocupar até <strong>{_html(_fmt_pct(ctx.get("to_max")))}</strong> do terreno no térreo.</p>',
-            _formula_box_html(f'{_fmt_area(area)} × {_fmt_pct(ctx.get("to_max"))} = {_fmt_area(a_to)}'),
-            '<p class="lead">Esse é o limite máximo permitido pela Taxa de Ocupação (TO).</p>',
-        ]
-    if ctx.get('is_irregular'):
-        sec6.append(_info_box_html('Terreno irregular', 'Como o lote não é retangular, este relatório não calcula a implantação por recuos. Aqui são apresentados os limites legais por TO, TP e IA.', 'warning'))
-    else:
-        op_cards = ''.join([
-            _summary_box('Frontal', _fmt_m(ctx.get('rec_fr')), 'default'),
-            _summary_box('Laterais', f'{_fmt_m(ctx.get("rec_lat"))} cada', 'default'),
-            _summary_box('Fundo', _fmt_m(ctx.get('rec_fun')), 'default'),
-            _summary_box('Largura útil', _fmt_m(ctx.get('w_util')), 'default'),
-            _summary_box('Profundidade útil', _fmt_m(ctx.get('d_util')), 'default'),
-            _summary_box('Área útil estimada', _fmt_area(a_recuos), 'default'),
-        ])
-        sec6.append(_info_box_html('Opção alternativa — adotando os recuos da zona', '<div class="resumo-grid">' + op_cards + '</div>' + (f'<div class="formula-box">{_html(_fmt_m(ctx.get("w_util")))} × {_html(_fmt_m(ctx.get("d_util")))} = {_html(_fmt_area(a_recuos))}</div>' if a_recuos is not None else '')))
-    sec6.append(_info_box_html('Opção principal — aproveitando a flexibilidade da lei', 'Para residência unifamiliar, a legislação admite zerar o recuo frontal e os recuos laterais, desde que o projeto continue respeitando a TO máxima e a TP mínima.' + (f'<div class="formula-box">Térreo máximo nesta opção: {_html(_fmt_area(a_op2_max))}</div>' if a_op2_max is not None else ''), 'success'))
-    body.append(_section_card('Quanto posso ocupar no térreo?', ''.join(sec6), 6))
-
-    sec7: List[str] = []
-    if ctx.get('tp_min') is not None and a_perm_min is not None:
-        sec7 += [
-            f'<p class="lead">A zona exige <strong>{_html(_fmt_pct(ctx.get("tp_min")))}</strong> de área permeável.</p>',
-            _formula_box_html(f'{_fmt_area(area)} × {_fmt_pct(ctx.get("tp_min"))} = {_fmt_area(a_perm_min)} obrigatórios permeáveis'),
-        ]
-    tp2 = tp_scenario(a_op2_max)
-    if tp2:
-        a_rest, a_imperm = tp2
-        sec7.append(_info_box_html('Cenário pela opção principal', f'<p>Usando <strong>{_html(_fmt_area(a_op2_max))}</strong> no térreo, sobra <strong>{_html(_fmt_area(a_rest))}</strong> no lote.</p><p style="margin-top:6px">Desses, <strong>{_html(_fmt_area(a_perm_min))}</strong> devem permitir infiltração no solo e <strong>{_html(_fmt_area(a_imperm))}</strong> podem receber piso impermeável.</p>'))
-    if a_recuos is not None:
-        tp_recuos = tp_scenario(a_recuos)
-        if tp_recuos:
-            a_rest, a_imperm = tp_recuos
-            sec7.append(_info_box_html('Cenário pela opção com recuos da zona', f'<p>Usando <strong>{_html(_fmt_area(a_recuos))}</strong> no térreo, sobra <strong>{_html(_fmt_area(a_rest))}</strong> no lote.</p><p style="margin-top:6px">Desses, <strong>{_html(_fmt_area(a_perm_min))}</strong> devem permitir infiltração no solo e <strong>{_html(_fmt_area(a_imperm))}</strong> podem receber piso impermeável.</p>'))
-    body.append(_section_card('Quanto preciso deixar livre?', ''.join(sec7), 7))
-
-    body.append(_section_card('Tipos de piso: o que conta como permeável?', '<p class="lead">Nem todo piso externo conta do mesmo jeito na permeabilidade. Veja como a lei trata isso:</p>' + _table_html(['Tipo de Piso', 'Percentual considerado permeável'], [[a, b] for a, b in PERMEABILIDADE_ROWS]) + '<p class="lead" style="margin-top:10px">Isso ajuda a entender que nem toda área “livre” do lote conta 100% como permeável.</p>', 8))
-
-    sec9: List[str] = []
-    if ctx.get('ia_max') is not None and a_total is not None:
-        sec9 += [
-            '<p class="lead">Além da ocupação no térreo, a zona também define o potencial construtivo total do lote por meio do Índice de Aproveitamento (IA).</p>',
-            _formula_box_html(f'{_fmt_area(area)} × {_fmt_int_or_num(ctx.get("ia_max"))} = {_fmt_area(a_total)}'),
-            '<p class="lead">Esse é o total que pode ser distribuído entre térreo e pavimentos superiores, respeitando também os demais parâmetros urbanísticos.</p>',
-        ]
-    if ctx.get('gabarito') is not None:
-        sec9.append(_info_box_html('Altura máxima da zona', f'<p><strong>{_html(_fmt_m(ctx.get("gabarito")))}</strong></p><p style="margin-top:6px">Exemplo simples: adotando pé-direito médio de 3,00 m por pavimento, isso pode permitir algo próximo de <strong>{_html(str(ctx.get("pav_est") or "-"))} pavimentos</strong>, apenas como referência inicial.</p>'))
-    body.append(_section_card('Posso construir mais andares?', ''.join(sec9), 9))
-
-    body.append(_section_card('Preciso de vagas de estacionamento?', _info_box_html('Estacionamento', 'Neste caso, não existe exigência mínima obrigatória de vagas de estacionamento. Essa exigência costuma aparecer em residências multifamiliares e em outras atividades previstas na lei.', 'success'), 10))
-
-    quadro_rows = [[row[h] for h in ['AMBIENTE', 'CIRCULO INSCRITO', 'AREA MINIMA', 'ILUMINACAO', 'VENTILACAO', 'PE-DIREITO', 'OBS.']] for row in QUADRO_ROWS]
-    body.append(_section_card('Quais medidas mínimas os ambientes precisam ter?', '<p class="lead">Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação.</p>' + _table_html(['Ambiente', 'Círculo inscrito', 'Área mínima', 'Iluminação', 'Ventilação', 'Pé-direito', 'Obs.'], quadro_rows) + _info_box_html('Observações aplicáveis', _bullet_items(QUADRO_OBS)), 11))
-
-    sec12 = ['<p class="lead">A análise não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação do lote com a rua.</p>']
-    if figures:
-        sec12.append('<div class="figure-stack">' + _figure_cards_html(figures) + '</div>')
-    else:
-        sec12.append(_info_box_html('Figuras do Anexo V', 'As figuras do Anexo V não estavam disponíveis para este estudo.', 'warning'))
-    body.append(_section_card('O que preciso saber sobre a calçada?', ''.join(sec12), 12))
-
-    dicas_html: List[str] = []
-    for item in get_dicas_valiosas(is_corner=bool(ctx.get('is_corner'))):
-        if isinstance(item, (list, tuple)) and len(item) >= 2:
-            dicas_html.append(_info_box_html(str(item[0] or 'Dica'), _html(str(item[1] or ''))))
-        else:
-            texto = str(item or '').strip()
-            if texto:
-                dicas_html.append(_info_box_html('Dica', _html(texto)))
-    body.append(_section_card('Dicas valiosas', ''.join(dicas_html), 13))
-
-    resumo_cards = ''.join([
-        _summary_box('Zona', f"{ctx.get('zone')} — {zone_desc_title}", 'default'),
-        _summary_box('TO máxima', _fmt_pct(ctx.get('to_max')), 'default'),
-        _summary_box('TP mínima', _fmt_pct(ctx.get('tp_min')), 'default'),
-        _summary_box('IA máximo', _fmt_int_or_num(ctx.get('ia_max')), 'default'),
-        _summary_box('Altura máxima', _fmt_m(ctx.get('gabarito')), 'default'),
-        _summary_box('Área máxima no térreo', _fmt_area(a_to), 'default'),
-        _summary_box('Área permeável mínima', _fmt_area(a_perm_min), 'default'),
-        _summary_box('Área total máxima', _fmt_area(a_total), 'default'),
-    ])
-    body.append(_section_card('Resumo rápido final', '<div class="resumo-grid">' + resumo_cards + '</div><p class="lead" style="margin-top:12px">Em resumo: você pode ocupar até a TO máxima da zona no térreo, precisa manter a TP mínima do terreno permeável, pode construir até o IA máximo no total e deve respeitar os limites de altura, recuos e demais exigências urbanísticas.</p>', 14))
-
-    sec15 = ''.join([
-        '<p class="lead">Após a finalização dos projetos, será necessário dar entrada na documentação junto à Prefeitura para obter o alvará de construção.</p>',
-        '<div class="intro-grid">',
-        '<div class="checklist-box"><div class="checklist-title">Alvará de Construção Simplificado</div>' + _bullet_items(['Documento de identidade do requerente ou representante legal', 'CPF ou CNPJ', 'Matrícula atualizada do imóvel ou documento equivalente', 'Certidão negativa de IPTU', 'Parecer favorável de Adequabilidade Locacional', 'Tabela com índices urbanísticos e áreas da edificação', 'Projeto arquitetônico em arquivo digital', 'ART/RRT do responsável técnico', 'Termo de responsabilidade do responsável técnico', 'Termo de responsabilidade do proprietário', 'Isenção da licença ambiental']) + '</div>',
-        '<div class="checklist-box"><div class="checklist-title">Alvará de Construção (Obra Nova)</div>' + _bullet_items(['Requerimento único', 'Documento de identidade do requerente ou representante legal', 'CPF ou CNPJ', 'Matrícula atualizada do imóvel', 'Autorização do proprietário, quando necessária', 'BCI', 'ART/RRT com comprovante de pagamento', 'Projeto arquitetônico assinado', 'Projeto hidrossanitário', 'Memorial de cálculo e drenagem pluvial', 'Declaração do SAAE sobre rede de esgoto, quando necessária', 'Aprovação do Corpo de Bombeiros, IPHAN, licenciamento ambiental, PGRSCC, COMAR, DNIT/SOP ou EIV, quando aplicável']) + '</div>',
-        '</div>',
-    ])
-    body.append(_section_card('O que acontece depois desta etapa?', sec15, 15))
-
-    body.append(_section_card('Fechamento final', _info_box_html('Fechamento final', 'Este relatório foi pensado para ajudar a entender o terreno de forma mais simples. Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no setor de licenciamento de obras da Prefeitura.'), 16))
-    body.append('</div><div class="footer-note">Documento gerado pelo Viabilidade Fácil com base no mesmo conteúdo exibido na tela do relatório urbanístico.</div></div></body></html>')
-    return ''.join(body)
-
-
-def _generate_html_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any]) -> bytes:
-    if HTML is None:
-        raise RuntimeError("WeasyPrint nao esta disponivel no ambiente.")
+def generate_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any]) -> bytes:
     payload = build_report_payload(calc, session_state)
-    ctx = _extract_context(calc, session_state)
-    html = _render_unifamiliar_report_html(ctx, payload)
-    base_url = str(Path(__file__).resolve().parent.parent)
-    return HTML(string=html, base_url=base_url).write_pdf()
-
-
-def _render_html_fallback_warning(pdf: _ReportPDF, reason: str) -> None:
-    _section_title(pdf, "AVISO SOBRE A GERACAO DO PDF")
-    _status_box(
-        pdf,
-        "Nao foi possivel renderizar o PDF em HTML com a identidade visual reforcada. O sistema gerou automaticamente a versao de contingencia para nao interromper o download.",
-        False,
-    )
-    _paragraph(pdf, "Motivo tecnico identificado:", bold=True)
-    _paragraph(pdf, reason, color=(153, 52, 52))
-    _paragraph(pdf, "Acao recomendada: verificar a instalacao do WeasyPrint/dependencias e gerar o PDF novamente.")
-    pdf.ln(1)
-
-
-def _generate_legacy_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any], *, html_failure_reason: str | None = None) -> bytes:
-    payload = build_report_payload(calc, session_state)
-    pdf = _ReportPDF()
+    pdf = _ReportPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=12)
     pdf.set_margins(14, 24, 14)
     pdf.add_page()
 
     ctx = _extract_context(calc, session_state)
     _meta_header(pdf, ctx, payload["generated_at"])
-    if html_failure_reason:
-        _render_html_fallback_warning(pdf, html_failure_reason)
     _render_localizacao_indices_analise(pdf, ctx)
     _render_zone_description_block(pdf, ctx)
     _render_relatorio_narrativo(pdf, ctx)
@@ -1465,22 +907,3 @@ def _generate_legacy_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[
     if isinstance(result, bytes):
         return result
     return result.encode("latin-1", errors="replace")
-def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
-    rule = calc.get("rule") or {}
-    return {
-        "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "calc": calc,
-        "session_state": session_state,
-        "figures": filter_figuras_by_lot_type(_extract_figures_from_rule(rule), is_corner=bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner"))),
-    }
-
-
-def generate_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any]) -> bytes:
-    use_code = str((calc or {}).get("use_type_code") or "RES_UNI").upper().strip()
-    if use_code.startswith("RES_UNI"):
-        try:
-            return _generate_html_report_pdf_bytes(calc, session_state)
-        except Exception as exc:
-            reason = str(exc).strip() or exc.__class__.__name__
-            return _generate_legacy_report_pdf_bytes(calc, session_state, html_failure_reason=reason)
-    return _generate_legacy_report_pdf_bytes(calc, session_state)
