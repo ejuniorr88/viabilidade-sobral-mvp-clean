@@ -579,11 +579,13 @@ def _sync_current_payment_state(supabase, current_user_id: str) -> None:
         merged.update(latest_payment)
         st.session_state["current_payment_snapshot"] = merged
         st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
-        credit_result = (result or {}).get("credit_result") or {}
-        if credit_result.get("credited") or credit_result.get("reason") == "already_credited":
+        if bool((result or {}).get("fully_credited")):
             st.session_state["payments_focus_mode"] = False
+            wallet_flag = f"wallet_balance_refresh_after_credit_{payment_id}"
+            if not st.session_state.get(wallet_flag):
+                st.session_state[wallet_flag] = True
+                st.rerun()
     except Exception:
-        # Não interromper a renderização do painel; a área visual mostra o erro depois.
         return
 
 
@@ -637,9 +639,7 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
             if st.session_state.get("payments_focus_mode"):
                 st.session_state["payments_focus_mode"] = False
         elif credit_result.get("reason") == "credited_to_other_user":
-            st.success("Este pagamento já foi confirmado e os créditos já foram reconciliados para a sua carteira.")
-            if st.session_state.get("payments_focus_mode"):
-                st.session_state["payments_focus_mode"] = False
+            st.error("Este pagamento já foi confirmado, mas os créditos foram reconciliados para outro usuário.")
         else:
             st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. O sistema está tentando reconciliar automaticamente...")
 
