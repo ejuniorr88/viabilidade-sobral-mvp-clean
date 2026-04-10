@@ -5,6 +5,8 @@ import json
 from typing import Any, Dict, List, Optional, Set
 
 import streamlit as st
+
+from core.env_secrets import get_secret, get_secret_str
 from supabase import Client, create_client
 
 from core.auth import get_supabase_auth_client
@@ -12,8 +14,8 @@ from core.auth import get_supabase_auth_client
 
 @st.cache_resource(show_spinner=False)
 def get_supabase_server_client() -> Client:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
+    url = get_secret_str("SUPABASE_URL", required=True)
+    key = get_secret("SUPABASE_SERVICE_ROLE_KEY")
     if not key:
         raise RuntimeError("Falta configurar SUPABASE_SERVICE_ROLE_KEY nos Secrets do Streamlit.")
     return create_client(url, key)
