@@ -8,7 +8,7 @@ from urllib.request import Request, urlopen
 import streamlit as st
 from supabase import Client, create_client
 
-from core.env_secrets import get_secret, get_secret_str
+from core import report_confirmation as report_confirmation_core
 
 
 AUTH_STATE_KEYS = [
@@ -30,17 +30,22 @@ def get_supabase_auth_client() -> Client:
     client = st.session_state.get("_supabase_auth_client")
     if client is None:
         client = create_client(
-            get_secret_str("SUPABASE_URL", required=True),
-            get_secret("SUPABASE_SERVICE_ROLE_KEY")
-            if get_secret("SUPABASE_SERVICE_ROLE_KEY")
-            else get_secret_str("SUPABASE_ANON_KEY", required=True),
+            st.secrets["SUPABASE_URL"],
+            st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+            if st.secrets.get("SUPABASE_SERVICE_ROLE_KEY")
+            else st.secrets["SUPABASE_ANON_KEY"],
         )
         st.session_state["_supabase_auth_client"] = client
     return client
 
 
 def get_app_url() -> str:
-    raw = get_secret_str("REDIRECT_URL", get_secret_str("APP_URL", "http://localhost:8501")).strip()
+    raw = str(
+        st.secrets.get(
+            "REDIRECT_URL",
+            st.secrets.get("APP_URL", "http://localhost:8501"),
+        )
+    ).strip()
     if not raw:
         raw = "http://localhost:8501"
 
@@ -52,12 +57,22 @@ def get_app_url() -> str:
 
 
 def get_external_login_url() -> str:
-    raw = get_secret_str("EXTERNAL_LOGIN_URL", "https://viabilidade-sobral-mvp-clean.vercel.app").strip()
+    raw = str(
+        st.secrets.get(
+            "EXTERNAL_LOGIN_URL",
+            "https://viabilidade-sobral-mvp-clean.vercel.app",
+        )
+    ).strip()
     return raw.rstrip("/") or "https://viabilidade-sobral-mvp-clean.vercel.app"
 
 
 def get_gateway_url() -> str:
-    raw = get_secret_str("AUTH_GATEWAY_URL", "https://viabilidade-auth-gateway.onrender.com").strip()
+    raw = str(
+        st.secrets.get(
+            "AUTH_GATEWAY_URL",
+            "https://viabilidade-auth-gateway.onrender.com",
+        )
+    ).strip()
     return raw.rstrip("/") or "https://viabilidade-auth-gateway.onrender.com"
 
 
@@ -132,8 +147,37 @@ def extract_user_fields(user_obj: Any) -> Dict[str, Optional[str]]:
     }
 
 
+def _clear_cross_account_runtime_state() -> None:
+    report_confirmation_core.clear_report_runtime_state(
+        session_state=st.session_state,
+        clear_last_calc_signature=False,
+        preserve_snapshot=False,
+        preserve_pending=False,
+    )
+    st.session_state["show_client_area"] = False
+    st.session_state["post_login_action"] = None
+
+
 def store_user_in_state(user_obj: Any) -> None:
     info = extract_user_fields(user_obj)
+    previous_user_id = st.session_state.get("auth_user_id")
+    previous_user_email = st.session_state.get("auth_user_email")
+    next_user_id = info["id"]
+    next_user_email = info["email"]
+
+    changed_user = bool(
+        previous_user_id
+        and next_user_id
+        and str(previous_user_id) != str(next_user_id)
+    ) or bool(
+        previous_user_email
+        and next_user_email
+        and str(previous_user_email).strip().lower() != str(next_user_email).strip().lower()
+    )
+
+    if changed_user:
+        _clear_cross_account_runtime_state()
+
     st.session_state["auth_logged_in"] = bool(info["id"] or info["email"])
     st.session_state["auth_user_id"] = info["id"]
     st.session_state["auth_user_email"] = info["email"]
@@ -266,6 +310,7 @@ def logout_limpo() -> None:
     keep = {
         "_supabase_auth_client": st.session_state.get("_supabase_auth_client"),
     }
+    _clear_cross_account_runtime_state()
     for k in AUTH_STATE_KEYS:
         st.session_state.pop(k, None)
     clear_user_in_state()
