@@ -6,7 +6,6 @@ from typing import Any, Callable, Dict
 import streamlit as st
 
 from ui.report.final_confirmation import render_final_confirmation
-from ui.runtime.navigation_focus import arm_navigation_focus
 from ui.report.review_panel import render_review_panel
 from ui.report.terms_gate import render_terms_gate
 
@@ -59,9 +58,18 @@ def render_report_section(
     arm_new_report_confirmation_func: Callable[..., Any],
 ) -> None:
     if can_offer_report:
-        st.markdown('<div id="report-section-start"></div>', unsafe_allow_html=True)
         st.markdown("---")
-        st.subheader("Relatório completo")
+        title_col, shortcut_col = st.columns([1.8, 1.0])
+        with title_col:
+            st.subheader("Relatório completo")
+        with shortcut_col:
+            gerar_relatorio_top = st.button(
+                "📄 Gerar relatório",
+                key="btn_generate_report_top",
+                use_container_width=True,
+                disabled=(not user_logged_in),
+            )
+
         st.caption(
             "A análise inicial acima é gratuita. Para liberar o relatório completo, "
             "gere o relatório com 1 crédito."
@@ -97,6 +105,7 @@ def render_report_section(
                 use_container_width=True,
                 disabled=(not user_logged_in),
             )
+            gerar_relatorio = bool(gerar_relatorio_top or gerar_relatorio)
         with c2:
             if not user_logged_in:
                 st.info("Faça login com Google para gerar o relatório completo.")
@@ -113,11 +122,9 @@ def render_report_section(
             elif not user_logged_in or not user_id:
                 st.error("Faça login com Google para gerar o relatório completo.")
             elif is_same_as_snapshot:
-                arm_navigation_focus(st.session_state, "report_section")
                 st.info("Este relatório já foi gerado e continua disponível abaixo.")
             elif saldo_atual is not None and int(saldo_atual) <= 0:
                 st.session_state.show_inline_payments = True
-                arm_navigation_focus(st.session_state, "inline_payments")
                 st.error("Você não possui créditos suficientes para gerar o relatório.")
             else:
                 # Mantém compatibilidade com o contrato legado do runtime e dos testes
@@ -135,7 +142,6 @@ def render_report_section(
                     signature=current_report_signature,
                     is_new_report=bool(has_snapshot and not is_same_as_snapshot),
                 )
-                arm_navigation_focus(st.session_state, "report_section")
                 st.rerun()
 
         if st.session_state.get(_REVIEW_OPEN_KEY):
@@ -150,7 +156,6 @@ def render_report_section(
 
             if confirm_no:
                 _clear_review_state()
-                arm_navigation_focus(st.session_state, "report_section")
                 st.rerun()
 
             if confirm_yes:
@@ -174,7 +179,6 @@ def render_report_section(
                         _clear_review_state()
                         clear_pending_report_func()
                         st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-                        arm_navigation_focus(st.session_state, "report_section")
                         st.rerun()
                     except Exception as e:
                         st.session_state.show_inline_payments = True
@@ -198,7 +202,6 @@ def render_report_section(
 
             if confirm_no:
                 clear_pending_report_func()
-                arm_navigation_focus(st.session_state, "report_section")
                 st.rerun()
 
             if confirm_yes:
@@ -221,14 +224,12 @@ def render_report_section(
                         novo_saldo = debit_result.get("new_balance")
                         st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                         clear_pending_report_func()
-                        arm_navigation_focus(st.session_state, "report_section")
                         st.rerun()
                     except Exception as e:
                         st.session_state.show_inline_payments = True
                         st.error(f"Não foi possível preparar e gerar o novo relatório: {e}")
 
         if st.session_state.get("show_inline_payments"):
-            st.markdown('<div id="inline-payments-start"></div>', unsafe_allow_html=True)
             st.markdown("### Comprar créditos")
             render_payments_panel_func()
 
