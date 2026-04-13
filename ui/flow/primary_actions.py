@@ -46,7 +46,7 @@ def render_primary_actions(*, session_state, clear_report_runtime_state: ClearRu
     btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
     with btn_col2:
         clicked_calcular = st.button(
-            "🚀 GERAR ESTUDO DE VIABILIDADE",
+            "🚀 GERAR CONSULTA AOS ÍNDICES URBANÍSTICOS",
             key="btn_calc",
             use_container_width=True,
         )
