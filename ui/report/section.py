@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Callable, Dict
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from ui.report.final_confirmation import render_final_confirmation
 from ui.report.review_panel import render_review_panel
@@ -15,6 +16,54 @@ _REVIEW_SIGNATURE_KEY = "report_review_signature"
 _REVIEW_CALC_KEY = "report_review_calc"
 _REVIEW_SESSION_KEY = "report_review_session"
 _REVIEW_IS_NEW_KEY = "report_review_is_new_report"
+
+
+def _render_generate_report_button_style() -> None:
+    """Aplica um destaque visual discreto no botão inicial do relatório.
+
+    Usa script leve no DOM para evitar depender de seletores frágeis do Streamlit
+    que podem deixar o botão branco ou perder o estilo entre reruns.
+    """
+
+    components.html(
+        """
+        <script>
+        const styleButton = () => {
+            const rootDoc = window.parent.document;
+            const buttons = [...rootDoc.querySelectorAll('div[data-testid="stButton"] button')];
+            const target = buttons.find((btn) =>
+                (btn.innerText || '').trim().includes('Gerar Relatório do Estudo de Viabilidade')
+            );
+            if (!target) return false;
+
+            target.style.background = 'linear-gradient(180deg, #eef4ff 0%, #e7f0ff 100%)';
+            target.style.border = '1px solid #c7d5ea';
+            target.style.color = '#173b69';
+            target.style.fontWeight = '700';
+            target.style.boxShadow = '0 2px 10px rgba(23, 59, 105, 0.08)';
+            target.style.transition = 'all 0.15s ease';
+
+            target.onmouseenter = () => {
+                target.style.background = 'linear-gradient(180deg, #f3f7ff 0%, #eaf2ff 100%)';
+                target.style.borderColor = '#9db6d8';
+                target.style.color = '#122f56';
+            };
+            target.onmouseleave = () => {
+                target.style.background = 'linear-gradient(180deg, #eef4ff 0%, #e7f0ff 100%)';
+                target.style.borderColor = '#c7d5ea';
+                target.style.color = '#173b69';
+            };
+            return true;
+        };
+
+        if (!styleButton()) {
+            setTimeout(styleButton, 120);
+            setTimeout(styleButton, 350);
+        }
+        </script>
+        """,
+        height=0,
+    )
 
 
 def _clear_review_state() -> None:
@@ -66,27 +115,6 @@ def render_report_section(
             "A análise inicial acima é gratuita. Para liberar o relatório completo, "
             "gere o relatório com 1 crédito."
         )
-        st.markdown(
-            """
-            <style>
-            div[data-testid="element-container"]:has(#report-generate-button-style-hook)
-            + div[data-testid="element-container"] div[data-testid="stButton"] > button {
-                background: linear-gradient(180deg, #eef4ff 0%, #e7f0ff 100%);
-                border: 1px solid #c7d5ea;
-                color: #173b69;
-                font-weight: 700;
-                box-shadow: 0 2px 10px rgba(23, 59, 105, 0.08);
-            }
-            div[data-testid="element-container"]:has(#report-generate-button-style-hook)
-            + div[data-testid="element-container"] div[data-testid="stButton"] > button:hover {
-                border-color: #9db6d8;
-                color: #122f56;
-                background: linear-gradient(180deg, #f3f7ff 0%, #eaf2ff 100%);
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
 
         report_confirmation_state = compute_report_confirmation_state_func(
             calc_ref=calc,
@@ -112,7 +140,6 @@ def render_report_section(
 
         c1, c2 = st.columns([1, 2])
         with c1:
-            st.markdown('<div id="report-generate-button-style-hook"></div>', unsafe_allow_html=True)
             gerar_relatorio = st.button(
                 "📄 Gerar Relatório do Estudo de Viabilidade",
                 key="btn_generate_report",
@@ -127,6 +154,8 @@ def render_report_section(
                     st.info(f"Saldo atual: {saldo_atual} crédito(s).")
                 else:
                     st.info("Não foi possível consultar o saldo neste momento.")
+
+        _render_generate_report_button_style()
 
         if gerar_relatorio:
             if preview_inadequado:
@@ -157,7 +186,7 @@ def render_report_section(
                     signature=current_report_signature,
                     is_new_report=bool(has_snapshot and not is_same_as_snapshot),
                 )
-                arm_navigation_focus(st.session_state, "report_review")
+                arm_navigation_focus(st.session_state, "report_review_confirm")
                 st.rerun()
 
         if st.session_state.get(_REVIEW_OPEN_KEY):
@@ -169,6 +198,7 @@ def render_report_section(
 
             render_review_panel(calc=review_calc, session_snapshot=review_session)
             accepted = render_terms_gate(signature=review_sig)
+            st.markdown('<div id="report-review-confirm-start"></div>', unsafe_allow_html=True)
             confirm_yes, confirm_no = render_final_confirmation(is_new_report=is_new_report)
 
             if confirm_no:
