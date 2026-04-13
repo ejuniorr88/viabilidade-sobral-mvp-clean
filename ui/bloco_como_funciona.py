@@ -21,7 +21,7 @@ def render_como_funciona():
             Informe testada, profundidade e, se necessário, marque as opções do terreno conforme o caso.</p>
 
             <p><b>3. Gere o estudo de viabilidade</b><br>
-            Após definir a localização e preencher os dados, clique em <b>Gerar estudo de viabilidade</b> para visualizar os parâmetros urbanísticos e a análise inicial.</p>
+            Após definir a localização e preencher os dados, clique em <b>Gerar consulta aos índices urbanísticos</b> para visualizar os parâmetros urbanísticos e a análise inicial.</p>
 
             <p><b>4. Revise os resultados</b><br>
             O sistema apresentará a zona, os índices urbanísticos e a leitura preliminar de viabilidade do local escolhido.</p>
