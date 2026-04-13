@@ -281,10 +281,19 @@ current_signature = report_confirmation_core.build_calc_signature(
     use_type_code=st.session_state.calc.get("use_type_code"),
     project_mode=st.session_state.calc.get("project_mode"),
     categoria_label=categoria_label,
+    lot_area_m2=lot_area,
+    built_ground_m2=built_ground,
+    permeable_area_m2=permeable_area,
+    lot_front_m=st.session_state.get("lot_front_m") or st.session_state.calc.get("lot_testada_m"),
+    lot_depth_m=st.session_state.get("lot_depth_m") or st.session_state.calc.get("lot_profundidade_m"),
+    lot_is_corner=st.session_state.get("lot_is_corner", False),
+    lot_is_midblock=st.session_state.get("lot_is_midblock", not st.session_state.get("lot_is_corner", False)),
+    lot_is_irregular=st.session_state.get("lot_is_irregular", st.session_state.calc.get("lot_irregular", False)),
 )
 
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
     _clear_report_runtime_state(preserve_snapshot=True, preserve_pending=True)
+    _clear_pending_report()
     st.session_state.free_calc_done = False
     st.session_state.calc.pop("err", None)
     st.session_state.calc.pop("rule", None)
