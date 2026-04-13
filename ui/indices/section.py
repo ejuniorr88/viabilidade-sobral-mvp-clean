@@ -120,13 +120,13 @@ def render_indices_section(
     Item 4 - Preserva o design original (usa card_func do app.py).
     Só completa os parâmetros do schema zone_rules.
     """
-    st.header("4) Índices Urbanísticos (Supabase)")
+    st.header("4) Índices Urbanísticos")
 
     zone = calc.get("zone_lookup") or calc.get("zone") or calc.get("zone_sigla")
     use_type = calc.get("use_type_code")
 
     if not zone or not use_type:
-        st.info("Clique em Calcular viabilidade para carregar zona, via e regras do Supabase.")
+        st.info("Clique em Gerar consulta aos índices urbanísticos para carregar zona, via e índices urbanísticos.")
         return
 
     # Garantir regra no calc (sem mudar o fluxo)
@@ -148,7 +148,7 @@ def render_indices_section(
             rule = None
 
     if not rule:
-        st.info("Clique em Calcular viabilidade para carregar zona, via e regras do Supabase.")
+        st.info("Clique em Gerar consulta aos índices urbanísticos para carregar zona, via e índices urbanísticos.")
         return
 
     # Se não veio card_func, usa um fallback que mantém tudo funcionando
