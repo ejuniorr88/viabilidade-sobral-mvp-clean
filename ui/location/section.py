@@ -108,13 +108,11 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     via_nome = calc.get("via_nome") or calc.get("street_name")
     via_tipo = calc.get("via_tipo") or calc.get("street_type")
 
-    colA, colB, colC = st.columns(3)
+    colA, colB = st.columns(2)
     with colA:
         _card("Zona", zone)
     with colB:
         _card("Rua / Logradouro", via_nome)
-    with colC:
-        _card("Tipo de via", via_tipo)
 
     if str(calc.get("subzone_code") or "PADRAO") != "PADRAO":
         st.caption(f"Subzona/Setor: {calc.get('subzone_code','PADRAO')}")
