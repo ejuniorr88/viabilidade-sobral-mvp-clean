@@ -66,6 +66,27 @@ def render_report_section(
             "A análise inicial acima é gratuita. Para liberar o relatório completo, "
             "gere o relatório com 1 crédito."
         )
+        st.markdown(
+            """
+            <style>
+            div[data-testid="element-container"]:has(#report-generate-button-style-hook)
+            + div[data-testid="element-container"] div[data-testid="stButton"] > button {
+                background: linear-gradient(180deg, #eef4ff 0%, #e7f0ff 100%);
+                border: 1px solid #c7d5ea;
+                color: #173b69;
+                font-weight: 700;
+                box-shadow: 0 2px 10px rgba(23, 59, 105, 0.08);
+            }
+            div[data-testid="element-container"]:has(#report-generate-button-style-hook)
+            + div[data-testid="element-container"] div[data-testid="stButton"] > button:hover {
+                border-color: #9db6d8;
+                color: #122f56;
+                background: linear-gradient(180deg, #f3f7ff 0%, #eaf2ff 100%);
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
         report_confirmation_state = compute_report_confirmation_state_func(
             calc_ref=calc,
@@ -91,6 +112,7 @@ def render_report_section(
 
         c1, c2 = st.columns([1, 2])
         with c1:
+            st.markdown('<div id="report-generate-button-style-hook"></div>', unsafe_allow_html=True)
             gerar_relatorio = st.button(
                 "📄 Gerar Relatório do Estudo de Viabilidade",
                 key="btn_generate_report",
@@ -135,10 +157,11 @@ def render_report_section(
                     signature=current_report_signature,
                     is_new_report=bool(has_snapshot and not is_same_as_snapshot),
                 )
-                arm_navigation_focus(st.session_state, "report_section")
+                arm_navigation_focus(st.session_state, "report_review")
                 st.rerun()
 
         if st.session_state.get(_REVIEW_OPEN_KEY):
+            st.markdown('<div id="report-review-start"></div>', unsafe_allow_html=True)
             review_calc = deepcopy(st.session_state.get(_REVIEW_CALC_KEY) or calc)
             review_session = deepcopy(st.session_state.get(_REVIEW_SESSION_KEY) or current_report_session)
             review_sig = st.session_state.get(_REVIEW_SIGNATURE_KEY) or current_report_signature
