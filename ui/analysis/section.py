@@ -60,7 +60,7 @@ def render_analise_section(
     st.subheader("5) Análise Urbanística")
 
     if not calc.get("ok"):
-        st.info("Clique em **Calcular viabilidade** para gerar a análise.")
+        st.info("Clique em **Gerar consulta aos índices urbanísticos** para gerar a análise.")
         return
 
     rule = calc.get("rule")
