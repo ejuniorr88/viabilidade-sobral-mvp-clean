@@ -7,6 +7,7 @@ _TARGET_TO_ELEMENT_ID = {
     "login_gate": "login-gate-start",
     "primary_actions": "primary-actions-start",
     "report_section": "report-section-start",
+    "report_review": "report-review-start",
     "inline_payments": "inline-payments-start",
 }
 
