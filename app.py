@@ -51,6 +51,7 @@ from ui.indices.section import render_indices_section
 from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
 from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
+from ui.runtime.navigation_focus import render_navigation_focus_if_needed
 from ui.relatorio import (
     render_relatorio_section,
     render_zone_description_section,
@@ -438,6 +439,11 @@ render_report_section(
 )
 
 render_item3_scroll_if_needed(
+    session_state=st.session_state,
+    components_module=components,
+)
+
+render_navigation_focus_if_needed(
     session_state=st.session_state,
     components_module=components,
 )
