@@ -220,5 +220,3 @@ def render_indices_section(
         with c3:
             _call_card(card_func, r[4], r[5])
 
-    with st.expander("Ver regra bruta (JSON do Supabase)"):
-        st.json(rule)
