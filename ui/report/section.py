@@ -64,8 +64,9 @@ def render_report_section(
             st.subheader("Relatório completo")
         with shortcut_col:
             gerar_relatorio_top = st.button(
-                "📄 Gerar relatório",
+                "📄 Gerar Relatório do Estudo de Viabilidade",
                 key="btn_generate_report_top",
+                type="primary",
                 use_container_width=True,
                 disabled=(not user_logged_in),
             )
@@ -100,8 +101,9 @@ def render_report_section(
         c1, c2 = st.columns([1, 2])
         with c1:
             gerar_relatorio = st.button(
-                "📄 Gerar relatório",
+                "📄 Gerar Relatório do Estudo de Viabilidade",
                 key="btn_generate_report",
+                type="primary",
                 use_container_width=True,
                 disabled=(not user_logged_in),
             )
