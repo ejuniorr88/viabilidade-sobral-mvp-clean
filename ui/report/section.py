@@ -128,8 +128,27 @@ def render_report_section(
         has_snapshot = report_confirmation_state["has_snapshot"]
         is_same_as_snapshot = report_confirmation_state["is_same_as_snapshot"]
 
-        if st.session_state.get(_REVIEW_OPEN_KEY) and st.session_state.get(_REVIEW_SIGNATURE_KEY) != current_report_signature:
-            _clear_review_state()
+        review_signature_changed = bool(
+            st.session_state.get(_REVIEW_OPEN_KEY)
+            and st.session_state.get(_REVIEW_SIGNATURE_KEY)
+            and st.session_state.get(_REVIEW_SIGNATURE_KEY) != current_report_signature
+        )
+        pending_signature_changed = bool(
+            st.session_state.get("pending_report_signature")
+            and st.session_state.get("pending_report_signature") != current_report_signature
+        )
+
+        if review_signature_changed:
+            clear_pending_report_func()
+            _arm_review_state(
+                calc=calc,
+                session_snapshot=current_report_session,
+                signature=current_report_signature,
+                is_new_report=bool(has_snapshot and not is_same_as_snapshot),
+            )
+            arm_navigation_focus(st.session_state, "report_section")
+        elif pending_signature_changed:
+            clear_pending_report_func()
 
         saldo_atual = None
         if user_logged_in and user_id:
