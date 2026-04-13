@@ -15,30 +15,42 @@ def _read(path: Path) -> str:
 
 
 def _install_stub_modules() -> None:
-    if "streamlit" not in sys.modules:
-        st = types.ModuleType("streamlit")
-        st.secrets = {}
+    st_obj = sys.modules.get("streamlit")
+    if not isinstance(st_obj, types.ModuleType):
+        st_mod = types.ModuleType("streamlit")
+        for name, value in getattr(st_obj, "__dict__", {}).items():
+            setattr(st_mod, name, value)
+        st_obj = st_mod
+        sys.modules["streamlit"] = st_obj
 
+    if not hasattr(st_obj, "secrets"):
+        st_obj.secrets = {}
+
+    if not hasattr(st_obj, "cache_resource"):
         def cache_resource(*_args, **_kwargs):
             def decorator(func):
                 return func
             return decorator
 
-        st.cache_resource = cache_resource
-        sys.modules["streamlit"] = st
+        st_obj.cache_resource = cache_resource
 
-    if "supabase" not in sys.modules:
-        sb = types.ModuleType("supabase")
+    sb_obj = sys.modules.get("supabase")
+    if not isinstance(sb_obj, types.ModuleType):
+        sb_mod = types.ModuleType("supabase")
+        for name, value in getattr(sb_obj, "__dict__", {}).items():
+            setattr(sb_mod, name, value)
+        sb_obj = sb_mod
+        sys.modules["supabase"] = sb_obj
 
+    if not hasattr(sb_obj, "Client"):
         class Client:  # pragma: no cover - only for import compatibility
             pass
+        sb_obj.Client = Client
 
+    if not hasattr(sb_obj, "create_client"):
         def create_client(*_args, **_kwargs):  # pragma: no cover
             raise RuntimeError("create_client stub should not be called in tests")
-
-        sb.Client = Client
-        sb.create_client = create_client
-        sys.modules["supabase"] = sb
+        sb_obj.create_client = create_client
 
 
 def _import_coupons_module():
