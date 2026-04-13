@@ -392,7 +392,7 @@ if st.session_state.get("confirm_new_report") and st.session_state.get("pending_
 """
 # Âncoras contratuais preservadas no app.py para os testes de fluxo/ordem.
 # st.subheader("Relatório completo")
-# "📄 Gerar relatório"
+# "📄 Gerar Relatório do Estudo de Viabilidade"
 # key="btn_generate_report"
 # disabled=(not user_logged_in)
 # get_credit_balance(user_id)
