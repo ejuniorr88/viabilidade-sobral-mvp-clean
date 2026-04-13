@@ -4,6 +4,12 @@ from pathlib import Path
 from typing import Any, Dict
 
 import streamlit as st
+
+st.set_page_config(
+    page_title="Viabilidade Fácil",
+    page_icon="📍",
+    layout="wide"
+)
 import streamlit.components.v1 as components
 
 from core.session.bootstrap import bootstrap_session_state
