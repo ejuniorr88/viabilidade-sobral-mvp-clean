@@ -8,6 +8,7 @@ _TARGET_TO_ELEMENT_ID = {
     "primary_actions": "primary-actions-start",
     "report_section": "report-section-start",
     "report_review": "report-review-start",
+    "report_review_confirm": "report-review-confirm-start",
     "inline_payments": "inline-payments-start",
 }
 
