@@ -30,7 +30,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     calc: Dict[str, Any] = st.session_state.calc
 
     use_type_code = (calc.get("use_type_code") or "RES_UNI").strip().upper()
-    st.text_input("use_type_code", value=use_type_code, disabled=True, key="use_type_code_readonly")
 
     if calcular:
         if not getattr(st.session_state, "last_click", None):
