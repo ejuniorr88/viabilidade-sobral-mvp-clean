@@ -739,17 +739,15 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
         if st.button("Fechar pagamento atual", key=f"close_current_paid_{payment_id}"):
             st.session_state.pop("current_payment_id", None)
             st.session_state.pop("current_payment_snapshot", None)
-            st.session_state.pop("payments_focus_mode", None)
-            st.session_state.pop("landing_show_all_plans", None)
             st.session_state.pop(rerun_flag_key, None)
+            st.session_state["payments_focus_mode"] = False
             _clear_landing_checkout_state()
             st.rerun()
     else:
         if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
             st.session_state.pop("current_payment_id", None)
             st.session_state.pop("current_payment_snapshot", None)
-            st.session_state.pop("payments_focus_mode", None)
-            st.session_state.pop("landing_show_all_plans", None)
+            st.session_state["payments_focus_mode"] = False
             _clear_landing_checkout_state()
             st.rerun()
 
