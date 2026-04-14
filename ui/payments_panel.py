@@ -316,11 +316,6 @@ def _create_pix_payment(
 def _clear_landing_checkout_state() -> None:
     st.session_state["landing_checkout_mode"] = False
     st.session_state["landing_selected_plan_slug"] = None
-    st.session_state.pop("landing_show_all_plans", None)
-
-
-def _should_show_all_landing_plans() -> bool:
-    return bool(st.session_state.get("landing_show_all_plans"))
 
 
 # =========================================================
@@ -534,38 +529,12 @@ def _render_buy_section(
     selected_plan_slug = _normalize_plan_slug(st.session_state.get("landing_selected_plan_slug"))
     selected_package_id = _resolve_selected_package_id(packages, selected_plan_slug)
     ordered_packages = _sort_packages_for_selected_plan(packages, selected_package_id)
-    show_all_plans = _should_show_all_landing_plans()
-
     if landing_mode and selected_plan_slug:
-        pretty_plan = selected_plan_slug.replace('_', ' ').title()
-        st.info(f"Plano pré-selecionado a partir da landing: {pretty_plan}.")
-        action_col1, action_col2 = st.columns([1, 1])
-        with action_col1:
-            if show_all_plans:
-                if st.button("Voltar para o plano escolhido", key="landing_back_to_selected_plan"):
-                    st.session_state["landing_show_all_plans"] = False
-                    st.rerun()
-            else:
-                if st.button("Ver outros planos", key="landing_show_all_plans"):
-                    st.session_state["landing_show_all_plans"] = True
-                    st.rerun()
-        with action_col2:
-            if st.button("Fechar checkout", key="landing_close_checkout"):
-                st.session_state.pop("current_payment_id", None)
-                st.session_state.pop("current_payment_snapshot", None)
-                st.session_state["payments_focus_mode"] = False
-                _clear_landing_checkout_state()
-                st.rerun()
+        st.info(f"Plano pré-selecionado a partir da landing: {selected_plan_slug.replace('_', ' ').title()}.")
 
-    visible_packages = ordered_packages
-    if landing_mode and selected_package_id and not show_all_plans:
-        visible_packages = [p for p in ordered_packages if str(_safe_get(p, "id", "")) == str(selected_package_id)]
-        if not visible_packages:
-            visible_packages = ordered_packages
+    cols = st.columns(len(ordered_packages)) if len(ordered_packages) <= 3 else st.columns(3)
 
-    cols = st.columns(len(visible_packages)) if len(visible_packages) <= 3 else st.columns(3)
-
-    for idx, package in enumerate(visible_packages):
+    for idx, package in enumerate(ordered_packages):
         col = cols[idx % len(cols)]
         package_id = str(_safe_get(package, 'id', idx))
         with col:
@@ -652,8 +621,6 @@ def _render_buy_section(
                     st.session_state["current_payment_snapshot"] = payment
                     st.session_state["pix_created_success"] = True
                     st.session_state["payments_focus_mode"] = False
-                    if landing_mode:
-                        st.session_state["landing_show_all_plans"] = False
                     st.rerun()
 
 
@@ -737,15 +704,6 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
 
     if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
-        close_col1, close_col2 = st.columns([1, 3])
-        with close_col1:
-            if st.button("Fechar pagamento pendente", key=f"close_current_pending_{payment_id}"):
-                st.session_state.pop("current_payment_id", None)
-                st.session_state.pop("current_payment_snapshot", None)
-                st.session_state["payments_focus_mode"] = False
-                if st.session_state.get("landing_checkout_mode"):
-                    st.session_state["landing_show_all_plans"] = False
-                st.rerun()
     elif status == "paid":
         inspect = None
         payment_id_str = str(_safe_get(current_payment, "id"))
@@ -781,12 +739,18 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
         if st.button("Fechar pagamento atual", key=f"close_current_paid_{payment_id}"):
             st.session_state.pop("current_payment_id", None)
             st.session_state.pop("current_payment_snapshot", None)
+            st.session_state.pop("payments_focus_mode", None)
+            st.session_state.pop("landing_show_all_plans", None)
             st.session_state.pop(rerun_flag_key, None)
+            _clear_landing_checkout_state()
             st.rerun()
     else:
         if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
             st.session_state.pop("current_payment_id", None)
             st.session_state.pop("current_payment_snapshot", None)
+            st.session_state.pop("payments_focus_mode", None)
+            st.session_state.pop("landing_show_all_plans", None)
+            _clear_landing_checkout_state()
             st.rerun()
 
 
