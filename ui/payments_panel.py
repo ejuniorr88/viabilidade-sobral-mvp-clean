@@ -696,6 +696,10 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
 
     if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
+
+        if st.button("Cancelar / fechar Pix atual", key=f"close_current_pending_{payment_id}"):
+            clear_all_checkout_states()
+            st.rerun()
     elif status == "paid":
         inspect = None
         payment_id_str = str(_safe_get(current_payment, "id"))
