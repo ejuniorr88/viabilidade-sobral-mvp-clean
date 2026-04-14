@@ -8,6 +8,13 @@ from ui.auth_panel import render_google_login_box
 from ui.client_area import render_client_area_page
 
 
+def _clear_client_area_checkout_state() -> None:
+    st.session_state["show_client_area"] = False
+    st.session_state["landing_checkout_mode"] = False
+    st.session_state["landing_selected_plan_slug"] = None
+    st.session_state["payments_focus_mode"] = False
+
+
 def render_login_gate_block() -> None:
     render_google_login_box(
         title="Faça login para continuar",
@@ -26,7 +33,7 @@ def render_client_area_gate(
 ) -> None:
     if user_logged_in and user_id:
         if st.button("← Voltar para o estudo", key="client_area_back"):
-            st.session_state["show_client_area"] = False
+            _clear_client_area_checkout_state()
             st.rerun()
         render_client_area_page(
             user_id=user_id,
@@ -37,7 +44,7 @@ def render_client_area_gate(
         return
 
     if st.button("← Voltar para o estudo", key="client_area_back_guest"):
-        st.session_state["show_client_area"] = False
+        _clear_client_area_checkout_state()
         st.rerun()
     st.markdown("## Área do cliente")
     st.info("Faça login com Google para acessar sua área do cliente e ver seus relatórios salvos.")
