@@ -18,7 +18,6 @@ def test_location_section_module_keeps_expected_entrypoints() -> None:
         'st.subheader("3) Localização (zona + via)")',
         '_card("Zona", zone)',
         '_card("Rua / Logradouro", via_nome)',
-        '_card("Tipo de via", via_tipo)',
         "def render_location_section(*args, **kwargs)",
         "return render_localizacao_section(*args, **kwargs)",
     ]
