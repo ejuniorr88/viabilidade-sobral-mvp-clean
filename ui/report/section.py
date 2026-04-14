@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-import json
 from typing import Any, Callable, Dict
 
 import streamlit as st
@@ -18,26 +17,6 @@ _REVIEW_CALC_KEY = "report_review_calc"
 _REVIEW_SESSION_KEY = "report_review_session"
 _REVIEW_IS_NEW_KEY = "report_review_is_new_report"
 _NOTICE_FOCUS_SIGNATURE_KEY = "report_section_notice_focus_signature"
-
-
-def _normalize_notice_value(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(k): _normalize_notice_value(v) for k, v in sorted(value.items(), key=lambda item: str(item[0]))}
-    if isinstance(value, (list, tuple)):
-        return [_normalize_notice_value(v) for v in value]
-    return value
-
-
-def _build_notice_focus_signature(*, report_signature: str | None, session_snapshot: Dict[str, Any] | None, built_ground: Any, permeable_area: Any) -> str:
-    payload = {
-        "report_signature": report_signature,
-        "session_snapshot": _normalize_notice_value(session_snapshot or {}),
-        "built_ground": built_ground,
-        "permeable_area": permeable_area,
-    }
-    return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
-
-
 
 
 def _render_generate_report_button_style() -> None:
@@ -87,6 +66,23 @@ def _render_generate_report_button_style() -> None:
         height=0,
     )
 
+
+
+
+def _build_notice_focus_signature(*, report_signature: str | None, session_snapshot: Dict[str, Any], built_ground: Any, permeable_area: Any) -> str:
+    lot_front = session_snapshot.get("lot_front_m")
+    lot_depth = session_snapshot.get("lot_depth_m")
+    lot_area = session_snapshot.get("lot_area_m2")
+    return "|".join(
+        [
+            str(report_signature or ""),
+            str(lot_front if lot_front is not None else ""),
+            str(lot_depth if lot_depth is not None else ""),
+            str(lot_area if lot_area is not None else ""),
+            str(built_ground if built_ground is not None else ""),
+            str(permeable_area if permeable_area is not None else ""),
+        ]
+    )
 
 def _clear_review_state() -> None:
     st.session_state[_REVIEW_OPEN_KEY] = False
