@@ -1,7 +1,9 @@
 import json
+import re
+import unicodedata
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import streamlit as st
 
@@ -132,6 +134,59 @@ def _build_current_report_signature(calc_ref, session_snapshot):
     return build_report_signature(calc=calc_ref, session_state=session_snapshot)
 
 
+def _normalize_checkout_plan_slug(value: Any) -> Optional[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+
+    normalized = unicodedata.normalize("NFD", raw)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = re.sub(r"[^a-z0-9]+", "_", normalized.lower()).strip("_")
+
+    if "intermedi" in normalized:
+        return "intermediario"
+    if "profissional" in normalized:
+        return "profissional"
+    if "basico" in normalized:
+        return "basico"
+    return normalized or None
+
+
+def _clear_landing_checkout_query_params() -> None:
+    keys = ["checkout", "plan"]
+    try:
+        for key in keys:
+            try:
+                del st.query_params[key]
+            except Exception:
+                pass
+    except Exception:
+        try:
+            current = st.experimental_get_query_params()
+            cleaned = {k: v for k, v in current.items() if k not in keys}
+            st.experimental_set_query_params(**cleaned)
+        except Exception:
+            pass
+
+
+def _consume_landing_checkout_query_params() -> None:
+    checkout_flag = str(safe_get_query_param("checkout") or "").strip().lower()
+    plan_value = safe_get_query_param("plan")
+    should_open_checkout = checkout_flag in {"1", "true", "yes", "on"} or bool(plan_value)
+
+    if not should_open_checkout:
+        return
+
+    st.session_state["landing_checkout_mode"] = True
+    st.session_state["landing_selected_plan_slug"] = _normalize_checkout_plan_slug(plan_value)
+    st.session_state["show_client_area"] = True
+
+    if not st.session_state.get("auth_logged_in"):
+        st.session_state["post_login_action"] = "open_client_area"
+
+    _clear_landing_checkout_query_params()
+
+
 def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
     if not isinstance(calc_ref, dict):
         return False
@@ -180,6 +235,7 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
+_consume_landing_checkout_query_params()
 
 legal_view = safe_get_query_param("view")
 if legal_view == "terms":
