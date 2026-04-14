@@ -176,13 +176,24 @@ def render_client_area_page(user_id: str, user_name: str, user_email: str, credi
     st.markdown("## Área do cliente")
     st.caption("Aqui ficam seus relatórios gerados, histórico de uso e ferramentas internas quando liberadas para o seu usuário.")
 
-    if st.session_state.get("landing_checkout_mode"):
+    should_render_checkout = bool(
+        st.session_state.get("landing_checkout_mode")
+        or st.session_state.get("payments_focus_mode")
+        or st.session_state.get("current_payment_id")
+        or st.session_state.get("current_payment_snapshot")
+    )
+
+    if should_render_checkout:
         selected_plan = st.session_state.get("landing_selected_plan_slug")
         st.markdown("### Comprar créditos")
-        if selected_plan:
+        if st.session_state.get("landing_checkout_mode") and selected_plan:
             st.caption(f"Você selecionou o plano {str(selected_plan).replace('_', ' ').title()} na landing. Gere o Pix abaixo para concluir a compra.")
-        else:
+        elif st.session_state.get("landing_checkout_mode"):
             st.caption("Você veio da landing. Escolha o plano e gere o Pix abaixo para concluir a compra.")
+        elif st.session_state.get("current_payment_id") or st.session_state.get("current_payment_snapshot"):
+            st.caption("Seu pagamento atual continua disponível abaixo até a conclusão ou fechamento manual.")
+        elif st.session_state.get("payments_focus_mode"):
+            st.caption("Escolha um plano e gere o Pix abaixo para concluir a compra.")
 
         from ui.payments_panel import render_payments_panel
         render_payments_panel()
