@@ -11,7 +11,6 @@ from core.client_reports import build_download_signed_url, list_client_reports
 from core.coupons import user_can_manage_coupons
 from ui.coupons_admin import render_coupons_admin_section
 from ui.relatorio import render_relatorio_section
-from core.state_helpers import clear_all_checkout_states
 
 _TZ = ZoneInfo("America/Fortaleza")
 
@@ -177,37 +176,6 @@ def _render_coupons_tab(user_email: str) -> None:
 def render_client_area_page(user_id: str, user_name: str, user_email: str, credit_balance: Any) -> None:
     st.markdown("## Área do cliente")
     st.caption("Aqui ficam seus relatórios gerados, histórico de uso e ferramentas internas quando liberadas para o seu usuário.")
-
-    should_render_checkout = bool(
-        st.session_state.get("landing_checkout_mode")
-        or st.session_state.get("payments_focus_mode")
-        or st.session_state.get("current_payment_id")
-        or st.session_state.get("current_payment_snapshot")
-    )
-
-    if should_render_checkout:
-        selected_plan = st.session_state.get("landing_selected_plan_slug")
-
-        title_col, action_col = st.columns([0.72, 0.28])
-        with title_col:
-            st.markdown("### Finalizar compra")
-        with action_col:
-            if st.button("❌ Cancelar / Fechar", use_container_width=True, key="client_area_close_checkout"):
-                clear_all_checkout_states()
-                st.rerun()
-
-        if st.session_state.get("landing_checkout_mode") and selected_plan:
-            st.caption(f"Você selecionou o plano {str(selected_plan).replace('_', ' ').title()} na landing. Gere o Pix abaixo para concluir a compra.")
-        elif st.session_state.get("landing_checkout_mode"):
-            st.caption("Você veio da landing. Escolha o plano e gere o Pix abaixo para concluir a compra.")
-        elif st.session_state.get("current_payment_id") or st.session_state.get("current_payment_snapshot"):
-            st.caption("Seu pagamento atual continua disponível abaixo até a conclusão ou fechamento manual.")
-        else:
-            st.caption("Escolha um plano para gerar o Pix.")
-
-        from ui.payments_panel import render_payments_panel
-        render_payments_panel()
-        st.markdown("---")
 
     c1, c2, c3 = st.columns(3)
     with c1:
