@@ -10,6 +10,7 @@ from ui.client_area import render_client_area_page
 
 def _clear_client_area_checkout_state() -> None:
     st.session_state["show_client_area"] = False
+    st.session_state["show_plans_page"] = False
     st.session_state["landing_checkout_mode"] = False
     st.session_state["landing_selected_plan_slug"] = None
     st.session_state["payments_focus_mode"] = False
