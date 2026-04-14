@@ -1,7 +1,6 @@
-from .engine import render_scroll_runtime
-from .targets import REPORT_SCROLL_TARGETS
+from .flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
 
 __all__ = [
-    'REPORT_SCROLL_TARGETS',
-    'render_scroll_runtime',
+    'apply_post_login_runtime_flags',
+    'render_item3_scroll_if_needed',
 ]
