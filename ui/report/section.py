@@ -17,6 +17,7 @@ _REVIEW_CALC_KEY = "report_review_calc"
 _REVIEW_SESSION_KEY = "report_review_session"
 _REVIEW_IS_NEW_KEY = "report_review_is_new_report"
 _NOTICE_FOCUS_SIGNATURE_KEY = "report_section_notice_focus_signature"
+_LEGACY_GENERATE_REPORT_LABEL = "📄 Gerar relatório"
 
 
 def _render_generate_report_button_style() -> None:
@@ -298,6 +299,8 @@ def render_report_section(
             )
             if notice_should_focus and st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) != notice_focus_signature:
                 arm_navigation_focus(st.session_state, "report_section_notice")
+                # Registra a última assinatura pedida para evitar re-scroll em reruns estáveis,
+                # mas mantém o disparo de JS forte no runtime para o browser real.
                 st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = notice_focus_signature
         else:
             if st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) is not None:
