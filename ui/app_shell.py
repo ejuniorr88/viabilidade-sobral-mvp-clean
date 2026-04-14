@@ -220,12 +220,18 @@ def render_top_nav() -> None:
     with cols[3]:
         if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=True):
             st.session_state["show_client_area"] = True
+            st.session_state["show_plans_page"] = False
             if not st.session_state.get("auth_logged_in"):
                 st.session_state["post_login_action"] = "open_client_area"
             st.rerun()
 
     with cols[4]:
-        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=True)
+        if st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=True):
+            st.session_state["show_plans_page"] = True
+            st.session_state["show_client_area"] = False
+            if not st.session_state.get("auth_logged_in"):
+                st.session_state["post_login_action"] = "open_plans_page"
+            st.rerun()
 
     with cols[5]:
         st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)
