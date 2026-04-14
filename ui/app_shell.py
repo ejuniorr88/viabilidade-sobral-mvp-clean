@@ -103,21 +103,54 @@ def inject_global_styles() -> None:
         }}
 
         .vf-brand {{
-            font-size: 30px;
-            font-weight: 800;
-            color: {WHITE};
-            letter-spacing: -0.02em;
-            line-height: 1;
-            white-space: nowrap;
-            margin: 0;
-            min-height: 92px;
-            display: flex;
-            align-items: center;
+            display: none !important;
         }}
 
         .vf-brand-dot {{
             color: {ORANGE};
             margin-left: 2px;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton {{
+            width: auto !important;
+            justify-content: flex-start !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] {{
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: {WHITE} !important;
+            font-size: 30px !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.02em !important;
+            line-height: 1 !important;
+            min-height: 92px !important;
+            width: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            justify-content: flex-start !important;
+            align-items: center !important;
+            white-space: nowrap !important;
+            transition: none !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"]::after {{
+            content: ".";
+            color: {ORANGE};
+            margin-left: 2px;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"]:hover,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"]:focus,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"]:focus-visible,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"]:active {{
+            background: transparent !important;
+            color: {WHITE} !important;
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            opacity: 1 !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton {{
@@ -209,10 +242,12 @@ def render_top_nav() -> None:
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
-        st.markdown(
-            '<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="vf-brand"></div>', unsafe_allow_html=True)
+        if st.button("Viabilidade-Fácil", key="vf_nav_home", type="tertiary"):
+            st.session_state["show_plans_page"] = False
+            st.session_state["show_client_area"] = False
+            st.session_state["post_login_action"] = None
+            st.rerun()
 
     with cols[2]:
         st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=True)
