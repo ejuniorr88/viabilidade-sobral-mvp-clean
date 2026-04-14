@@ -87,28 +87,43 @@ def render_scroll_runtime(*, components_module: Any, element_id: str, offset: in
                 const maxCycleAttempts = 6;
                 const pollingMs = 320;
 
+                const getScrollContainer = () => (
+                    rootDoc.querySelector('section.main')
+                    || rootDoc.scrollingElement
+                    || rootDoc.documentElement
+                    || rootDoc.body
+                );
+
                 const computeTargetTop = (el) => {{
                     const absoluteTop = el.getBoundingClientRect().top + rootWin.scrollY;
                     return Math.max(absoluteTop - offset, 0);
                 }};
 
+                const nudgeContainerByOffset = () => {{
+                    if (!isActive() || offset <= 0) return;
+                    const container = getScrollContainer();
+                    if (container && typeof container.scrollBy === 'function') {{
+                        container.scrollBy({{ top: -offset, left: 0, behavior: 'auto' }});
+                    }}
+                    rootWin.scrollBy({{ top: -offset, left: 0, behavior: 'auto' }});
+                }};
+
                 const applyScroll = (el) => {{
                     if (!isActive() || !el) return;
-                    const targetTop = computeTargetTop(el);
-                    const shouldUseScrollIntoView = offset <= 0;
 
-                    // Para a confirmação (offset 0), manter o comportamento mais agressivo.
-                    // Para o aviso amarelo (offset > 0), evitar scrollIntoView(start), porque
-                    // ele tende a colar o alvo no topo e anular visualmente o offset.
-                    if (shouldUseScrollIntoView) {{
-                        el.scrollIntoView({{ behavior: 'auto', block: 'start' }});
-                    }}
-                    rootWin.scrollTo({{ top: targetTop, behavior: 'auto' }});
+                    // Sempre força a rolagem até o alvo primeiro. No Streamlit,
+                    // em alguns cenários o container real não responde bem só com
+                    // window.scrollTo; scrollIntoView garante o "voltar" até o bloco.
+                    el.scrollIntoView({{ behavior: 'auto', block: 'start' }});
+                    nudgeContainerByOffset();
+
                     clearFrame();
                     controller.rafId = rootWin.requestAnimationFrame(() => {{
                         if (!isActive()) return;
                         const liveEl = getTargetElement();
                         if (!liveEl) return;
+                        liveEl.scrollIntoView({{ behavior: 'auto', block: 'start' }});
+                        nudgeContainerByOffset();
                         rootWin.scrollTo({{ top: computeTargetTop(liveEl), behavior: 'auto' }});
                     }});
                 }};
