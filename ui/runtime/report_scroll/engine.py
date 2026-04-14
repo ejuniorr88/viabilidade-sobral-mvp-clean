@@ -95,7 +95,14 @@ def render_scroll_runtime(*, components_module: Any, element_id: str, offset: in
                 const applyScroll = (el) => {{
                     if (!isActive() || !el) return;
                     const targetTop = computeTargetTop(el);
-                    el.scrollIntoView({{ behavior: 'auto', block: 'start' }});
+                    const shouldUseScrollIntoView = offset <= 0;
+
+                    // Para a confirmação (offset 0), manter o comportamento mais agressivo.
+                    // Para o aviso amarelo (offset > 0), evitar scrollIntoView(start), porque
+                    // ele tende a colar o alvo no topo e anular visualmente o offset.
+                    if (shouldUseScrollIntoView) {{
+                        el.scrollIntoView({{ behavior: 'auto', block: 'start' }});
+                    }}
                     rootWin.scrollTo({{ top: targetTop, behavior: 'auto' }});
                     clearFrame();
                     controller.rafId = rootWin.requestAnimationFrame(() => {{
