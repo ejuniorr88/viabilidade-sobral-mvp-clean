@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from typing import Any, Callable, Dict
 
 import streamlit as st
@@ -18,26 +18,6 @@ _REVIEW_CALC_KEY = "report_review_calc"
 _REVIEW_SESSION_KEY = "report_review_session"
 _REVIEW_IS_NEW_KEY = "report_review_is_new_report"
 _NOTICE_FOCUS_SIGNATURE_KEY = "report_section_notice_focus_signature"
-
-
-def _normalize_notice_value(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(k): _normalize_notice_value(v) for k, v in sorted(value.items(), key=lambda item: str(item[0]))}
-    if isinstance(value, (list, tuple)):
-        return [_normalize_notice_value(v) for v in value]
-    return value
-
-
-def _build_notice_focus_signature(*, report_signature: str | None, session_snapshot: Dict[str, Any] | None, built_ground: Any, permeable_area: Any) -> str:
-    payload = {
-        "report_signature": report_signature,
-        "session_snapshot": _normalize_notice_value(session_snapshot or {}),
-        "built_ground": built_ground,
-        "permeable_area": permeable_area,
-    }
-    return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
-
-
 
 
 def _render_generate_report_button_style() -> None:
@@ -88,6 +68,16 @@ def _render_generate_report_button_style() -> None:
     )
 
 
+
+
+def _build_notice_focus_signature(*, report_signature: str, session_snapshot: Dict[str, Any], built_ground: Any, permeable_area: Any) -> str:
+    payload = {
+        "report_signature": report_signature,
+        "session_snapshot": session_snapshot,
+        "built_ground": built_ground,
+        "permeable_area": permeable_area,
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
 def _clear_review_state() -> None:
     st.session_state[_REVIEW_OPEN_KEY] = False
     st.session_state[_REVIEW_SIGNATURE_KEY] = None
@@ -277,23 +267,14 @@ def render_report_section(
 
             return
 
-        is_review_open = bool(st.session_state.get(_REVIEW_OPEN_KEY))
-        is_legacy_confirming = bool(
-            st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature")
-        )
         notice_should_focus = bool(
             has_snapshot
             and not is_same_as_snapshot
-            and not is_review_open
-            and not is_legacy_confirming
+            and not st.session_state.get(_REVIEW_OPEN_KEY)
+            and not (st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature"))
         )
-
+        notice_focus_signature = None
         if has_snapshot and not is_same_as_snapshot:
-            st.markdown('<div id="report-section-scenario-notice"></div>', unsafe_allow_html=True)
-            st.warning(
-                "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, clique novamente em gerar relatório."
-            )
-
             notice_focus_signature = _build_notice_focus_signature(
                 report_signature=current_report_signature,
                 session_snapshot=current_report_session,
@@ -303,9 +284,13 @@ def render_report_section(
             if notice_should_focus and st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) != notice_focus_signature:
                 arm_navigation_focus(st.session_state, "report_section_notice")
                 st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = notice_focus_signature
-        else:
-            if st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) is not None:
-                st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = None
+
+            st.markdown('<div id="report-section-scenario-notice"></div>', unsafe_allow_html=True)
+            st.warning(
+                "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, clique novamente em gerar relatório."
+            )
+        elif st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY):
+            st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = None
 
         # Compatibilidade com fluxo legado/testes antigos.
         if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature"):
