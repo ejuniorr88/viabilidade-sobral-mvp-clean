@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from typing import Any, Callable, Dict
 
@@ -16,7 +17,7 @@ _REVIEW_SIGNATURE_KEY = "report_review_signature"
 _REVIEW_CALC_KEY = "report_review_calc"
 _REVIEW_SESSION_KEY = "report_review_session"
 _REVIEW_IS_NEW_KEY = "report_review_is_new_report"
-_NOTICE_FOCUS_SIGNATURE_KEY = "report_notice_focus_signature"
+_NOTICE_FOCUS_SIGNATURE_KEY = "report_section_notice_focus_signature"
 
 
 def _render_generate_report_button_style() -> None:
@@ -67,6 +68,16 @@ def _render_generate_report_button_style() -> None:
     )
 
 
+
+
+def _build_notice_focus_signature(*, report_signature: str, session_snapshot: Dict[str, Any], built_ground: Any, permeable_area: Any) -> str:
+    payload = {
+        "report_signature": report_signature,
+        "session_snapshot": session_snapshot,
+        "built_ground": built_ground,
+        "permeable_area": permeable_area,
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
 def _clear_review_state() -> None:
     st.session_state[_REVIEW_OPEN_KEY] = False
     st.session_state[_REVIEW_SIGNATURE_KEY] = None
@@ -256,24 +267,30 @@ def render_report_section(
 
             return
 
-        show_generated_notice = bool(has_snapshot and not is_same_as_snapshot)
-        should_focus_generated_notice = bool(
-            show_generated_notice
+        notice_should_focus = bool(
+            has_snapshot
+            and not is_same_as_snapshot
             and not st.session_state.get(_REVIEW_OPEN_KEY)
             and not (st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature"))
         )
-
-        if should_focus_generated_notice:
-            last_notice_signature = st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY)
-            if last_notice_signature != current_report_signature:
+        notice_focus_signature = None
+        if has_snapshot and not is_same_as_snapshot:
+            notice_focus_signature = _build_notice_focus_signature(
+                report_signature=current_report_signature,
+                session_snapshot=current_report_session,
+                built_ground=built_ground,
+                permeable_area=permeable_area,
+            )
+            if notice_should_focus and st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) != notice_focus_signature:
                 arm_navigation_focus(st.session_state, "report_section_notice")
-                st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = current_report_signature
+                st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = notice_focus_signature
 
-        if show_generated_notice:
             st.markdown('<div id="report-section-scenario-notice"></div>', unsafe_allow_html=True)
             st.warning(
                 "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, clique novamente em gerar relatório."
             )
+        elif st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY):
+            st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = None
 
         # Compatibilidade com fluxo legado/testes antigos.
         if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature"):
