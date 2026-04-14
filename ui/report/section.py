@@ -262,6 +262,8 @@ def render_report_section(
 
         # Compatibilidade com fluxo legado/testes antigos.
         if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature"):
+            st.markdown('<div id="report-confirm-new-start"></div>', unsafe_allow_html=True)
+            arm_navigation_focus(st.session_state, "report_confirm_new")
             st.warning("Você tem certeza que deseja gerar outro relatório? Isso vai gastar outro crédito.")
             c_yes, c_no = st.columns(2)
             with c_yes:
