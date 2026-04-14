@@ -689,17 +689,21 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
         )
 
     st.markdown("---")
-    st.markdown("## Pagamento atual")
-    _render_pix_block(current_payment)
+    status = str(_safe_get(current_payment, "status") or "").strip().lower()
+    title_col, action_col = st.columns([0.72, 0.28])
+    with title_col:
+        st.markdown("## Pagamento atual")
+    with action_col:
+        close_label = "Cancelar / fechar Pix atual" if status == "pending" else "Fechar pagamento atual"
+        if st.button(close_label, key=f"close_current_payment_{payment_id}", use_container_width=True):
+            st.session_state.pop(f"paid_credit_sync_{payment_id}", None)
+            clear_all_checkout_states()
+            st.rerun()
 
-    status = _safe_get(current_payment, "status")
+    _render_pix_block(current_payment)
 
     if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
-
-        if st.button("Cancelar / fechar Pix atual", key=f"close_current_pending_{payment_id}"):
-            clear_all_checkout_states()
-            st.rerun()
     elif status == "paid":
         inspect = None
         payment_id_str = str(_safe_get(current_payment, "id"))
@@ -730,15 +734,6 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
             st.error("Este pagamento já foi confirmado, mas os créditos foram reconciliados para outro usuário.")
         else:
             st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. O sistema está tentando reconciliar automaticamente...")
-
-        if st.button("Fechar pagamento atual", key=f"close_current_paid_{payment_id}"):
-            st.session_state.pop(rerun_flag_key, None)
-            clear_all_checkout_states()
-            st.rerun()
-    else:
-        if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
-            clear_all_checkout_states()
-            st.rerun()
 
 
 # =========================================================
