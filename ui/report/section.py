@@ -298,7 +298,7 @@ def render_report_section(
                 permeable_area=permeable_area,
             )
             if notice_should_focus and st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) != notice_focus_signature:
-                arm_navigation_focus(st.session_state, "report_section")
+                arm_navigation_focus(st.session_state, "report_section_notice_context")
                 # O comportamento desejado é enquadrar o bloco "Relatório completo"
                 # inteiro, e não colar o aviso amarelo no topo da viewport.
                 st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = notice_focus_signature
