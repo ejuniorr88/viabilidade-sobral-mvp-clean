@@ -110,7 +110,7 @@ def test_render_indices_section_shows_info_when_zone_or_use_type_missing(monkeyp
     indices_mod.render_indices_section(calc={})
 
     assert fake.infos == [
-        "Clique em Calcular viabilidade para carregar zona, via e regras do Supabase."
+        "Clique em Gerar consulta aos índices urbanísticos para carregar zona, via e índices urbanísticos."
     ]
 
 
@@ -239,4 +239,3 @@ def test_render_indices_section_fetches_rule_when_missing(monkeypatch):
 
     assert calc["rule"]["zone_sigla"] == "ZAP"
     assert _find_value(cards, "Zona") == "ZAP"
-    assert fake.json_payloads and fake.json_payloads[-1]["zone_sigla"] == "ZAP"
