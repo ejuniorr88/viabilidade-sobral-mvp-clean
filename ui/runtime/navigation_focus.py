@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, MutableMapping, Optional
 
 
-_TARGET_TO_CONFIG = {
+_TARGET_CONFIG = {
     "login_gate": {"element_id": "login-gate-start", "offset": 0},
     "primary_actions": {"element_id": "primary-actions-start", "offset": 0},
     "report_section": {"element_id": "report-section-start", "offset": 0},
@@ -17,7 +17,7 @@ _TARGET_TO_CONFIG = {
 def arm_navigation_focus(session_state: MutableMapping[str, Any], target: str) -> None:
     """Arma um foco visual leve sem acoplar regra de negócio ao app principal."""
 
-    if target in _TARGET_TO_CONFIG:
+    if target in _TARGET_CONFIG:
         session_state["nav_focus_target"] = target
 
 
@@ -26,19 +26,15 @@ def resolve_navigation_target(session_state: MutableMapping[str, Any]) -> Option
     """Resolve o próximo destino visual reaproveitando flags já consolidadas."""
 
     if session_state.get("scroll_to_login_gate"):
-        return _TARGET_TO_CONFIG["login_gate"]
+        return _TARGET_CONFIG["login_gate"]
 
     target = session_state.get("nav_focus_target")
     if target:
-        return _TARGET_TO_CONFIG.get(str(target))
+        config = _TARGET_CONFIG.get(str(target))
+        if config:
+            return dict(config)
 
     return None
-
-
-
-def resolve_navigation_element_id(session_state: MutableMapping[str, Any]) -> Optional[str]:
-    target = resolve_navigation_target(session_state)
-    return target.get("element_id") if target else None
 
 
 
@@ -51,14 +47,13 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
 
     element_id = target_config["element_id"]
     offset = int(target_config.get("offset", 0) or 0)
-
     current_run_id = int(session_state.get("nav_focus_run_counter", 0) or 0) + 1
     session_state["nav_focus_run_counter"] = current_run_id
 
     components_module.html(
         f"""
         <script>
-            // Run ID Determinístico: {current_run_id}
+            // Run ID Deterministico: {current_run_id}
             const rootDoc = window.parent.document;
             const rootWin = window.parent;
             const elementId = {element_id!r};
