@@ -766,8 +766,9 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
 
     balance = _fetch_credit_balance(supabase_client, user_id)
     packages = _fetch_credit_packages(supabase_client)
-    ledger_rows = _fetch_recent_ledger(supabase_client, user_id)
-    payments_rows = _fetch_recent_payments(supabase_client, user_id)
+    # Removido por decisão de UX: a tela de compra não precisa exibir blocos
+    # de extrato/pagamentos recentes. A Área do Cliente segue como lugar
+    # exclusivo para relatórios e histórico relevante do usuário.
 
     _render_wallet_header(profile, balance)
 
@@ -809,5 +810,6 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
     _render_buy_section(user_id, user_email, user_name, display_packages, landing_mode=landing_mode)
     _render_current_payment_area(supabase_client, current_user_id=user_id)
 
-    _render_recent_ledger(ledger_rows)
-    _render_recent_payments(payments_rows)
+    # Os blocos "Extrato recente de créditos" e "Pagamentos recentes"
+    # foram removidos desta tela para manter o fluxo focado apenas em planos,
+    # cupom e pagamento.
