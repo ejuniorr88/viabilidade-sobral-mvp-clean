@@ -14,7 +14,7 @@ def test_primary_actions_module_keeps_expected_entrypoints() -> None:
 
     required = [
         "def render_primary_actions(",
-        '"🚀 GERAR ESTUDO DE VIABILIDADE"',
+        '"🚀 GERAR CONSULTA AOS ÍNDICES URBANÍSTICOS"',
         '"🗑️ LIMPAR TUDO"',
         'session_state.calc = {"use_type_code": session_state.calc.get("use_type_code", "RES_UNI")}',
         "clear_report_runtime_state(clear_last_calc_signature=True)",
@@ -36,5 +36,5 @@ def test_app_delegates_primary_actions_instead_of_inline_buttons() -> None:
     for item in required:
         assert item in text, f"app.py deixou de delegar o bloco principal de ações: {item}"
 
-    assert 'st.button(\n        "🚀 GERAR ESTUDO DE VIABILIDADE"' not in text
+    assert 'st.button(\n        "🚀 GERAR CONSULTA AOS ÍNDICES URBANÍSTICOS"' not in text
     assert 'st.button(\n        "🗑️ LIMPAR TUDO"' not in text
