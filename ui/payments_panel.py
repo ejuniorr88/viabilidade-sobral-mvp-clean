@@ -12,6 +12,12 @@ from core.env_secrets import get_secret, get_secret_str
 from core.auth import get_supabase_auth_client
 from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited, inspect_payment_credit_status
 from core.coupons import validate_coupon_for_checkout
+from ui.payments_landing_checkout import (
+    clear_show_all_plans_flag,
+    filter_packages_for_landing_checkout,
+    get_landing_checkout_context,
+    should_show_all_plans,
+)
 
 
 # =========================================================
@@ -42,79 +48,6 @@ def _fmt_dt(v: Any) -> str:
         return "-"
     s = str(v)
     return s.replace("T", " ")[:19]
-
-
-def _normalize_plan_slug(value: Any) -> str:
-    raw = str(value or "").strip()
-    if not raw:
-        return ""
-
-    normalized = unicodedata.normalize("NFD", raw)
-    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
-    normalized = normalized.lower().strip()
-
-    if "intermedi" in normalized:
-        return "intermediario"
-    if "profissional" in normalized:
-        return "profissional"
-    if "basico" in normalized:
-        return "basico"
-    return normalized.replace(" ", "_")
-
-
-def _package_candidate_slugs(package: Dict[str, Any]) -> List[str]:
-    candidates = [
-        _safe_get(package, "plan_slug", ""),
-        _safe_get(package, "slug", ""),
-        _safe_get(package, "name", ""),
-        _safe_get(package, "description", ""),
-    ]
-    return [value for value in (_normalize_plan_slug(item) for item in candidates) if value]
-
-
-def _resolve_selected_package_id(packages: List[Dict[str, Any]], selected_slug: str) -> Optional[str]:
-    if not selected_slug or not packages:
-        return None
-
-    for package in packages:
-        if selected_slug in _package_candidate_slugs(package):
-            return str(_safe_get(package, "id", "")) or None
-
-    for package in packages:
-        candidates = _package_candidate_slugs(package)
-        if any(selected_slug in candidate or candidate in selected_slug for candidate in candidates):
-            return str(_safe_get(package, "id", "")) or None
-
-    ordered_by_price = sorted(
-        list(packages),
-        key=lambda package: (_to_float(_safe_get(package, "price_brl", 0)), str(_safe_get(package, "id", ""))),
-    )
-    if not ordered_by_price:
-        return None
-
-    if selected_slug == "basico":
-        return str(_safe_get(ordered_by_price[0], "id", "")) or None
-    if selected_slug == "intermediario":
-        target_index = 1 if len(ordered_by_price) > 1 else 0
-        return str(_safe_get(ordered_by_price[target_index], "id", "")) or None
-    if selected_slug == "profissional":
-        return str(_safe_get(ordered_by_price[-1], "id", "")) or None
-
-    return None
-
-
-def _sort_packages_for_selected_plan(packages: List[Dict[str, Any]], selected_package_id: Optional[str]) -> List[Dict[str, Any]]:
-    if not selected_package_id:
-        return list(packages)
-
-    return sorted(
-        list(packages),
-        key=lambda package: (
-            0 if str(_safe_get(package, "id", "")) == str(selected_package_id) else 1,
-            _to_float(_safe_get(package, "price_brl", 0)),
-            str(_safe_get(package, "id", "")),
-        ),
-    )
 
 
 def _get_user_id(user_profile: Dict[str, Any]) -> Optional[str]:
@@ -316,6 +249,7 @@ def _create_pix_payment(
 def _clear_landing_checkout_state() -> None:
     st.session_state["landing_checkout_mode"] = False
     st.session_state["landing_selected_plan_slug"] = None
+    clear_show_all_plans_flag(st.session_state)
 
 
 # =========================================================
@@ -526,22 +460,28 @@ def _render_buy_section(
         st.warning("Nenhum pacote disponível para compra.")
         return
 
-    selected_plan_slug = _normalize_plan_slug(st.session_state.get("landing_selected_plan_slug"))
-    selected_package_id = _resolve_selected_package_id(packages, selected_plan_slug)
-    ordered_packages = _sort_packages_for_selected_plan(packages, selected_package_id)
-    if landing_mode and selected_plan_slug:
-        st.info(f"Plano pré-selecionado a partir da landing: {selected_plan_slug.replace('_', ' ').title()}.")
+    landing_context = get_landing_checkout_context(st.session_state, packages)
+    visible_packages = filter_packages_for_landing_checkout(st.session_state, landing_context, packages)
 
-    cols = st.columns(len(ordered_packages)) if len(ordered_packages) <= 3 else st.columns(3)
+    if landing_context.active and landing_context.selected_plan_slug:
+        st.info(
+            f"Plano pré-selecionado a partir da landing: {landing_context.selected_plan_label}."
+        )
+        toggle_label = "Ver outros planos" if not should_show_all_plans(st.session_state) else "Voltar para o plano escolhido"
+        if st.button(toggle_label, key="landing_toggle_other_plans"):
+            st.session_state["landing_show_all_plans"] = not should_show_all_plans(st.session_state)
+            st.rerun()
 
-    for idx, package in enumerate(ordered_packages):
+    cols = st.columns(len(visible_packages)) if len(visible_packages) <= 3 else st.columns(3)
+
+    for idx, package in enumerate(visible_packages):
         col = cols[idx % len(cols)]
         package_id = str(_safe_get(package, 'id', idx))
         with col:
-            is_selected_plan = bool(selected_package_id) and package_id == str(selected_package_id)
+            is_selected_plan = bool(landing_context.selected_package_id) and package_id == str(landing_context.selected_package_id)
             st.markdown(f"**{_safe_get(package, 'name', 'Pacote')}**")
             st.caption(_safe_get(package, "description", "-"))
-            if is_selected_plan:
+            if is_selected_plan and landing_context.active:
                 st.success("Plano escolhido na landing")
 
             coupon_input_key = f"coupon_input_{package_id}"
@@ -601,7 +541,7 @@ def _render_buy_section(
             if coupon_message and isinstance(applied_result, dict):
                 if applied_result.get("ok") and current_coupon:
                     st.success(coupon_message)
-                elif not applied_result.get("ok") and _normalize_coupon_code(coupon_input_value):
+                elif not applied_result.get("ok") and str(coupon_input_value or "").strip().upper():
                     st.error(coupon_message)
 
             if st.button(
