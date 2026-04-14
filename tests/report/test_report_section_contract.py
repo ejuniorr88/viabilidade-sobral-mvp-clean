@@ -27,7 +27,7 @@ def test_new_report_module_keeps_main_visual_anchors() -> None:
 
     required = [
         'st.subheader("Relatório completo")',
-        '"📄 Gerar relatório"',
+        '"📄 Gerar Relatório do Estudo de Viabilidade"',
         'key="btn_generate_report"',
         'render_zone_description_section_func(report_calc)',
         'render_relatorio_section_func(report_calc)',
