@@ -241,8 +241,46 @@ def full_w(pdf: ReportPDF) -> float:
     return pdf.w - pdf.l_margin - pdf.r_margin
 
 
-def ensure_space(pdf: ReportPDF, h: float) -> None:
-    if pdf.get_y() + h > pdf.h - pdf.b_margin:
+
+def _safe_line_count(pdf: ReportPDF, text: str, width: float, line_h: float = 5.0) -> int:
+    """
+    Mede o número de linhas de forma robusta.
+    Tenta usar dry_run do fpdf2; se a versão não suportar, cai no cálculo matemático
+    com get_string_width, que existe em versões antigas também.
+    """
+    txt = san(text)
+    if not txt:
+        return 1
+    width = max(4.0, float(width))
+    try:
+        lines = pdf.multi_cell(width, line_h, txt, dry_run=True, output="LINES")
+        return max(1, len(lines))
+    except Exception:
+        total_lines = 0
+        for paragraph in txt.split("\n"):
+            p = paragraph.strip()
+            if not p:
+                total_lines += 1
+                continue
+            words = p.split(" ")
+            current_w = 0.0
+            lines_in_par = 1
+            for word in words:
+                token = (word + " ").strip() if word else " "
+                token_w = pdf.get_string_width((word + " ") if word else " ")
+                if current_w + token_w > width and current_w > 0:
+                    lines_in_par += 1
+                    current_w = token_w
+                else:
+                    current_w += token_w
+            total_lines += lines_in_par
+        return max(1, total_lines)
+
+
+def ensure_space(pdf: ReportPDF, needed_height: float) -> None:
+    """Garante que há espaço suficiente antes de desenhar um bloco."""
+    space_left = pdf.h - pdf.b_margin - pdf.get_y()
+    if needed_height > space_left:
         pdf.add_page()
 
 
@@ -282,6 +320,7 @@ def paragraph(pdf: ReportPDF, text: str, *, bold: bool = False, color: tuple[int
     pdf.set_x(pdf.l_margin)
     pdf.set_text_color(0, 0, 0)
 
+
 def bullet_list(pdf: ReportPDF, items: Sequence[str]) -> None:
     for it in items:
         ensure_space(pdf, 5.8)
@@ -290,117 +329,160 @@ def bullet_list(pdf: ReportPDF, items: Sequence[str]) -> None:
         pdf.multi_cell(full_w(pdf) - 2, 5.2, san(f"- {it}"))
         pdf.set_x(pdf.l_margin)
 
+
 def card_box(pdf: ReportPDF, title: str, body_lines: Sequence[str], *, fill=(248,250,252), title_color=(29,44,78)) -> None:
+    """
+    Caixa com look-ahead.
+    Se não couber inteira na página, pula antes.
+    Se for maior que a área útil da página, entra em modo quebrável.
+    """
     line_h = 4.9
-    title_h = 4.6
+    title_h = 4.8
     inner_w = full_w(pdf) - 6
     title_txt = san(title or "")
     body_lines = [str(x) for x in (body_lines or []) if str(x).strip()]
 
-    try:
-        pdf.set_font("Helvetica", "B", 10.5)
-        title_lines = pdf.multi_cell(max(4, inner_w), title_h, title_txt, dry_run=True, output="LINES")
-        title_count = max(1, len(title_lines))
-    except Exception:
-        title_count = max(1, title_txt.count("\n") + 1)
+    pdf.set_font("Helvetica", "B", 10.5)
+    title_count = _safe_line_count(pdf, title_txt, inner_w, title_h)
 
-    wrapped_counts = [_wrapped_line_count(pdf, line, inner_w, line_h) for line in body_lines] if body_lines else [1]
-    body_h = max(1, sum(wrapped_counts)) * line_h
-    h = 4 + title_count * title_h + 2 + body_h + 3
-    ensure_space(pdf, h + 2)
+    pdf.set_font("Helvetica", "", 10)
+    body_h = 0.0
+    for line in body_lines:
+        body_h += _safe_line_count(pdf, line, inner_w, line_h) * line_h
+
+    total_box_height = 3 + (title_count * title_h) + 2 + body_h + 3
+    usable_h = pdf.h - pdf.t_margin - pdf.b_margin - 10
+
+    # Bloco grande demais para uma página: cabeçalho em caixa e corpo paginável
+    if total_box_height > usable_h:
+        ensure_space(pdf, 11)
+        x = pdf.l_margin
+        y = pdf.get_y()
+        pdf.set_fill_color(*fill)
+        pdf.set_draw_color(224, 228, 234)
+        pdf.rounded_rect(x, y, full_w(pdf), 9.5, 1.8, style="DF")
+
+        pdf.set_xy(x + 3, y + 2.2)
+        pdf.set_font("Helvetica", "B", 10.5)
+        pdf.set_text_color(*title_color)
+        pdf.multi_cell(inner_w, title_h, title_txt)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(y + 11)
+
+        pdf.set_font("Helvetica", "", 10)
+        for line in body_lines:
+            # quebra segura do corpo, sem fundo contínuo
+            lines_needed = _safe_line_count(pdf, line, full_w(pdf) - 2, line_h)
+            ensure_space(pdf, lines_needed * line_h + 1.5)
+            pdf.set_x(pdf.l_margin + 1)
+            pdf.multi_cell(full_w(pdf) - 2, line_h, san(line))
+            pdf.set_x(pdf.l_margin)
+        pdf.ln(1.5)
+        return
+
+    ensure_space(pdf, total_box_height + 2)
 
     x = pdf.l_margin
     y = pdf.get_y()
     pdf.set_fill_color(*fill)
     pdf.set_draw_color(224, 228, 234)
-    pdf.rounded_rect(x, y, full_w(pdf), h, 1.8, style="DF")
+    pdf.rounded_rect(x, y, full_w(pdf), total_box_height, 1.8, style="DF")
 
     pdf.set_xy(x + 3, y + 2.2)
     pdf.set_font("Helvetica", "B", 10.5)
     pdf.set_text_color(*title_color)
     pdf.multi_cell(inner_w, title_h, title_txt)
 
-    pdf.set_xy(x + 3, y + 3 + title_count * title_h + 1.5)
+    pdf.set_xy(x + 3, y + 3 + (title_count * title_h) + 1.5)
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(0, 0, 0)
     for line in body_lines:
         pdf.multi_cell(inner_w, line_h, san(line))
         pdf.set_x(x + 3)
-    pdf.set_y(max(pdf.get_y(), y + h) + 2)
+
+    pdf.set_y(y + total_box_height + 2)
+
 
 def kpi_row(pdf: ReportPDF, items: Sequence[tuple[str, str]], widths: Sequence[float]) -> None:
+    """Linha de KPIs com altura simétrica e medição robusta."""
     assert len(items) == len(widths)
-    label_h = 3.2
-    value_h = 4.2
+    label_h = 3.3
+    value_h = 4.4
     row_heights = []
+
     for (label, value), w in zip(items, widths):
-        try:
-            pdf.set_font("Helvetica", "B", 8.2)
-            label_lines = pdf.multi_cell(max(4, w-4), label_h, san(label), dry_run=True, output="LINES")
-            pdf.set_font("Helvetica", "B", 11)
-            value_lines = pdf.multi_cell(max(4, w-4), value_h, san(value), dry_run=True, output="LINES")
-            row_heights.append(4 + len(label_lines)*label_h + len(value_lines)*value_h)
-        except Exception:
-            row_heights.append(16)
-    box_h = max(row_heights + [16])
+        pdf.set_font("Helvetica", "B", 8.2)
+        label_lines = _safe_line_count(pdf, label, w - 4, label_h)
+        pdf.set_font("Helvetica", "B", 11)
+        value_lines = _safe_line_count(pdf, value, w - 4, value_h)
+        row_heights.append(4 + (label_lines * label_h) + 1 + (value_lines * value_h) + 3)
+
+    box_h = max(row_heights + [16.0])
     ensure_space(pdf, box_h + 2)
+
     x = pdf.l_margin
     y = pdf.get_y()
     for (label, value), w in zip(items, widths):
         pdf.set_fill_color(248, 250, 252)
         pdf.set_draw_color(224, 228, 234)
         pdf.rounded_rect(x, y, w, box_h, 1.5, style="DF")
-        pdf.set_xy(x + 2, y + 2)
+
+        pdf.set_xy(x + 2, y + 2.2)
         pdf.set_font("Helvetica", "B", 8.2)
         pdf.set_text_color(95, 95, 95)
         pdf.multi_cell(w - 4, label_h, san(label))
+
         yy = pdf.get_y()
         pdf.set_xy(x + 2, yy + 0.4)
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(24, 41, 74)
         pdf.multi_cell(w - 4, value_h, san(value), align="L")
+
         x += w + 2.5
-    pdf.set_text_color(0,0,0)
+
+    pdf.set_text_color(0, 0, 0)
     pdf.set_y(y + box_h + 2)
 
+
 def simple_table(pdf: ReportPDF, headers: List[str], rows: List[List[str]], widths: List[float], *, font_size: int = 9, line_h: float = 5.0) -> None:
-    def row_h(row: List[str], bold=False):
+    def row_h(row: List[str], bold: bool = False) -> float:
         pdf.set_font("Helvetica", "B" if bold else "", font_size)
         max_lines = 1
         for idx, txt in enumerate(row):
-            lines = pdf.multi_cell(max(4, widths[idx]-2), line_h, san(txt), dry_run=True, output="LINES")
-            max_lines = max(max_lines, len(lines))
+            max_lines = max(max_lines, _safe_line_count(pdf, txt, widths[idx] - 2, line_h))
         return max_lines * line_h + 2
 
     hh = row_h(headers, True)
-    ensure_space(pdf, hh+2)
+    ensure_space(pdf, hh + 2)
+
     x = pdf.l_margin
     y = pdf.get_y()
     pdf.set_fill_color(235, 241, 250)
-    pdf.set_draw_color(220,224,230)
+    pdf.set_draw_color(220, 224, 230)
     pdf.set_font("Helvetica", "B", font_size)
+
     for head, w in zip(headers, widths):
         pdf.rect(x, y, w, hh, style="DF")
-        pdf.set_xy(x+1, y+1)
-        pdf.multi_cell(w-2, line_h, san(head))
+        pdf.set_xy(x + 1, y + 1)
+        pdf.multi_cell(w - 2, line_h, san(head))
         x += w
-    pdf.set_y(y+hh)
+
+    pdf.set_y(y + hh)
     flip = False
     for row in rows:
         rh = row_h(row)
-        ensure_space(pdf, rh+1)
+        ensure_space(pdf, rh + 1)
         x = pdf.l_margin
         y = pdf.get_y()
-        pdf.set_fill_color(*( (255,255,255) if not flip else (250,252,255) ))
+        pdf.set_fill_color(*((255,255,255) if not flip else (250,252,255)))
         flip = not flip
         pdf.set_font("Helvetica", "", font_size)
         for txt, w in zip(row, widths):
             pdf.rect(x, y, w, rh, style="DF")
-            pdf.set_xy(x+1, y+1)
-            pdf.multi_cell(w-2, line_h, san(txt))
+            pdf.set_xy(x + 1, y + 1)
+            pdf.multi_cell(w - 2, line_h, san(txt))
             x += w
-        pdf.set_y(y+rh)
-
+        pdf.set_y(y + rh)
 
 def status_badge_width(pdf: ReportPDF, text: str) -> float:
     label = (text or 'SEM DADO').strip().upper()
@@ -620,6 +702,7 @@ def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) ->
     }
 
 
+
 def render_cover(pdf: ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None:
     meta = f"Zona {ctx['zone']} | Via: {ctx['via']} | Tipo de lote: {ctx['tipo_lote']} | Emitido em: {generated_at}"
     intro = (
@@ -628,36 +711,33 @@ def render_cover(pdf: ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None
     )
 
     badge_w = status_badge_width(pdf, ctx['status_curto'])
-    gap = 4.0
-    title_w = max(70, full_w(pdf) - badge_w - gap - 6)
+    gap = 5.0
+    title_w = max(74, full_w(pdf) - badge_w - gap - 6)
 
     try:
-        pdf.set_font('Helvetica', 'B', 14)
-        title_lines = pdf.multi_cell(title_w, 6, san(ctx['uso_label']), dry_run=True, output='LINES')
-    except Exception:
-        title_lines = [ctx['uso_label']]
-
-    try:
-        pdf.set_font('Helvetica', '', 9.8)
-        meta_lines = pdf.multi_cell(full_w(pdf) - 6, 4.8, san(meta), dry_run=True, output='LINES')
+        pdf.set_font('Helvetica', 'B', 14.5)
+        title_lines = pdf.multi_cell(title_w, 6.1, san(ctx['uso_label']), dry_run=True, output='LINES')
+        pdf.set_font('Helvetica', '', 9.4)
+        meta_lines = pdf.multi_cell(full_w(pdf) - 6, 4.7, san(meta), dry_run=True, output='LINES')
         intro_lines = pdf.multi_cell(full_w(pdf) - 6, 4.9, san(intro), dry_run=True, output='LINES')
     except Exception:
+        title_lines = [ctx['uso_label']]
         meta_lines = [meta]
         intro_lines = [intro]
 
-    title_block_h = max(8, len(title_lines) * 6)
-    cover_h = max(52, 10 + title_block_h + len(meta_lines) * 4.8 + len(intro_lines) * 4.9 + 8)
+    title_block_h = max(8, len(title_lines) * 6.1)
+    cover_h = max(56, 10 + title_block_h + len(meta_lines) * 4.7 + len(intro_lines) * 4.9 + 9)
 
     x = pdf.l_margin
     y = pdf.get_y()
-    pdf.set_fill_color(248, 250, 252)
+    pdf.set_fill_color(247, 249, 252)
     pdf.set_draw_color(226, 232, 240)
-    pdf.rounded_rect(x, y, full_w(pdf), cover_h, 2.2, style='DF')
+    pdf.rounded_rect(x, y, full_w(pdf), cover_h, 2.4, style='DF')
 
     pdf.set_xy(x + 3, y + 3)
-    pdf.set_font('Helvetica', 'B', 14)
+    pdf.set_font('Helvetica', 'B', 14.5)
     pdf.set_text_color(32, 42, 71)
-    pdf.multi_cell(title_w, 6, san(ctx['uso_label']))
+    pdf.multi_cell(title_w, 6.1, san(ctx['uso_label']))
 
     badge_x = x + full_w(pdf) - badge_w - 3
     badge_y = y + 3 + max(0, (title_block_h - 9) / 2)
@@ -665,29 +745,32 @@ def render_cover(pdf: ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None
 
     meta_y = y + 4 + title_block_h
     pdf.set_xy(x + 3, meta_y)
-    pdf.set_font('Helvetica', '', 9.8)
-    pdf.set_text_color(80, 88, 102)
-    pdf.multi_cell(full_w(pdf) - 6, 4.8, san(meta))
+    pdf.set_font('Helvetica', '', 9.4)
+    pdf.set_text_color(86, 94, 108)
+    pdf.multi_cell(full_w(pdf) - 6, 4.7, san(meta))
 
-    pdf.set_xy(x + 3, meta_y + len(meta_lines) * 4.8 + 1)
-    pdf.set_font('Helvetica', '', 10)
+    pdf.set_xy(x + 3, meta_y + len(meta_lines) * 4.7 + 1.2)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.set_text_color(32, 42, 71)
+    pdf.cell(0, 4.6, san('Leitura inicial do relatório'), new_x='LMARGIN', new_y='NEXT')
+    pdf.set_font('Helvetica', '', 9.9)
     pdf.set_text_color(0, 0, 0)
     pdf.multi_cell(full_w(pdf) - 6, 4.9, san(intro))
     pdf.set_y(y + cover_h + 2)
 
     section_title(pdf, '', 'DADOS PRINCIPAIS DO ESTUDO')
-    widths = [42, 42, 42, full_w(pdf) - 126 - 7.5]
+    w3 = (full_w(pdf) - 5.0) / 3
     kpi_row(pdf, [
         ('ÁREA DO TERRENO', fmt_area(ctx['area'])),
         ('DIMENSÕES', f"{fmt_num(ctx['front'])} m × {fmt_num(ctx['depth'])} m"),
         ('TIPO DE LOTE', ctx['tipo_lote']),
-        ('SUBZONA / SETOR', ctx['subzona']),
-    ], widths)
+    ], [w3, w3, w3])
     kpi_row(pdf, [
-        ('VIA', ctx['via']),
+        ('SUBZONA / SETOR', ctx['subzona']),
         ('TIPO DE VIA', ctx['via_tipo']),
         ('RESULTADO', ctx['status_curto']),
-    ], [70, 45, full_w(pdf) - 115 - 5.0])
+    ], [w3, w3, w3])
+    card_box(pdf, 'VIA', [ctx['via']], fill=(248, 250, 252))
 
 def render_item_01(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "01", "Onde está localizado o terreno?")
@@ -711,80 +794,88 @@ def mf_sigla_nome(sigla: str) -> str:
     }
     return mapa.get(str(sigla).strip().upper(), sigla)
 
+
 def _fallback_zone_class_unifamiliar(zone_sigla: str | None) -> str | None:
     z = str(zone_sigla or "").strip().upper()
     z = z.replace("—", "-").replace("_", "").replace("/", "").replace(" ", "")
-
     if not z:
         return None
-    if z.startswith("ZEIP"):
-        return "A"
-    if z.startswith("ZCR"):
-        return "A"
-    if z.startswith("ZOP"):
-        return "A"
-    if z.startswith("ZAP"):
-        return "A"
-    if z.startswith("ZAM"):
-        return "A"
-    if z.startswith("ZPP1") or z == "ZPP1":
-        return "A"
-    if z.startswith("ZPP2") or z == "ZPP2":
-        return "A"
-    if z.startswith("ZPP3") or z == "ZPP3":
-        return "A"
-    if z.startswith("ZPP"):
-        return "A"
-    if z.startswith("ZEIS1"):
-        return "AP"
-    if z.startswith("ZEIS2"):
-        return "AP"
-    if z.startswith("ZEIS3"):
-        return "AP"
-    if z.startswith("ZEPE1") or z.startswith("ZEPE2") or z.startswith("ZEPE"):
-        return "I"
-    if z.startswith("ZEIAAPP") or z.startswith("ZEIA-APP"):
-        return "I"
-    if z.startswith("ZEIA1") or z.startswith("ZEIA2") or z.startswith("ZEIA3"):
-        return "I"
-    if z.startswith("ZOD"):
-        return "A"
-    if z.startswith("ZEIT"):
-        return "A"
-    if z.startswith("ZEIC"):
-        return "A"
+
+    allow_a = {
+        "ZEIP", "ZCR", "ZOP", "ZAP", "ZAM", "ZPP", "ZOD", "ZEIT", "ZEIC"
+    }
+    allow_ap = {"ZEIS1", "ZEIS2", "ZEIS3"}
+    deny_i = {"ZEPE", "ZEIA", "ZRO"}
+
+    for prefix in allow_a:
+        if z.startswith(prefix):
+            return "A"
+    for prefix in allow_ap:
+        if z.startswith(prefix):
+            return "AP"
+    for prefix in deny_i:
+        if z.startswith(prefix):
+            return "I"
     return None
+
 
 def _parse_zone_description_parts(text: str) -> Dict[str, str]:
     raw = str(text or "").strip()
     out: Dict[str, str] = {"intro": "", "o_que_e": "", "o_que_busca": "", "na_pratica": "", "fechamento": ""}
     if not raw:
         return out
+
     clean = " ".join(raw.replace("\n", " ").split())
 
-    pats = {
-        "o_que_e": r"O que é \([^)]*\):\s*(.*?)(?=O que a zona busca:|O que isso significa na prática:|$)",
-        "o_que_busca": r"O que a zona busca:\s*(.*?)(?=O que isso significa na prática:|$)",
-        "na_pratica": r"O que isso significa na prática:\s*(.*?)(?=É essa leitura da zona que ajuda|$)",
-        "fechamento": r"(É essa leitura da zona que ajuda.*)$",
-    }
-    first_label_idx = None
-    for label in ["O que é (", "O que a zona busca:", "O que isso significa na prática:"]:
-        idx = clean.find(label)
-        if idx != -1:
-            first_label_idx = idx if first_label_idx is None else min(first_label_idx, idx)
-    if first_label_idx is None:
-        out["o_que_e"] = clean
+    label_map = [
+        ("o_que_e", [r"O que é \([^)]*\):", r"O que é:"]),
+        ("o_que_busca", [r"O que a zona busca:", r"O que busca:"]),
+        ("na_pratica", [r"O que isso significa na prática:", r"Na prática:"]),
+    ]
+
+    # tenta separar pelos rótulos conhecidos, mas tolera variações
+    positions = []
+    for key, pats in label_map:
+        found = None
+        found_text = None
+        for pat in pats:
+            m = re.search(pat, clean, flags=re.I)
+            if m:
+                found = m.start()
+                found_text = m.group(0)
+                break
+        if found is not None:
+            positions.append((found, key, found_text))
+    positions.sort(key=lambda x: x[0])
+
+    if not positions:
+        # fallback editorial: divide em até 3 sentenças iniciais
+        sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if s.strip()]
+        if sents:
+            out["o_que_e"] = sents[0]
+        if len(sents) > 1:
+            out["o_que_busca"] = sents[1]
+        if len(sents) > 2:
+            out["na_pratica"] = " ".join(sents[2:4])
+        if len(sents) > 4:
+            out["fechamento"] = " ".join(sents[4:])
         return out
-    out["intro"] = clean[:first_label_idx].strip()
-    for k, pat in pats.items():
-        m = re.search(pat, clean)
-        if m:
-            out[k] = m.group(1).strip()
+
+    first_pos = positions[0][0]
+    out["intro"] = clean[:first_pos].strip()
+
+    for idx, (pos, key, matched_text) in enumerate(positions):
+        start = pos + len(matched_text)
+        end = positions[idx + 1][0] if idx + 1 < len(positions) else len(clean)
+        chunk = clean[start:end].strip(" :.-")
+        out[key] = chunk
+
+    # tenta puxar fechamento editorial, quando existir
+    m_end = re.search(r"(É essa leitura da zona que ajuda.*)$", clean, flags=re.I)
+    if m_end:
+        out["fechamento"] = m_end.group(1).strip()
+
     return out
-
-
-
 
 def _fallback_zone_description(zone_sigla: str) -> Dict[str, str]:
     z = str(zone_sigla or "").strip().upper().replace(" ", "")
@@ -835,6 +926,7 @@ def _fetch_adequabilidade_unifamiliar(zone_sigla: str, via_tipo_texto: str | Non
     return None, None, final_dbg
 
 
+
 def _resolve_status(zone_class: str | None, via_tipo: str | None, via_class: str | None, current_status: str | None, current_icon: str | None, current_explicacao: str | None) -> tuple[str, str, str, str]:
     z = (zone_class or '').strip().upper()
     vn = _mf_via_tipo_norm(via_tipo)
@@ -844,18 +936,19 @@ def _resolve_status(zone_class: str | None, via_tipo: str | None, via_class: str
     explicacao = (current_explicacao or '').strip()
 
     sem_dado_like = {'', 'SEM DADO', 'NÃO ENCONTRADO', 'NAO ENCONTRADO', 'NÃO LOCALIZADO', 'NAO LOCALIZADO', 'NÃO INFORMADO', 'NAO INFORMADO'}
-
     status = raw_status if raw_status not in sem_dado_like else ''
 
+    # Heurística simples e estável para unifamiliar:
+    # A -> permite ; I -> não permite ; AP/AM/APAM/PE -> depende/PE ; via A sem zona -> possível pela via.
     if not status:
-        if z == 'I' or vc == 'I':
+        if z in {'A'}:
+            status = 'PERMITE'
+        elif z in {'I'} or vc == 'I':
             status = 'NÃO PERMITE'
+        elif z in {'AP', 'AM', 'AP/AM', 'APAM'}:
+            status = 'DEPENDE DO PORTE'
         elif z == 'PE':
             status = 'PROJETO ESPECIAL'
-        elif z in {'AP', 'AM', 'AP/AM'}:
-            status = 'DEPENDE DO PORTE'
-        elif z == 'A':
-            status = 'PERMITE'
         elif not z and vc == 'A':
             status = 'POSSÍVEL PELA VIA'
         else:
@@ -864,31 +957,33 @@ def _resolve_status(zone_class: str | None, via_tipo: str | None, via_class: str
                 status = s2.strip().upper()
                 if not explicacao and e2:
                     explicacao = e2
-            else:
-                status = 'SEM DADO'
+
+    if not status:
+        status = 'SEM DADO'
 
     if status == 'PERMITE':
-        icon = icon or '✅'
+        icon = icon or 'OK'
         if not explicacao or 'não foi possível determinar' in explicacao.lower():
             explicacao = 'Resumo final: PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.'
     elif status == 'NÃO PERMITE':
-        icon = icon or '⛔'
+        icon = icon or 'X'
         explicacao = explicacao or 'Resumo final: NÃO PERMITE. Em regra, a leitura atual não favorece a implantação desse uso nesta condição.'
     elif status == 'DEPENDE DO PORTE':
-        icon = icon or '⚠️'
+        icon = icon or 'ATENCAO'
         explicacao = explicacao or 'Resumo final: DEPENDE DO PORTE. A possibilidade depende do porte do empreendimento e das demais regras aplicáveis.'
     elif status == 'PROJETO ESPECIAL':
-        icon = icon or '⚠️'
+        icon = icon or 'ATENCAO'
         explicacao = explicacao or 'Resumo final: PROJETO ESPECIAL. O caso pode exigir análise específica e condições extras no licenciamento.'
     elif status in {'POSSÍVEL PELA VIA', 'POSSIVEL PELA VIA'}:
-        icon = icon or '⚠️'
+        icon = icon or 'ATENCAO'
         explicacao = explicacao or 'Resumo final: POSSÍVEL PELA VIA. A leitura por via é favorável, mas a adequabilidade por zona não foi localizada automaticamente.'
     else:
         status = 'SEM DADO'
-        icon = icon or '⚠️'
+        icon = icon or 'ATENCAO'
         explicacao = explicacao or 'Não foi possível determinar automaticamente o resultado por zona.'
 
     return icon, status, explicacao, vn or ''
+
 
 def render_item_02(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "02", "O uso residencial unifamiliar é viável neste terreno?")
@@ -909,30 +1004,24 @@ def render_item_02(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
 
     if status == 'PERMITE':
         fill = (231, 245, 236)
-        resumo = "Resumo final: PERMITE"
-        leitura = "Resumo final: PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        resumo = "PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        reforco = "Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
     elif status == 'NÃO PERMITE':
         fill = (254, 242, 242)
-        resumo = "Resumo final: NÃO PERMITE"
-        leitura = "Resumo final: NÃO PERMITE. Em regra, a leitura atual não favorece a implantação desse uso nesta condição."
+        resumo = "NÃO PERMITE. Em regra, a leitura atual não favorece a implantação desse uso nesta condição."
+        reforco = "Quando o resultado for negativo, a análise da zona, da via e das demais exigências urbanísticas continua sendo essencial para confirmação do caso concreto."
     elif status in {'DEPENDE DO PORTE', 'PROJETO ESPECIAL', 'POSSÍVEL PELA VIA', 'POSSIVEL PELA VIA'}:
         fill = (255, 247, 237)
-        resumo = f"Resumo final: {status}"
-        leitura = ctx.get('explicacao') or resumo
+        resumo = (ctx.get('explicacao') or status).replace('Resumo final:', '').strip()
+        reforco = "Mesmo com leitura parcialmente favorável, a definição final ainda depende do porte, da via e das demais exigências urbanísticas aplicáveis."
     else:
         fill = (255, 247, 237)
-        resumo = "Resumo final: SEM DADO"
-        leitura = ctx.get('explicacao') or "Não foi possível determinar o resultado por zona."
+        resumo = (ctx.get('explicacao') or "Não foi possível determinar automaticamente o resultado por zona.").replace('Resumo final:', '').strip()
+        reforco = "Quando a leitura automática não localizar o resultado completo, o caso ainda deve ser confirmado com a leitura da zona, da via e das demais regras urbanísticas aplicáveis."
 
-    card_box(pdf, "Leitura da viabilidade", [zona_line, via_line, resumo], fill=fill)
-    card_box(pdf, "Resumo final", [leitura], fill=fill)
-
-    if status == 'PERMITE':
-        paragraph(pdf, "Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.", bold=True)
-    elif status in {'DEPENDE DO PORTE', 'PROJETO ESPECIAL', 'POSSÍVEL PELA VIA', 'POSSIVEL PELA VIA'}:
-        paragraph(pdf, "Mesmo com leitura parcialmente favorável, a definição final ainda depende do porte, da via e das demais exigências urbanísticas aplicáveis.", bold=True)
-    else:
-        paragraph(pdf, "Quando a leitura automática não localizar o resultado completo, o caso ainda deve ser confirmado com a leitura da zona, da via e das demais regras urbanísticas aplicáveis.", bold=True)
+    card_box(pdf, "Leitura da viabilidade", [zona_line, via_line, f"Resumo final: {status}"], fill=fill)
+    card_box(pdf, "Conclusão", [resumo], fill=fill)
+    paragraph(pdf, reforco, bold=True)
 
 def render_item_03(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "03", "Como funciona a leitura da adequabilidade no unifamiliar?")
@@ -958,6 +1047,7 @@ def render_item_03(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
             ["Projeto especial", "acima de 5.000 m²"],
         ], [35, full_w(pdf)-35], font_size=9, line_h=4.9)
 
+
 def render_item_04(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "04", "O que essa zona permite neste terreno?")
     paragraph(pdf, "Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação. Nas áreas urbanas, essas informações normalmente ajudam a definir o que pode ser construído, quanto pode ocupar no térreo, quanto precisa ficar livre e o porte da edificação. Já em áreas rurais ou em zonas com tratamento especial, nem sempre existem parâmetros urbanísticos numéricos definidos da mesma forma. Nesses casos, a análise ficará restrita aos critérios aplicáveis do Código de Ordenamento Urbano e às demais regras específicas que incidirem sobre a área.")
@@ -969,7 +1059,7 @@ def render_item_04(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     parts = {}
     if desc and desc.get('description_text'):
         parts = _parse_zone_description_parts(str(desc.get('description_text')))
-    if not parts.get('o_que_e'):
+    if not any(parts.get(k) for k in ("o_que_e","o_que_busca","na_pratica")):
         parts = _fallback_zone_description(ctx['zone']) or parts
 
     if parts.get("intro"):
@@ -1165,19 +1255,25 @@ def render_figuras(pdf: ReportPDF, figures: List[Dict[str, Any]]) -> None:
                 pass
 
 
+
 def render_item_13(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
+    pdf.add_page()
     section_title(pdf, "13", "Dicas valiosas")
+    paragraph(pdf, "Orientações úteis para interpretação prática do relatório.")
     card_box(pdf, "Flexibilidade de recuos no uso residencial unifamiliar", [
         "Art. 112. Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima e da Taxa de Ocupação Máxima da zona em que se encontra.",
-        "Na prática: para residência unifamiliar, a legislação admite zerar recuos frontal e laterais, desde que a proposta continue respeitando a TP mínima e a TO máxima da zona.",
-    ], fill=(255,247,237))
+        "Na prática: para residência unifamiliar, a legislação admite zerar recuos frontal e laterais, desde que a proposta continue respeitando a TP mínima e a TO máxima da zona."
+    ], fill=(255, 247, 237))
     card_box(pdf, "Calçada", [
-        "Não existe uma largura única e fixa para toda calçada no município. Quando houver padrão definido no loteamento ou na via, ele deve ser seguido. Quando não houver, a referência costuma ser a calçada já existente no local.",
-    ], fill=(255,247,237))
+        "Não existe uma largura única e fixa para toda calçada no município. Quando houver padrão definido no loteamento ou na via, ele deve ser seguido. Quando não houver, a referência costuma ser a calçada já existente no local."
+    ], fill=(255, 247, 237))
     card_box(pdf, "Piscina", [
-        "Piscina não entra como área construída para a Taxa de Ocupação (TO). Mas ela conta como área impermeável para a Taxa de Permeabilidade (TP). Além disso, deve respeitar afastamento mínimo de 0,50 m das divisas.",
-    ], fill=(255,247,237))
-
+        "Piscina não entra como área construída para a Taxa de Ocupação (TO). Mas ela conta como área impermeável para a Taxa de Permeabilidade (TP)."
+    ], fill=(255, 247, 237))
+    card_box(pdf, "Art. 144 e leitura prática", [
+        "As piscinas, espelhos d'água, caixas d'água, cisternas e tanques deverão observar afastamento mínimo de 0,50 m de todas as divisas do terreno.",
+        "Na prática: além desse afastamento mínimo, esses elementos também entram no cálculo da TP como área impermeável."
+    ], fill=(255, 247, 237))
 
 def render_item_14(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "14", "Resumo rápido final")
