@@ -68,6 +68,7 @@ from ui.access_gates import (
     resolve_calculate_access,
     render_login_gate_if_needed,
 )
+from ui.plans.gate import render_plans_gate
 from ui.payments_panel import render_payments_panel
 from ui.relatorio_blocks.multifamiliar_guia import (
     render_multifamiliar_inadequado_preview,
@@ -179,10 +180,11 @@ def _consume_landing_checkout_query_params() -> None:
 
     st.session_state["landing_checkout_mode"] = True
     st.session_state["landing_selected_plan_slug"] = _normalize_checkout_plan_slug(plan_value)
-    st.session_state["show_client_area"] = True
+    st.session_state["show_plans_page"] = True
+    st.session_state["show_client_area"] = False
 
     if not st.session_state.get("auth_logged_in"):
-        st.session_state["post_login_action"] = "open_client_area"
+        st.session_state["post_login_action"] = "open_plans_page"
 
     _clear_landing_checkout_query_params()
 
@@ -264,6 +266,13 @@ apply_post_login_runtime_flags(
     user_logged_in=user_logged_in,
     user_id=user_id,
 )
+
+if st.session_state.get("show_plans_page"):
+    render_plans_gate(
+        user_logged_in=user_logged_in,
+        user_id=user_id,
+    )
+    st.stop()
 
 if st.session_state.get("show_client_area"):
     credit_balance = None
