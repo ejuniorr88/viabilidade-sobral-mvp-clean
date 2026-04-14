@@ -176,6 +176,18 @@ def render_client_area_page(user_id: str, user_name: str, user_email: str, credi
     st.markdown("## Área do cliente")
     st.caption("Aqui ficam seus relatórios gerados, histórico de uso e ferramentas internas quando liberadas para o seu usuário.")
 
+    if st.session_state.get("landing_checkout_mode"):
+        selected_plan = st.session_state.get("landing_selected_plan_slug")
+        st.markdown("### Comprar créditos")
+        if selected_plan:
+            st.caption(f"Você selecionou o plano {str(selected_plan).replace('_', ' ').title()} na landing. Gere o Pix abaixo para concluir a compra.")
+        else:
+            st.caption("Você veio da landing. Escolha o plano e gere o Pix abaixo para concluir a compra.")
+
+        from ui.payments_panel import render_payments_panel
+        render_payments_panel()
+        st.markdown("---")
+
     c1, c2, c3 = st.columns(3)
     with c1:
         _info_card("Nome", user_name or "—")
