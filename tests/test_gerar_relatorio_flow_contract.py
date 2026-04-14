@@ -15,7 +15,7 @@ def test_gerar_relatorio_flow_contract_keeps_generate_button_and_credit_gate() -
 
     required = [
         'st.subheader("Relatório completo")',
-        '"📄 Gerar relatório"',
+        '"📄 Gerar Relatório do Estudo de Viabilidade"',
         'key="btn_generate_report"',
         'disabled=(not user_logged_in)',
         'get_credit_balance(user_id)',
