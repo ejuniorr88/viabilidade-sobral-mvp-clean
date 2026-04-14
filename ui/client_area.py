@@ -193,7 +193,7 @@ def render_client_area_page(user_id: str, user_name: str, user_email: str, credi
         elif st.session_state.get("current_payment_id") or st.session_state.get("current_payment_snapshot"):
             st.caption("Seu pagamento atual continua disponível abaixo até a conclusão ou fechamento manual.")
         else:
-            st.caption("Escolha um plano e gere o Pix abaixo para concluir a compra.")
+            st.caption("Escolha um plano para gerar o Pix.")
 
         from ui.payments_panel import render_payments_panel
         render_payments_panel()
