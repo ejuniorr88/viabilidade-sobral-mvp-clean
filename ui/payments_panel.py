@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import time
+import unicodedata
 from typing import Any, Dict, List, Optional
 
 import streamlit as st
@@ -41,6 +42,79 @@ def _fmt_dt(v: Any) -> str:
         return "-"
     s = str(v)
     return s.replace("T", " ")[:19]
+
+
+def _normalize_plan_slug(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    normalized = unicodedata.normalize("NFD", raw)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = normalized.lower().strip()
+
+    if "intermedi" in normalized:
+        return "intermediario"
+    if "profissional" in normalized:
+        return "profissional"
+    if "basico" in normalized:
+        return "basico"
+    return normalized.replace(" ", "_")
+
+
+def _package_candidate_slugs(package: Dict[str, Any]) -> List[str]:
+    candidates = [
+        _safe_get(package, "plan_slug", ""),
+        _safe_get(package, "slug", ""),
+        _safe_get(package, "name", ""),
+        _safe_get(package, "description", ""),
+    ]
+    return [value for value in (_normalize_plan_slug(item) for item in candidates) if value]
+
+
+def _resolve_selected_package_id(packages: List[Dict[str, Any]], selected_slug: str) -> Optional[str]:
+    if not selected_slug or not packages:
+        return None
+
+    for package in packages:
+        if selected_slug in _package_candidate_slugs(package):
+            return str(_safe_get(package, "id", "")) or None
+
+    for package in packages:
+        candidates = _package_candidate_slugs(package)
+        if any(selected_slug in candidate or candidate in selected_slug for candidate in candidates):
+            return str(_safe_get(package, "id", "")) or None
+
+    ordered_by_price = sorted(
+        list(packages),
+        key=lambda package: (_to_float(_safe_get(package, "price_brl", 0)), str(_safe_get(package, "id", ""))),
+    )
+    if not ordered_by_price:
+        return None
+
+    if selected_slug == "basico":
+        return str(_safe_get(ordered_by_price[0], "id", "")) or None
+    if selected_slug == "intermediario":
+        target_index = 1 if len(ordered_by_price) > 1 else 0
+        return str(_safe_get(ordered_by_price[target_index], "id", "")) or None
+    if selected_slug == "profissional":
+        return str(_safe_get(ordered_by_price[-1], "id", "")) or None
+
+    return None
+
+
+def _sort_packages_for_selected_plan(packages: List[Dict[str, Any]], selected_package_id: Optional[str]) -> List[Dict[str, Any]]:
+    if not selected_package_id:
+        return list(packages)
+
+    return sorted(
+        list(packages),
+        key=lambda package: (
+            0 if str(_safe_get(package, "id", "")) == str(selected_package_id) else 1,
+            _to_float(_safe_get(package, "price_brl", 0)),
+            str(_safe_get(package, "id", "")),
+        ),
+    )
 
 
 def _get_user_id(user_profile: Dict[str, Any]) -> Optional[str]:
@@ -237,6 +311,11 @@ def _create_pix_payment(
     except Exception as e:
         st.error(f"Não foi possível criar o pagamento Pix: {e}")
         return None
+
+
+def _clear_landing_checkout_state() -> None:
+    st.session_state["landing_checkout_mode"] = False
+    st.session_state["landing_selected_plan_slug"] = None
 
 
 # =========================================================
@@ -437,6 +516,8 @@ def _render_buy_section(
     user_email: str,
     user_name: str,
     packages: List[Dict[str, Any]],
+    *,
+    landing_mode: bool = False,
 ) -> None:
     st.markdown("## Comprar créditos")
     st.caption("Escolha um plano para gerar o Pix.")
@@ -445,14 +526,23 @@ def _render_buy_section(
         st.warning("Nenhum pacote disponível para compra.")
         return
 
-    cols = st.columns(len(packages)) if len(packages) <= 3 else st.columns(3)
+    selected_plan_slug = _normalize_plan_slug(st.session_state.get("landing_selected_plan_slug"))
+    selected_package_id = _resolve_selected_package_id(packages, selected_plan_slug)
+    ordered_packages = _sort_packages_for_selected_plan(packages, selected_package_id)
+    if landing_mode and selected_plan_slug:
+        st.info(f"Plano pré-selecionado a partir da landing: {selected_plan_slug.replace('_', ' ').title()}.")
 
-    for idx, package in enumerate(packages):
+    cols = st.columns(len(ordered_packages)) if len(ordered_packages) <= 3 else st.columns(3)
+
+    for idx, package in enumerate(ordered_packages):
         col = cols[idx % len(cols)]
         package_id = str(_safe_get(package, 'id', idx))
         with col:
+            is_selected_plan = bool(selected_package_id) and package_id == str(selected_package_id)
             st.markdown(f"**{_safe_get(package, 'name', 'Pacote')}**")
             st.caption(_safe_get(package, "description", "-"))
+            if is_selected_plan:
+                st.success("Plano escolhido na landing")
 
             coupon_input_key = f"coupon_input_{package_id}"
             coupon_message_key = f"coupon_message_{package_id}"
@@ -530,6 +620,8 @@ def _render_buy_section(
                     st.session_state["current_payment_id"] = _safe_get(payment, "id")
                     st.session_state["current_payment_snapshot"] = payment
                     st.session_state["pix_created_success"] = True
+                    st.session_state["payments_focus_mode"] = False
+                    _clear_landing_checkout_state()
                     st.rerun()
 
 
@@ -581,6 +673,7 @@ def _sync_current_payment_state(supabase, current_user_id: str) -> None:
         st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
         if bool((result or {}).get("fully_credited")):
             st.session_state["payments_focus_mode"] = False
+            _clear_landing_checkout_state()
             wallet_flag = f"wallet_balance_refresh_after_credit_{payment_id}"
             if not st.session_state.get(wallet_flag):
                 st.session_state[wallet_flag] = True
@@ -638,6 +731,7 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
             st.success("Este pagamento já foi confirmado e os créditos já estão na carteira.")
             if st.session_state.get("payments_focus_mode"):
                 st.session_state["payments_focus_mode"] = False
+            _clear_landing_checkout_state()
         elif credit_result.get("reason") == "credited_to_other_user":
             st.error("Este pagamento já foi confirmado, mas os créditos foram reconciliados para outro usuário.")
         else:
@@ -675,23 +769,29 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
         return
 
     focus_mode = bool(st.session_state.get("payments_focus_mode"))
+    landing_mode = bool(st.session_state.get("landing_checkout_mode"))
 
     # Primeiro, sincroniza o pagamento atual com o usuário resolvido do painel.
     # Só depois buscamos saldo/extrato/pagamentos para refletir o estado persistido.
     _sync_current_payment_state(supabase_client, user_id)
+
+    focus_mode = bool(st.session_state.get("payments_focus_mode"))
+    landing_mode = bool(st.session_state.get("landing_checkout_mode"))
 
     balance = _fetch_credit_balance(supabase_client, user_id)
     packages = _fetch_credit_packages(supabase_client)
     ledger_rows = _fetch_recent_ledger(supabase_client, user_id)
     payments_rows = _fetch_recent_payments(supabase_client, user_id)
 
-    if focus_mode:
+    if landing_mode:
+        st.info("Você selecionou um plano na landing. Conclua o pagamento abaixo.")
+    elif focus_mode:
         st.warning("Saldo insuficiente para gerar o relatório. Escolha um plano e conclua o pagamento.")
     _render_wallet_header(profile, balance)
-    _render_packages_table(packages, expanded=focus_mode)
-    _render_buy_section(user_id, user_email, user_name, packages)
+    _render_packages_table(packages, expanded=(focus_mode or landing_mode))
+    _render_buy_section(user_id, user_email, user_name, packages, landing_mode=landing_mode)
     _render_current_payment_area(supabase_client, current_user_id=user_id)
 
-    if not focus_mode:
+    if not focus_mode and not landing_mode:
         _render_recent_ledger(ledger_rows)
         _render_recent_payments(payments_rows)
