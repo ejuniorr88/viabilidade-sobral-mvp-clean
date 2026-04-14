@@ -12,6 +12,7 @@ from core.env_secrets import get_secret, get_secret_str
 from core.auth import get_supabase_auth_client
 from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited, inspect_payment_credit_status
 from core.coupons import validate_coupon_for_checkout
+from core.state_helpers import clear_all_checkout_states
 
 
 # =========================================================
@@ -312,10 +313,12 @@ def _create_pix_payment(
         st.error(f"Não foi possível criar o pagamento Pix: {e}")
         return None
 
+def _expand_all_plans_callback() -> None:
+    st.session_state["show_all_plans_override"] = True
 
-def _clear_landing_checkout_state() -> None:
-    st.session_state["landing_checkout_mode"] = False
-    st.session_state["landing_selected_plan_slug"] = None
+
+def _collapse_all_plans_callback() -> None:
+    st.session_state["show_all_plans_override"] = False
 
 
 # =========================================================
@@ -511,6 +514,7 @@ def _get_current_coupon_application(package: Dict[str, Any], coupon_input_value:
     return applied
 
 
+
 def _render_buy_section(
     user_id: str,
     user_email: str,
@@ -526,23 +530,14 @@ def _render_buy_section(
         st.warning("Nenhum pacote disponível para compra.")
         return
 
-    selected_plan_slug = _normalize_plan_slug(st.session_state.get("landing_selected_plan_slug"))
-    selected_package_id = _resolve_selected_package_id(packages, selected_plan_slug)
-    ordered_packages = _sort_packages_for_selected_plan(packages, selected_package_id)
-    if landing_mode and selected_plan_slug:
-        st.info(f"Plano pré-selecionado a partir da landing: {selected_plan_slug.replace('_', ' ').title()}.")
+    cols = st.columns(len(packages)) if len(packages) <= 3 else st.columns(3)
 
-    cols = st.columns(len(ordered_packages)) if len(ordered_packages) <= 3 else st.columns(3)
-
-    for idx, package in enumerate(ordered_packages):
+    for idx, package in enumerate(packages):
         col = cols[idx % len(cols)]
-        package_id = str(_safe_get(package, 'id', idx))
+        package_id = str(_safe_get(package, "id", idx))
         with col:
-            is_selected_plan = bool(selected_package_id) and package_id == str(selected_package_id)
             st.markdown(f"**{_safe_get(package, 'name', 'Pacote')}**")
             st.caption(_safe_get(package, "description", "-"))
-            if is_selected_plan:
-                st.success("Plano escolhido na landing")
 
             coupon_input_key = f"coupon_input_{package_id}"
             coupon_message_key = f"coupon_message_{package_id}"
@@ -551,8 +546,8 @@ def _render_buy_section(
             coupon_input_value = st.text_input("Cupom", key=coupon_widget_key)
             current_coupon = _get_current_coupon_application(package, coupon_input_value)
 
-            original_amount = _to_float(_safe_get(package, 'price_brl', 0))
-            package_credits = int(_to_float(_safe_get(package, 'credits', 0)))
+            original_amount = _to_float(_safe_get(package, "price_brl", 0))
+            package_credits = int(_to_float(_safe_get(package, "credits", 0)))
             if current_coupon:
                 benefit_type = str(current_coupon.get("benefit_type") or "discount").strip().lower()
                 if benefit_type == "credit":
@@ -620,9 +615,7 @@ def _render_buy_section(
                     st.session_state["current_payment_id"] = _safe_get(payment, "id")
                     st.session_state["current_payment_snapshot"] = payment
                     st.session_state["pix_created_success"] = True
-                    st.session_state["payments_focus_mode"] = False
                     st.rerun()
-
 
 def _resolve_current_payment(supabase) -> Optional[Dict[str, Any]]:
     payment_id = st.session_state.get("current_payment_id")
@@ -672,7 +665,6 @@ def _sync_current_payment_state(supabase, current_user_id: str) -> None:
         st.session_state["current_payment_id"] = _safe_get(merged, "id", payment_id)
         if bool((result or {}).get("fully_credited")):
             st.session_state["payments_focus_mode"] = False
-            _clear_landing_checkout_state()
             wallet_flag = f"wallet_balance_refresh_after_credit_{payment_id}"
             if not st.session_state.get(wallet_flag):
                 st.session_state[wallet_flag] = True
@@ -704,12 +696,6 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
 
     if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
-        if st.button("Cancelar / fechar Pix atual", key=f"close_current_pending_{payment_id}"):
-            st.session_state.pop("current_payment_id", None)
-            st.session_state.pop("current_payment_snapshot", None)
-            st.session_state["payments_focus_mode"] = False
-            _clear_landing_checkout_state()
-            st.rerun()
     elif status == "paid":
         inspect = None
         payment_id_str = str(_safe_get(current_payment, "id"))
@@ -736,31 +722,25 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
             st.success("Este pagamento já foi confirmado e os créditos já estão na carteira.")
             if st.session_state.get("payments_focus_mode"):
                 st.session_state["payments_focus_mode"] = False
-            _clear_landing_checkout_state()
         elif credit_result.get("reason") == "credited_to_other_user":
             st.error("Este pagamento já foi confirmado, mas os créditos foram reconciliados para outro usuário.")
         else:
             st.warning("Pagamento confirmado, mas os créditos ainda não apareceram na carteira. O sistema está tentando reconciliar automaticamente...")
 
         if st.button("Fechar pagamento atual", key=f"close_current_paid_{payment_id}"):
-            st.session_state.pop("current_payment_id", None)
-            st.session_state.pop("current_payment_snapshot", None)
             st.session_state.pop(rerun_flag_key, None)
-            st.session_state["payments_focus_mode"] = False
-            _clear_landing_checkout_state()
+            clear_all_checkout_states()
             st.rerun()
     else:
         if st.button("Fechar pagamento atual", key=f"close_current_other_{payment_id}"):
-            st.session_state.pop("current_payment_id", None)
-            st.session_state.pop("current_payment_snapshot", None)
-            st.session_state["payments_focus_mode"] = False
-            _clear_landing_checkout_state()
+            clear_all_checkout_states()
             st.rerun()
 
 
 # =========================================================
 # Entry point
 # =========================================================
+
 def render_payments_panel(supabase=None, user_profile=None) -> None:
     supabase_client = _resolve_supabase(supabase)
     profile = _resolve_user_profile(supabase_client, user_profile)
@@ -777,30 +757,58 @@ def render_payments_panel(supabase=None, user_profile=None) -> None:
         st.warning("Cliente Supabase ainda não disponível nesta execução. Atualize a página uma vez.")
         return
 
-    focus_mode = bool(st.session_state.get("payments_focus_mode"))
-    landing_mode = bool(st.session_state.get("landing_checkout_mode"))
-
-    # Primeiro, sincroniza o pagamento atual com o usuário resolvido do painel.
-    # Só depois buscamos saldo/extrato/pagamentos para refletir o estado persistido.
     _sync_current_payment_state(supabase_client, user_id)
 
     focus_mode = bool(st.session_state.get("payments_focus_mode"))
     landing_mode = bool(st.session_state.get("landing_checkout_mode"))
+    selected_plan = st.session_state.get("landing_selected_plan_slug")
+    show_all_plans = bool(st.session_state.get("show_all_plans_override", False))
+    has_active_payment = bool(st.session_state.get("current_payment_id") or st.session_state.get("current_payment_snapshot"))
 
     balance = _fetch_credit_balance(supabase_client, user_id)
     packages = _fetch_credit_packages(supabase_client)
     ledger_rows = _fetch_recent_ledger(supabase_client, user_id)
     payments_rows = _fetch_recent_payments(supabase_client, user_id)
 
-    if landing_mode:
-        st.info("Você selecionou um plano na landing. Conclua o pagamento abaixo.")
+    _render_wallet_header(profile, balance)
+
+    display_packages = list(packages)
+
+    if landing_mode and selected_plan:
+        selected_slug = _normalize_plan_slug(selected_plan)
+        selected_pkg_id = _resolve_selected_package_id(packages, selected_slug)
+
+        if selected_pkg_id:
+            if not show_all_plans:
+                display_packages = [p for p in packages if str(_safe_get(p, "id", "")) == str(selected_pkg_id)]
+
+                c1, c2 = st.columns([0.72, 0.28])
+                with c1:
+                    st.success("Você selecionou este plano na landing. Conclua o pagamento abaixo.")
+                with c2:
+                    st.button(
+                        "Ver outros planos",
+                        key="expand_all_plans_btn",
+                        on_click=_expand_all_plans_callback,
+                        use_container_width=True,
+                    )
+            else:
+                c1, c2 = st.columns([0.72, 0.28])
+                with c1:
+                    st.info("Mostrando todos os pacotes disponíveis.")
+                with c2:
+                    st.button(
+                        "Voltar ao plano escolhido",
+                        key="collapse_all_plans_btn",
+                        on_click=_collapse_all_plans_callback,
+                        use_container_width=True,
+                    )
     elif focus_mode:
         st.warning("Saldo insuficiente para gerar o relatório. Escolha um plano e conclua o pagamento.")
-    _render_wallet_header(profile, balance)
-    _render_packages_table(packages, expanded=(focus_mode or landing_mode))
-    _render_buy_section(user_id, user_email, user_name, packages, landing_mode=landing_mode)
+
+    _render_packages_table(display_packages, expanded=(focus_mode or landing_mode or has_active_payment))
+    _render_buy_section(user_id, user_email, user_name, display_packages, landing_mode=landing_mode)
     _render_current_payment_area(supabase_client, current_user_id=user_id)
 
-    if not focus_mode and not landing_mode:
-        _render_recent_ledger(ledger_rows)
-        _render_recent_payments(payments_rows)
+    _render_recent_ledger(ledger_rows)
+    _render_recent_payments(payments_rows)
