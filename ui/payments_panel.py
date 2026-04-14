@@ -12,12 +12,6 @@ from core.env_secrets import get_secret, get_secret_str
 from core.auth import get_supabase_auth_client
 from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited, inspect_payment_credit_status
 from core.coupons import validate_coupon_for_checkout
-from ui.payments_landing_checkout import (
-    clear_show_all_plans_flag,
-    filter_packages_for_landing_checkout,
-    get_landing_checkout_context,
-    should_show_all_plans,
-)
 
 
 # =========================================================
@@ -48,6 +42,79 @@ def _fmt_dt(v: Any) -> str:
         return "-"
     s = str(v)
     return s.replace("T", " ")[:19]
+
+
+def _normalize_plan_slug(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    normalized = unicodedata.normalize("NFD", raw)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = normalized.lower().strip()
+
+    if "intermedi" in normalized:
+        return "intermediario"
+    if "profissional" in normalized:
+        return "profissional"
+    if "basico" in normalized:
+        return "basico"
+    return normalized.replace(" ", "_")
+
+
+def _package_candidate_slugs(package: Dict[str, Any]) -> List[str]:
+    candidates = [
+        _safe_get(package, "plan_slug", ""),
+        _safe_get(package, "slug", ""),
+        _safe_get(package, "name", ""),
+        _safe_get(package, "description", ""),
+    ]
+    return [value for value in (_normalize_plan_slug(item) for item in candidates) if value]
+
+
+def _resolve_selected_package_id(packages: List[Dict[str, Any]], selected_slug: str) -> Optional[str]:
+    if not selected_slug or not packages:
+        return None
+
+    for package in packages:
+        if selected_slug in _package_candidate_slugs(package):
+            return str(_safe_get(package, "id", "")) or None
+
+    for package in packages:
+        candidates = _package_candidate_slugs(package)
+        if any(selected_slug in candidate or candidate in selected_slug for candidate in candidates):
+            return str(_safe_get(package, "id", "")) or None
+
+    ordered_by_price = sorted(
+        list(packages),
+        key=lambda package: (_to_float(_safe_get(package, "price_brl", 0)), str(_safe_get(package, "id", ""))),
+    )
+    if not ordered_by_price:
+        return None
+
+    if selected_slug == "basico":
+        return str(_safe_get(ordered_by_price[0], "id", "")) or None
+    if selected_slug == "intermediario":
+        target_index = 1 if len(ordered_by_price) > 1 else 0
+        return str(_safe_get(ordered_by_price[target_index], "id", "")) or None
+    if selected_slug == "profissional":
+        return str(_safe_get(ordered_by_price[-1], "id", "")) or None
+
+    return None
+
+
+def _sort_packages_for_selected_plan(packages: List[Dict[str, Any]], selected_package_id: Optional[str]) -> List[Dict[str, Any]]:
+    if not selected_package_id:
+        return list(packages)
+
+    return sorted(
+        list(packages),
+        key=lambda package: (
+            0 if str(_safe_get(package, "id", "")) == str(selected_package_id) else 1,
+            _to_float(_safe_get(package, "price_brl", 0)),
+            str(_safe_get(package, "id", "")),
+        ),
+    )
 
 
 def _get_user_id(user_profile: Dict[str, Any]) -> Optional[str]:
@@ -249,7 +316,11 @@ def _create_pix_payment(
 def _clear_landing_checkout_state() -> None:
     st.session_state["landing_checkout_mode"] = False
     st.session_state["landing_selected_plan_slug"] = None
-    clear_show_all_plans_flag(st.session_state)
+    st.session_state.pop("landing_show_all_plans", None)
+
+
+def _should_show_all_landing_plans() -> bool:
+    return bool(st.session_state.get("landing_show_all_plans"))
 
 
 # =========================================================
@@ -460,17 +531,37 @@ def _render_buy_section(
         st.warning("Nenhum pacote disponível para compra.")
         return
 
-    landing_context = get_landing_checkout_context(st.session_state, packages)
-    visible_packages = filter_packages_for_landing_checkout(st.session_state, landing_context, packages)
+    selected_plan_slug = _normalize_plan_slug(st.session_state.get("landing_selected_plan_slug"))
+    selected_package_id = _resolve_selected_package_id(packages, selected_plan_slug)
+    ordered_packages = _sort_packages_for_selected_plan(packages, selected_package_id)
+    show_all_plans = _should_show_all_landing_plans()
 
-    if landing_context.active and landing_context.selected_plan_slug:
-        st.info(
-            f"Plano pré-selecionado a partir da landing: {landing_context.selected_plan_label}."
-        )
-        toggle_label = "Ver outros planos" if not should_show_all_plans(st.session_state) else "Voltar para o plano escolhido"
-        if st.button(toggle_label, key="landing_toggle_other_plans"):
-            st.session_state["landing_show_all_plans"] = not should_show_all_plans(st.session_state)
-            st.rerun()
+    if landing_mode and selected_plan_slug:
+        pretty_plan = selected_plan_slug.replace('_', ' ').title()
+        st.info(f"Plano pré-selecionado a partir da landing: {pretty_plan}.")
+        action_col1, action_col2 = st.columns([1, 1])
+        with action_col1:
+            if show_all_plans:
+                if st.button("Voltar para o plano escolhido", key="landing_back_to_selected_plan"):
+                    st.session_state["landing_show_all_plans"] = False
+                    st.rerun()
+            else:
+                if st.button("Ver outros planos", key="landing_show_all_plans"):
+                    st.session_state["landing_show_all_plans"] = True
+                    st.rerun()
+        with action_col2:
+            if st.button("Fechar checkout", key="landing_close_checkout"):
+                st.session_state.pop("current_payment_id", None)
+                st.session_state.pop("current_payment_snapshot", None)
+                st.session_state["payments_focus_mode"] = False
+                _clear_landing_checkout_state()
+                st.rerun()
+
+    visible_packages = ordered_packages
+    if landing_mode and selected_package_id and not show_all_plans:
+        visible_packages = [p for p in ordered_packages if str(_safe_get(p, "id", "")) == str(selected_package_id)]
+        if not visible_packages:
+            visible_packages = ordered_packages
 
     cols = st.columns(len(visible_packages)) if len(visible_packages) <= 3 else st.columns(3)
 
@@ -478,10 +569,10 @@ def _render_buy_section(
         col = cols[idx % len(cols)]
         package_id = str(_safe_get(package, 'id', idx))
         with col:
-            is_selected_plan = bool(landing_context.selected_package_id) and package_id == str(landing_context.selected_package_id)
+            is_selected_plan = bool(selected_package_id) and package_id == str(selected_package_id)
             st.markdown(f"**{_safe_get(package, 'name', 'Pacote')}**")
             st.caption(_safe_get(package, "description", "-"))
-            if is_selected_plan and landing_context.active:
+            if is_selected_plan:
                 st.success("Plano escolhido na landing")
 
             coupon_input_key = f"coupon_input_{package_id}"
@@ -541,7 +632,7 @@ def _render_buy_section(
             if coupon_message and isinstance(applied_result, dict):
                 if applied_result.get("ok") and current_coupon:
                     st.success(coupon_message)
-                elif not applied_result.get("ok") and str(coupon_input_value or "").strip().upper():
+                elif not applied_result.get("ok") and _normalize_coupon_code(coupon_input_value):
                     st.error(coupon_message)
 
             if st.button(
@@ -561,7 +652,8 @@ def _render_buy_section(
                     st.session_state["current_payment_snapshot"] = payment
                     st.session_state["pix_created_success"] = True
                     st.session_state["payments_focus_mode"] = False
-                    _clear_landing_checkout_state()
+                    if landing_mode:
+                        st.session_state["landing_show_all_plans"] = False
                     st.rerun()
 
 
@@ -645,6 +737,15 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
 
     if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)
+        close_col1, close_col2 = st.columns([1, 3])
+        with close_col1:
+            if st.button("Fechar pagamento pendente", key=f"close_current_pending_{payment_id}"):
+                st.session_state.pop("current_payment_id", None)
+                st.session_state.pop("current_payment_snapshot", None)
+                st.session_state["payments_focus_mode"] = False
+                if st.session_state.get("landing_checkout_mode"):
+                    st.session_state["landing_show_all_plans"] = False
+                st.rerun()
     elif status == "paid":
         inspect = None
         payment_id_str = str(_safe_get(current_payment, "id"))
