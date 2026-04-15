@@ -59,6 +59,7 @@ from ui.relatorio import (
 )
 from core.auth import handle_oauth_callback, safe_get_query_param
 from ui.runtime.app_query_params import (
+    consume_client_area_query_param,
     consume_home_nav_query_param,
     consume_landing_checkout_query_params,
 )
@@ -186,6 +187,7 @@ if safe_get_query_param("auth_flow") == "callback":
 handle_oauth_callback()
 inject_global_styles()
 consume_home_nav_query_param(st.session_state)
+consume_client_area_query_param(st.session_state)
 consume_landing_checkout_query_params(st.session_state)
 
 legal_view = safe_get_query_param("view")
