@@ -103,7 +103,7 @@ def inject_global_styles() -> None:
 
         .vf-brand-home {{
             text-decoration: none !important;
-            color: inherit !important;
+            color: #ffffff !important;
         }}
 
         .vf-brand-home:hover,
@@ -112,7 +112,7 @@ def inject_global_styles() -> None:
         .vf-brand-home:active,
         .vf-brand-home:visited {{
             text-decoration: none !important;
-            color: inherit !important;
+            color: #ffffff !important;
             outline: none !important;
         }}
 
