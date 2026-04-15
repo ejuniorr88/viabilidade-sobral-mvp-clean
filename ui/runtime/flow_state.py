@@ -17,6 +17,12 @@ def apply_post_login_runtime_flags(
 
     if session_state.get("post_login_action") == "open_client_area" and user_logged_in and user_id:
         session_state["show_client_area"] = True
+        session_state["show_plans_page"] = False
+        session_state["post_login_action"] = None
+
+    if session_state.get("post_login_action") == "open_plans_page" and user_logged_in and user_id:
+        session_state["show_plans_page"] = True
+        session_state["show_client_area"] = False
         session_state["post_login_action"] = None
 
 

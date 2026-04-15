@@ -21,7 +21,7 @@ def render_how_it_works_panel() -> None:
         st.markdown("### Como funciona")
         st.markdown("**1. Marque no mapa**  \nSelecione o terreno clicando no mapa.")
         st.markdown("**2. Preencha os dados**  \nInforme as dimensões do lote.")
-        st.markdown("**3. Gere a viabilidade**  \nClique em **Gerar estudo de viabilidade**.")
+        st.markdown("**3. Gere a viabilidade**  \nClique em **Gerar consulta aos índices urbanísticos**.")
         st.markdown("**4. Veja os resultados**  \nConfira zona, índices e análise.")
         st.markdown("**5. Gere o relatório (opcional)**  \nBaixe o relatório completo se quiser detalhamento.")
 

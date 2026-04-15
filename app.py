@@ -1,7 +1,9 @@
 import json
+import re
+import unicodedata
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import streamlit as st
 
@@ -51,6 +53,8 @@ from ui.indices.section import render_indices_section
 from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
 from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
+from ui.runtime.navigation_focus import render_navigation_focus_if_needed
+from ui.runtime.report_navigation import arm_report_initial_focus
 from ui.relatorio import (
     render_relatorio_section,
     render_zone_description_section,
@@ -65,6 +69,7 @@ from ui.access_gates import (
     resolve_calculate_access,
     render_login_gate_if_needed,
 )
+from ui.plans.gate import render_plans_gate
 from ui.payments_panel import render_payments_panel
 from ui.relatorio_blocks.multifamiliar_guia import (
     render_multifamiliar_inadequado_preview,
@@ -74,6 +79,7 @@ from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user, refund_viability_credit
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
+from core.state_helpers import clear_all_checkout_states
 from core import report_confirmation as report_confirmation_core
 from core import checkout_flow as checkout_flow_core
 
@@ -131,6 +137,87 @@ def _build_current_report_signature(calc_ref, session_snapshot):
     return build_report_signature(calc=calc_ref, session_state=session_snapshot)
 
 
+def _normalize_checkout_plan_slug(value: Any) -> Optional[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+
+    normalized = unicodedata.normalize("NFD", raw)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = re.sub(r"[^a-z0-9]+", "_", normalized.lower()).strip("_")
+
+    if "intermedi" in normalized:
+        return "intermediario"
+    if "profissional" in normalized:
+        return "profissional"
+    if "basico" in normalized:
+        return "basico"
+    return normalized or None
+
+
+def _clear_landing_checkout_query_params() -> None:
+    keys = ["checkout", "plan"]
+    try:
+        for key in keys:
+            try:
+                del st.query_params[key]
+            except Exception:
+                pass
+    except Exception:
+        try:
+            current = st.experimental_get_query_params()
+            cleaned = {k: v for k, v in current.items() if k not in keys}
+            st.experimental_set_query_params(**cleaned)
+        except Exception:
+            pass
+
+
+def _clear_home_nav_query_param() -> None:
+    try:
+        try:
+            del st.query_params["nav"]
+        except Exception:
+            pass
+    except Exception:
+        try:
+            current = st.experimental_get_query_params()
+            cleaned = {k: v for k, v in current.items() if k != "nav"}
+            st.experimental_set_query_params(**cleaned)
+        except Exception:
+            pass
+
+
+def _consume_home_nav_query_param() -> None:
+    nav_value = str(safe_get_query_param("nav") or "").strip().lower()
+    if nav_value != "home":
+        return
+
+    st.session_state["show_plans_page"] = False
+    st.session_state["show_client_area"] = False
+    st.session_state["post_login_action"] = None
+    clear_all_checkout_states()
+    _clear_home_nav_query_param()
+
+
+def _consume_landing_checkout_query_params() -> None:
+    checkout_flag = str(safe_get_query_param("checkout") or "").strip().lower()
+    plan_value = safe_get_query_param("plan")
+    should_open_checkout = checkout_flag in {"1", "true", "yes", "on"} or bool(plan_value)
+
+    if not should_open_checkout:
+        return
+
+    st.session_state["landing_checkout_mode"] = True
+    st.session_state["landing_selected_plan_slug"] = _normalize_checkout_plan_slug(plan_value)
+    st.session_state["show_plans_page"] = True
+    st.session_state["show_client_area"] = False
+
+    if not st.session_state.get("auth_logged_in"):
+        st.session_state["post_login_action"] = "open_plans_page"
+
+    _clear_landing_checkout_query_params()
+
+
 def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
     if not isinstance(calc_ref, dict):
         return False
@@ -179,6 +266,8 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
+_consume_home_nav_query_param()
+_consume_landing_checkout_query_params()
 
 legal_view = safe_get_query_param("view")
 if legal_view == "terms":
@@ -207,6 +296,13 @@ apply_post_login_runtime_flags(
     user_logged_in=user_logged_in,
     user_id=user_id,
 )
+
+if st.session_state.get("show_plans_page"):
+    render_plans_gate(
+        user_logged_in=user_logged_in,
+        user_id=user_id,
+    )
+    st.stop()
 
 if st.session_state.get("show_client_area"):
     credit_balance = None
@@ -359,6 +455,9 @@ if preview_inadequado:
 
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err")) and not preview_inadequado
 
+if run_free_calc_now and can_offer_report:
+    arm_report_initial_focus(st.session_state)
+
 _REPORT_LEGACY_FLOW_CONTRACT = """
 report_confirmation_state = report_confirmation_core.compute_report_confirmation_state(
 current_report_session = report_confirmation_state["current_report_session"]
@@ -391,7 +490,7 @@ if st.session_state.get("confirm_new_report") and st.session_state.get("pending_
 """
 # Âncoras contratuais preservadas no app.py para os testes de fluxo/ordem.
 # st.subheader("Relatório completo")
-# "📄 Gerar relatório"
+# "📄 Gerar Relatório do Estudo de Viabilidade"
 # key="btn_generate_report"
 # disabled=(not user_logged_in)
 # get_credit_balance(user_id)
@@ -438,6 +537,11 @@ render_report_section(
 )
 
 render_item3_scroll_if_needed(
+    session_state=st.session_state,
+    components_module=components,
+)
+
+render_navigation_focus_if_needed(
     session_state=st.session_state,
     components_module=components,
 )

@@ -334,7 +334,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.subheader("6) Relatório Urbanístico")
 
     if not isinstance(calc, dict) or not calc.get("ok"):
-        st.info("Clique em **Calcular viabilidade** para gerar o relatório.")
+        st.info("Clique em **Gerar consulta aos índices urbanísticos** para gerar o relatório.")
         return
 
     rule = calc.get("rule") or {}

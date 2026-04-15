@@ -30,4 +30,4 @@ def test_new_indices_module_exists_and_exports_render() -> None:
 
     assert "from .section import render_indices_section" in init_text
     assert "def render_indices_section(" in section_text
-    assert 'st.header("4) Índices Urbanísticos (Supabase)")' in section_text
+    assert 'st.header("4) Índices Urbanísticos")' in section_text

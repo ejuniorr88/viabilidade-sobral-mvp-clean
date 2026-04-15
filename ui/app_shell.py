@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
@@ -102,6 +101,21 @@ def inject_global_styles() -> None:
             min-height: 92px !important;
         }}
 
+        .vf-brand-home {{
+            text-decoration: none !important;
+            color: #ffffff !important;
+        }}
+
+        .vf-brand-home:hover,
+        .vf-brand-home:focus,
+        .vf-brand-home:focus-visible,
+        .vf-brand-home:active,
+        .vf-brand-home:visited {{
+            text-decoration: none !important;
+            color: #ffffff !important;
+            outline: none !important;
+        }}
+
         .vf-brand {{
             font-size: 30px;
             font-weight: 800;
@@ -113,6 +127,8 @@ def inject_global_styles() -> None:
             min-height: 92px;
             display: flex;
             align-items: center;
+            font-family: inherit !important;
+            cursor: pointer;
         }}
 
         .vf-brand-dot {{
@@ -209,8 +225,9 @@ def render_top_nav() -> None:
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
+        home_url = f"{get_app_url()}?nav=home"
         st.markdown(
-            '<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
+            f'<a class="vf-brand vf-brand-home" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema">Viabilidade-Fácil<span class="vf-brand-dot">.</span></a>',
             unsafe_allow_html=True,
         )
 
@@ -220,12 +237,18 @@ def render_top_nav() -> None:
     with cols[3]:
         if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=True):
             st.session_state["show_client_area"] = True
+            st.session_state["show_plans_page"] = False
             if not st.session_state.get("auth_logged_in"):
                 st.session_state["post_login_action"] = "open_client_area"
             st.rerun()
 
     with cols[4]:
-        st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=True)
+        if st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=True):
+            st.session_state["show_plans_page"] = True
+            st.session_state["show_client_area"] = False
+            if not st.session_state.get("auth_logged_in"):
+                st.session_state["post_login_action"] = "open_plans_page"
+            st.rerun()
 
     with cols[5]:
         st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)

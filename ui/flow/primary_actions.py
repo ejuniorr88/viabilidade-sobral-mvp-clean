@@ -4,6 +4,8 @@ from typing import Any, Callable
 
 import streamlit as st
 
+from ui.runtime.navigation_focus import arm_navigation_focus
+
 
 ClearRuntimeStateFn = Callable[..., Any]
 
@@ -39,10 +41,12 @@ def render_primary_actions(*, session_state, clear_report_runtime_state: ClearRu
     A limpeza segue exatamente o comportamento já consolidado do app.
     """
 
+    st.markdown('<div id="primary-actions-start"></div>', unsafe_allow_html=True)
+
     btn_col1, btn_col2, btn_col3 = st.columns([1, 2.1, 1])
     with btn_col2:
         clicked_calcular = st.button(
-            "🚀 GERAR ESTUDO DE VIABILIDADE",
+            "🚀 GERAR CONSULTA AOS ÍNDICES URBANÍSTICOS",
             key="btn_calc",
             use_container_width=True,
         )
@@ -56,6 +60,7 @@ def render_primary_actions(*, session_state, clear_report_runtime_state: ClearRu
         if limpar_tudo:
             if _has_generated_report(session_state):
                 session_state.confirm_clear_all = True
+                arm_navigation_focus(session_state, "primary_actions")
                 st.rerun()
             _perform_clear_all(
                 session_state=session_state,
@@ -88,6 +93,7 @@ def render_primary_actions(*, session_state, clear_report_runtime_state: ClearRu
                 )
             if confirm_clear_no:
                 session_state.confirm_clear_all = False
+                arm_navigation_focus(session_state, "primary_actions")
                 st.rerun()
 
     return clicked_calcular

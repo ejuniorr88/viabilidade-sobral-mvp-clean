@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import os
 import tempfile
 from datetime import datetime
@@ -9,8 +10,13 @@ from urllib.request import urlopen
 
 from fpdf import FPDF
 
-from ui.relatorio_blocks.dicas_valiosas import get_dicas_valiosas
 from ui.relatorio_blocks.figuras_anexo_v import filter_figuras_by_lot_type
+from ui.relatorio_blocks.multifamiliar_items.common import (
+    _fetch_adequabilidade as _mf_fetch_adequabilidade,
+    _sigla_nome as _mf_sigla_nome,
+    _summarize_adequabilidade as _mf_summarize_adequabilidade,
+    _via_tipo_norm as _mf_via_tipo_norm,
+)
 from .zone_descriptions import fetch_zone_description
 
 try:
@@ -32,17 +38,44 @@ QUADRO_ROWS: List[Dict[str, str]] = [
 ]
 
 QUADRO_OBS = [
-    "Tolera-se iluminação e ventilação zenital.",
-    "Admite-se ventilação mecânica ou indireta nos casos permitidos.",
-    "Banheiro não pode comunicar-se diretamente com cozinha ou sala de jantar.",
-    "Corredores com mais de 5,00 m devem ter largura mínima de 1,00 m.",
-    "Corredores com mais de 10,00 m exigem ventilação mínima proporcional.",
-    "Área de porta com veneziana pode ser computada como ventilação.",
-    "Escadas devem ser de material incombustível ou tratado.",
-    "Patamar obrigatório quando houver mudança de direção ou altura superior a 2,90 m.",
-    "Largura mínima do degrau: 0,25 m.",
-    "Altura máxima do degrau: 0,19 m.",
+    "Tolerada a iluminação e ventilação zenital.",
+    "Poderão utilizar ventilação mecânica ou serem ventilados e iluminados indiretamente através de outros banheiros, circulações, depósitos ou áreas de serviços.",
+    "Não poderão comunicar-se diretamente com a cozinha e sala de jantar.",
+    "As condições de iluminação e ventilação naturais poderão ser substituídas por meios artificiais.",
+    "Para corredores com mais de 5,00m de comprimento, a largura mínima é de 1,00m.",
+    "Para corredores com mais de 10,00m de comprimento é obrigatória a ventilação na relação de 1/20 da área do piso.",
+    "Poderá ser computada como área de ventilação a área da porta com venezianas.",
+    "Deverá ser material incombustível ou tratada para tal.",
+    "Serão permitidas escadas em curva, desde que a curvatura interna tenha um raio mínimo de 2,00m e os degraus tenham largura mínima de 0,28m, medida na linha do piso, desenvolvida à distância de 1,00m da linha de curvatura externa.",
+    "As exigências da observação 9 ficam dispensadas para escadas tipo marinheiro e caracol, admitidas para acesso a torres, jiraus, adegas, ateliês, escritórios e outros casos especiais.",
+    "Serão obrigatórios os patamares intermediários sempre que houver mudança de direção ou quando o lance da escada precisar vencer altura superior a 2,90m; o comprimento do patamar não será inferior à largura da escada.",
+    "A largura mínima do degrau será de 0,25m.",
+    "A altura máxima do degrau será de 0,19m.",
+    "O piso deve ser antiderrapante.",
+    "A inclinação máxima será de 10%.",
+    "Consideram-se corredores principais os que dão acesso às unidades habitacionais em residências multifamiliares.",
+    "Quando a área for superior a 10,00m², deverão ser ventilados na relação de 1/24 da área do piso.",
+    "Quando o comprimento for superior a 10,00m, deverá ser alargado de 0,10m por metro, ou fração, do comprimento excedente a 10,00m.",
+    "Quando não houver ligação direta com o exterior, será tolerada ventilação por meio de chaminés de ventilação ou pela caixa de escada, nos casos que precisar.",
+    "Deverá haver ligação direta entre o hall e a caixa de escada.",
+    "Tolerada ventilação pela caixa de escada.",
+    "A área mínima de 6,00m² é exigida quando houver um só elevador. Quando houver mais de um elevador, a área deverá ser aumentada de 30% para o elevador excedente.",
+    "A área mínima de 12,00m², exigida quando houver um só elevador, deverá ser aumentada de 30% por elevador excedente.",
+    "Será tolerado um diâmetro de 2,50m, quando os elevadores se situarem no mesmo lado do hall.",
+    "Consideram-se corredores principais os de uso comum do edifício.",
+    "Quando a área for superior a 20,00m², deverão ser ventilados na relação de 1/20 da área do piso.",
+    "A abertura de ventilação deverá se situar, no máximo, a 10,00m de qualquer ponto do corredor.",
+    "Consideram-se corredores secundários os de uso exclusivo da administração do edifício ou destinado a serviço.",
 ]
+
+QUADRO_GERAIS_OBS = [
+    "a) Para o uso residencial o revestimento impermeável das paredes será, no mínimo, até 1,50m na cozinha, banheiro e lavanderia.",
+    "b) Para os edifícios de habitação multifamiliar ou coletiva e comerciais, o revestimento impermeável das paredes será, no mínimo até 1,50m nas escadas e sanitários.",
+    "c) Para os edifícios de habitação multifamiliar ou coletiva e comerciais, o revestimento impermeável do piso será no hall do prédio, hall dos pavimentos, corredores principais e secundários, escadas, rampas e sanitários.",
+    "d) As edificações construídas com estruturas de contêineres devem observar a legislação vigente e apresentar um pé-direito mínimo de 2,40m.",
+    "e) Para todos os usos, as colunas iluminação mínima e ventilação mínima deste Anexo referem-se à relação entre a área da abertura e a área do piso.",
+]
+
 
 PERMEABILIDADE_ROWS = [
     ("Grama", "100%"),
@@ -82,8 +115,59 @@ class ReportPDF(FPDF):
 
 
 def san(text: Any) -> str:
-    return str(text).encode("latin-1", "replace").decode("latin-1")
-
+    s = str(text)
+    replacements = {
+        "—": " - ",
+        "–": " - ",
+        "−": "-",
+        "’": "'",
+        "‘": "'",
+        "“": '"',
+        "”": '"',
+        "→": " -> ",
+        "⇒": " -> ",
+        "✅": "",
+        "⚠️": "",
+        "⚠": "",
+        "⛔": "",
+        "📍": "",
+        "📘": "",
+        "🧭": "",
+        "📏": "",
+        "📐": "",
+        "🌿": "",
+        "🧱": "",
+        "🏢": "",
+        "🚗": "",
+        "📋": "",
+        "🚶": "",
+        "📎": "",
+        "💡": "",
+        "📌": "",
+        "🏛️": "",
+        "🏗️": "",
+        "📄": "",
+        "🔎": "",
+        "•": "-",
+        "1️⃣": "1",
+        "2️⃣": "2",
+        "3️⃣": "3",
+        "4️⃣": "4",
+        "5️⃣": "5",
+        "6️⃣": "6",
+        "7️⃣": "7",
+        "8️⃣": "8",
+        "9️⃣": "9",
+        "0️⃣": "0",
+        "\u00a0": " ",
+    }
+    for a, b in replacements.items():
+        s = s.replace(a, b)
+    if "\n" in s:
+        s = "\n".join(" ".join(line.split()) for line in s.splitlines())
+    else:
+        s = " ".join(s.split())
+    return s.encode("latin-1", "replace").decode("latin-1")
 
 def safe_float(v: Any) -> Optional[float]:
     try:
@@ -157,8 +241,46 @@ def full_w(pdf: ReportPDF) -> float:
     return pdf.w - pdf.l_margin - pdf.r_margin
 
 
-def ensure_space(pdf: ReportPDF, h: float) -> None:
-    if pdf.get_y() + h > pdf.h - pdf.b_margin:
+
+def _safe_line_count(pdf: ReportPDF, text: str, width: float, line_h: float = 5.0) -> int:
+    """
+    Mede o número de linhas de forma robusta.
+    Tenta usar dry_run do fpdf2; se a versão não suportar, cai no cálculo matemático
+    com get_string_width, que existe em versões antigas também.
+    """
+    txt = san(text)
+    if not txt:
+        return 1
+    width = max(4.0, float(width))
+    try:
+        lines = pdf.multi_cell(width, line_h, txt, dry_run=True, output="LINES")
+        return max(1, len(lines))
+    except Exception:
+        total_lines = 0
+        for paragraph in txt.split("\n"):
+            p = paragraph.strip()
+            if not p:
+                total_lines += 1
+                continue
+            words = p.split(" ")
+            current_w = 0.0
+            lines_in_par = 1
+            for word in words:
+                token = (word + " ").strip() if word else " "
+                token_w = pdf.get_string_width((word + " ") if word else " ")
+                if current_w + token_w > width and current_w > 0:
+                    lines_in_par += 1
+                    current_w = token_w
+                else:
+                    current_w += token_w
+            total_lines += lines_in_par
+        return max(1, total_lines)
+
+
+def ensure_space(pdf: ReportPDF, needed_height: float) -> None:
+    """Garante que há espaço suficiente antes de desenhar um bloco."""
+    space_left = pdf.h - pdf.b_margin - pdf.get_y()
+    if needed_height > space_left:
         pdf.add_page()
 
 
@@ -167,6 +289,13 @@ def section_title(pdf: ReportPDF, n: str, title: str) -> None:
     pdf.ln(2)
     x = pdf.l_margin
     y = pdf.get_y()
+    if not str(n or '').strip():
+        pdf.set_font("Helvetica", "B", 12.5)
+        pdf.set_text_color(35, 46, 68)
+        pdf.multi_cell(full_w(pdf), 6, san(title))
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(y + 8)
+        return
     pdf.set_fill_color(32, 77, 156)
     pdf.rect(x, y, 12, 8, style="F")
     pdf.set_xy(x, y + 1.6)
@@ -183,10 +312,12 @@ def section_title(pdf: ReportPDF, n: str, title: str) -> None:
 
 def paragraph(pdf: ReportPDF, text: str, *, bold: bool = False, color: tuple[int, int, int] | None = None, h: float = 5.2) -> None:
     ensure_space(pdf, h + 1)
+    pdf.set_x(pdf.l_margin)
     pdf.set_font("Helvetica", "B" if bold else "", 10)
     if color:
         pdf.set_text_color(*color)
     pdf.multi_cell(full_w(pdf), h, san(text))
+    pdf.set_x(pdf.l_margin)
     pdf.set_text_color(0, 0, 0)
 
 
@@ -195,106 +326,194 @@ def bullet_list(pdf: ReportPDF, items: Sequence[str]) -> None:
         ensure_space(pdf, 5.8)
         pdf.set_x(pdf.l_margin + 2)
         pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(full_w(pdf) - 2, 5.2, san(f"• {it}"))
+        pdf.multi_cell(full_w(pdf) - 2, 5.2, san(f"- {it}"))
+        pdf.set_x(pdf.l_margin)
 
 
 def card_box(pdf: ReportPDF, title: str, body_lines: Sequence[str], *, fill=(248,250,252), title_color=(29,44,78)) -> None:
+    """
+    Caixa com look-ahead.
+    Se não couber inteira na página, pula antes.
+    Se for maior que a área útil da página, entra em modo quebrável.
+    """
     line_h = 4.9
-    body_h = max(1, len(body_lines)) * line_h
-    h = 7 + body_h + 3
-    ensure_space(pdf, h + 2)
+    title_h = 4.8
+    inner_w = full_w(pdf) - 6
+    title_txt = san(title or "")
+    body_lines = [str(x) for x in (body_lines or []) if str(x).strip()]
+
+    pdf.set_font("Helvetica", "B", 10.5)
+    title_count = _safe_line_count(pdf, title_txt, inner_w, title_h)
+
+    pdf.set_font("Helvetica", "", 10)
+    body_h = 0.0
+    for line in body_lines:
+        body_h += _safe_line_count(pdf, line, inner_w, line_h) * line_h
+
+    total_box_height = 3 + (title_count * title_h) + 2 + body_h + 3
+    usable_h = pdf.h - pdf.t_margin - pdf.b_margin - 10
+
+    # Bloco grande demais para uma página: cabeçalho em caixa e corpo paginável
+    if total_box_height > usable_h:
+        ensure_space(pdf, 11)
+        x = pdf.l_margin
+        y = pdf.get_y()
+        pdf.set_fill_color(*fill)
+        pdf.set_draw_color(224, 228, 234)
+        pdf.rounded_rect(x, y, full_w(pdf), 9.5, 1.8, style="DF")
+
+        pdf.set_xy(x + 3, y + 2.2)
+        pdf.set_font("Helvetica", "B", 10.5)
+        pdf.set_text_color(*title_color)
+        pdf.multi_cell(inner_w, title_h, title_txt)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(y + 11)
+
+        pdf.set_font("Helvetica", "", 10)
+        for line in body_lines:
+            # quebra segura do corpo, sem fundo contínuo
+            lines_needed = _safe_line_count(pdf, line, full_w(pdf) - 2, line_h)
+            ensure_space(pdf, lines_needed * line_h + 1.5)
+            pdf.set_x(pdf.l_margin + 1)
+            pdf.multi_cell(full_w(pdf) - 2, line_h, san(line))
+            pdf.set_x(pdf.l_margin)
+        pdf.ln(1.5)
+        return
+
+    ensure_space(pdf, total_box_height + 2)
+
     x = pdf.l_margin
     y = pdf.get_y()
     pdf.set_fill_color(*fill)
     pdf.set_draw_color(224, 228, 234)
-    pdf.rounded_rect(x, y, full_w(pdf), h, 1.8, style="DF")
-    pdf.set_xy(x + 3, y + 2.5)
+    pdf.rounded_rect(x, y, full_w(pdf), total_box_height, 1.8, style="DF")
+
+    pdf.set_xy(x + 3, y + 2.2)
     pdf.set_font("Helvetica", "B", 10.5)
     pdf.set_text_color(*title_color)
-    pdf.cell(0, 4, san(title))
-    pdf.set_xy(x + 3, y + 7.5)
+    pdf.multi_cell(inner_w, title_h, title_txt)
+
+    pdf.set_xy(x + 3, y + 3 + (title_count * title_h) + 1.5)
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(0, 0, 0)
     for line in body_lines:
-        pdf.multi_cell(full_w(pdf) - 6, line_h, san(line))
+        pdf.multi_cell(inner_w, line_h, san(line))
         pdf.set_x(x + 3)
-    pdf.set_y(y + h + 2)
+
+    pdf.set_y(y + total_box_height + 2)
 
 
 def kpi_row(pdf: ReportPDF, items: Sequence[tuple[str, str]], widths: Sequence[float]) -> None:
+    """Linha de KPIs com altura simétrica e medição robusta."""
     assert len(items) == len(widths)
-    ensure_space(pdf, 15)
+    label_h = 3.3
+    value_h = 4.4
+    row_heights = []
+
+    for (label, value), w in zip(items, widths):
+        pdf.set_font("Helvetica", "B", 8.2)
+        label_lines = _safe_line_count(pdf, label, w - 4, label_h)
+        pdf.set_font("Helvetica", "B", 11)
+        value_lines = _safe_line_count(pdf, value, w - 4, value_h)
+        row_heights.append(4 + (label_lines * label_h) + 1 + (value_lines * value_h) + 3)
+
+    box_h = max(row_heights + [16.0])
+    ensure_space(pdf, box_h + 2)
+
     x = pdf.l_margin
     y = pdf.get_y()
     for (label, value), w in zip(items, widths):
         pdf.set_fill_color(248, 250, 252)
         pdf.set_draw_color(224, 228, 234)
-        pdf.rounded_rect(x, y, w, 13.5, 1.5, style="DF")
-        pdf.set_xy(x + 2, y + 2)
+        pdf.rounded_rect(x, y, w, box_h, 1.5, style="DF")
+
+        pdf.set_xy(x + 2, y + 2.2)
         pdf.set_font("Helvetica", "B", 8.2)
         pdf.set_text_color(95, 95, 95)
-        pdf.multi_cell(w - 4, 3.2, san(label))
-        pdf.set_xy(x + 2, y + 7.2)
+        pdf.multi_cell(w - 4, label_h, san(label))
+
+        yy = pdf.get_y()
+        pdf.set_xy(x + 2, yy + 0.4)
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(24, 41, 74)
-        pdf.multi_cell(w - 4, 4.2, san(value), align="L")
+        pdf.multi_cell(w - 4, value_h, san(value), align="L")
+
         x += w + 2.5
-    pdf.set_text_color(0,0,0)
-    pdf.set_y(y + 16)
+
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_y(y + box_h + 2)
 
 
 def simple_table(pdf: ReportPDF, headers: List[str], rows: List[List[str]], widths: List[float], *, font_size: int = 9, line_h: float = 5.0) -> None:
-    def row_h(row: List[str], bold=False):
+    def row_h(row: List[str], bold: bool = False) -> float:
         pdf.set_font("Helvetica", "B" if bold else "", font_size)
         max_lines = 1
         for idx, txt in enumerate(row):
-            lines = pdf.multi_cell(max(4, widths[idx]-2), line_h, san(txt), dry_run=True, output="LINES")
-            max_lines = max(max_lines, len(lines))
+            max_lines = max(max_lines, _safe_line_count(pdf, txt, widths[idx] - 2, line_h))
         return max_lines * line_h + 2
 
     hh = row_h(headers, True)
-    ensure_space(pdf, hh+2)
+    ensure_space(pdf, hh + 2)
+
     x = pdf.l_margin
     y = pdf.get_y()
     pdf.set_fill_color(235, 241, 250)
-    pdf.set_draw_color(220,224,230)
+    pdf.set_draw_color(220, 224, 230)
     pdf.set_font("Helvetica", "B", font_size)
+
     for head, w in zip(headers, widths):
         pdf.rect(x, y, w, hh, style="DF")
-        pdf.set_xy(x+1, y+1)
-        pdf.multi_cell(w-2, line_h, san(head))
+        pdf.set_xy(x + 1, y + 1)
+        pdf.multi_cell(w - 2, line_h, san(head))
         x += w
-    pdf.set_y(y+hh)
+
+    pdf.set_y(y + hh)
     flip = False
     for row in rows:
         rh = row_h(row)
-        ensure_space(pdf, rh+1)
+        ensure_space(pdf, rh + 1)
         x = pdf.l_margin
         y = pdf.get_y()
-        pdf.set_fill_color(*( (255,255,255) if not flip else (250,252,255) ))
+        pdf.set_fill_color(*((255,255,255) if not flip else (250,252,255)))
         flip = not flip
         pdf.set_font("Helvetica", "", font_size)
         for txt, w in zip(row, widths):
             pdf.rect(x, y, w, rh, style="DF")
-            pdf.set_xy(x+1, y+1)
-            pdf.multi_cell(w-2, line_h, san(txt))
+            pdf.set_xy(x + 1, y + 1)
+            pdf.multi_cell(w - 2, line_h, san(txt))
             x += w
-        pdf.set_y(y+rh)
+        pdf.set_y(y + rh)
 
+def status_badge_width(pdf: ReportPDF, text: str) -> float:
+    label = (text or 'SEM DADO').strip().upper()
+    return max(36, min(58, pdf.get_string_width(san(label)) + 12))
 
-def status_badge(pdf: ReportPDF, text: str) -> None:
-    x = pdf.l_margin
-    y = pdf.get_y()
-    w = 35
-    pdf.set_fill_color(231,245,236)
-    pdf.set_draw_color(187,247,208)
-    pdf.rounded_rect(x, y, w, 9, 1.4, style="DF")
-    pdf.set_xy(x, y+2)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(27,112,61)
-    pdf.cell(w, 4, san(text), align="C")
-    pdf.set_text_color(0,0,0)
+def status_badge(pdf: ReportPDF, text: str, x: float | None = None, y: float | None = None) -> float:
+    x = pdf.get_x() if x is None else x
+    y = pdf.get_y() if y is None else y
+    label = (text or 'SEM DADO').strip().upper()
 
+    if label in {'PERMITE', 'ATENDE'}:
+        fill = (231, 245, 236); border = (187, 247, 208); font = (27, 112, 61)
+    elif label in {'NÃO PERMITE', 'NAO PERMITE', 'INADEQUADO'}:
+        fill = (254, 242, 242); border = (254, 202, 202); font = (153, 27, 27)
+    elif label in {'PROJETO ESPECIAL', 'DEPENDE DO PORTE', 'POSSÍVEL PELA VIA', 'POSSIVEL PELA VIA'}:
+        fill = (255, 247, 237); border = (253, 215, 170); font = (154, 52, 18)
+    elif label == 'SEM DADO':
+        fill = (248, 250, 252); border = (203, 213, 225); font = (71, 85, 105)
+    else:
+        fill = (243, 246, 250); border = (203, 213, 225); font = (51, 65, 85)
+
+    w = status_badge_width(pdf, label)
+    pdf.set_fill_color(*fill)
+    pdf.set_draw_color(*border)
+    pdf.rounded_rect(x, y, w, 9, 1.4, style='DF')
+    pdf.set_xy(x, y + 2)
+    pdf.set_font('Helvetica', 'B', 11)
+    pdf.set_text_color(*font)
+    pdf.cell(w, 4, san(label), align='C')
+    pdf.set_text_color(0, 0, 0)
+    return w
 
 def build_public_storage_url(bucket: str, path: str) -> Optional[str]:
     base = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -431,20 +650,28 @@ def extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict
         if a_livre is not None:
             tp_user = (a_livre / area) * 100.0
     tipo_lote = "Esquina" if is_corner else "Meio de quadra"
-    zone = pick_text(calc.get("zone"), calc.get("zone_sigla"), rule.get("zone_sigla"))
+    zone = pick_text(calc.get("zone"), calc.get("zone_sigla"), calc.get("zone_lookup"), rule.get("zone_sigla"))
     via = pick_text(calc.get("via_nome"), calc.get("street_name"), default="-")
     via_tipo = pick_text(calc.get("via_tipo"), calc.get("street_type"), default="-")
     uso = pick_text(calc.get("use_type_code"), default="RES_UNI")
     uso_label = "Residência unifamiliar" if uso.startswith("RES_UNI") else uso
     subzona = pick_text(rule.get("subzona"), rule.get("subzone_code"), calc.get("subzone_code"), default="PADRAO")
+    zone_sigla_lookup = pick_text(calc.get("zone_sigla"), calc.get("zone_lookup"), zone, rule.get("zone_sigla"), default="")
+    zone_class = pick_text(calc.get("zone_class"), default="")
+    via_class = pick_text(calc.get("via_class"), default="")
+    if not zone_class and not via_class:
+        try:
+            zone_class, via_class, _ = _fetch_adequabilidade_unifamiliar(str(zone_sigla_lookup or ""), via_tipo)
+        except Exception:
+            zone_class, via_class = zone_class, via_class
+    if not zone_class and uso.startswith("RES_UNI"):
+        zone_class = _fallback_zone_class_unifamiliar(zone_sigla_lookup or zone)
     status_curto = pick_text(calc.get("status_curto"), calc.get("resultado_final"), default="SEM DADO")
     icon = pick_text(calc.get("icon"), default="")
     explicacao = pick_text(calc.get("explicacao"), default="")
-    zone_class = pick_text(calc.get("zone_class"), default="")
-    via_class = pick_text(calc.get("via_class"), default="")
-    via_norm = pick_text(calc.get("via_norm"), default="")
+    icon, status_curto, explicacao, via_norm = _resolve_status(zone_class, via_tipo, via_class, status_curto, icon, explicacao)
     zone_title = zone
-    desc = fetch_zone_desc(pick_text(calc.get("zone_sigla"), zone), pick_text(calc.get("subzone_code"), subzona), pick_text(calc.get("zone_label_raw"), zone))
+    desc = fetch_zone_desc(zone_sigla_lookup or zone, pick_text(calc.get("subzone_code"), subzona), pick_text(calc.get("zone_label_raw"), zone))
     if desc and desc.get("title"):
         zone_title = str(desc.get("title"))
     return {
@@ -475,45 +702,75 @@ def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) ->
     }
 
 
+
 def render_cover(pdf: ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None:
-    pdf.set_fill_color(248, 250, 252)
-    pdf.set_draw_color(226, 232, 240)
-    y = pdf.get_y()
-    pdf.rounded_rect(pdf.l_margin, y, full_w(pdf), 40, 2.2, style="DF")
-    pdf.set_xy(pdf.l_margin + 3, y + 3)
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.set_text_color(32, 42, 71)
-    pdf.cell(0, 6, san(ctx["uso_label"]))
-    pdf.set_xy(pdf.l_margin + 3, y + 10)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.set_text_color(80, 88, 102)
-    pdf.multi_cell(full_w(pdf)-42, 5, san(f"Zona {ctx['zone']} | Via: {ctx['via']} | Tipo de lote: {ctx['tipo_lote']} | Emitido em: {generated_at}"))
-    pdf.set_xy(pdf.w - pdf.r_margin - 38, y + 6)
-    status_badge(pdf, ctx["status_curto"]) 
-    pdf.set_xy(pdf.l_margin + 3, y + 19)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.set_text_color(0,0,0)
+    meta = f"Zona {ctx['zone']} | Via: {ctx['via']} | Tipo de lote: {ctx['tipo_lote']} | Emitido em: {generated_at}"
     intro = (
         "Este relatório mostra, de forma simples, o que pode ou não pode ser feito no terreno informado, com base na zona, na via e nas regras urbanísticas do município. "
-        "Primeiro mostramos onde o terreno está, depois se o uso é viável, e em seguida explicamos os principais limites do lote, como ocupação, área livre, altura, vagas, ambientes mínimos e calçada."
+        "Primeiro mostramos onde o terreno está, depois se o uso é viável e, em seguida, explicamos os principais limites do lote, como ocupação, área livre, altura, vagas, ambientes mínimos e calçada."
     )
-    pdf.multi_cell(full_w(pdf)-6, 5.0, san(intro))
-    pdf.set_y(y + 42)
 
-    section_title(pdf, "", "DADOS PRINCIPAIS DO ESTUDO")
-    widths = [42, 42, 42, full_w(pdf) - 126 - 7.5]
-    kpi_row(pdf, [
-        ("ÁREA DO TERRENO", fmt_area(ctx["area"])),
-        ("DIMENSÕES", f"{fmt_num(ctx['front'])} m × {fmt_num(ctx['depth'])} m"),
-        ("TIPO DE LOTE", ctx["tipo_lote"]),
-        ("SUBZONA / SETOR", ctx["subzona"]),
-    ], widths)
-    kpi_row(pdf, [
-        ("VIA", ctx["via"]),
-        ("TIPO DE VIA", ctx["via_tipo"]),
-        ("RESULTADO", ctx["status_curto"]),
-    ], [70, 45, full_w(pdf)-115-5.0])
+    badge_w = status_badge_width(pdf, ctx['status_curto'])
+    gap = 5.0
+    title_w = max(74, full_w(pdf) - badge_w - gap - 6)
 
+    try:
+        pdf.set_font('Helvetica', 'B', 14.5)
+        title_lines = pdf.multi_cell(title_w, 6.1, san(ctx['uso_label']), dry_run=True, output='LINES')
+        pdf.set_font('Helvetica', '', 9.4)
+        meta_lines = pdf.multi_cell(full_w(pdf) - 6, 4.7, san(meta), dry_run=True, output='LINES')
+        intro_lines = pdf.multi_cell(full_w(pdf) - 6, 4.9, san(intro), dry_run=True, output='LINES')
+    except Exception:
+        title_lines = [ctx['uso_label']]
+        meta_lines = [meta]
+        intro_lines = [intro]
+
+    title_block_h = max(8, len(title_lines) * 6.1)
+    cover_h = max(56, 10 + title_block_h + len(meta_lines) * 4.7 + len(intro_lines) * 4.9 + 9)
+
+    x = pdf.l_margin
+    y = pdf.get_y()
+    pdf.set_fill_color(247, 249, 252)
+    pdf.set_draw_color(226, 232, 240)
+    pdf.rounded_rect(x, y, full_w(pdf), cover_h, 2.4, style='DF')
+
+    pdf.set_xy(x + 3, y + 3)
+    pdf.set_font('Helvetica', 'B', 14.5)
+    pdf.set_text_color(32, 42, 71)
+    pdf.multi_cell(title_w, 6.1, san(ctx['uso_label']))
+
+    badge_x = x + full_w(pdf) - badge_w - 3
+    badge_y = y + 3 + max(0, (title_block_h - 9) / 2)
+    status_badge(pdf, ctx['status_curto'], x=badge_x, y=badge_y)
+
+    meta_y = y + 4 + title_block_h
+    pdf.set_xy(x + 3, meta_y)
+    pdf.set_font('Helvetica', '', 9.4)
+    pdf.set_text_color(86, 94, 108)
+    pdf.multi_cell(full_w(pdf) - 6, 4.7, san(meta))
+
+    pdf.set_xy(x + 3, meta_y + len(meta_lines) * 4.7 + 1.2)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.set_text_color(32, 42, 71)
+    pdf.cell(0, 4.6, san('Leitura inicial do relatório'), new_x='LMARGIN', new_y='NEXT')
+    pdf.set_font('Helvetica', '', 9.9)
+    pdf.set_text_color(0, 0, 0)
+    pdf.multi_cell(full_w(pdf) - 6, 4.9, san(intro))
+    pdf.set_y(y + cover_h + 2)
+
+    section_title(pdf, '', 'DADOS PRINCIPAIS DO ESTUDO')
+    w3 = (full_w(pdf) - 5.0) / 3
+    kpi_row(pdf, [
+        ('ÁREA DO TERRENO', fmt_area(ctx['area'])),
+        ('DIMENSÕES', f"{fmt_num(ctx['front'])} m × {fmt_num(ctx['depth'])} m"),
+        ('TIPO DE LOTE', ctx['tipo_lote']),
+    ], [w3, w3, w3])
+    kpi_row(pdf, [
+        ('SUBZONA / SETOR', ctx['subzona']),
+        ('TIPO DE VIA', ctx['via_tipo']),
+        ('RESULTADO', ctx['status_curto']),
+    ], [w3, w3, w3])
+    card_box(pdf, 'VIA', [ctx['via']], fill=(248, 250, 252))
 
 def render_item_01(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "01", "Onde está localizado o terreno?")
@@ -538,28 +795,238 @@ def mf_sigla_nome(sigla: str) -> str:
     return mapa.get(str(sigla).strip().upper(), sigla)
 
 
+def _fallback_zone_class_unifamiliar(zone_sigla: str | None) -> str | None:
+    z = str(zone_sigla or "").strip().upper()
+    z = z.replace("—", "-").replace("_", "").replace("/", "").replace(" ", "")
+    if not z:
+        return None
+
+    allow_a = {
+        "ZEIP", "ZCR", "ZOP", "ZAP", "ZAM", "ZPP", "ZOD", "ZEIT", "ZEIC"
+    }
+    allow_ap = {"ZEIS1", "ZEIS2", "ZEIS3"}
+    deny_i = {"ZEPE", "ZEIA", "ZRO"}
+
+    for prefix in allow_a:
+        if z.startswith(prefix):
+            return "A"
+    for prefix in allow_ap:
+        if z.startswith(prefix):
+            return "AP"
+    for prefix in deny_i:
+        if z.startswith(prefix):
+            return "I"
+    return None
+
+
+def _parse_zone_description_parts(text: str) -> Dict[str, str]:
+    raw = str(text or "").strip()
+    out: Dict[str, str] = {"intro": "", "o_que_e": "", "o_que_busca": "", "na_pratica": "", "fechamento": ""}
+    if not raw:
+        return out
+
+    clean = " ".join(raw.replace("\n", " ").split())
+
+    label_map = [
+        ("o_que_e", [r"O que é \([^)]*\):", r"O que é:"]),
+        ("o_que_busca", [r"O que a zona busca:", r"O que busca:"]),
+        ("na_pratica", [r"O que isso significa na prática:", r"Na prática:"]),
+    ]
+
+    # tenta separar pelos rótulos conhecidos, mas tolera variações
+    positions = []
+    for key, pats in label_map:
+        found = None
+        found_text = None
+        for pat in pats:
+            m = re.search(pat, clean, flags=re.I)
+            if m:
+                found = m.start()
+                found_text = m.group(0)
+                break
+        if found is not None:
+            positions.append((found, key, found_text))
+    positions.sort(key=lambda x: x[0])
+
+    if not positions:
+        # fallback editorial: divide em até 3 sentenças iniciais
+        sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", clean) if s.strip()]
+        if sents:
+            out["o_que_e"] = sents[0]
+        if len(sents) > 1:
+            out["o_que_busca"] = sents[1]
+        if len(sents) > 2:
+            out["na_pratica"] = " ".join(sents[2:4])
+        if len(sents) > 4:
+            out["fechamento"] = " ".join(sents[4:])
+        return out
+
+    first_pos = positions[0][0]
+    out["intro"] = clean[:first_pos].strip()
+
+    for idx, (pos, key, matched_text) in enumerate(positions):
+        start = pos + len(matched_text)
+        end = positions[idx + 1][0] if idx + 1 < len(positions) else len(clean)
+        chunk = clean[start:end].strip(" :.-")
+        out[key] = chunk
+
+    # tenta puxar fechamento editorial, quando existir
+    m_end = re.search(r"(É essa leitura da zona que ajuda.*)$", clean, flags=re.I)
+    if m_end:
+        out["fechamento"] = m_end.group(1).strip()
+
+    return out
+
+def _fallback_zone_description(zone_sigla: str) -> Dict[str, str]:
+    z = str(zone_sigla or "").strip().upper().replace(" ", "")
+    if z == "ZAM":
+        return {
+            "title": "ZAM - Zona de Adensamento Médio",
+            "o_que_e": "zona em consolidação, com infraestrutura em implantação ou incompleta, onde o crescimento deve ser moderado.",
+            "o_que_busca": "controlar adensamento e orientar crescimento gradual para manter qualidade urbana.",
+            "na_pratica": "dá para crescer, mas normalmente com mais controle e atenção à capacidade de infraestrutura local.",
+            "fechamento": "É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.",
+        }
+    if z == "ZAP":
+        return {
+            "title": "ZAP - Zona de Adensamento Preferencial",
+            "o_que_e": "zona estratégica para crescimento mais intenso e organizado, com potencial de formar novas centralidades.",
+            "o_que_busca": "estimular adensamento e mistura de usos, fortalecer cidade policêntrica e direcionar ocupação eficiente.",
+            "na_pratica": "costuma favorecer projetos urbanos mais intensos, desde que compatíveis com a infraestrutura.",
+            "fechamento": "É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.",
+        }
+    return {}
+
+def _wrapped_line_count(pdf: "ReportPDF", text: str, width: float, line_h: float) -> int:
+    txt = san(text)
+    if not txt:
+        return 1
+    try:
+        lines = pdf.multi_cell(max(4, width), line_h, txt, dry_run=True, output="LINES")
+        return max(1, len(lines))
+    except Exception:
+        return max(1, txt.count("\n") + 1)
+
+
+def _fetch_adequabilidade_unifamiliar(zone_sigla: str, via_tipo_texto: str | None) -> tuple[str | None, str | None, dict[str, Any]]:
+    attempts: list[tuple[str, str | None, str | None, dict[str, Any]]] = []
+    for use_code in ("RES_UNI", "RES_MULTI_R21", "RES_MULTI_R22", "RES_MULTI_R3"):
+        zc, vc, dbg = _mf_fetch_adequabilidade(
+            zone_sigla=str(zone_sigla or ""),
+            via_tipo_texto=via_tipo_texto,
+            use_type_code=use_code,
+        )
+        attempts.append((use_code, zc, vc, dbg))
+        if zc or vc:
+            dbg = dict(dbg or {})
+            dbg["resolved_use_type_code"] = use_code
+            return zc, vc, dbg
+    final_dbg = dict(attempts[0][3] if attempts else {})
+    final_dbg["attempts"] = [{"use_type_code": u, "zone_class": z, "via_class": v} for u, z, v, _ in attempts]
+    return None, None, final_dbg
+
+
+
+def _resolve_status(zone_class: str | None, via_tipo: str | None, via_class: str | None, current_status: str | None, current_icon: str | None, current_explicacao: str | None) -> tuple[str, str, str, str]:
+    z = (zone_class or '').strip().upper()
+    vn = _mf_via_tipo_norm(via_tipo)
+    vc = (via_class or '').strip().upper()
+    raw_status = (current_status or '').strip().upper()
+    icon = (current_icon or '').strip()
+    explicacao = (current_explicacao or '').strip()
+
+    sem_dado_like = {'', 'SEM DADO', 'NÃO ENCONTRADO', 'NAO ENCONTRADO', 'NÃO LOCALIZADO', 'NAO LOCALIZADO', 'NÃO INFORMADO', 'NAO INFORMADO'}
+    status = raw_status if raw_status not in sem_dado_like else ''
+
+    # Heurística simples e estável para unifamiliar:
+    # A -> permite ; I -> não permite ; AP/AM/APAM/PE -> depende/PE ; via A sem zona -> possível pela via.
+    if not status:
+        if z in {'A'}:
+            status = 'PERMITE'
+        elif z in {'I'} or vc == 'I':
+            status = 'NÃO PERMITE'
+        elif z in {'AP', 'AM', 'AP/AM', 'APAM'}:
+            status = 'DEPENDE DO PORTE'
+        elif z == 'PE':
+            status = 'PROJETO ESPECIAL'
+        elif not z and vc == 'A':
+            status = 'POSSÍVEL PELA VIA'
+        else:
+            _, s2, e2 = _mf_summarize_adequabilidade(zone_class=z or None, via_norm=vn, via_class=vc or None)
+            if s2 and s2.strip().upper() not in sem_dado_like:
+                status = s2.strip().upper()
+                if not explicacao and e2:
+                    explicacao = e2
+
+    if not status:
+        status = 'SEM DADO'
+
+    if status == 'PERMITE':
+        icon = icon or 'OK'
+        if not explicacao or 'não foi possível determinar' in explicacao.lower():
+            explicacao = 'Resumo final: PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.'
+    elif status == 'NÃO PERMITE':
+        icon = icon or 'X'
+        explicacao = explicacao or 'Resumo final: NÃO PERMITE. Em regra, a leitura atual não favorece a implantação desse uso nesta condição.'
+    elif status == 'DEPENDE DO PORTE':
+        icon = icon or 'ATENCAO'
+        explicacao = explicacao or 'Resumo final: DEPENDE DO PORTE. A possibilidade depende do porte do empreendimento e das demais regras aplicáveis.'
+    elif status == 'PROJETO ESPECIAL':
+        icon = icon or 'ATENCAO'
+        explicacao = explicacao or 'Resumo final: PROJETO ESPECIAL. O caso pode exigir análise específica e condições extras no licenciamento.'
+    elif status in {'POSSÍVEL PELA VIA', 'POSSIVEL PELA VIA'}:
+        icon = icon or 'ATENCAO'
+        explicacao = explicacao or 'Resumo final: POSSÍVEL PELA VIA. A leitura por via é favorável, mas a adequabilidade por zona não foi localizada automaticamente.'
+    else:
+        status = 'SEM DADO'
+        icon = icon or 'ATENCAO'
+        explicacao = explicacao or 'Não foi possível determinar automaticamente o resultado por zona.'
+
+    return icon, status, explicacao, vn or ''
+
+
 def render_item_02(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "02", "O uso residencial unifamiliar é viável neste terreno?")
     paragraph(pdf, "Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.")
-    via_line = f"Por via: {ctx['via_tipo'] or 'via local'}"
-    if ctx["via_norm"] and ctx["via_class"]:
-        via_line = f"Por via: {ctx['via_class']} ({mf_sigla_nome(ctx['via_class'])})"
-    body = [
-        f"Por zona: {ctx['zone_class'] or 'não encontrado'}" + (f" ({mf_sigla_nome(ctx['zone_class'])})" if ctx['zone_class'] else ""),
-        via_line,
-        f"Resumo final: {ctx['status_curto']}",
-    ]
-    tone = (231,245,236) if ctx['status_curto'] == 'PERMITE' else (255,247,237)
-    card_box(pdf, "Leitura da viabilidade", body, fill=tone)
-    if ctx['explicacao']:
-        paragraph(pdf, f"Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.")
 
+    zone_class = (ctx.get('zone_class') or '').strip().upper()
+    via_class = (ctx.get('via_class') or '').strip().upper()
+    via_norm = ctx.get('via_norm') or ''
+    status = (ctx.get('status_curto') or 'SEM DADO').strip().upper()
+
+    zona_line = f"Por zona: {zone_class} ({mf_sigla_nome(zone_class)})" if zone_class else "Por zona: não encontrado"
+    if via_norm in {'via local', 'local', ''} and not via_class:
+        via_line = f"Por via: {ctx['via_tipo'] or 'via local'}"
+    elif via_class:
+        via_line = f"Por via: {via_class} ({mf_sigla_nome(via_class)})"
+    else:
+        via_line = f"Por via: {ctx['via_tipo'] or '-'}"
+
+    if status == 'PERMITE':
+        fill = (231, 245, 236)
+        resumo = "PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        reforco = "Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+    elif status == 'NÃO PERMITE':
+        fill = (254, 242, 242)
+        resumo = "NÃO PERMITE. Em regra, a leitura atual não favorece a implantação desse uso nesta condição."
+        reforco = "Quando o resultado for negativo, a análise da zona, da via e das demais exigências urbanísticas continua sendo essencial para confirmação do caso concreto."
+    elif status in {'DEPENDE DO PORTE', 'PROJETO ESPECIAL', 'POSSÍVEL PELA VIA', 'POSSIVEL PELA VIA'}:
+        fill = (255, 247, 237)
+        resumo = (ctx.get('explicacao') or status).replace('Resumo final:', '').strip()
+        reforco = "Mesmo com leitura parcialmente favorável, a definição final ainda depende do porte, da via e das demais exigências urbanísticas aplicáveis."
+    else:
+        fill = (255, 247, 237)
+        resumo = (ctx.get('explicacao') or "Não foi possível determinar automaticamente o resultado por zona.").replace('Resumo final:', '').strip()
+        reforco = "Quando a leitura automática não localizar o resultado completo, o caso ainda deve ser confirmado com a leitura da zona, da via e das demais regras urbanísticas aplicáveis."
+
+    card_box(pdf, "Leitura da viabilidade", [zona_line, via_line, f"Resumo final: {status}"], fill=fill)
+    card_box(pdf, "Conclusão", [resumo], fill=fill)
+    paragraph(pdf, reforco, bold=True)
 
 def render_item_03(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "03", "Como funciona a leitura da adequabilidade no unifamiliar?")
-    paragraph(pdf, "No unifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o tipo da via.")
-    paragraph(pdf, "Pequeno: até 250 m² | Médio: 250,01 m² até 1.000 m² | Grande: 1.000,01 m² até 5.000 m²")
-    paragraph(pdf, "Projeto especial: acima de 5.000 m²")
+    paragraph(pdf, "No unifamiliar, o resultado não depende só do nome da zona. Em alguns casos, também é preciso observar o tipo da via. Por isso, estas siglas ajudam a interpretar corretamente a viabilidade mostrada acima.")
+    paragraph(pdf, "Leitura de siglas", bold=True, color=(32, 42, 71))
     simple_table(pdf,
         ["Sigla", "O que significa", "Como interpretar"],
         [
@@ -570,29 +1037,59 @@ def render_item_03(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
             ["AP/AM", "Depende do porte", "Pode, mas depende se o caso é pequeno ou médio."],
             ["PE", "Projeto especial", "Pode exigir análise específica e condições extras no licenciamento."],
         ], [18, 58, full_w(pdf)-76], font_size=8.8, line_h=4.7)
+    paragraph(pdf, "Leitura de porte", bold=True, color=(32, 42, 71))
+    simple_table(pdf,
+        ["Porte", "Faixa (área construída total)"],
+        [
+            ["Pequeno", "até 250 m²"],
+            ["Médio", "de 250,01 m² até 1.000 m²"],
+            ["Grande", "de 1.000,01 m² até 5.000 m²"],
+            ["Projeto especial", "acima de 5.000 m²"],
+        ], [35, full_w(pdf)-35], font_size=9, line_h=4.9)
 
 
 def render_item_04(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "04", "O que essa zona permite neste terreno?")
-    paragraph(pdf, "Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação.")
+    paragraph(pdf, "Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação. Nas áreas urbanas, essas informações normalmente ajudam a definir o que pode ser construído, quanto pode ocupar no térreo, quanto precisa ficar livre e o porte da edificação. Já em áreas rurais ou em zonas com tratamento especial, nem sempre existem parâmetros urbanísticos numéricos definidos da mesma forma. Nesses casos, a análise ficará restrita aos critérios aplicáveis do Código de Ordenamento Urbano e às demais regras específicas que incidirem sobre a área.")
+
     desc = ctx.get('desc') or {}
     title = ctx.get('zone_title') or ctx['zone']
-    if desc and desc.get('description_text'):
-        card_box(pdf, f"{title}", [str(desc.get('description_text'))], fill=(248,250,252))
-    else:
-        card_box(pdf, f"Zona {ctx['zone']}", [
-            f"Via do terreno: {ctx['via']}",
-            f"Tipo de via: {ctx['via_tipo']}",
-        ])
+    card_box(pdf, "Zona analisada", [title], fill=(243, 246, 250))
 
+    parts = {}
+    if desc and desc.get('description_text'):
+        parts = _parse_zone_description_parts(str(desc.get('description_text')))
+    if not any(parts.get(k) for k in ("o_que_e","o_que_busca","na_pratica")):
+        parts = _fallback_zone_description(ctx['zone']) or parts
+
+    if parts.get("intro"):
+        paragraph(pdf, parts["intro"])
+    if parts.get("o_que_e"):
+        card_box(pdf, f"O que é ({ctx['zone']})", [parts["o_que_e"]], fill=(248, 250, 252))
+    if parts.get("o_que_busca"):
+        card_box(pdf, "O que a zona busca", [parts["o_que_busca"]], fill=(248, 250, 252))
+    if parts.get("na_pratica"):
+        card_box(pdf, "O que isso significa na prática", [parts["na_pratica"]], fill=(240, 253, 244))
+    fechamento = parts.get("fechamento") or "É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte."
+    paragraph(pdf, fechamento, bold=True)
 
 def render_item_05(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "05", "Regras principais para este terreno")
     paragraph(pdf, "Depois de entender a zona, o próximo passo é ver as regras básicas do lote.")
+    paragraph(pdf, "Para este terreno, vale olhar principalmente:")
+    bullet_list(pdf, [
+        "ocupação máxima no térreo",
+        "área que precisa ficar livre",
+        "recuos",
+        "altura máxima",
+        "potencial total de construção",
+    ])
+    paragraph(pdf, "Resumo das regras", bold=True, color=(32, 42, 71))
     w = (full_w(pdf)-5.0)/2
     kpi_row(pdf, [("TO MÁXIMA", fmt_pct(ctx['to_max'])), ("TP MÍNIMA", fmt_pct(ctx['tp_min']))], [w,w])
-    kpi_row(pdf, [("IA MÁXIMO", fmt_plain(ctx['ia_max'])), ("IA MÍNIMO", fmt_plain(ctx['ia_min']))], [w,w])
-    kpi_row(pdf, [("RECUOS", f"F: {fmt_num(ctx['rec_fr'])} m | L: {fmt_num(ctx['rec_lat'])} m | Fu: {fmt_num(ctx['rec_fun'])} m"), ("ALTURA MÁXIMA", fmt_m(ctx['gabarito']))], [full_w(pdf)-45, 42])
+    kpi_row(pdf, [("IA MÁXIMO", fmt_plain(ctx['ia_max'])), ("IA MÍNIMO", "não informado" if fmt_plain(ctx['ia_min']) == '-' else fmt_plain(ctx['ia_min']))], [w,w])
+    kpi_row(pdf, [("RECUOS", f"Frontal: {fmt_num(ctx['rec_fr'])} m | Laterais: {fmt_num(ctx['rec_lat'])} m | Fundos: {fmt_num(ctx['rec_fun'])} m"), ("ALTURA MÁXIMA", fmt_m(ctx['gabarito']))], [full_w(pdf)-45, 42])
+    paragraph(pdf, "Essas são as regras que mais impactam o projeto.")
 
 
 def render_item_06(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
@@ -600,20 +1097,37 @@ def render_item_06(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     if ctx['to_max'] is None or ctx['a_to'] is None:
         card_box(pdf, "Sem dado", ["Sem TO máxima cadastrada para esta zona/uso."], fill=(255,247,237))
         return
-    paragraph(pdf, "A Taxa de Ocupação mostra o limite percentual permitido para o térreo.")
     paragraph(pdf, f"A zona permite ocupar até {fmt_pct(ctx['to_max'])} do terreno no térreo.")
     card_box(pdf, "Cálculo da TO", [f"{fmt_area(ctx['area'])} × {fmt_pct(ctx['to_max'])} = {fmt_area(ctx['a_to'])}", "Esse é o limite máximo permitido pela Taxa de Ocupação (TO)."], fill=(243,246,250))
-    if not ctx['is_irregular']:
-        card_box(pdf, "Opção principal — adotando os recuos da zona", [
-            f"Frontal: {fmt_m(ctx['rec_fr'])} | Laterais: {fmt_m(ctx['rec_lat'])} cada | Fundo: {fmt_m(ctx['rec_fun'])}",
-            f"Largura útil: {fmt_num(ctx['w_util'])} m | Profundidade útil: {fmt_num(ctx['d_util'])} m",
-            f"{fmt_num(ctx['w_util'])} m × {fmt_num(ctx['d_util'])} m = {fmt_area(ctx['a_recuos'])}",
-            f"Nessa opção, o limite físico pelos recuos é {fmt_area(ctx['a_op1_max'])}." if ctx['a_op1_max'] is not None else "",
-        ])
-    card_box(pdf, "Opção alternativa — aproveitando a flexibilidade da lei", [
-        "Para residência unifamiliar, a legislação admite zerar o recuo frontal e os recuos laterais, desde que o projeto continue respeitando a TO máxima e a TP mínima.",
-        f"Térreo máximo nesta opção: {fmt_area(ctx['a_op2_max'])}" if ctx['a_op2_max'] is not None else "",
+    paragraph(pdf, "Como complemento a essa verificação, também é importante analisar a área que efetivamente cabe no lote, considerando os recuos aplicáveis.")
+    card_box(pdf, "Art. 112 — Flexibilidade de recuos", [
+        "Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima e da Taxa de Ocupação Máxima da zona em que se encontra.",
+        "Na prática: para residência unifamiliar, a norma permite encostar nas laterais e alinhar na frente, desde que o projeto continue respeitando a TO máxima e a TP mínima.",
     ], fill=(240,253,244))
+    paragraph(pdf, "A partir disso, este lote pode ser lido de duas formas:")
+    card_box(pdf, "Opção principal — aproveitando a flexibilidade da lei", [
+        "Para este caso, a legislação admite zerar o recuo frontal e os recuos laterais.",
+        "Assim, o térreo pode aproveitar melhor a área do lote, desde que continue respeitando a TO e a TP.",
+        f"Térreo máximo nesta opção: {fmt_area(ctx['a_op2_max'])}" if ctx['a_op2_max'] is not None else "",
+        "O recuo de fundo e as demais exigências urbanísticas aplicáveis continuam precisando ser respeitados.",
+    ], fill=(240,253,244))
+    if not ctx['is_irregular']:
+        card_box(pdf, "Opção alternativa — adotando os recuos da zona", [
+            f"Frontal: {fmt_m(ctx['rec_fr'])}",
+            f"Laterais: {fmt_m(ctx['rec_lat'])} cada",
+            f"Fundo: {fmt_m(ctx['rec_fun'])}",
+            "Com isso, a área útil de implantação no térreo passa a ser:",
+            f"Largura útil: {fmt_num(ctx['w_util'])} m",
+            f"Profundidade útil: {fmt_num(ctx['d_util'])} m",
+            f"{fmt_num(ctx['w_util'])} × {fmt_num(ctx['d_util'])} = {fmt_area(ctx['a_recuos'])}",
+            f"Nesse cenário, mesmo que a zona permita até {fmt_area(ctx['a_to'])} pela TO, o limite físico de implantação, considerando os recuos, fica em {fmt_area(ctx['a_op1_max'])}." if ctx['a_op1_max'] is not None else "",
+        ], fill=(248,250,252))
+    card_box(pdf, "Leitura prática", [
+        f"Pela Taxa de Ocupação (TO), o lote pode ocupar até {fmt_area(ctx['a_to'])} no térreo.",
+        f"Na leitura com a flexibilidade do art. 112, o aproveitamento do térreo pode chegar ao limite máximo permitido pela zona, desde que sejam respeitadas a TO, a TP e as demais exigências aplicáveis.",
+        (f"Na leitura com os recuos padrão da zona, a área útil de implantação fica em {fmt_area(ctx['a_op1_max'])}." if ctx['a_op1_max'] is not None else ""),
+        ("Neste caso, sem uma área pretendida informada, o estudo passa a apresentar os dois referenciais principais do lote: o limite máximo pela TO e o limite físico de implantação considerando os recuos." if ctx['area_pedida'] is None else ""),
+    ], fill=(243,246,250))
 
 
 def render_item_07(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
@@ -621,16 +1135,30 @@ def render_item_07(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     if ctx['tp_min'] is None or ctx['a_perm_min'] is None:
         card_box(pdf, "Sem dado", ["Sem TP mínima cadastrada para esta zona/uso."], fill=(255,247,237))
         return
-    paragraph(pdf, "Além da ocupação no térreo, a zona exige área permeável mínima.")
     paragraph(pdf, f"A zona exige {fmt_pct(ctx['tp_min'])} de área permeável.")
-    card_box(pdf, "Cálculo da TP", [f"{fmt_area(ctx['area'])} × {fmt_pct(ctx['tp_min'])} = {fmt_area(ctx['a_perm_min'])} obrigatórios permeáveis"], fill=(243,246,250))
+    card_box(pdf, "Cálculo da TP", [f"{fmt_area(ctx['area'])} × {fmt_pct(ctx['tp_min'])} = {fmt_area(ctx['a_perm_min'])} obrigatórios permeáveis", "Isso quer dizer que parte do terreno precisa continuar permitindo a infiltração da água da chuva no solo."], fill=(243,246,250))
+    paragraph(pdf, "Ver cenários usando os máximos das opções")
     if ctx['a_op2_max'] is not None and ctx['area'] is not None:
         a_rest = ctx['area'] - ctx['a_op2_max']
         a_imp = a_rest - ctx['a_perm_min']
-        card_box(pdf, "Cenário pela opção principal", [
-            f"Usando {fmt_area(ctx['a_op2_max'])} no térreo, sobra {fmt_area(a_rest)} no lote.",
-            f"Desses, {fmt_area(ctx['a_perm_min'])} devem permitir infiltração no solo e {fmt_area(a_imp)} podem receber piso impermeável.",
+        card_box(pdf, "Cenário pela Opção 2 (Art. 112)", [
+            f"Se você utilizar {fmt_area(ctx['a_op2_max'])} no térreo:",
+            f"Área restante no lote: {fmt_area(ctx['area'])} − {fmt_area(ctx['a_op2_max'])} = {fmt_area(a_rest)}",
+            f"{fmt_area(ctx['a_perm_min'])} devem permitir infiltração no solo",
+            f"{fmt_area(a_imp)} podem receber piso impermeável",
         ], fill=(240,253,244))
+    if ctx['a_op1_max'] is not None and ctx['area'] is not None:
+        a_rest1 = ctx['area'] - ctx['a_op1_max']
+        a_imp1 = a_rest1 - ctx['a_perm_min']
+        card_box(pdf, "Cenário pela Opção 1 (recuos padrão)", [
+            f"Se você utilizar {fmt_area(ctx['a_op1_max'])} no térreo:",
+            f"Área restante no lote: {fmt_area(ctx['area'])} − {fmt_area(ctx['a_op1_max'])} = {fmt_area(a_rest1)}",
+            f"{fmt_area(ctx['a_perm_min'])} devem permitir infiltração no solo",
+            f"{fmt_area(a_imp1)} podem receber piso impermeável",
+        ], fill=(248,250,252))
+    card_box(pdf, "Leitura prática", [
+        "Nas duas opções, o lote precisa manter a área permeável mínima. A diferença está em quanto sobra livre além desse mínimo.",
+    ], fill=(243,246,250))
 
 
 def render_item_08(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
@@ -643,14 +1171,22 @@ def render_item_08(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
 def render_item_09(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "09", "Posso construir mais andares?")
     paragraph(pdf, "Além da ocupação no térreo, a zona também define o potencial construtivo total do lote por meio do Índice de Aproveitamento (IA).")
+
     if ctx['a_total'] is not None:
         card_box(pdf, "Potencial construtivo total", [
+            f"Se o IA máximo da zona for {fmt_plain(ctx['ia_max'])}, então o potencial construtivo total do lote será:",
             f"{fmt_area(ctx['area'])} × {fmt_plain(ctx['ia_max'])} = {fmt_area(ctx['a_total'])}",
             "Esse é o total que pode ser distribuído entre térreo e pavimentos superiores, respeitando também os demais parâmetros urbanísticos.",
-        ], fill=(243,246,250))
-    if ctx['gabarito'] is not None:
-        card_box(pdf, "Altura máxima da zona", [fmt_m(ctx['gabarito']), "Exemplo simples: adotando pé-direito médio de 3,00 m por pavimento, isso pode permitir algo próximo de 5 pavimentos, apenas como referência inicial."], fill=(248,250,252))
+        ], fill=(243, 246, 250))
 
+    if ctx['gabarito'] is not None:
+        g_text = fmt_m(ctx['gabarito'])
+        pav_ref = max(1, round((ctx['gabarito'] or 0) / 3))
+        card_box(pdf, "Altura máxima da zona", [
+            f"Altura máxima da zona: {g_text}",
+            f"Exemplo simples para ter uma noção de andares: adotando um pé-direito médio de 3,00 m por pavimento, a altura máxima de {g_text} pode permitir, em média, algo próximo de {pav_ref} pavimentos.",
+            "Isso é apenas uma referência inicial. Na prática, a quantidade real de andares depende também da laje, cobertura, platibanda, caixa d’água e da forma como o projeto será desenvolvido.",
+        ], fill=(248, 250, 252))
 
 def render_item_10(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "10", "Preciso de vagas de estacionamento?")
@@ -662,16 +1198,20 @@ def render_item_10(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
 
 def render_item_11(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "11", "Quais medidas mínimas os ambientes precisam ter?")
-    paragraph(pdf, "Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação.")
+    paragraph(pdf, "Além das regras do lote, a legislação também traz medidas mínimas para alguns ambientes da edificação. Isso vale para itens como sala, quartos, cozinha, banheiro, área de serviço, garagem e escada.")
+    paragraph(pdf, "Quadro técnico — parâmetros dos ambientes", bold=True, color=(32, 42, 71))
+    paragraph(pdf, "Lei Complementar nº 90/2023 — Anexo II")
     headers = list(QUADRO_ROWS[0].keys())
     rows = [[row[h] for h in headers] for row in QUADRO_ROWS]
     simple_table(pdf, headers, rows, [42, 24, 23, 18, 18, 20, 16], font_size=8.1, line_h=4.5)
-    card_box(pdf, "Observações aplicáveis", QUADRO_OBS, fill=(243,246,250))
+    card_box(pdf, "Observações", QUADRO_OBS, fill=(243,246,250))
+    card_box(pdf, "Observações gerais", QUADRO_GERAIS_OBS, fill=(248,250,252))
 
 
 def render_item_12_intro(pdf: ReportPDF) -> None:
     section_title(pdf, "12", "O que preciso saber sobre a calçada?")
-    paragraph(pdf, "A análise não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação do lote com a rua.")
+    paragraph(pdf, "A análise não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, rebaixo de meio-fio e relação do lote com a rua. As figuras abaixo ajudam a visualizar esse padrão.")
+    paragraph(pdf, "Figuras anexas (Anexo V)", bold=True, color=(32, 42, 71))
 
 
 def render_figuras(pdf: ReportPDF, figures: List[Dict[str, Any]]) -> None:
@@ -715,68 +1255,107 @@ def render_figuras(pdf: ReportPDF, figures: List[Dict[str, Any]]) -> None:
                 pass
 
 
-def render_item_13(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
-    section_title(pdf, "13", "Dicas valiosas")
-    for item in get_dicas_valiosas(is_corner=bool(ctx['is_corner'])):
-        if isinstance(item, (list, tuple)) and len(item) >= 2:
-            titulo = str(item[0] or '').strip()
-            texto = str(item[1] or '').strip()
-            if texto:
-                card_box(pdf, titulo or 'Dica', [texto], fill=(255,247,237))
-        else:
-            texto = str(item or '').strip()
-            if texto:
-                card_box(pdf, 'Dica', [texto], fill=(255,247,237))
 
+def render_item_13(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
+    pdf.add_page()
+    section_title(pdf, "13", "Dicas valiosas")
+    paragraph(pdf, "Orientações úteis para interpretação prática do relatório.")
+    card_box(pdf, "Flexibilidade de recuos no uso residencial unifamiliar", [
+        "Art. 112. Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima e da Taxa de Ocupação Máxima da zona em que se encontra.",
+        "Na prática: para residência unifamiliar, a legislação admite zerar recuos frontal e laterais, desde que a proposta continue respeitando a TP mínima e a TO máxima da zona."
+    ], fill=(255, 247, 237))
+    card_box(pdf, "Calçada", [
+        "Não existe uma largura única e fixa para toda calçada no município. Quando houver padrão definido no loteamento ou na via, ele deve ser seguido. Quando não houver, a referência costuma ser a calçada já existente no local."
+    ], fill=(255, 247, 237))
+    card_box(pdf, "Piscina", [
+        "Piscina não entra como área construída para a Taxa de Ocupação (TO). Mas ela conta como área impermeável para a Taxa de Permeabilidade (TP)."
+    ], fill=(255, 247, 237))
+    card_box(pdf, "Art. 144 e leitura prática", [
+        "As piscinas, espelhos d'água, caixas d'água, cisternas e tanques deverão observar afastamento mínimo de 0,50 m de todas as divisas do terreno.",
+        "Na prática: além desse afastamento mínimo, esses elementos também entram no cálculo da TP como área impermeável."
+    ], fill=(255, 247, 237))
 
 def render_item_14(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "14", "Resumo rápido final")
-    paragraph(pdf, f"{ctx['zone_title']}")
-    kpi_row(pdf, [("ZONA", ctx['zone']), ("TO MÁXIMA", fmt_pct(ctx['to_max'])), ("TP MÍNIMA", fmt_pct(ctx['tp_min']))], [40, 40, full_w(pdf)-80-5.0])
-    kpi_row(pdf, [("IA MÁXIMO", fmt_plain(ctx['ia_max'])), ("ALTURA MÁXIMA", fmt_m(ctx['gabarito'])), ("ÁREA MÁXIMA NO TÉRREO", fmt_area(ctx['a_to']))], [40, 45, full_w(pdf)-85-5.0])
-    kpi_row(pdf, [("ÁREA PERMEÁVEL MÍNIMA", fmt_area(ctx['a_perm_min'])), ("ÁREA TOTAL MÁXIMA", fmt_area(ctx['a_total']))], [88, full_w(pdf)-88-2.5])
-    if ctx['area_pedida'] is not None and ctx['a_considerada'] is not None:
-        resumo = (
-            f"Em resumo: o relatório considerou a área de {fmt_area(ctx['a_considerada'])} no térreo. "
-            f"Com isso, a TO considerada ficou em {fmt_pct(ctx['to_projeto_pct'])}, a área livre remanescente em {fmt_area(ctx['a_livre'])} e o saldo estimado pelo IA em {fmt_area(ctx['a_ia_saldo'])}."
-        )
-    else:
-        resumo = (
-            f"Em resumo: você pode ocupar até a TO máxima da zona no térreo, precisa manter a TP mínima do terreno permeável, "
-            f"pode construir até o IA máximo no total e deve respeitar os limites de altura, recuos e demais exigências urbanísticas."
-        )
-    card_box(pdf, "Síntese final", [resumo], fill=(243,246,250))
+    paragraph(pdf, "Se você quiser ver só o essencial deste terreno, este é o resumo principal:")
+    card_box(pdf, "Síntese executiva", [
+        f"Uso analisado: {ctx['uso_label']}",
+        f"Zona: {ctx['zone_title']}",
+        f"Tipo de lote: {ctx['tipo_lote']}",
+        f"Via: {ctx['via']}",
+        f"Tipo de via: {ctx['via_tipo']}",
+        f"TO máxima: {fmt_pct(ctx['to_max'])}",
+        f"TP mínima: {fmt_pct(ctx['tp_min'])}",
+        f"IA máximo: {fmt_plain(ctx['ia_max'])}",
+        f"Altura máxima: {fmt_m(ctx['gabarito'])}",
+        f"Área máxima no térreo pela TO: {fmt_area(ctx['a_to'])}",
+        f"Área permeável mínima: {fmt_area(ctx['a_perm_min'])}",
+        f"Área total máxima estimada: {fmt_area(ctx['a_total'])}",
+    ], fill=(243,246,250))
+    resumo = (
+        f"Em resumo: você pode ocupar até {fmt_pct(ctx['to_max'])} do lote no térreo; precisa manter pelo menos {fmt_pct(ctx['tp_min'])} do terreno permeável; a construção pode chegar até {fmt_plain(ctx['ia_max'])} vezes a área do lote no total; e a altura deve respeitar o limite da zona."
+    )
+    card_box(pdf, "Leitura final", [resumo], fill=(248,250,252))
 
 
 def render_item_15(pdf: ReportPDF) -> None:
     section_title(pdf, "15", "O que acontece depois desta etapa?")
     paragraph(pdf, "Após a finalização dos projetos, será necessário dar entrada na documentação junto à Prefeitura para obter o alvará de construção.")
+    paragraph(pdf, "De forma geral, esse processo pode seguir por duas vias:")
+    bullet_list(pdf, [
+        "Alvará de Construção Simplificado → voltado para casos mais simples e de menor porte;",
+        "Alvará de Construção (Obra Nova) → usado quando a obra exige análise técnica mais completa e documentação complementar.",
+    ])
+    paragraph(pdf, "Abaixo, apresentamos um resumo dos dois caminhos e um checklist básico dos itens que normalmente precisam ser providenciados.")
     card_box(pdf, "Alvará de Construção Simplificado", [
-        "Documento de identidade do requerente ou representante legal",
-        "CPF ou CNPJ",
-        "Matrícula atualizada do imóvel ou documento equivalente",
-        "Certidão negativa de IPTU",
-        "Parecer favorável de Adequabilidade Locacional",
-        "Tabela com índices urbanísticos e áreas da edificação",
-        "Projeto arquitetônico em arquivo digital",
-        "ART/RRT do responsável técnico",
-        "Termo de responsabilidade do responsável técnico",
-        "Termo de responsabilidade do proprietário",
-        "Isenção da licença ambiental",
+        "O Alvará de Construção Simplificado é uma forma mais rápida de licenciamento, voltada para casos mais simples. Ele costuma ser usado para residência unifamiliar e para comércio/serviços de pequeno porte, com área construída de até 250,00 m².",
+        "A lógica desse alvará é mais enxuta e autodeclaratória, mas isso não elimina a necessidade de apresentar os documentos corretos e atender às exigências urbanísticas e técnicas do Município.",
+        "Checklist — documentos e itens principais:",
+        "[ ] Documento de identidade do requerente ou representante legal",
+        "[ ] CPF ou CNPJ",
+        "[ ] Matrícula atualizada do imóvel ou documento equivalente",
+        "[ ] Certidão negativa de IPTU",
+        "[ ] Parecer favorável de Adequabilidade Locacional",
+        "[ ] Tabela com índices urbanísticos e áreas da edificação",
+        "[ ] Projeto arquitetônico em arquivo digital",
+        "[ ] ART/RRT do responsável técnico",
+        "[ ] Termo de responsabilidade do responsável técnico",
+        "[ ] Termo de responsabilidade do proprietário",
+        "[ ] Isenção da licença ambiental",
+        "Atenção:",
+        "[ ] Confirmar se o caso realmente se enquadra como simplificado",
+        "[ ] Conferir se a área construída está dentro do limite permitido",
+        "[ ] Protocolar o pedido com antecedência mínima indicada pelo procedimento",
+        "[ ] Verificar se todos os arquivos digitais estão prontos e legíveis",
     ], fill=(248,250,252))
     card_box(pdf, "Alvará de Construção (Obra Nova)", [
-        "Requerimento único",
-        "Documento de identidade do requerente ou representante legal",
-        "CPF ou CNPJ",
-        "Matrícula atualizada do imóvel",
-        "Autorização do proprietário, quando necessária",
-        "BCI",
-        "ART/RRT com comprovante de pagamento",
-        "Projeto arquitetônico assinado",
-        "Projeto hidrossanitário",
-        "Memorial de cálculo e drenagem pluvial",
-        "Declaração do SAAE sobre rede de esgoto, quando necessária",
-        "Aprovação do Corpo de Bombeiros, IPHAN, licenciamento ambiental, PGRSCC, COMAR, DNIT/SOP ou EIV, quando aplicável",
+        "O Alvará de Construção (Obra Nova) é o caminho regular de licenciamento para obras novas que exigem análise técnica completa da Prefeitura. Ele é mais detalhado e costuma ser necessário em casos que não se enquadram no procedimento simplificado ou que exigem documentação complementar.",
+        "Esse tipo de alvará pede uma conferência mais ampla do projeto, incluindo aspectos urbanísticos, arquitetônicos, hidrossanitários, ambientais e, em alguns casos, exigências de outros órgãos.",
+        "Checklist — documentos principais:",
+        "[ ] Requerimento único",
+        "[ ] Documento de identidade do requerente ou representante legal",
+        "[ ] CPF ou CNPJ",
+        "[ ] Matrícula atualizada do imóvel",
+        "[ ] Autorização do proprietário, quando necessária",
+        "[ ] BCI",
+        "[ ] ART/RRT com comprovante de pagamento",
+        "[ ] Projeto arquitetônico assinado",
+        "[ ] Projeto hidrossanitário",
+        "[ ] Memorial de cálculo e drenagem pluvial",
+        "[ ] Declaração do SAAE sobre rede de esgoto, quando necessária",
+        "Checklist — documentos adicionais que podem ser exigidos:",
+        "[ ] Aprovação do Corpo de Bombeiros",
+        "[ ] Aprovação do IPHAN, quando o imóvel estiver em ZEIP",
+        "[ ] Licenciamento ambiental ou termo de isenção",
+        "[ ] PGRSCC",
+        "[ ] Autorização do COMAR, quando aplicável",
+        "[ ] Aprovação do DNIT ou SOP, quando houver acesso por rodovia",
+        "[ ] EIV, quando exigido pela legislação",
+        "Atenção:",
+        "[ ] Confirmar se o caso realmente exige alvará regular de obra nova",
+        "[ ] Conferir se há exigência de documentos complementares por localização ou tipologia",
+        "[ ] Verificar se o imóvel está em área com proteção especial",
+        "[ ] Conferir se o projeto atende às exigências técnicas antes do protocolo",
     ], fill=(248,250,252))
 
 
@@ -784,7 +1363,7 @@ def render_item_16(pdf: ReportPDF) -> None:
     section_title(pdf, "16", "Fechamento final")
     card_box(pdf, "Fechamento final", [
         "Este relatório foi pensado para ajudar a entender o terreno de forma mais simples.",
-        "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no setor de licenciamento de obras da Prefeitura.",
+        "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no setor de licenciamento de obras da prefeitura.",
     ], fill=(243,246,250))
 
 

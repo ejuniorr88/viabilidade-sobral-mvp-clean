@@ -172,6 +172,7 @@ def _render_coupons_tab(user_email: str) -> None:
     render_coupons_admin_section(current_user_email=user_email)
 
 
+
 def render_client_area_page(user_id: str, user_name: str, user_email: str, credit_balance: Any) -> None:
     st.markdown("## Área do cliente")
     st.caption("Aqui ficam seus relatórios gerados, histórico de uso e ferramentas internas quando liberadas para o seu usuário.")

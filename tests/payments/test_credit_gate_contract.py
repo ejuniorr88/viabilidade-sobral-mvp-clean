@@ -42,7 +42,7 @@ def test_credit_gate_contract_keeps_generate_button_login_gate() -> None:
 
     required = [
         'st.button(',
-        '"📄 Gerar relatório"',
+        '"📄 Gerar Relatório do Estudo de Viabilidade"',
         'key="btn_generate_report"',
         'disabled=(not user_logged_in)',
         'if can_offer_report:',

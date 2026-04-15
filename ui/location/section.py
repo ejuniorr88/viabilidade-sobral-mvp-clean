@@ -30,7 +30,6 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     calc: Dict[str, Any] = st.session_state.calc
 
     use_type_code = (calc.get("use_type_code") or "RES_UNI").strip().upper()
-    st.text_input("use_type_code", value=use_type_code, disabled=True, key="use_type_code_readonly")
 
     if calcular:
         if not getattr(st.session_state, "last_click", None):
@@ -109,13 +108,11 @@ def render_localizacao_section(*args, **kwargs) -> Optional[Dict[str, Any]]:
     via_nome = calc.get("via_nome") or calc.get("street_name")
     via_tipo = calc.get("via_tipo") or calc.get("street_type")
 
-    colA, colB, colC = st.columns(3)
+    colA, colB = st.columns(2)
     with colA:
         _card("Zona", zone)
     with colB:
         _card("Rua / Logradouro", via_nome)
-    with colC:
-        _card("Tipo de via", via_tipo)
 
     if str(calc.get("subzone_code") or "PADRAO") != "PADRAO":
         st.caption(f"Subzona/Setor: {calc.get('subzone_code','PADRAO')}")

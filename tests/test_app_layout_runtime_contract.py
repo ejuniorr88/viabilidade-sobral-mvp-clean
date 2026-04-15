@@ -8,7 +8,7 @@ def test_app_restores_login_top_and_map_order_contract():
     assert "render_google_login_top()" in app_text
     map_import_idx = app_text.index("from ui.map.section import render_mapa_section")
     map_render_idx = app_text.index("radius_m = render_mapa_section(zones_gj)")
-    button_idx = flow_text.index('"🚀 GERAR ESTUDO DE VIABILIDADE"')
+    button_idx = flow_text.index('"🚀 GERAR CONSULTA AOS ÍNDICES URBANÍSTICOS"')
 
     assert map_import_idx < map_render_idx
     assert 'clicked_calcular = render_primary_actions(' in app_text
