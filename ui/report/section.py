@@ -10,6 +10,11 @@ from ui.report.final_confirmation import render_final_confirmation
 from ui.report.review_panel import render_review_panel
 from ui.report.terms_gate import render_terms_gate
 from ui.runtime.navigation_focus import arm_navigation_focus
+from ui.runtime.report_navigation import (
+    arm_report_confirmation_focus,
+    arm_report_generated_focus,
+    arm_report_initial_focus,
+)
 
 _REVIEW_OPEN_KEY = "report_review_open"
 _REVIEW_SIGNATURE_KEY = "report_review_signature"
@@ -17,6 +22,7 @@ _REVIEW_CALC_KEY = "report_review_calc"
 _REVIEW_SESSION_KEY = "report_review_session"
 _REVIEW_IS_NEW_KEY = "report_review_is_new_report"
 _NOTICE_FOCUS_SIGNATURE_KEY = "report_section_notice_focus_signature"
+_LEGACY_GENERATE_REPORT_LABEL = "📄 Gerar relatório"
 
 
 def _render_generate_report_button_style() -> None:
@@ -164,7 +170,7 @@ def render_report_section(
                 signature=current_report_signature,
                 is_new_report=bool(has_snapshot and not is_same_as_snapshot),
             )
-            arm_navigation_focus(st.session_state, "report_section")
+            arm_report_confirmation_focus(st.session_state)
         elif pending_signature_changed:
             clear_pending_report_func()
 
@@ -201,7 +207,7 @@ def render_report_section(
             elif not user_logged_in or not user_id:
                 st.error("Faça login com Google para gerar o relatório completo.")
             elif is_same_as_snapshot:
-                arm_navigation_focus(st.session_state, "report_section")
+                arm_report_initial_focus(st.session_state)
                 st.info("Este relatório já foi gerado e continua disponível abaixo.")
             elif saldo_atual is not None and int(saldo_atual) <= 0:
                 st.session_state.show_inline_payments = True
@@ -223,7 +229,7 @@ def render_report_section(
                     signature=current_report_signature,
                     is_new_report=bool(has_snapshot and not is_same_as_snapshot),
                 )
-                arm_navigation_focus(st.session_state, "report_review_confirm")
+                arm_report_confirmation_focus(st.session_state)
                 st.rerun()
 
         if st.session_state.get(_REVIEW_OPEN_KEY):
@@ -240,7 +246,7 @@ def render_report_section(
 
             if confirm_no:
                 _clear_review_state()
-                arm_navigation_focus(st.session_state, "report_section")
+                arm_report_initial_focus(st.session_state)
                 st.rerun()
 
             if confirm_yes:
@@ -264,7 +270,7 @@ def render_report_section(
                         _clear_review_state()
                         clear_pending_report_func()
                         st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
-                        arm_navigation_focus(st.session_state, "report_section")
+                        arm_report_initial_focus(st.session_state)
                         st.rerun()
                     except Exception as e:
                         st.session_state.show_inline_payments = True
@@ -285,6 +291,7 @@ def render_report_section(
         )
 
         if has_snapshot and not is_same_as_snapshot:
+            st.markdown('<div id="report-generated-context-start"></div>', unsafe_allow_html=True)
             st.markdown('<div id="report-section-scenario-notice"></div>', unsafe_allow_html=True)
             st.warning(
                 "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, clique novamente em gerar relatório."
@@ -297,7 +304,9 @@ def render_report_section(
                 permeable_area=permeable_area,
             )
             if notice_should_focus and st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) != notice_focus_signature:
-                arm_navigation_focus(st.session_state, "report_section_notice_context")
+                arm_report_generated_focus(st.session_state)
+                # Registra a última assinatura pedida para evitar re-scroll em reruns estáveis,
+                # mas mantém o disparo de JS forte no runtime para o browser real.
                 st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = notice_focus_signature
         else:
             if st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) is not None:
@@ -314,7 +323,7 @@ def render_report_section(
 
             if confirm_no:
                 clear_pending_report_func()
-                arm_navigation_focus(st.session_state, "report_section")
+                arm_report_initial_focus(st.session_state)
                 st.rerun()
 
             if confirm_yes:
@@ -337,7 +346,7 @@ def render_report_section(
                         novo_saldo = debit_result.get("new_balance")
                         st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                         clear_pending_report_func()
-                        arm_navigation_focus(st.session_state, "report_section")
+                        arm_report_initial_focus(st.session_state)
                         st.rerun()
                     except Exception as e:
                         st.session_state.show_inline_payments = True
