@@ -54,6 +54,7 @@ from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
 from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
 from ui.runtime.navigation_focus import render_navigation_focus_if_needed
+from ui.runtime.report_navigation import arm_report_initial_focus
 from ui.relatorio import (
     render_relatorio_section,
     render_zone_description_section,
@@ -453,6 +454,9 @@ if preview_inadequado:
     _render_blocked_report_preview(calc)
 
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err")) and not preview_inadequado
+
+if run_free_calc_now and can_offer_report:
+    arm_report_initial_focus(st.session_state)
 
 _REPORT_LEGACY_FLOW_CONTRACT = """
 report_confirmation_state = report_confirmation_core.compute_report_confirmation_state(
