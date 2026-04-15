@@ -225,7 +225,7 @@ def render_top_nav() -> None:
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
-        home_url = get_app_url()
+        home_url = f"{get_app_url()}?nav=home"
         st.markdown(
             f'<a class="vf-brand vf-brand-home" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema">Viabilidade-Fácil<span class="vf-brand-dot">.</span></a>',
             unsafe_allow_html=True,
