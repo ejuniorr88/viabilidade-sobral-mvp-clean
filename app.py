@@ -78,6 +78,7 @@ from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user, refund_viability_credit
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
+from core.state_helpers import clear_all_checkout_states
 from core import report_confirmation as report_confirmation_core
 from core import checkout_flow as checkout_flow_core
 
@@ -170,6 +171,33 @@ def _clear_landing_checkout_query_params() -> None:
             pass
 
 
+def _clear_home_nav_query_param() -> None:
+    try:
+        try:
+            del st.query_params["nav"]
+        except Exception:
+            pass
+    except Exception:
+        try:
+            current = st.experimental_get_query_params()
+            cleaned = {k: v for k, v in current.items() if k != "nav"}
+            st.experimental_set_query_params(**cleaned)
+        except Exception:
+            pass
+
+
+def _consume_home_nav_query_param() -> None:
+    nav_value = str(safe_get_query_param("nav") or "").strip().lower()
+    if nav_value != "home":
+        return
+
+    st.session_state["show_plans_page"] = False
+    st.session_state["show_client_area"] = False
+    st.session_state["post_login_action"] = None
+    clear_all_checkout_states()
+    _clear_home_nav_query_param()
+
+
 def _consume_landing_checkout_query_params() -> None:
     checkout_flag = str(safe_get_query_param("checkout") or "").strip().lower()
     plan_value = safe_get_query_param("plan")
@@ -237,6 +265,7 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
+_consume_home_nav_query_param()
 _consume_landing_checkout_query_params()
 
 legal_view = safe_get_query_param("view")
