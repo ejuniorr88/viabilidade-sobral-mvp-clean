@@ -102,29 +102,7 @@ def inject_global_styles() -> None:
             min-height: 92px !important;
         }}
 
-        .vf-brand-link {{
-            display: inline-flex !important;
-            align-items: center !important;
-            min-height: 92px;
-            text-decoration: none !important;
-            cursor: pointer !important;
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-        }}
-
-        .vf-brand-link:hover,
-        .vf-brand-link:focus,
-        .vf-brand-link:focus-visible,
-        .vf-brand-link:active {{
-            text-decoration: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-            background: transparent !important;
-        }}
-
         .vf-brand {{
-            font-family: inherit !important;
             font-size: 30px;
             font-weight: 800;
             color: {WHITE};
@@ -135,6 +113,7 @@ def inject_global_styles() -> None:
             min-height: 92px;
             display: flex;
             align-items: center;
+            cursor: pointer;
         }}
 
         .vf-brand-dot {{
@@ -231,9 +210,8 @@ def render_top_nav() -> None:
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
-        app_url = get_app_url()
         st.markdown(
-            f'<a class="vf-brand-link" href="{app_url}/" target="_self"><div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div></a>',
+            '<div class="vf-brand" id="vf-home-brand" role="link" tabindex="0" aria-label="Ir para a página inicial do sistema">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
             unsafe_allow_html=True,
         )
 
@@ -258,6 +236,48 @@ def render_top_nav() -> None:
 
     with cols[5]:
         st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)
+
+    app_url = get_app_url().rstrip("/")
+    components.html(
+        f"""
+        <script>
+        const bindHomeBrand = () => {{
+            try {{
+                const doc = window.parent.document;
+                const brand = doc.getElementById("vf-home-brand");
+                if (!brand) return false;
+                if (brand.dataset.vfHomeBound === "1") return true;
+
+                const goHome = (event) => {{
+                    if (event) event.preventDefault();
+                    window.parent.location.href = "{app_url}";
+                }};
+
+                brand.dataset.vfHomeBound = "1";
+                brand.style.cursor = "pointer";
+                brand.addEventListener("click", goHome);
+                brand.addEventListener("keydown", (event) => {{
+                    if (event.key === "Enter" || event.key === " ") {{
+                        goHome(event);
+                    }}
+                }});
+                return true;
+            }} catch (error) {{
+                return false;
+            }}
+        }};
+
+        if (!bindHomeBrand()) {{
+            let tries = 0;
+            const timer = setInterval(() => {{
+                tries += 1;
+                if (bindHomeBrand() || tries > 40) clearInterval(timer);
+            }}, 150);
+        }}
+        </script>
+        """,
+        height=0,
+    )
 
 
 def render_wallet_summary() -> None:
