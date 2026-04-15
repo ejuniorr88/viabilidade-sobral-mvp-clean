@@ -1,9 +1,7 @@
 import json
-import re
-import unicodedata
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import streamlit as st
 
@@ -27,8 +25,6 @@ from ui.flow.primary_actions import render_primary_actions
 from ui.how_it_works_panel import render_how_it_works_panel
 from ui.flow.use_selector import render_use_selector
 from ui.legal import render_privacy_page, render_terms_page
-
-st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
 
 bootstrap_session_state(st.session_state)
@@ -62,6 +58,10 @@ from ui.relatorio import (
     should_block_unifamiliar_preview,
 )
 from core.auth import handle_oauth_callback, safe_get_query_param
+from ui.runtime.app_query_params import (
+    consume_home_nav_query_param,
+    consume_landing_checkout_query_params,
+)
 from ui.auth_panel import render_google_login_top
 from ui.access_gates import (
     render_login_gate_block,
@@ -137,87 +137,6 @@ def _build_current_report_signature(calc_ref, session_snapshot):
     return build_report_signature(calc=calc_ref, session_state=session_snapshot)
 
 
-def _normalize_checkout_plan_slug(value: Any) -> Optional[str]:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-
-    normalized = unicodedata.normalize("NFD", raw)
-    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
-    normalized = re.sub(r"[^a-z0-9]+", "_", normalized.lower()).strip("_")
-
-    if "intermedi" in normalized:
-        return "intermediario"
-    if "profissional" in normalized:
-        return "profissional"
-    if "basico" in normalized:
-        return "basico"
-    return normalized or None
-
-
-def _clear_landing_checkout_query_params() -> None:
-    keys = ["checkout", "plan"]
-    try:
-        for key in keys:
-            try:
-                del st.query_params[key]
-            except Exception:
-                pass
-    except Exception:
-        try:
-            current = st.experimental_get_query_params()
-            cleaned = {k: v for k, v in current.items() if k not in keys}
-            st.experimental_set_query_params(**cleaned)
-        except Exception:
-            pass
-
-
-def _clear_home_nav_query_param() -> None:
-    try:
-        try:
-            del st.query_params["nav"]
-        except Exception:
-            pass
-    except Exception:
-        try:
-            current = st.experimental_get_query_params()
-            cleaned = {k: v for k, v in current.items() if k != "nav"}
-            st.experimental_set_query_params(**cleaned)
-        except Exception:
-            pass
-
-
-def _consume_home_nav_query_param() -> None:
-    nav_value = str(safe_get_query_param("nav") or "").strip().lower()
-    if nav_value != "home":
-        return
-
-    st.session_state["show_plans_page"] = False
-    st.session_state["show_client_area"] = False
-    st.session_state["post_login_action"] = None
-    clear_all_checkout_states()
-    _clear_home_nav_query_param()
-
-
-def _consume_landing_checkout_query_params() -> None:
-    checkout_flag = str(safe_get_query_param("checkout") or "").strip().lower()
-    plan_value = safe_get_query_param("plan")
-    should_open_checkout = checkout_flag in {"1", "true", "yes", "on"} or bool(plan_value)
-
-    if not should_open_checkout:
-        return
-
-    st.session_state["landing_checkout_mode"] = True
-    st.session_state["landing_selected_plan_slug"] = _normalize_checkout_plan_slug(plan_value)
-    st.session_state["show_plans_page"] = True
-    st.session_state["show_client_area"] = False
-
-    if not st.session_state.get("auth_logged_in"):
-        st.session_state["post_login_action"] = "open_plans_page"
-
-    _clear_landing_checkout_query_params()
-
-
 def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
     if not isinstance(calc_ref, dict):
         return False
@@ -266,8 +185,8 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
-_consume_home_nav_query_param()
-_consume_landing_checkout_query_params()
+consume_home_nav_query_param(st.session_state)
+consume_landing_checkout_query_params(st.session_state)
 
 legal_view = safe_get_query_param("view")
 if legal_view == "terms":
