@@ -120,14 +120,67 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
 
                 const computeTargetTop = (el) => Math.max((el.getBoundingClientRect().top || 0) + rootWin.scrollY - offset, 0);
 
+                const findScrollableAncestor = (el) => {{
+                    let node = el ? el.parentElement : null;
+                    while (node && node !== rootDoc.body) {{
+                        const style = rootWin.getComputedStyle(node);
+                        const overflowY = String(style?.overflowY || '');
+                        const canScroll = /(auto|scroll|overlay)/.test(overflowY) && node.scrollHeight > (node.clientHeight + 4);
+                        if (canScroll) {{
+                            return node;
+                        }}
+                        node = node.parentElement;
+                    }}
+                    return scrollRoot();
+                }};
+
+                const scrollContainerTo = (container, top, behaviorValue) => {{
+                    if (!container) {{
+                        return;
+                    }}
+                    try {{
+                        if (typeof container.scrollTo === 'function') {{
+                            container.scrollTo({{ top, behavior: behaviorValue }});
+                            return;
+                        }}
+                    }} catch (err) {{
+                    }}
+                    try {{
+                        container.scrollTop = top;
+                    }} catch (err) {{
+                    }}
+                }};
+
+                const alignScrollableAncestor = (el, behaviorValue) => {{
+                    const scrollableAncestor = findScrollableAncestor(el);
+                    if (!scrollableAncestor || scrollableAncestor === rootWin) {{
+                        return;
+                    }}
+
+                    const containerRect = scrollableAncestor.getBoundingClientRect
+                        ? scrollableAncestor.getBoundingClientRect()
+                        : {{ top: 0 }};
+                    const localTop = Math.max(
+                        ((el.getBoundingClientRect().top || 0) - (containerRect.top || 0))
+                        + (scrollableAncestor.scrollTop || 0)
+                        - offset,
+                        0
+                    );
+                    scrollContainerTo(scrollableAncestor, localTop, behaviorValue);
+                }};
+
                 const applyScroll = (el) => {{
                     const targetTop = computeTargetTop(el);
-                    if (behavior === 'confirmation') {{
-                        el.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                        rootWin.scrollTo({{ top: targetTop, behavior: 'smooth' }});
-                    }} else {{
-                        rootWin.scrollTo({{ top: targetTop, behavior: 'smooth' }});
+                    const behaviorValue = behavior === 'confirmation' ? 'smooth' : 'auto';
+
+                    try {{
+                        el.scrollIntoView({{ behavior: 'auto', block: 'start', inline: 'nearest' }});
+                    }} catch (err) {{
                     }}
+
+                    alignScrollableAncestor(el, behaviorValue);
+                    scrollContainerTo(rootDoc.scrollingElement || rootDoc.documentElement || rootDoc.body, targetTop, behaviorValue);
+                    scrollContainerTo(rootWin, targetTop, behaviorValue);
                     return targetTop;
                 }};
 
@@ -156,7 +209,13 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
                         const finalEl = rootDoc.getElementById(elementId);
                         if (finalEl) {{
                             const finalTop = Math.max((finalEl.getBoundingClientRect().top || 0) + rootWin.scrollY - offset, 0);
-                            rootWin.scrollTo({{ top: Number.isFinite(finalTop) ? finalTop : targetTop, behavior: 'auto' }});
+                            try {{
+                                finalEl.scrollIntoView({{ behavior: 'auto', block: 'start', inline: 'nearest' }});
+                            }} catch (err) {{
+                            }}
+                            alignScrollableAncestor(finalEl, 'auto');
+                            scrollContainerTo(rootDoc.scrollingElement || rootDoc.documentElement || rootDoc.body, Number.isFinite(finalTop) ? finalTop : targetTop, 'auto');
+                            scrollContainerTo(rootWin, Number.isFinite(finalTop) ? finalTop : targetTop, 'auto');
                         }}
                         cleanup();
                     }}, 240);
