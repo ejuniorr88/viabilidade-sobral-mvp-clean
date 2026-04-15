@@ -45,6 +45,40 @@ def clear_landing_checkout_query_params() -> None:
             pass
 
 
+
+
+def clear_client_area_query_params() -> None:
+    keys = ["client_area"]
+    try:
+        for key in keys:
+            try:
+                del st.query_params[key]
+            except Exception:
+                pass
+    except Exception:
+        try:
+            current = st.experimental_get_query_params()
+            cleaned = {k: v for k, v in current.items() if k not in keys}
+            st.experimental_set_query_params(**cleaned)
+        except Exception:
+            pass
+
+
+def consume_client_area_query_param(session_state) -> None:
+    client_area_flag = str(safe_get_query_param("client_area") or "").strip().lower()
+    should_open_client_area = client_area_flag in {"1", "true", "yes", "on"}
+
+    if not should_open_client_area:
+        return
+
+    session_state["show_client_area"] = True
+    session_state["show_plans_page"] = False
+
+    if not session_state.get("auth_logged_in"):
+        session_state["post_login_action"] = "open_client_area"
+
+    clear_client_area_query_params()
+
 def clear_home_nav_query_param() -> None:
     try:
         try:
