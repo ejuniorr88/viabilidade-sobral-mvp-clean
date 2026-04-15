@@ -192,7 +192,7 @@ def test_refreshes_open_review_with_new_lot_data_and_clears_legacy_pending_confi
     assert st_stub.session_state["report_review_signature"] == "sig-new"
     assert st_stub.session_state.get("pending_report_signature") is None
     assert st_stub.session_state.get("confirm_new_report") is None
-    assert st_stub.session_state.get("navigation_focus_target") == "report_section"
+    assert st_stub.session_state.get("nav_focus_target") == "report_confirmation_block"
     assert render_calls, "A revisão deve continuar renderizando após a edição do lote."
     assert render_calls[-1][1]["lot_front_m"] == 12.0
     assert not any("Você tem certeza que deseja gerar outro relatório" in msg for msg in st_stub.warnings)
@@ -248,7 +248,7 @@ def test_generate_report_button_arms_review_and_focuses_confirmation_block() -> 
     assert armed_calls, "O clique no botão principal deve continuar armando a confirmação legada compatível."
     assert st_stub.session_state["report_review_open"] is True
     assert st_stub.session_state["report_review_signature"] == "sig-current"
-    assert st_stub.session_state.get("navigation_focus_target") == "report_review_confirm"
+    assert st_stub.session_state.get("nav_focus_target") == "report_confirmation_block"
 
 
 def test_stale_pending_signature_is_cleared_before_legacy_confirmation_branch_runs() -> None:
