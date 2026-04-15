@@ -15,6 +15,7 @@ def bootstrap_session_state(session_state: MutableMapping[str, Any]) -> None:
     session_state.setdefault("scroll_to_item3", False)
     session_state.setdefault("post_login_action", None)
     session_state.setdefault("show_inline_payments", False)
+    session_state.setdefault("show_plans_page", False)
     session_state.setdefault("show_client_area", False)
     session_state.setdefault("confirm_clear_all", False)
     session_state.setdefault("last_report_storage_error", None)
