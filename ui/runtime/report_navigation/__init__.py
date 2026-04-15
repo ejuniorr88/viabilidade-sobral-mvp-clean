@@ -1,4 +1,4 @@
-  from __future__ import annotations
+from __future__ import annotations
 
 from .confirmation import REPORT_CONFIRMATION_TARGETS, arm_report_confirmation_focus
 from .generated import REPORT_GENERATED_TARGETS, arm_report_generated_focus
