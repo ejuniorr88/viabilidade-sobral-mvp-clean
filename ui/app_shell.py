@@ -13,7 +13,7 @@ BLUE = "#071847"
 ORANGE = "#d68910"
 WHITE = "#ffffff"
 TEXT = "#1f2a44"
-HOW_IT_WORKS_URL = "https://viabilidadefacil.com.br/entenda-o-sistema.html"
+HOW_IT_WORKS_URL = "https://www.viabilidadefacil.com.br/entenda-o-sistema.html"
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
