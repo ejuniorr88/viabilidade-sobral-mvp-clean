@@ -7,7 +7,7 @@ from .base import arm_report_navigation_target
 REPORT_GENERATED_TARGETS = {
     "report_generated_notice_context": {
         "element_id": "report-generated-context-start",
-        "offset": 140,
+        "offset": 0,
         "behavior": "generated_context",
     },
 }
