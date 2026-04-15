@@ -17,7 +17,6 @@ _REVIEW_CALC_KEY = "report_review_calc"
 _REVIEW_SESSION_KEY = "report_review_session"
 _REVIEW_IS_NEW_KEY = "report_review_is_new_report"
 _NOTICE_FOCUS_SIGNATURE_KEY = "report_section_notice_focus_signature"
-_LEGACY_GENERATE_REPORT_LABEL = "📄 Gerar relatório"
 
 
 def _render_generate_report_button_style() -> None:
@@ -286,7 +285,6 @@ def render_report_section(
         )
 
         if has_snapshot and not is_same_as_snapshot:
-            st.markdown('<div id="report-section-notice-context-start"></div>', unsafe_allow_html=True)
             st.markdown('<div id="report-section-scenario-notice"></div>', unsafe_allow_html=True)
             st.warning(
                 "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, clique novamente em gerar relatório."
@@ -300,8 +298,6 @@ def render_report_section(
             )
             if notice_should_focus and st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) != notice_focus_signature:
                 arm_navigation_focus(st.session_state, "report_section_notice_context")
-                # O comportamento desejado é enquadrar o bloco "Relatório completo"
-                # inteiro, e não colar o aviso amarelo no topo da viewport.
                 st.session_state[_NOTICE_FOCUS_SIGNATURE_KEY] = notice_focus_signature
         else:
             if st.session_state.get(_NOTICE_FOCUS_SIGNATURE_KEY) is not None:
