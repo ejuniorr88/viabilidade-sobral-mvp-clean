@@ -102,10 +102,25 @@ def inject_global_styles() -> None:
             min-height: 92px !important;
         }}
 
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child,
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child [data-testid="stColumn"],
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child [data-testid="stColumn"] > div {{
-            position: relative !important;
+        .vf-brand-link {{
+            display: inline-flex !important;
+            align-items: center !important;
+            min-height: 92px;
+            text-decoration: none !important;
+            cursor: pointer !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }}
+
+        .vf-brand-link:hover,
+        .vf-brand-link:focus,
+        .vf-brand-link:focus-visible,
+        .vf-brand-link:active {{
+            text-decoration: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
         }}
 
         .vf-brand {{
@@ -120,53 +135,11 @@ def inject_global_styles() -> None:
             min-height: 92px;
             display: flex;
             align-items: center;
-            position: relative;
-            z-index: 30;
-            pointer-events: none !important;
         }}
 
         .vf-brand-dot {{
             color: {ORANGE};
             margin-left: 2px;
-        }}
-
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton {{
-            position: absolute !important;
-            inset: 0 !important;
-            width: 100% !important;
-            min-height: 92px !important;
-            margin: 0 !important;
-            z-index: 20 !important;
-            justify-content: flex-start !important;
-        }}
-
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] {{
-            position: absolute !important;
-            inset: 0 !important;
-            width: 100% !important;
-            min-height: 92px !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            color: transparent !important;
-            font-size: 0 !important;
-            line-height: 0 !important;
-            border-radius: 0 !important;
-            cursor: pointer !important;
-        }}
-
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"]:hover,
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"]:focus,
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"]:focus-visible,
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"]:active {{
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            outline: none !important;
-            color: transparent !important;
-            opacity: 1 !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton {{
@@ -258,13 +231,9 @@ def render_top_nav() -> None:
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
-        if st.button("​", key="vf_nav_home", type="tertiary"):
-            st.session_state["show_plans_page"] = False
-            st.session_state["show_client_area"] = False
-            st.session_state["post_login_action"] = None
-            st.rerun()
+        app_url = get_app_url()
         st.markdown(
-            '<div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
+            f'<a class="vf-brand-link" href="{app_url}/" target="_self"><div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div></a>',
             unsafe_allow_html=True,
         )
 
