@@ -102,12 +102,8 @@ def inject_global_styles() -> None:
         }}
 
         .vf-brand-home {{
-            display: inline-flex;
-            align-items: center;
-            min-height: 92px;
             text-decoration: none !important;
             color: inherit !important;
-            cursor: pointer;
         }}
 
         .vf-brand-home:hover,
@@ -132,6 +128,7 @@ def inject_global_styles() -> None:
             display: flex;
             align-items: center;
             font-family: inherit !important;
+            cursor: pointer;
         }}
 
         .vf-brand-dot {{
@@ -230,7 +227,7 @@ def render_top_nav() -> None:
     with cols[0]:
         home_url = get_app_url()
         st.markdown(
-            f'<a class="vf-brand-home" href="{home_url}" target="_self"><div class="vf-brand">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div></a>',
+            f'<a class="vf-brand vf-brand-home" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema">Viabilidade-Fácil<span class="vf-brand-dot">.</span></a>',
             unsafe_allow_html=True,
         )
 
