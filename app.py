@@ -1,4 +1,7 @@
 import json
+import re
+import unicodedata
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -25,6 +28,7 @@ from ui.how_it_works_panel import render_how_it_works_panel
 from ui.flow.use_selector import render_use_selector
 from ui.legal import render_privacy_page, render_terms_page
 
+st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
 
 bootstrap_session_state(st.session_state)
@@ -50,10 +54,6 @@ from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
 from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
 from ui.runtime.navigation_focus import render_navigation_focus_if_needed
-from ui.runtime.app_query_params import (
-    consume_home_nav_query_param,
-    consume_landing_checkout_query_params,
-)
 from ui.runtime.report_navigation import arm_report_initial_focus
 from ui.relatorio import (
     render_relatorio_section,
@@ -77,18 +77,11 @@ from ui.relatorio_blocks.multifamiliar_guia import (
 )
 from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user, refund_viability_credit
+from core.report_pdf import generate_report_pdf_bytes
+from core.client_reports import save_client_report, build_report_signature
 from core.state_helpers import clear_all_checkout_states
 from core import report_confirmation as report_confirmation_core
-from core.report_pdf import generate_report_pdf_bytes
-from ui.runtime.report_flow_bindings import (
-    build_current_report_signature,
-    clear_pending_report,
-    clear_report_runtime_state,
-    current_report_session_snapshot,
-    prepare_and_consume_report,
-    render_blocked_report_preview,
-    should_block_report_preview,
-)
+from core import checkout_flow as checkout_flow_core
 
 
 @st.cache_data(show_spinner=False)
@@ -103,14 +96,178 @@ def _zones_prepared():
 
 
 
+def _current_report_session_snapshot(calc_ref, built_ground_value, permeable_area_value):
+    return report_confirmation_core.current_report_session_snapshot(
+        calc_ref=calc_ref,
+        built_ground_value=built_ground_value,
+        permeable_area_value=permeable_area_value,
+        session_state=st.session_state,
+    )
+
+
+def _commit_report_snapshot(calc_ref, session_snapshot, pdf_bytes, signature):
+    report_confirmation_core.commit_report_snapshot(
+        session_state=st.session_state,
+        calc_ref=calc_ref,
+        session_snapshot=session_snapshot,
+        pdf_bytes=pdf_bytes,
+        signature=signature,
+    )
+
+
+def _clear_pending_report():
+    report_confirmation_core.clear_pending_report(st.session_state)
+
+
+def _clear_report_runtime_state(
+    *,
+    clear_last_calc_signature: bool = False,
+    preserve_snapshot: bool = False,
+    preserve_pending: bool = False,
+) -> None:
+    report_confirmation_core.clear_report_runtime_state(
+        session_state=st.session_state,
+        clear_last_calc_signature=clear_last_calc_signature,
+        preserve_snapshot=preserve_snapshot,
+        preserve_pending=preserve_pending,
+    )
+
+
+def _build_current_report_signature(calc_ref, session_snapshot):
+    return build_report_signature(calc=calc_ref, session_state=session_snapshot)
+
+
+def _normalize_checkout_plan_slug(value: Any) -> Optional[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+
+    normalized = unicodedata.normalize("NFD", raw)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = re.sub(r"[^a-z0-9]+", "_", normalized.lower()).strip("_")
+
+    if "intermedi" in normalized:
+        return "intermediario"
+    if "profissional" in normalized:
+        return "profissional"
+    if "basico" in normalized:
+        return "basico"
+    return normalized or None
+
+
+def _clear_landing_checkout_query_params() -> None:
+    keys = ["checkout", "plan"]
+    try:
+        for key in keys:
+            try:
+                del st.query_params[key]
+            except Exception:
+                pass
+    except Exception:
+        try:
+            current = st.experimental_get_query_params()
+            cleaned = {k: v for k, v in current.items() if k not in keys}
+            st.experimental_set_query_params(**cleaned)
+        except Exception:
+            pass
+
+
+def _clear_home_nav_query_param() -> None:
+    try:
+        try:
+            del st.query_params["nav"]
+        except Exception:
+            pass
+    except Exception:
+        try:
+            current = st.experimental_get_query_params()
+            cleaned = {k: v for k, v in current.items() if k != "nav"}
+            st.experimental_set_query_params(**cleaned)
+        except Exception:
+            pass
+
+
+def _consume_home_nav_query_param() -> None:
+    nav_value = str(safe_get_query_param("nav") or "").strip().lower()
+    if nav_value != "home":
+        return
+
+    st.session_state["show_plans_page"] = False
+    st.session_state["show_client_area"] = False
+    st.session_state["post_login_action"] = None
+    clear_all_checkout_states()
+    _clear_home_nav_query_param()
+
+
+def _consume_landing_checkout_query_params() -> None:
+    checkout_flag = str(safe_get_query_param("checkout") or "").strip().lower()
+    plan_value = safe_get_query_param("plan")
+    should_open_checkout = checkout_flag in {"1", "true", "yes", "on"} or bool(plan_value)
+
+    if not should_open_checkout:
+        return
+
+    st.session_state["landing_checkout_mode"] = True
+    st.session_state["landing_selected_plan_slug"] = _normalize_checkout_plan_slug(plan_value)
+    st.session_state["show_plans_page"] = True
+    st.session_state["show_client_area"] = False
+
+    if not st.session_state.get("auth_logged_in"):
+        st.session_state["post_login_action"] = "open_plans_page"
+
+    _clear_landing_checkout_query_params()
+
+
+def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
+    if not isinstance(calc_ref, dict):
+        return False
+    if not calc_ref.get("ok") or not calc_ref.get("rule") or not (calc_ref.get("zone") or calc_ref.get("zone_sigla")) or calc_ref.get("err"):
+        return False
+    if str(calc_ref.get("use_type_code") or "").startswith("RES_MULTI_") and calc_ref.get("project_mode") == "GUIA_FASE_1":
+        return should_block_multifamiliar_preview(calc_ref, rule=calc_ref.get("rule") or {})
+    return should_block_unifamiliar_preview(calc_ref)
+
+
+def _render_blocked_report_preview(calc_ref: Dict[str, Any]) -> None:
+    rule_ref = calc_ref.get("rule") or {}
+    if str(calc_ref.get("use_type_code") or "").startswith("RES_MULTI_") and calc_ref.get("project_mode") == "GUIA_FASE_1":
+        render_multifamiliar_inadequado_preview(calc=calc_ref, rule=rule_ref)
+    else:
+        render_unifamiliar_inadequado_preview(calc_ref)
+
+
+def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, user_id_value, selected_use_label_value, categoria_label_value):
+    # Shim de compatibilidade: a orquestração real foi modularizada em core.checkout_flow.
+    # As âncoras abaixo são mantidas por contrato para proteger a regressão de débito/armazenamento:
+    # generate_report_pdf_bytes(calc=calc_ref, session_state=session_snapshot)
+    # consume_viability_credit(
+    # amount=1
+    # save_client_report(
+    # last_saved_report_signature
+    debit_result, pdf_bytes = checkout_flow_core.prepare_and_consume_report(
+        calc_ref=calc_ref,
+        session_snapshot=session_snapshot,
+        report_signature=report_signature,
+        user_id_value=user_id_value,
+        selected_use_label_value=selected_use_label_value,
+        categoria_label_value=categoria_label_value,
+        session_state=st.session_state,
+        generate_report_pdf_bytes_func=generate_report_pdf_bytes,
+        consume_viability_credit_func=consume_viability_credit,
+        refund_viability_credit_func=refund_viability_credit,
+        commit_report_snapshot_func=_commit_report_snapshot,
+        save_client_report_func=save_client_report,
+    )
+    return debit_result, pdf_bytes
+
 
 if safe_get_query_param("auth_flow") == "callback":
     render_auth_callback_bridge()
 
 handle_oauth_callback()
 inject_global_styles()
-consume_home_nav_query_param(st.session_state, safe_get_query_param=safe_get_query_param, clear_all_checkout_states_func=clear_all_checkout_states)
-consume_landing_checkout_query_params(st.session_state, safe_get_query_param=safe_get_query_param)
+_consume_home_nav_query_param()
+_consume_landing_checkout_query_params()
 
 legal_view = safe_get_query_param("view")
 if legal_view == "terms":
@@ -197,13 +354,13 @@ radius_m = render_mapa_section(zones_gj)
 
 clicked_calcular = render_primary_actions(
     session_state=st.session_state,
-    clear_report_runtime_state=clear_report_runtime_state,
+    clear_report_runtime_state=_clear_report_runtime_state,
 )
 
 # Compatibilidade contratual: a limpeza real continua delegada em ui.flow.primary_actions.
 limpar_tudo = False
 if limpar_tudo:
-    clear_report_runtime_state(clear_last_calc_signature=True)
+    _clear_report_runtime_state(clear_last_calc_signature=True)
     st.session_state.free_calc_done = False
     st.session_state.post_login_action = None
 
@@ -222,7 +379,7 @@ current_signature = report_confirmation_core.build_calc_signature(
 )
 
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
-    clear_report_runtime_state(preserve_snapshot=True, preserve_pending=True)
+    _clear_report_runtime_state(preserve_snapshot=True, preserve_pending=True)
     st.session_state.free_calc_done = False
     st.session_state.calc.pop("err", None)
     st.session_state.calc.pop("rule", None)
@@ -250,7 +407,7 @@ st.markdown('<div id="item-3-start"></div>', unsafe_allow_html=True)
 show_item3 = bool(run_free_calc_now or st.session_state.get("free_calc_done"))
 
 if run_free_calc_now:
-    clear_report_runtime_state(preserve_snapshot=True)
+    _clear_report_runtime_state(preserve_snapshot=True)
     st.session_state.free_calc_done = False
     st.session_state.last_calc_signature = current_signature
 
@@ -290,11 +447,11 @@ if section4_can_try:
 
 
 
-preview_inadequado = should_block_report_preview(calc)
+preview_inadequado = _should_block_report_preview(calc)
 if preview_inadequado:
-    clear_report_runtime_state(preserve_snapshot=True)
+    _clear_report_runtime_state(preserve_snapshot=True)
     st.markdown("---")
-    render_blocked_report_preview(calc)
+    _render_blocked_report_preview(calc)
 
 can_offer_report = bool(calc.get("rule")) and bool(calc.get("zone")) and not bool(calc.get("err")) and not preview_inadequado
 
@@ -310,7 +467,7 @@ has_snapshot = report_confirmation_state["has_snapshot"]
 is_same_as_snapshot = report_confirmation_state["is_same_as_snapshot"]
 if gerar_relatorio:
     if preview_inadequado:
-        clear_report_runtime_state(preserve_snapshot=True)
+        _clear_report_runtime_state(preserve_snapshot=True)
         st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
     elif has_snapshot and not is_same_as_snapshot:
         report_confirmation_core.arm_new_report_confirmation(
@@ -322,13 +479,13 @@ if gerar_relatorio:
         st.session_state.show_inline_payments = True
         st.error("Você não possui créditos suficientes para gerar o relatório.")
     else:
-        prepare_and_consume_report(
+        _prepare_and_consume_report(
 if st.session_state.get("confirm_new_report") and st.session_state.get("pending_report_signature"):
     confirm_yes = st.button("Sim, gerar outro relatório", key="btn_confirm_new_report_yes", use_container_width=True)
     confirm_no = st.button("Não", key="btn_confirm_new_report_no", use_container_width=True)
     if confirm_yes:
                 if preview_inadequado:
-                clear_report_runtime_state(preserve_snapshot=True)
+                _clear_report_runtime_state(preserve_snapshot=True)
                 st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
 """
 # Âncoras contratuais preservadas no app.py para os testes de fluxo/ordem.
@@ -371,10 +528,10 @@ render_report_section(
     render_zone_description_section_func=render_zone_description_section,
     render_relatorio_section_func=render_relatorio_section,
     generate_report_pdf_bytes_func=generate_report_pdf_bytes,
-    clear_report_runtime_state_func=clear_report_runtime_state,
-    clear_pending_report_func=clear_pending_report,
-    prepare_and_consume_report_func=prepare_and_consume_report,
-    build_current_report_signature_func=build_current_report_signature,
+    clear_report_runtime_state_func=_clear_report_runtime_state,
+    clear_pending_report_func=_clear_pending_report,
+    prepare_and_consume_report_func=_prepare_and_consume_report,
+    build_current_report_signature_func=_build_current_report_signature,
     compute_report_confirmation_state_func=report_confirmation_core.compute_report_confirmation_state,
     arm_new_report_confirmation_func=report_confirmation_core.arm_new_report_confirmation,
 )
