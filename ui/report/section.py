@@ -133,7 +133,6 @@ def render_report_section(
 ) -> None:
     if can_offer_report:
         st.markdown('<div id="report-section-start"></div>', unsafe_allow_html=True)
-        st.markdown('<div id="report-generated-context-start"></div>', unsafe_allow_html=True)
         st.markdown("---")
         st.subheader("Relatório completo")
         st.caption(
@@ -292,6 +291,7 @@ def render_report_section(
         )
 
         if has_snapshot and not is_same_as_snapshot:
+            st.markdown('<div id="report-generated-context-start"></div>', unsafe_allow_html=True)
             st.markdown('<div id="report-section-scenario-notice"></div>', unsafe_allow_html=True)
             st.warning(
                 "Você está visualizando um relatório já gerado. Para gerar outro relatório neste novo cenário, clique novamente em gerar relatório."
