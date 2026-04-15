@@ -14,6 +14,7 @@ ORANGE = "#d68910"
 WHITE = "#ffffff"
 TEXT = "#1f2a44"
 HOW_IT_WORKS_URL = "https://www.viabilidadefacil.com.br/entenda-o-sistema.html"
+PLANS_PAGE_URL = "https://www.viabilidadefacil.com.br/planos.html"
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -299,12 +300,10 @@ def render_top_nav() -> None:
             st.rerun()
 
     with cols[4]:
-        if st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=True):
-            st.session_state["show_plans_page"] = True
-            st.session_state["show_client_area"] = False
-            if not st.session_state.get("auth_logged_in"):
-                st.session_state["post_login_action"] = "open_plans_page"
-            st.rerun()
+        st.markdown(
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_plans" class="vf-nav-link-button" href="{PLANS_PAGE_URL}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página de planos em nova aba">Planos</a></div>',
+            unsafe_allow_html=True,
+        )
 
     with cols[5]:
         st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)
