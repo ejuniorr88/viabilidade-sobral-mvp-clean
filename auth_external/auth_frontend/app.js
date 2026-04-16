@@ -180,6 +180,37 @@
     return callbackUrl.toString();
   }
 
+  function redirectMainAppWindow(accessToken) {
+    const preferredAppUrl = getPreferredStreamlitAppUrl();
+    if (!preferredAppUrl) {
+      return false;
+    }
+
+    try {
+      const streamlitUrl = new URL(preferredAppUrl);
+      streamlitUrl.searchParams.set("ext_access_token", accessToken);
+      const destination = streamlitUrl.toString();
+
+      if (window.opener && window.opener.top) {
+        window.opener.top.location.href = destination;
+        return true;
+      }
+    } catch (_err) {}
+
+    try {
+      const streamlitUrl = new URL(preferredAppUrl);
+      streamlitUrl.searchParams.set("ext_access_token", accessToken);
+      const destination = streamlitUrl.toString();
+
+      if (window.opener) {
+        window.opener.location.href = destination;
+        return true;
+      }
+    } catch (_err) {}
+
+    return false;
+  }
+
   async function notifyParentAndMaybeClose(accessToken) {
     try {
       if (window.opener && typeof window.opener.postMessage === "function") {
@@ -194,15 +225,7 @@
     } catch (_err) {}
 
     writeStorage(STORAGE_KEYS.popupToken, accessToken);
-
-    try {
-      const preferredAppUrl = getPreferredStreamlitAppUrl();
-      if (window.opener && preferredAppUrl) {
-        const streamlitUrl = new URL(preferredAppUrl);
-        streamlitUrl.searchParams.set("ext_access_token", accessToken);
-        window.opener.location.href = streamlitUrl.toString();
-      }
-    } catch (_err) {}
+    redirectMainAppWindow(accessToken);
 
     setStatus("Login concluído. Voltando para o sistema...", "ok");
 
