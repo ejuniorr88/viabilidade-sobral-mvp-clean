@@ -52,13 +52,13 @@ def get_app_url() -> str:
 
 
 def get_external_login_url() -> str:
-    raw = get_secret_str("EXTERNAL_LOGIN_URL", "https://viabilidade-sobral-mvp-clean.vercel.app").strip()
-    return raw.rstrip("/") or "https://viabilidade-sobral-mvp-clean.vercel.app"
+    raw = get_secret_str("EXTERNAL_LOGIN_URL", "http://localhost:3000").strip()
+    return raw.rstrip("/") or "http://localhost:3000"
 
 
 def get_gateway_url() -> str:
-    raw = get_secret_str("AUTH_GATEWAY_URL", "https://viabilidade-auth-gateway.onrender.com").strip()
-    return raw.rstrip("/") or "https://viabilidade-auth-gateway.onrender.com"
+    raw = get_secret_str("AUTH_GATEWAY_URL", "http://localhost:8000").strip()
+    return raw.rstrip("/") or "http://localhost:8000"
 
 
 def build_auth_callback_url() -> str:
@@ -145,12 +145,10 @@ def _clear_cross_account_runtime_state() -> None:
     st.session_state["calc"] = {"use_type_code": "RES_UNI"}
 
     keys_to_clear = [
-        # mapa / localização
         "selected_lat",
         "selected_lon",
         "last_click",
         "click_hash",
-        # lote e inputs associados
         "lot_is_corner",
         "lot_is_midblock",
         "lot_is_irregular",
@@ -167,7 +165,6 @@ def _clear_cross_account_runtime_state() -> None:
         "built_ground_input_m2",
         "area_permeavel_prevista_m2",
         "permeable_area_m2",
-        # fluxo de cálculo / UX
         "free_calc_done",
         "show_login_gate",
         "scroll_to_login_gate",
@@ -176,23 +173,19 @@ def _clear_cross_account_runtime_state() -> None:
         "show_inline_payments",
         "show_client_area",
         "confirm_clear_all",
-        # widgets do seletor de uso / busca
         "vf_categoria",
         "vf_residential_option",
         "vf_busca_direta",
         "use_type_code_readonly",
-        # carteira / reconciliação visual
         "wallet_reconcile_done_for",
         "wallet_reconcile_result",
         "wallet_reconcile_error",
-        # rastros de relatório auxiliares
         "last_report_storage_error",
         "last_report_refund_result",
     ]
     for key in keys_to_clear:
         st.session_state.pop(key, None)
 
-    # Reinstala o calc mínimo para o app subir limpo no próximo ciclo.
     st.session_state["calc"] = {"use_type_code": "RES_UNI"}
     st.session_state["show_client_area"] = False
     st.session_state["post_login_action"] = None
@@ -306,7 +299,6 @@ def handle_oauth_callback() -> None:
 
     if external_access_token:
         try:
-            # Se já validamos este mesmo token nesta sessão, não chama o gateway de novo.
             if (
                 st.session_state.get("auth_external_access_token") == external_access_token
                 and st.session_state.get("auth_logged_in")
@@ -319,7 +311,6 @@ def handle_oauth_callback() -> None:
             _try_restore_from_external_token(force_verify=True)
             st.session_state["auth_message"] = "Login efetuado com sucesso."
             st.session_state.pop("oauth_url", None)
-            # Mantém o ext_access_token para permitir reidratação no refresh.
             clear_auth_query_params(remove_external_token=False)
             st.rerun()
             return
@@ -327,7 +318,6 @@ def handle_oauth_callback() -> None:
             clear_user_in_state()
             st.session_state["auth_last_error"] = f"Falha ao concluir login: {e}"
             st.session_state.pop("oauth_url", None)
-            # Se o token falhar, limpamos para evitar travar em estado intermediário.
             clear_auth_query_params(remove_external_token=True)
             st.rerun()
             return
@@ -337,18 +327,17 @@ def handle_oauth_callback() -> None:
 
 def get_auth_url(force_select_account: bool = False) -> Optional[str]:
     base = get_external_login_url()
-    params: Dict[str, Any] = {}
-
-    app_url = get_app_url()
-    if app_url:
-        params["streamlit_app_url"] = app_url
+    params: Dict[str, Any] = {
+        "streamlit_app_url": get_app_url(),
+        "gateway_base_url": get_gateway_url(),
+        "supabase_url": get_secret_str("SUPABASE_URL", required=True),
+        "supabase_anon_key": get_secret_str("SUPABASE_ANON_KEY", required=True),
+    }
 
     if force_select_account:
         params["switch_account"] = "1"
 
-    if params:
-        return f"{base}?{urlencode(params)}"
-    return base
+    return f"{base}?{urlencode(params)}"
 
 
 def logout_limpo() -> None:
@@ -367,7 +356,6 @@ def logout_limpo() -> None:
     st.rerun()
 
 
-# Compat wrappers for existing ui/auth_panel.py
 def start_google_login(force_select_account: bool = False) -> Optional[str]:
     return get_auth_url(force_select_account=force_select_account)
 
