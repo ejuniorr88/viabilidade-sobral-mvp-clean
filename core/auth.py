@@ -338,6 +338,11 @@ def handle_oauth_callback() -> None:
 def get_auth_url(force_select_account: bool = False) -> Optional[str]:
     base = get_external_login_url()
     params: Dict[str, Any] = {}
+
+    app_url = get_app_url()
+    if app_url:
+        params["streamlit_app_url"] = app_url
+
     if force_select_account:
         params["switch_account"] = "1"
 
