@@ -1,17 +1,19 @@
 (function () {
-  const cfg = window.AUTH_CONFIG;
-  if (!cfg || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
-    throw new Error("AUTH_CONFIG incompleto. Preencha auth_frontend/config.js");
-  }
+  const baseCfg = window.AUTH_CONFIG || {};
 
   const STORAGE_KEYS = {
     preferredAppUrl: "vf_preferred_streamlit_app_url",
     popupToken: "vf_auth_popup_token",
     accessToken: "vf_access_token",
     user: "vf_user",
+    supabaseUrl: "vf_auth_supabase_url",
+    supabaseAnonKey: "vf_auth_supabase_anon_key",
+    gatewayBaseUrl: "vf_auth_gateway_base_url",
+    loginRedirectUrl: "vf_auth_login_redirect_url",
   };
 
-  const supabaseClient = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  let runtimeCfg = null;
+  let supabaseClient = null;
 
   const els = {
     loginBtn: document.getElementById("loginBtn"),
@@ -70,11 +72,72 @@
     try { window.localStorage.removeItem(key); } catch (_err) {}
   }
 
+  function normalizeUrl(value) {
+    const raw = (value || "").trim();
+    if (!raw) return "";
+    return raw.replace(/\/+$/, "");
+  }
+
+  function persistRuntimeConfig(cfg) {
+    if (cfg.SUPABASE_URL) writeStorage(STORAGE_KEYS.supabaseUrl, cfg.SUPABASE_URL);
+    if (cfg.SUPABASE_ANON_KEY) writeStorage(STORAGE_KEYS.supabaseAnonKey, cfg.SUPABASE_ANON_KEY);
+    if (cfg.GATEWAY_BASE_URL) writeStorage(STORAGE_KEYS.gatewayBaseUrl, cfg.GATEWAY_BASE_URL);
+    if (cfg.LOGIN_REDIRECT_URL) writeStorage(STORAGE_KEYS.loginRedirectUrl, cfg.LOGIN_REDIRECT_URL);
+    if (cfg.STREAMLIT_APP_URL) writeStorage(STORAGE_KEYS.preferredAppUrl, cfg.STREAMLIT_APP_URL);
+  }
+
+  function buildRuntimeConfig() {
+    const cfg = {
+      SUPABASE_URL: normalizeUrl(
+        getQueryParam("supabase_url") ||
+        readStorage(STORAGE_KEYS.supabaseUrl) ||
+        baseCfg.SUPABASE_URL
+      ),
+      SUPABASE_ANON_KEY: (
+        getQueryParam("supabase_anon_key") ||
+        readStorage(STORAGE_KEYS.supabaseAnonKey) ||
+        baseCfg.SUPABASE_ANON_KEY ||
+        ""
+      ).trim(),
+      GATEWAY_BASE_URL: normalizeUrl(
+        getQueryParam("gateway_base_url") ||
+        readStorage(STORAGE_KEYS.gatewayBaseUrl) ||
+        baseCfg.GATEWAY_BASE_URL
+      ),
+      LOGIN_REDIRECT_URL: normalizeUrl(
+        getQueryParam("login_redirect_url") ||
+        readStorage(STORAGE_KEYS.loginRedirectUrl) ||
+        baseCfg.LOGIN_REDIRECT_URL ||
+        (window.location.origin + window.location.pathname)
+      ),
+      STREAMLIT_APP_URL: normalizeUrl(
+        getQueryParam("streamlit_app_url") ||
+        readStorage(STORAGE_KEYS.preferredAppUrl) ||
+        baseCfg.STREAMLIT_APP_URL
+      ),
+    };
+
+    persistRuntimeConfig(cfg);
+    return cfg;
+  }
+
+  function validateRuntimeConfig(cfg) {
+    const missing = [];
+    if (!cfg.SUPABASE_URL) missing.push("SUPABASE_URL");
+    if (!cfg.SUPABASE_ANON_KEY) missing.push("SUPABASE_ANON_KEY");
+    if (!cfg.GATEWAY_BASE_URL) missing.push("GATEWAY_BASE_URL");
+    if (!cfg.STREAMLIT_APP_URL) missing.push("STREAMLIT_APP_URL");
+
+    if (missing.length) {
+      throw new Error(`AUTH_CONFIG incompleto: ${missing.join(", ")}`);
+    }
+  }
+
   function getPreferredStreamlitAppUrl() {
     return (
       getQueryParam("streamlit_app_url") ||
       readStorage(STORAGE_KEYS.preferredAppUrl) ||
-      cfg.STREAMLIT_APP_URL ||
+      runtimeCfg?.STREAMLIT_APP_URL ||
       ""
     );
   }
@@ -96,7 +159,7 @@
   }
 
   async function wakeGateway() {
-    const wakeUrl = `${cfg.GATEWAY_BASE_URL}/health`;
+    const wakeUrl = `${runtimeCfg.GATEWAY_BASE_URL}/health`;
     let lastError = null;
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -126,7 +189,7 @@
   }
 
   async function verifyWithGateway(accessToken) {
-    const verifyUrl = `${cfg.GATEWAY_BASE_URL}/api/auth/session/verify`;
+    const verifyUrl = `${runtimeCfg.GATEWAY_BASE_URL}/api/auth/session/verify`;
     let lastError = null;
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -168,47 +231,28 @@
   }
 
   function buildLoginRedirectUrl() {
-    const callbackUrl = new URL(window.location.origin + window.location.pathname);
+    const callbackUrl = new URL(runtimeCfg.LOGIN_REDIRECT_URL || (window.location.origin + window.location.pathname));
     const preferredAppUrl = persistPreferredStreamlitAppUrl();
+
     if (preferredAppUrl) {
       callbackUrl.searchParams.set("streamlit_app_url", preferredAppUrl);
     }
+    if (runtimeCfg.GATEWAY_BASE_URL) {
+      callbackUrl.searchParams.set("gateway_base_url", runtimeCfg.GATEWAY_BASE_URL);
+    }
+    if (runtimeCfg.SUPABASE_URL) {
+      callbackUrl.searchParams.set("supabase_url", runtimeCfg.SUPABASE_URL);
+    }
+    if (runtimeCfg.SUPABASE_ANON_KEY) {
+      callbackUrl.searchParams.set("supabase_anon_key", runtimeCfg.SUPABASE_ANON_KEY);
+    }
+
     const switchAccount = getQueryParam("switch_account");
     if (switchAccount) {
       callbackUrl.searchParams.set("switch_account", switchAccount);
     }
+
     return callbackUrl.toString();
-  }
-
-  function redirectMainAppWindow(accessToken) {
-    const preferredAppUrl = getPreferredStreamlitAppUrl();
-    if (!preferredAppUrl) {
-      return false;
-    }
-
-    try {
-      const streamlitUrl = new URL(preferredAppUrl);
-      streamlitUrl.searchParams.set("ext_access_token", accessToken);
-      const destination = streamlitUrl.toString();
-
-      if (window.opener && window.opener.top) {
-        window.opener.top.location.href = destination;
-        return true;
-      }
-    } catch (_err) {}
-
-    try {
-      const streamlitUrl = new URL(preferredAppUrl);
-      streamlitUrl.searchParams.set("ext_access_token", accessToken);
-      const destination = streamlitUrl.toString();
-
-      if (window.opener) {
-        window.opener.location.href = destination;
-        return true;
-      }
-    } catch (_err) {}
-
-    return false;
   }
 
   async function notifyParentAndMaybeClose(accessToken) {
@@ -225,7 +269,15 @@
     } catch (_err) {}
 
     writeStorage(STORAGE_KEYS.popupToken, accessToken);
-    redirectMainAppWindow(accessToken);
+
+    try {
+      const preferredAppUrl = getPreferredStreamlitAppUrl();
+      if (window.opener && preferredAppUrl) {
+        const streamlitUrl = new URL(preferredAppUrl);
+        streamlitUrl.searchParams.set("ext_access_token", accessToken);
+        window.opener.location.href = streamlitUrl.toString();
+      }
+    } catch (_err) {}
 
     setStatus("Login concluído. Voltando para o sistema...", "ok");
 
@@ -304,6 +356,16 @@
     await refreshState();
   }
 
+  try {
+    runtimeCfg = buildRuntimeConfig();
+    validateRuntimeConfig(runtimeCfg);
+    supabaseClient = window.supabase.createClient(runtimeCfg.SUPABASE_URL, runtimeCfg.SUPABASE_ANON_KEY);
+  } catch (err) {
+    setLoggedOutView();
+    setStatus(err.message || String(err), "error");
+    return;
+  }
+
   if (els.loginBtn) {
     els.loginBtn.addEventListener("click", async () => {
       try {
@@ -360,7 +422,14 @@
         }
 
         const preferredAppUrl = getPreferredStreamlitAppUrl();
-        const streamlitUrl = new URL(preferredAppUrl || cfg.STREAMLIT_APP_URL);
+        const fallbackUrl = runtimeCfg.STREAMLIT_APP_URL;
+        const targetUrl = preferredAppUrl || fallbackUrl;
+
+        if (!targetUrl) {
+          throw new Error("URL do sistema principal não informada.");
+        }
+
+        const streamlitUrl = new URL(targetUrl);
         streamlitUrl.searchParams.set("ext_access_token", data.session.access_token);
         window.location.href = streamlitUrl.toString();
       } catch (err) {
