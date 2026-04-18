@@ -1,15 +1,52 @@
 (function () {
   const baseCfg = window.AUTH_CONFIG || {};
 
+  function getQueryParam(name) {
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      return (params.get(name) || "").trim();
+    } catch (_err) {
+      return "";
+    }
+  }
+
+  function normalizeUrl(value) {
+    const raw = (value || "").trim();
+    if (!raw) return "";
+    return raw.replace(/\/+$/, "");
+  }
+
+  function deriveEnvNamespace() {
+    const seed = (
+      getQueryParam("env_key") ||
+      getQueryParam("login_redirect_url") ||
+      baseCfg.LOGIN_REDIRECT_URL ||
+      getQueryParam("supabase_url") ||
+      baseCfg.SUPABASE_URL ||
+      getQueryParam("streamlit_app_url") ||
+      baseCfg.STREAMLIT_APP_URL ||
+      window.location.origin
+    ).trim().toLowerCase();
+
+    return (seed || "default").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "default";
+  }
+
+  const ENV_NAMESPACE = deriveEnvNamespace();
+
+  function scopedStorageKey(baseKey) {
+    return `${baseKey}__${ENV_NAMESPACE}`;
+  }
+
   const STORAGE_KEYS = {
-    preferredAppUrl: "vf_preferred_streamlit_app_url",
-    popupToken: "vf_auth_popup_token",
-    accessToken: "vf_access_token",
-    user: "vf_user",
-    supabaseUrl: "vf_auth_supabase_url",
-    supabaseAnonKey: "vf_auth_supabase_anon_key",
-    gatewayBaseUrl: "vf_auth_gateway_base_url",
-    loginRedirectUrl: "vf_auth_login_redirect_url",
+    preferredAppUrl: scopedStorageKey("vf_preferred_streamlit_app_url"),
+    popupToken: scopedStorageKey("vf_auth_popup_token"),
+    accessToken: scopedStorageKey("vf_access_token"),
+    user: scopedStorageKey("vf_user"),
+    supabaseUrl: scopedStorageKey("vf_auth_supabase_url"),
+    supabaseAnonKey: scopedStorageKey("vf_auth_supabase_anon_key"),
+    gatewayBaseUrl: scopedStorageKey("vf_auth_gateway_base_url"),
+    loginRedirectUrl: scopedStorageKey("vf_auth_login_redirect_url"),
+    envKey: scopedStorageKey("vf_auth_env_key"),
   };
 
   let runtimeCfg = null;
@@ -44,15 +81,6 @@
     return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
-  function getQueryParam(name) {
-    try {
-      const params = new URLSearchParams(window.location.search || "");
-      return (params.get(name) || "").trim();
-    } catch (_err) {
-      return "";
-    }
-  }
-
   function readStorage(key) {
     try {
       return (window.sessionStorage.getItem(key) || window.localStorage.getItem(key) || "").trim();
@@ -61,10 +89,13 @@
     }
   }
 
-  function writeStorage(key, value) {
+  function writeStorage(key, value, options = {}) {
     if (!value) return;
+    const persistLocal = options.persistLocal !== false;
     try { window.sessionStorage.setItem(key, value); } catch (_err) {}
-    try { window.localStorage.setItem(key, value); } catch (_err) {}
+    if (persistLocal) {
+      try { window.localStorage.setItem(key, value); } catch (_err) {}
+    }
   }
 
   function clearStorage(key) {
@@ -72,15 +103,12 @@
     try { window.localStorage.removeItem(key); } catch (_err) {}
   }
 
-  function normalizeUrl(value) {
-    const raw = (value || "").trim();
-    if (!raw) return "";
-    return raw.replace(/\/+$/, "");
-  }
-
   function persistRuntimeConfig(cfg) {
+    writeStorage(STORAGE_KEYS.envKey, ENV_NAMESPACE);
     if (cfg.SUPABASE_URL) writeStorage(STORAGE_KEYS.supabaseUrl, cfg.SUPABASE_URL);
-    if (cfg.SUPABASE_ANON_KEY) writeStorage(STORAGE_KEYS.supabaseAnonKey, cfg.SUPABASE_ANON_KEY);
+    if (cfg.SUPABASE_ANON_KEY) {
+      writeStorage(STORAGE_KEYS.supabaseAnonKey, cfg.SUPABASE_ANON_KEY, { persistLocal: false });
+    }
     if (cfg.GATEWAY_BASE_URL) writeStorage(STORAGE_KEYS.gatewayBaseUrl, cfg.GATEWAY_BASE_URL);
     if (cfg.LOGIN_REDIRECT_URL) writeStorage(STORAGE_KEYS.loginRedirectUrl, cfg.LOGIN_REDIRECT_URL);
     if (cfg.STREAMLIT_APP_URL) writeStorage(STORAGE_KEYS.preferredAppUrl, cfg.STREAMLIT_APP_URL);
@@ -115,9 +143,9 @@
         readStorage(STORAGE_KEYS.preferredAppUrl) ||
         baseCfg.STREAMLIT_APP_URL
       ),
+      ENV_KEY: ENV_NAMESPACE,
     };
 
-    persistRuntimeConfig(cfg);
     return cfg;
   }
 
@@ -243,8 +271,11 @@
     if (runtimeCfg.SUPABASE_URL) {
       callbackUrl.searchParams.set("supabase_url", runtimeCfg.SUPABASE_URL);
     }
-    if (runtimeCfg.SUPABASE_ANON_KEY) {
-      callbackUrl.searchParams.set("supabase_anon_key", runtimeCfg.SUPABASE_ANON_KEY);
+    if (runtimeCfg.LOGIN_REDIRECT_URL) {
+      callbackUrl.searchParams.set("login_redirect_url", runtimeCfg.LOGIN_REDIRECT_URL);
+    }
+    if (runtimeCfg.ENV_KEY) {
+      callbackUrl.searchParams.set("env_key", runtimeCfg.ENV_KEY);
     }
 
     const switchAccount = getQueryParam("switch_account");
@@ -359,6 +390,7 @@
   try {
     runtimeCfg = buildRuntimeConfig();
     validateRuntimeConfig(runtimeCfg);
+    persistRuntimeConfig(runtimeCfg);
     supabaseClient = window.supabase.createClient(runtimeCfg.SUPABASE_URL, runtimeCfg.SUPABASE_ANON_KEY);
   } catch (err) {
     setLoggedOutView();
@@ -369,13 +401,12 @@
   if (els.loginBtn) {
     els.loginBtn.addEventListener("click", async () => {
       try {
-        setStatus("Preparando gateway de autenticação...", "muted");
+        setStatus("Redirecionando para o Google...", "muted");
         if (els.loginBtn) els.loginBtn.disabled = true;
 
         persistPreferredStreamlitAppUrl();
-        await wakeGateway();
+        wakeGateway().catch((err) => console.warn("Falha ao aquecer gateway em background:", err));
 
-        setStatus("Redirecionando para o Google...", "muted");
         const { error } = await supabaseClient.auth.signInWithOAuth({
           provider: "google",
           options: {
