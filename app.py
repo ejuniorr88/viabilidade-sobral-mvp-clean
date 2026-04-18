@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict
 
@@ -78,6 +79,7 @@ from ui.relatorio_blocks.multifamiliar_guia import (
 )
 from ui.client_area import render_client_area_page
 from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user, refund_viability_credit
+from core.payments import ensure_paid_payment_is_credited, refresh_payment_status_and_credit
 from core.report_pdf import generate_report_pdf_bytes
 from core.client_reports import save_client_report, build_report_signature
 from core.state_helpers import clear_all_checkout_states
@@ -164,6 +166,13 @@ def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, us
     # amount=1
     # save_client_report(
     # last_saved_report_signature
+    preflight_credit_balance = partial(
+        checkout_flow_core.preflight_report_credit_balance,
+        session_state=st.session_state,
+        get_credit_balance_func=get_credit_balance,
+        refresh_payment_status_and_credit_func=refresh_payment_status_and_credit,
+        ensure_paid_payment_is_credited_func=ensure_paid_payment_is_credited,
+    )
     debit_result, pdf_bytes = checkout_flow_core.prepare_and_consume_report(
         calc_ref=calc_ref,
         session_snapshot=session_snapshot,
@@ -177,6 +186,7 @@ def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, us
         refund_viability_credit_func=refund_viability_credit,
         commit_report_snapshot_func=_commit_report_snapshot,
         save_client_report_func=save_client_report,
+        preflight_reconcile_credit_func=preflight_credit_balance,
     )
     return debit_result, pdf_bytes
 
@@ -444,6 +454,13 @@ render_report_section(
     can_offer_report=can_offer_report,
     pick_func=pick_rule,
     get_credit_balance_func=get_credit_balance,
+    preflight_credit_balance_func=partial(
+        checkout_flow_core.preflight_report_credit_balance,
+        session_state=st.session_state,
+        get_credit_balance_func=get_credit_balance,
+        refresh_payment_status_and_credit_func=refresh_payment_status_and_credit,
+        ensure_paid_payment_is_credited_func=ensure_paid_payment_is_credited,
+    ),
     render_payments_panel_func=render_payments_panel,
     render_analise_section_func=render_analise_section,
     render_zone_description_section_func=render_zone_description_section,
