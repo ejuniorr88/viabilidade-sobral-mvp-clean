@@ -2,17 +2,18 @@ from __future__ import annotations
 
 from typing import Any, MutableMapping, Optional
 
+from ui.runtime.inline_payments_focus import INLINE_PAYMENTS_FOCUS_TARGETS
 from ui.runtime.report_navigation import REPORT_NAVIGATION_TARGETS
 
 
 _BASE_TARGET_CONFIG = {
     "login_gate": {"element_id": "login-gate-start", "offset": 0, "behavior": "generic"},
     "primary_actions": {"element_id": "primary-actions-start", "offset": 0, "behavior": "generic"},
-    "inline_payments": {"element_id": "inline-payments-start", "offset": 0, "behavior": "generic"},
 }
 
 _TARGET_CONFIG = {
     **_BASE_TARGET_CONFIG,
+    **INLINE_PAYMENTS_FOCUS_TARGETS,
     **REPORT_NAVIGATION_TARGETS,
 }
 
@@ -113,8 +114,8 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
                 controller.activeToken = token;
 
                 const scrollRoot = () => rootDoc.querySelector('section.main') || rootDoc.scrollingElement || rootDoc.documentElement || rootDoc.body;
-                const tolerance = behavior === 'generated_context' ? 36 : 24;
-                const maxAttempts = behavior === 'generated_context' ? 24 : 18;
+                const tolerance = (behavior === 'generated_context' || behavior === 'inline_payments') ? 36 : 24;
+                const maxAttempts = (behavior === 'generated_context' || behavior === 'inline_payments') ? 24 : 18;
                 let attempts = 0;
                 let sawElement = false;
 
@@ -147,7 +148,7 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
 
                 const applyScroll = (el) => {{
                     const targetTop = computeTargetTop(el);
-                    const useElementFirst = behavior === 'confirmation' || behavior === 'initial' || behavior === 'generated_context';
+                    const useElementFirst = behavior === 'confirmation' || behavior === 'initial' || behavior === 'generated_context' || behavior === 'inline_payments';
                     if (useElementFirst) {{
                         el.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
                         alignScrollableContainer(el);
