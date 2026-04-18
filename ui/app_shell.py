@@ -22,8 +22,50 @@ DEFAULT_LANDING_BASE_URLS = {
 }
 
 
+def _extract_host_from_header_value(raw: str) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return ""
+
+    parsed = urlparse(value if "://" in value else f"https://{value}")
+    return (parsed.hostname or "").lower()
+
+
+def _get_request_host() -> str:
+    candidates: list[str] = []
+
+    try:
+        ctx_headers = st.context.headers if hasattr(st, "context") else None
+        if ctx_headers:
+            for key in ("X-Forwarded-Host", "Host", "Origin", "Referer"):
+                raw = ctx_headers.get(key) or ctx_headers.get(key.lower())
+                host = _extract_host_from_header_value(raw)
+                if host:
+                    candidates.append(host)
+    except Exception:
+        pass
+
+    try:
+        from streamlit.web.server.websocket_headers import _get_websocket_headers
+
+        ws_headers = _get_websocket_headers() or {}
+        for key in ("X-Forwarded-Host", "Host", "Origin", "Referer"):
+            raw = ws_headers.get(key) or ws_headers.get(key.lower())
+            host = _extract_host_from_header_value(raw)
+            if host:
+                candidates.append(host)
+    except Exception:
+        pass
+
+    for host in candidates:
+        if host:
+            return host
+
+    return ""
+
+
 def _detect_landing_environment(app_url: str) -> str:
-    host = (urlparse((app_url or "").strip()).hostname or "").lower()
+    host = _get_request_host() or (urlparse((app_url or "").strip()).hostname or "").lower()
 
     if host in {"app.viabilidadefacil.com.br", "www.app.viabilidadefacil.com.br"}:
         return "production"
