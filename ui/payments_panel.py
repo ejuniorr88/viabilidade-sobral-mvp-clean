@@ -13,6 +13,7 @@ from core.auth import get_supabase_auth_client
 from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited, inspect_payment_credit_status
 from core.coupons import validate_coupon_for_checkout
 from core.state_helpers import clear_all_checkout_states
+from ui.runtime.pix_payment_focus import arm_pix_payment_focus
 
 
 # =========================================================
@@ -614,7 +615,7 @@ def _render_buy_section(
                 if payment:
                     st.session_state["current_payment_id"] = _safe_get(payment, "id")
                     st.session_state["current_payment_snapshot"] = payment
-                    st.session_state["pix_created_success"] = True
+                    arm_pix_payment_focus(st.session_state)
                     st.rerun()
 
 def _resolve_current_payment(supabase) -> Optional[Dict[str, Any]]:
@@ -689,6 +690,7 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
         )
 
     st.markdown("---")
+    st.markdown('<div id="current-payment-start"></div>', unsafe_allow_html=True)
     status = str(_safe_get(current_payment, "status") or "").strip().lower()
     title_col, action_col = st.columns([0.72, 0.28])
     with title_col:
