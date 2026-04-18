@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 import streamlit as st
 
 from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
+from core.env_secrets import get_secret_str
 from ui.auth_panel import render_google_login_box
 
 
@@ -13,8 +15,48 @@ BLUE = "#071847"
 ORANGE = "#d68910"
 WHITE = "#ffffff"
 TEXT = "#1f2a44"
-HOW_IT_WORKS_URL = "https://www.viabilidadefacil.com.br/entenda-o-sistema.html"
-PLANS_PAGE_URL = "https://www.viabilidadefacil.com.br/planos.html"
+DEFAULT_LANDING_BASE_URLS = {
+    "production": "https://www.viabilidadefacil.com.br",
+    "homolog": "https://homolog.viabilidadefacil.com.br",
+    "staging": "https://homolog.viabilidadefacil.com.br",
+}
+
+
+def _detect_landing_environment(app_url: str) -> str:
+    host = (urlparse((app_url or "").strip()).hostname or "").lower()
+
+    if host in {"app.viabilidadefacil.com.br", "www.app.viabilidadefacil.com.br"}:
+        return "production"
+
+    if "stable" in host or "homolog" in host or "staging" in host:
+        return "homolog"
+
+    if host.endswith(".up.railway.app") or host.endswith(".streamlit.app") or host.endswith(".vercel.app"):
+        return "homolog"
+
+    if host in {"localhost", "127.0.0.1"}:
+        return "homolog"
+
+    return "production"
+
+
+def _get_landing_base_url() -> str:
+    app_url = (get_app_url() or "").strip()
+    environment = _detect_landing_environment(app_url)
+
+    runtime_urls = {
+        "production": get_secret_str("LANDING_URL_PRODUCTION", "").strip(),
+        "homolog": get_secret_str("LANDING_URL_HOMOLOG", "").strip(),
+        "staging": get_secret_str("LANDING_URL_STAGING", "").strip(),
+    }
+    legacy_fallback = get_secret_str("LANDING_BASE_URL", "").strip()
+
+    base_url = runtime_urls.get(environment) or legacy_fallback or DEFAULT_LANDING_BASE_URLS[environment]
+    return base_url.rstrip("/")
+
+
+def _build_landing_url(path: str) -> str:
+    return f"{_get_landing_base_url()}/{path.lstrip('/')}"
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -287,7 +329,7 @@ def render_top_nav() -> None:
 
     with cols[2]:
         st.markdown(
-            f'<div class="vf-nav-link-wrap"><a id="vf_nav_how" class="vf-nav-link-button" href="{HOW_IT_WORKS_URL}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página Como funciona em nova aba">Como funciona</a></div>',
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_how" class="vf-nav-link-button" href="{_build_landing_url("entenda-o-sistema.html")}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página Como funciona em nova aba">Como funciona</a></div>',
             unsafe_allow_html=True,
         )
 
@@ -301,7 +343,7 @@ def render_top_nav() -> None:
 
     with cols[4]:
         st.markdown(
-            f'<div class="vf-nav-link-wrap"><a id="vf_nav_plans" class="vf-nav-link-button" href="{PLANS_PAGE_URL}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página de planos em nova aba">Planos</a></div>',
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_plans" class="vf-nav-link-button" href="{_build_landing_url("planos.html")}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página de planos em nova aba">Planos</a></div>',
             unsafe_allow_html=True,
         )
 
