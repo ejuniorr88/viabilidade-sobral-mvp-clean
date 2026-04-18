@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 from ui.report.final_confirmation import render_final_confirmation
 from ui.report.review_panel import render_review_panel
 from ui.report.terms_gate import render_terms_gate
-from ui.runtime.navigation_focus import arm_navigation_focus
+from ui.runtime.inline_payments_focus import arm_inline_payments_focus
 from ui.runtime.report_navigation import (
     arm_report_confirmation_focus,
     arm_report_generated_focus,
@@ -119,6 +119,7 @@ def render_report_section(
     can_offer_report: bool,
     pick_func: Callable[..., Any],
     get_credit_balance_func: Callable[[str], Any],
+    preflight_credit_balance_func: Callable[[str], Any] | None = None,
     render_payments_panel_func: Callable[[], None],
     render_analise_section_func: Callable[..., None],
     render_zone_description_section_func: Callable[[Dict[str, Any]], None],
@@ -202,6 +203,13 @@ def render_report_section(
         _render_generate_report_button_style()
 
         if gerar_relatorio:
+            saldo_no_clique = saldo_atual
+            if user_logged_in and user_id and preflight_credit_balance_func is not None:
+                try:
+                    saldo_no_clique = preflight_credit_balance_func(user_id)
+                except Exception:
+                    saldo_no_clique = saldo_atual
+
             if preview_inadequado:
                 clear_report_runtime_state_func(preserve_snapshot=True)
                 st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
@@ -210,9 +218,9 @@ def render_report_section(
             elif is_same_as_snapshot:
                 arm_report_initial_focus(st.session_state)
                 st.info("Este relatório já foi gerado e continua disponível abaixo.")
-            elif saldo_atual is not None and int(saldo_atual) <= 0:
+            elif saldo_no_clique is not None and int(saldo_no_clique) <= 0:
                 st.session_state.show_inline_payments = True
-                arm_navigation_focus(st.session_state, "inline_payments")
+                arm_inline_payments_focus(st.session_state)
                 st.error("Você não possui créditos suficientes para gerar o relatório.")
             else:
                 # Mantém compatibilidade com o contrato legado do runtime e dos testes
@@ -275,7 +283,7 @@ def render_report_section(
                         st.rerun()
                     except Exception as e:
                         st.session_state.show_inline_payments = True
-                        arm_navigation_focus(st.session_state, "inline_payments")
+                        arm_inline_payments_focus(st.session_state)
                         st.error(f"Não foi possível preparar e gerar o relatório: {e}")
 
             return
@@ -350,7 +358,7 @@ def render_report_section(
                         st.rerun()
                     except Exception as e:
                         st.session_state.show_inline_payments = True
-                        arm_navigation_focus(st.session_state, "inline_payments")
+                        arm_inline_payments_focus(st.session_state)
                         st.error(f"Não foi possível preparar e gerar o novo relatório: {e}")
 
         if st.session_state.get("show_inline_payments"):

@@ -14,6 +14,8 @@
 
   let runtimeCfg = null;
   let supabaseClient = null;
+  let refreshStatePromise = null;
+  let suppressAuthStateRefresh = false;
 
   const els = {
     loginBtn: document.getElementById("loginBtn"),
@@ -158,35 +160,6 @@
     });
   }
 
-  async function wakeGateway() {
-    const wakeUrl = `${runtimeCfg.GATEWAY_BASE_URL}/health`;
-    let lastError = null;
-
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        const response = await fetchWithTimeout(
-          wakeUrl,
-          {
-            method: "GET",
-            headers: { "Accept": "application/json" },
-          },
-          8000
-        );
-        if (!response.ok) {
-          throw new Error(`Healthcheck retornou status ${response.status}`);
-        }
-        return true;
-      } catch (err) {
-        lastError = err;
-        await sleep(1200 * attempt);
-      }
-    }
-
-    if (lastError) {
-      console.warn("Falha ao acordar gateway antes do login:", lastError);
-    }
-    return false;
-  }
 
   async function verifyWithGateway(accessToken) {
     const verifyUrl = `${runtimeCfg.GATEWAY_BASE_URL}/api/auth/session/verify`;
@@ -255,6 +228,7 @@
     return callbackUrl.toString();
   }
 
+
   async function notifyParentAndMaybeClose(accessToken) {
     try {
       if (window.opener && typeof window.opener.postMessage === "function") {
@@ -269,88 +243,107 @@
     } catch (_err) {}
 
     writeStorage(STORAGE_KEYS.popupToken, accessToken);
-
-    try {
-      const preferredAppUrl = getPreferredStreamlitAppUrl();
-      if (window.opener && preferredAppUrl) {
-        const streamlitUrl = new URL(preferredAppUrl);
-        streamlitUrl.searchParams.set("ext_access_token", accessToken);
-        window.opener.location.href = streamlitUrl.toString();
-      }
-    } catch (_err) {}
-
     setStatus("Login concluído. Voltando para o sistema...", "ok");
 
     window.setTimeout(() => {
       try { window.close(); } catch (_err) {}
-    }, 300);
+    }, 200);
 
     return true;
   }
 
+
   async function refreshState() {
-    const { data, error } = await supabaseClient.auth.getSession();
-
-    if (error) {
-      setLoggedOutView();
-      setStatus(`Erro ao ler sessão: ${error.message}`, "error");
-      return;
+    if (refreshStatePromise) {
+      return refreshStatePromise;
     }
 
-    const session = data?.session;
-    if (!session?.access_token) {
-      setLoggedOutView();
-      setStatus("Você ainda não está autenticado.", "muted");
-      return;
-    }
+    refreshStatePromise = (async () => {
+      const { data, error } = await supabaseClient.auth.getSession();
 
-    try {
-      setStatus("Validando login no gateway...", "muted");
-      const verified = await verifyWithGateway(session.access_token);
-      writeStorage(STORAGE_KEYS.accessToken, session.access_token);
-      writeStorage(STORAGE_KEYS.user, JSON.stringify(verified.user || {}));
-      setLoggedInView(verified.user);
-      setStatus("Login validado com sucesso. Agora você já pode seguir para o sistema.", "ok");
+      if (error) {
+        setLoggedOutView();
+        setStatus(`Erro ao ler sessão: ${error.message}`, "error");
+        return;
+      }
+
+      const session = data?.session;
+      if (!session?.access_token) {
+        setLoggedOutView();
+        setStatus("Você ainda não está autenticado.", "muted");
+        return;
+      }
 
       if (isPopupFlow() && hasOAuthCallbackHash()) {
+        writeStorage(STORAGE_KEYS.accessToken, session.access_token);
+        setLoggedInView(session.user || {});
         await notifyParentAndMaybeClose(session.access_token);
         history.replaceState(null, "", window.location.pathname + window.location.search);
         return;
       }
 
-      if (hasOAuthCallbackHash()) {
-        history.replaceState(null, "", window.location.pathname + window.location.search);
+      try {
+        setStatus("Validando login no gateway...", "muted");
+        const verified = await verifyWithGateway(session.access_token);
+        writeStorage(STORAGE_KEYS.accessToken, session.access_token);
+        writeStorage(STORAGE_KEYS.user, JSON.stringify(verified.user || {}));
+        setLoggedInView(verified.user);
+        setStatus("Login validado com sucesso. Agora você já pode seguir para o sistema.", "ok");
+
+        if (hasOAuthCallbackHash()) {
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+      } catch (err) {
+        setLoggedOutView();
+        setStatus(err.message || String(err), "error");
       }
-    } catch (err) {
-      setLoggedOutView();
-      setStatus(err.message || String(err), "error");
+    })();
+
+    try {
+      return await refreshStatePromise;
+    } finally {
+      refreshStatePromise = null;
     }
   }
+
 
   async function handleInitialCallback() {
     persistPreferredStreamlitAppUrl();
 
     if (hasOAuthCallbackHash()) {
-      const { data, error } = await supabaseClient.auth.getSession();
-      const session = data?.session;
+      suppressAuthStateRefresh = true;
+      try {
+        let session = null;
+        let error = null;
 
-      if (error || !session?.access_token) {
-        setStatus(`Falha ao concluir retorno do Google: ${error?.message || "sessão ausente"}`, "error");
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          const result = await supabaseClient.auth.getSession();
+          error = result.error;
+          session = result.data?.session || null;
+          if (session?.access_token) break;
+          await sleep(250 * attempt);
+        }
+
+        if (error || !session?.access_token) {
+          setStatus(`Falha ao concluir retorno do Google: ${error?.message || "sessão ausente"}`, "error");
+          return;
+        }
+
+        writeStorage(STORAGE_KEYS.accessToken, session.access_token);
+
+        if (isPopupFlow()) {
+          setLoggedInView(session.user || {});
+          await notifyParentAndMaybeClose(session.access_token);
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+          return;
+        }
+
+        setStatus("Processando retorno do Google...", "muted");
+        await refreshState();
         return;
+      } finally {
+        suppressAuthStateRefresh = false;
       }
-
-      writeStorage(STORAGE_KEYS.accessToken, session.access_token);
-
-      if (isPopupFlow()) {
-        setStatus("Login concluído. Voltando para o sistema...", "ok");
-        await notifyParentAndMaybeClose(session.access_token);
-        history.replaceState(null, "", window.location.pathname + window.location.search);
-        return;
-      }
-
-      setStatus("Processando retorno do Google...", "muted");
-      window.setTimeout(refreshState, 150);
-      return;
     }
 
     await refreshState();
@@ -369,12 +362,9 @@
   if (els.loginBtn) {
     els.loginBtn.addEventListener("click", async () => {
       try {
-        setStatus("Preparando gateway de autenticação...", "muted");
         if (els.loginBtn) els.loginBtn.disabled = true;
 
         persistPreferredStreamlitAppUrl();
-        await wakeGateway();
-
         setStatus("Redirecionando para o Google...", "muted");
         const { error } = await supabaseClient.auth.signInWithOAuth({
           provider: "google",
@@ -439,6 +429,7 @@
   }
 
   supabaseClient.auth.onAuthStateChange((_event, _session) => {
+    if (suppressAuthStateRefresh) return;
     refreshState();
   });
 
