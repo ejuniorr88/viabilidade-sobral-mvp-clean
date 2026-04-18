@@ -119,6 +119,7 @@ def render_report_section(
     can_offer_report: bool,
     pick_func: Callable[..., Any],
     get_credit_balance_func: Callable[[str], Any],
+    preflight_credit_balance_func: Callable[[str], Any] | None,
     render_payments_panel_func: Callable[[], None],
     render_analise_section_func: Callable[..., None],
     render_zone_description_section_func: Callable[[Dict[str, Any]], None],
@@ -202,6 +203,13 @@ def render_report_section(
         _render_generate_report_button_style()
 
         if gerar_relatorio:
+            saldo_preflight = saldo_atual
+            if user_logged_in and user_id and preflight_credit_balance_func is not None:
+                try:
+                    saldo_preflight = preflight_credit_balance_func(user_id)
+                except Exception:
+                    saldo_preflight = saldo_atual
+
             if preview_inadequado:
                 clear_report_runtime_state_func(preserve_snapshot=True)
                 st.error("Este estudo está bloqueado por inadequabilidade. O crédito foi preservado.")
@@ -210,7 +218,7 @@ def render_report_section(
             elif is_same_as_snapshot:
                 arm_report_initial_focus(st.session_state)
                 st.info("Este relatório já foi gerado e continua disponível abaixo.")
-            elif saldo_atual is not None and int(saldo_atual) <= 0:
+            elif saldo_preflight is not None and int(saldo_preflight) <= 0:
                 st.session_state.show_inline_payments = True
                 arm_navigation_focus(st.session_state, "inline_payments")
                 st.error("Você não possui créditos suficientes para gerar o relatório.")
