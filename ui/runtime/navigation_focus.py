@@ -118,16 +118,41 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
                 let attempts = 0;
                 let sawElement = false;
 
+                const findScrollableContainer = (el) => {{
+                    let current = el?.parentElement || null;
+                    while (current) {{
+                        const style = rootWin.getComputedStyle(current);
+                        const overflowY = style?.overflowY || '';
+                        const canScroll = (overflowY === 'auto' || overflowY === 'scroll') && current.scrollHeight > current.clientHeight + 4;
+                        if (canScroll) {{
+                            return current;
+                        }}
+                        current = current.parentElement;
+                    }}
+                    return null;
+                }};
+
                 const computeTargetTop = (el) => Math.max((el.getBoundingClientRect().top || 0) + rootWin.scrollY - offset, 0);
+
+                const alignScrollableContainer = (el) => {{
+                    const container = findScrollableContainer(el);
+                    if (!container) {{
+                        return;
+                    }}
+                    const containerRect = container.getBoundingClientRect();
+                    const elementRect = el.getBoundingClientRect();
+                    const nextTop = Math.max(container.scrollTop + (elementRect.top - containerRect.top) - offset, 0);
+                    container.scrollTo({{ top: nextTop, behavior: 'smooth' }});
+                }};
 
                 const applyScroll = (el) => {{
                     const targetTop = computeTargetTop(el);
-                    if (behavior === 'confirmation') {{
+                    const useElementFirst = behavior === 'confirmation' || behavior === 'initial' || behavior === 'generated_context';
+                    if (useElementFirst) {{
                         el.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                        rootWin.scrollTo({{ top: targetTop, behavior: 'smooth' }});
-                    }} else {{
-                        rootWin.scrollTo({{ top: targetTop, behavior: 'smooth' }});
+                        alignScrollableContainer(el);
                     }}
+                    rootWin.scrollTo({{ top: targetTop, behavior: 'smooth' }});
                     return targetTop;
                 }};
 

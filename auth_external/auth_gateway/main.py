@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,20 +29,42 @@ def get_supabase_admin_client() -> Client:
 
 app = FastAPI(title=APP_NAME)
 
+def _normalize_origin(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+
+    parsed = urlparse(raw)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+
+    return raw.rstrip("/")
+
+
 def _default_allowed_origins() -> str:
-    return ",".join([
+    origins = [
+        os.getenv("APP_URL", "").strip(),
+        os.getenv("REDIRECT_URL", "").strip(),
+        os.getenv("EXTERNAL_LOGIN_URL", "").strip(),
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "https://viabilidade-sobral-mvp-clean.vercel.app",
-        "https://viabilidadeteste.streamlit.app",
-    ])
+        "http://localhost:8501",
+        "http://127.0.0.1:8501",
+    ]
+
+    deduped = []
+    for origin in origins:
+        cleaned = _normalize_origin(origin)
+        if cleaned and cleaned not in deduped:
+            deduped.append(cleaned)
+    return ",".join(deduped)
 
 
-allowed_origins = [
-    origin.strip()
-    for origin in os.getenv("AUTH_ALLOWED_ORIGINS", _default_allowed_origins()).split(",")
-    if origin.strip()
-]
+allowed_origins = []
+for origin in os.getenv("AUTH_ALLOWED_ORIGINS", _default_allowed_origins()).split(","):
+    cleaned = _normalize_origin(origin)
+    if cleaned and cleaned not in allowed_origins:
+        allowed_origins.append(cleaned)
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,18 +1,8 @@
-import sys
-from unittest.mock import MagicMock
-
-# Mock do streamlit para ambiente de teste/CI
-sys.modules["streamlit"] = MagicMock()
-sys.modules["streamlit.components"] = MagicMock()
-sys.modules["streamlit.components.v1"] = MagicMock()
-
-import inspect
-
-from ui import app_shell
+from pathlib import Path
 
 
 def _src() -> str:
-    return inspect.getsource(app_shell)
+    return Path("ui/app_shell.py").read_text(encoding="utf-8")
 
 
 def test_header_uses_single_top_row_columns():
@@ -73,3 +63,19 @@ def test_header_click_fix_contract_is_preserved():
     assert 'button[kind="tertiary"] div {{' in src
     assert 'pointer-events: none !important;' in src
     assert 'cursor: pointer !important;' in src
+
+
+def test_header_brand_home_link_contract_is_preserved():
+    src = _src()
+    assert 'home_url = f"{get_app_url()}?nav=home"' in src
+    assert 'class="vf-brand vf-brand-home"' in src
+    assert 'href="{home_url}"' in src
+    assert 'target="_self"' in src
+
+
+def test_header_brand_home_link_visual_contract_is_preserved():
+    src = _src()
+    assert '.vf-brand-home {{' in src
+    assert '.vf-brand-home:visited {{' in src
+    assert 'color: #ffffff !important;' in src
+    assert 'text-decoration: none !important;' in src

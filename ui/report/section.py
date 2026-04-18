@@ -133,8 +133,8 @@ def render_report_section(
 ) -> None:
     if can_offer_report:
         st.markdown('<div id="report-section-start"></div>', unsafe_allow_html=True)
-        st.markdown('<div id="report-generated-context-start"></div>', unsafe_allow_html=True)
         st.markdown("---")
+        st.markdown('<div id="report-generated-context-start"></div>', unsafe_allow_html=True)
         st.subheader("Relatório completo")
         st.caption(
             "A análise inicial acima é gratuita. Para liberar o relatório completo, "

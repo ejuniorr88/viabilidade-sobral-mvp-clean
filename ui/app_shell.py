@@ -13,6 +13,8 @@ BLUE = "#071847"
 ORANGE = "#d68910"
 WHITE = "#ffffff"
 TEXT = "#1f2a44"
+HOW_IT_WORKS_URL = "https://www.viabilidadefacil.com.br/entenda-o-sistema.html"
+PLANS_PAGE_URL = "https://www.viabilidadefacil.com.br/planos.html"
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -145,6 +147,55 @@ def inject_global_styles() -> None:
             min-height: 92px !important;
         }}
 
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-wrap,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-wrap > div,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-wrap p {{
+            margin: 0 !important;
+            width: 100% !important;
+            min-height: 92px !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-button {{
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: {WHITE} !important;
+            font-weight: 600 !important;
+            font-size: 15px !important;
+            white-space: nowrap !important;
+            padding: 0 12px !important;
+            min-height: 92px !important;
+            line-height: 1 !important;
+            justify-content: center !important;
+            align-items: center !important;
+            width: 100% !important;
+            border-radius: 8px !important;
+            margin: 0 !important;
+            cursor: pointer !important;
+            position: relative !important;
+            z-index: 20 !important;
+            transition: background 0.18s ease, opacity 0.18s ease !important;
+            display: flex !important;
+            text-decoration: none !important;
+            text-align: center !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-button:hover {{
+            color: {WHITE} !important;
+            background: rgba(255,255,255,0.14) !important;
+            opacity: 1 !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-button:focus,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-button:focus-visible,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-button:active {{
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            background: rgba(255,255,255,0.12) !important;
+            color: {WHITE} !important;
+        }}
+
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
             background: transparent !important;
             border: none !important;
@@ -210,7 +261,10 @@ def inject_global_styles() -> None:
             }}
 
             [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton,
-            [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"] {{
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton > button[kind="tertiary"],
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-wrap,
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-wrap > div,
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-button {{
                 font-size: 13px !important;
                 min-height: 76px !important;
             }}
@@ -232,7 +286,10 @@ def render_top_nav() -> None:
         )
 
     with cols[2]:
-        st.button("Como funciona", key="vf_nav_how", type="tertiary", use_container_width=True)
+        st.markdown(
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_how" class="vf-nav-link-button" href="{HOW_IT_WORKS_URL}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página Como funciona em nova aba">Como funciona</a></div>',
+            unsafe_allow_html=True,
+        )
 
     with cols[3]:
         if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=True):
@@ -243,12 +300,10 @@ def render_top_nav() -> None:
             st.rerun()
 
     with cols[4]:
-        if st.button("Planos", key="vf_nav_plans", type="tertiary", use_container_width=True):
-            st.session_state["show_plans_page"] = True
-            st.session_state["show_client_area"] = False
-            if not st.session_state.get("auth_logged_in"):
-                st.session_state["post_login_action"] = "open_plans_page"
-            st.rerun()
+        st.markdown(
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_plans" class="vf-nav-link-button" href="{PLANS_PAGE_URL}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página de planos em nova aba">Planos</a></div>',
+            unsafe_allow_html=True,
+        )
 
     with cols[5]:
         st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)
