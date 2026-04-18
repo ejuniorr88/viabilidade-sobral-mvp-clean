@@ -1,71 +1,21 @@
 (function () {
   const baseCfg = window.AUTH_CONFIG || {};
 
-  function getQueryParam(name) {
-    try {
-      const params = new URLSearchParams(window.location.search || "");
-      return (params.get(name) || "").trim();
-    } catch (_err) {
-      return "";
-    }
-  }
-
-  function normalizeUrl(value) {
-    const raw = (value || "").trim();
-    if (!raw) return "";
-    return raw.replace(/\/+$/, "");
-  }
-
-  const ACTIVE_ENV_NAMESPACE_KEY = "vf_auth_active_env_namespace";
-  const RAW_POPUP_TOKEN_KEY = "vf_auth_popup_token";
-
-  function readRawStorage(key) {
-    try {
-      return (window.sessionStorage.getItem(key) || window.localStorage.getItem(key) || "").trim();
-    } catch (_err) {
-      return "";
-    }
-  }
-
-  function deriveEnvNamespace() {
-    const seed = (
-      getQueryParam("env_key") ||
-      readRawStorage(ACTIVE_ENV_NAMESPACE_KEY) ||
-      getQueryParam("login_redirect_url") ||
-      baseCfg.LOGIN_REDIRECT_URL ||
-      getQueryParam("supabase_url") ||
-      baseCfg.SUPABASE_URL ||
-      getQueryParam("streamlit_app_url") ||
-      baseCfg.STREAMLIT_APP_URL ||
-      window.location.origin
-    ).trim().toLowerCase();
-
-    return (seed || "default").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "default";
-  }
-
-  const ENV_NAMESPACE = deriveEnvNamespace();
-
-  function scopedStorageKey(baseKey) {
-    return `${baseKey}__${ENV_NAMESPACE}`;
-  }
-
   const STORAGE_KEYS = {
-    preferredAppUrl: scopedStorageKey("vf_preferred_streamlit_app_url"),
-    popupToken: scopedStorageKey("vf_auth_popup_token"),
-    accessToken: scopedStorageKey("vf_access_token"),
-    user: scopedStorageKey("vf_user"),
-    supabaseUrl: scopedStorageKey("vf_auth_supabase_url"),
-    supabaseAnonKey: scopedStorageKey("vf_auth_supabase_anon_key"),
-    gatewayBaseUrl: scopedStorageKey("vf_auth_gateway_base_url"),
-    loginRedirectUrl: scopedStorageKey("vf_auth_login_redirect_url"),
-    envKey: scopedStorageKey("vf_auth_env_key"),
+    preferredAppUrl: "vf_preferred_streamlit_app_url",
+    popupToken: "vf_auth_popup_token",
+    accessToken: "vf_access_token",
+    user: "vf_user",
+    supabaseUrl: "vf_auth_supabase_url",
+    supabaseAnonKey: "vf_auth_supabase_anon_key",
+    gatewayBaseUrl: "vf_auth_gateway_base_url",
+    loginRedirectUrl: "vf_auth_login_redirect_url",
   };
 
   let runtimeCfg = null;
   let supabaseClient = null;
   let refreshStatePromise = null;
-  let popupDeliveryPromise = null;
-  let popupDeliveryToken = "";
+  let suppressAuthStateRefresh = false;
 
   const els = {
     loginBtn: document.getElementById("loginBtn"),
@@ -96,17 +46,27 @@
     return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
-  function readStorage(key) {
-    return readRawStorage(key);
+  function getQueryParam(name) {
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      return (params.get(name) || "").trim();
+    } catch (_err) {
+      return "";
+    }
   }
 
-  function writeStorage(key, value, options = {}) {
-    if (!value) return;
-    const persistLocal = options.persistLocal !== false;
-    try { window.sessionStorage.setItem(key, value); } catch (_err) {}
-    if (persistLocal) {
-      try { window.localStorage.setItem(key, value); } catch (_err) {}
+  function readStorage(key) {
+    try {
+      return (window.sessionStorage.getItem(key) || window.localStorage.getItem(key) || "").trim();
+    } catch (_err) {
+      return "";
     }
+  }
+
+  function writeStorage(key, value) {
+    if (!value) return;
+    try { window.sessionStorage.setItem(key, value); } catch (_err) {}
+    try { window.localStorage.setItem(key, value); } catch (_err) {}
   }
 
   function clearStorage(key) {
@@ -114,16 +74,13 @@
     try { window.localStorage.removeItem(key); } catch (_err) {}
   }
 
-  function clearOAuthHash() {
-    if (!hasOAuthCallbackHash()) return;
-    try {
-      history.replaceState(null, "", window.location.pathname + window.location.search);
-    } catch (_err) {}
+  function normalizeUrl(value) {
+    const raw = (value || "").trim();
+    if (!raw) return "";
+    return raw.replace(/\/+$/, "");
   }
 
   function persistRuntimeConfig(cfg) {
-    writeStorage(ACTIVE_ENV_NAMESPACE_KEY, ENV_NAMESPACE);
-    writeStorage(STORAGE_KEYS.envKey, ENV_NAMESPACE);
     if (cfg.SUPABASE_URL) writeStorage(STORAGE_KEYS.supabaseUrl, cfg.SUPABASE_URL);
     if (cfg.SUPABASE_ANON_KEY) writeStorage(STORAGE_KEYS.supabaseAnonKey, cfg.SUPABASE_ANON_KEY);
     if (cfg.GATEWAY_BASE_URL) writeStorage(STORAGE_KEYS.gatewayBaseUrl, cfg.GATEWAY_BASE_URL);
@@ -160,9 +117,9 @@
         readStorage(STORAGE_KEYS.preferredAppUrl) ||
         baseCfg.STREAMLIT_APP_URL
       ),
-      ENV_KEY: ENV_NAMESPACE,
     };
 
+    persistRuntimeConfig(cfg);
     return cfg;
   }
 
@@ -203,35 +160,6 @@
     });
   }
 
-  async function wakeGateway() {
-    const wakeUrl = `${runtimeCfg.GATEWAY_BASE_URL}/health`;
-    let lastError = null;
-
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        const response = await fetchWithTimeout(
-          wakeUrl,
-          {
-            method: "GET",
-            headers: { "Accept": "application/json" },
-          },
-          8000
-        );
-        if (!response.ok) {
-          throw new Error(`Healthcheck retornou status ${response.status}`);
-        }
-        return true;
-      } catch (err) {
-        lastError = err;
-        await sleep(1200 * attempt);
-      }
-    }
-
-    if (lastError) {
-      console.warn("Falha ao acordar gateway antes do login:", lastError);
-    }
-    return false;
-  }
 
   async function verifyWithGateway(accessToken) {
     const verifyUrl = `${runtimeCfg.GATEWAY_BASE_URL}/api/auth/session/verify`;
@@ -291,12 +219,6 @@
     if (runtimeCfg.SUPABASE_ANON_KEY) {
       callbackUrl.searchParams.set("supabase_anon_key", runtimeCfg.SUPABASE_ANON_KEY);
     }
-    if (runtimeCfg.LOGIN_REDIRECT_URL) {
-      callbackUrl.searchParams.set("login_redirect_url", runtimeCfg.LOGIN_REDIRECT_URL);
-    }
-    if (runtimeCfg.ENV_KEY) {
-      callbackUrl.searchParams.set("env_key", runtimeCfg.ENV_KEY);
-    }
 
     const switchAccount = getQueryParam("switch_account");
     if (switchAccount) {
@@ -306,89 +228,32 @@
     return callbackUrl.toString();
   }
 
+
   async function notifyParentAndMaybeClose(accessToken) {
-    if (!accessToken) return false;
-
-    if (popupDeliveryPromise && popupDeliveryToken === accessToken) {
-      return popupDeliveryPromise;
-    }
-
-    popupDeliveryToken = accessToken;
-    popupDeliveryPromise = (async () => {
-      let ackReceived = false;
-
-      const ackHandler = (event) => {
-        const data = event && event.data ? event.data : null;
-        if (!data || data.type !== "vf_auth_ack") {
-          return;
-        }
-        ackReceived = true;
-      };
-
-      try {
-        window.addEventListener("message", ackHandler);
-      } catch (_err) {}
-
-      try {
-        if (window.opener && typeof window.opener.postMessage === "function") {
-          window.opener.postMessage({ type: "vf_auth_success", access_token: accessToken }, "*");
-        }
-      } catch (_err) {}
-
-      try {
-        const channel = new BroadcastChannel("vf-auth-popup");
-        channel.postMessage({ type: "vf_auth_success", access_token: accessToken });
-        channel.close();
-      } catch (_err) {}
-
-      writeStorage(STORAGE_KEYS.popupToken, accessToken);
-      try {
-        window.localStorage.setItem(RAW_POPUP_TOKEN_KEY, accessToken);
-      } catch (_err) {}
-
-      setStatus("Login concluído. Voltando para o sistema...", "ok");
-
-      for (let attempt = 0; attempt < 10; attempt += 1) {
-        if (ackReceived) {
-          break;
-        }
-        await sleep(120);
+    try {
+      if (window.opener && typeof window.opener.postMessage === "function") {
+        window.opener.postMessage({ type: "vf_auth_success", access_token: accessToken }, "*");
       }
-
-      try {
-        window.removeEventListener("message", ackHandler);
-      } catch (_err) {}
-
-      if (!ackReceived && !window.opener) {
-        const preferredAppUrl = getPreferredStreamlitAppUrl();
-        if (preferredAppUrl) {
-          try {
-            const streamlitUrl = new URL(preferredAppUrl);
-            streamlitUrl.searchParams.set("ext_access_token", accessToken);
-            window.location.replace(streamlitUrl.toString());
-            return true;
-          } catch (_err) {}
-        }
-      }
-
-      window.setTimeout(() => {
-        try { window.close(); } catch (_err) {}
-      }, ackReceived ? 180 : 650);
-
-      return true;
-    })();
+    } catch (_err) {}
 
     try {
-      return await popupDeliveryPromise;
-    } finally {
-      popupDeliveryPromise = null;
-    }
+      const channel = new BroadcastChannel("vf-auth-popup");
+      channel.postMessage({ type: "vf_auth_success", access_token: accessToken });
+      channel.close();
+    } catch (_err) {}
+
+    writeStorage(STORAGE_KEYS.popupToken, accessToken);
+    setStatus("Login concluído. Voltando para o sistema...", "ok");
+
+    window.setTimeout(() => {
+      try { window.close(); } catch (_err) {}
+    }, 200);
+
+    return true;
   }
 
-  async function refreshState(options = {}) {
-    const allowPopupNotify = options.allowPopupNotify === true;
-    const silentIfNoSession = options.silentIfNoSession === true;
 
+  async function refreshState() {
     if (refreshStatePromise) {
       return refreshStatePromise;
     }
@@ -399,16 +264,22 @@
       if (error) {
         setLoggedOutView();
         setStatus(`Erro ao ler sessão: ${error.message}`, "error");
-        return { authenticated: false, error };
+        return;
       }
 
       const session = data?.session;
       if (!session?.access_token) {
         setLoggedOutView();
-        if (!silentIfNoSession) {
-          setStatus("Você ainda não está autenticado.", "muted");
-        }
-        return { authenticated: false, reason: "no_session" };
+        setStatus("Você ainda não está autenticado.", "muted");
+        return;
+      }
+
+      if (isPopupFlow() && hasOAuthCallbackHash()) {
+        writeStorage(STORAGE_KEYS.accessToken, session.access_token);
+        setLoggedInView(session.user || {});
+        await notifyParentAndMaybeClose(session.access_token);
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+        return;
       }
 
       try {
@@ -419,23 +290,12 @@
         setLoggedInView(verified.user);
         setStatus("Login validado com sucesso. Agora você já pode seguir para o sistema.", "ok");
 
-        if (allowPopupNotify && isPopupFlow() && hasOAuthCallbackHash()) {
-          await notifyParentAndMaybeClose(session.access_token);
-        }
-
         if (hasOAuthCallbackHash()) {
-          clearOAuthHash();
+          history.replaceState(null, "", window.location.pathname + window.location.search);
         }
-
-        return {
-          authenticated: true,
-          accessToken: session.access_token,
-          user: verified.user || {},
-        };
       } catch (err) {
         setLoggedOutView();
         setStatus(err.message || String(err), "error");
-        return { authenticated: false, error: err };
       }
     })();
 
@@ -446,30 +306,44 @@
     }
   }
 
+
   async function handleInitialCallback() {
     persistPreferredStreamlitAppUrl();
 
     if (hasOAuthCallbackHash()) {
-      setStatus("Processando retorno do Google...", "muted");
+      suppressAuthStateRefresh = true;
+      try {
+        let session = null;
+        let error = null;
 
-      for (let attempt = 1; attempt <= 3; attempt += 1) {
-        const result = await refreshState({
-          allowPopupNotify: isPopupFlow(),
-          silentIfNoSession: attempt < 3,
-        });
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          const result = await supabaseClient.auth.getSession();
+          error = result.error;
+          session = result.data?.session || null;
+          if (session?.access_token) break;
+          await sleep(250 * attempt);
+        }
 
-        if (result && result.authenticated) {
+        if (error || !session?.access_token) {
+          setStatus(`Falha ao concluir retorno do Google: ${error?.message || "sessão ausente"}`, "error");
           return;
         }
 
-        if (attempt < 3) {
-          await sleep(180 * attempt);
-        }
-      }
+        writeStorage(STORAGE_KEYS.accessToken, session.access_token);
 
-      setLoggedOutView();
-      setStatus("Falha ao concluir retorno do Google: sessão ausente.", "error");
-      return;
+        if (isPopupFlow()) {
+          setLoggedInView(session.user || {});
+          await notifyParentAndMaybeClose(session.access_token);
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+          return;
+        }
+
+        setStatus("Processando retorno do Google...", "muted");
+        await refreshState();
+        return;
+      } finally {
+        suppressAuthStateRefresh = false;
+      }
     }
 
     await refreshState();
@@ -478,7 +352,6 @@
   try {
     runtimeCfg = buildRuntimeConfig();
     validateRuntimeConfig(runtimeCfg);
-    persistRuntimeConfig(runtimeCfg);
     supabaseClient = window.supabase.createClient(runtimeCfg.SUPABASE_URL, runtimeCfg.SUPABASE_ANON_KEY);
   } catch (err) {
     setLoggedOutView();
@@ -489,12 +362,10 @@
   if (els.loginBtn) {
     els.loginBtn.addEventListener("click", async () => {
       try {
-        setStatus("Redirecionando para o Google...", "muted");
         if (els.loginBtn) els.loginBtn.disabled = true;
 
         persistPreferredStreamlitAppUrl();
-        wakeGateway().catch((err) => console.warn("Falha ao aquecer gateway em background:", err));
-
+        setStatus("Redirecionando para o Google...", "muted");
         const { error } = await supabaseClient.auth.signInWithOAuth({
           provider: "google",
           options: {
@@ -522,7 +393,6 @@
       clearStorage(STORAGE_KEYS.accessToken);
       clearStorage(STORAGE_KEYS.user);
       clearStorage(STORAGE_KEYS.popupToken);
-      clearStorage(RAW_POPUP_TOKEN_KEY);
       setLoggedOutView();
       setStatus("Sessão encerrada.", "muted");
     });
@@ -559,10 +429,8 @@
   }
 
   supabaseClient.auth.onAuthStateChange((_event, _session) => {
-    refreshState({
-      allowPopupNotify: isPopupFlow() && hasOAuthCallbackHash(),
-      silentIfNoSession: hasOAuthCallbackHash(),
-    });
+    if (suppressAuthStateRefresh) return;
+    refreshState();
   });
 
   handleInitialCallback();
