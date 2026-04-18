@@ -4,6 +4,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
@@ -42,18 +43,6 @@ def _get_request_host() -> str:
                 host = _extract_host_from_header_value(raw)
                 if host:
                     candidates.append(host)
-    except Exception:
-        pass
-
-    try:
-        from streamlit.web.server.websocket_headers import _get_websocket_headers
-
-        ws_headers = _get_websocket_headers() or {}
-        for key in ("X-Forwarded-Host", "Host", "Origin", "Referer"):
-            raw = ws_headers.get(key) or ws_headers.get(key.lower())
-            host = _extract_host_from_header_value(raw)
-            if host:
-                candidates.append(host)
     except Exception:
         pass
 
