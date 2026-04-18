@@ -16,9 +16,20 @@
     return raw.replace(/\/+$/, "");
   }
 
+  const ACTIVE_ENV_NAMESPACE_KEY = "vf_auth_active_env_namespace";
+
+  function readRawStorage(key) {
+    try {
+      return (window.sessionStorage.getItem(key) || window.localStorage.getItem(key) || "").trim();
+    } catch (_err) {
+      return "";
+    }
+  }
+
   function deriveEnvNamespace() {
     const seed = (
       getQueryParam("env_key") ||
+      readRawStorage(ACTIVE_ENV_NAMESPACE_KEY) ||
       getQueryParam("login_redirect_url") ||
       baseCfg.LOGIN_REDIRECT_URL ||
       getQueryParam("supabase_url") ||
@@ -82,11 +93,7 @@
   }
 
   function readStorage(key) {
-    try {
-      return (window.sessionStorage.getItem(key) || window.localStorage.getItem(key) || "").trim();
-    } catch (_err) {
-      return "";
-    }
+    return readRawStorage(key);
   }
 
   function writeStorage(key, value, options = {}) {
@@ -104,11 +111,10 @@
   }
 
   function persistRuntimeConfig(cfg) {
+    writeStorage(ACTIVE_ENV_NAMESPACE_KEY, ENV_NAMESPACE);
     writeStorage(STORAGE_KEYS.envKey, ENV_NAMESPACE);
     if (cfg.SUPABASE_URL) writeStorage(STORAGE_KEYS.supabaseUrl, cfg.SUPABASE_URL);
-    if (cfg.SUPABASE_ANON_KEY) {
-      writeStorage(STORAGE_KEYS.supabaseAnonKey, cfg.SUPABASE_ANON_KEY, { persistLocal: false });
-    }
+    if (cfg.SUPABASE_ANON_KEY) writeStorage(STORAGE_KEYS.supabaseAnonKey, cfg.SUPABASE_ANON_KEY);
     if (cfg.GATEWAY_BASE_URL) writeStorage(STORAGE_KEYS.gatewayBaseUrl, cfg.GATEWAY_BASE_URL);
     if (cfg.LOGIN_REDIRECT_URL) writeStorage(STORAGE_KEYS.loginRedirectUrl, cfg.LOGIN_REDIRECT_URL);
     if (cfg.STREAMLIT_APP_URL) writeStorage(STORAGE_KEYS.preferredAppUrl, cfg.STREAMLIT_APP_URL);
@@ -270,6 +276,9 @@
     }
     if (runtimeCfg.SUPABASE_URL) {
       callbackUrl.searchParams.set("supabase_url", runtimeCfg.SUPABASE_URL);
+    }
+    if (runtimeCfg.SUPABASE_ANON_KEY) {
+      callbackUrl.searchParams.set("supabase_anon_key", runtimeCfg.SUPABASE_ANON_KEY);
     }
     if (runtimeCfg.LOGIN_REDIRECT_URL) {
       callbackUrl.searchParams.set("login_redirect_url", runtimeCfg.LOGIN_REDIRECT_URL);
