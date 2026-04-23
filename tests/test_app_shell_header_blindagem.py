@@ -79,3 +79,18 @@ def test_header_brand_home_link_visual_contract_is_preserved():
     assert '.vf-brand-home:visited {{' in src
     assert 'color: #ffffff !important;' in src
     assert 'text-decoration: none !important;' in src
+
+
+def test_header_external_nav_links_open_in_same_tab_and_support_has_landing_route():
+    src = _src()
+    assert 'id="vf_nav_how"' in src
+    assert 'href="{_build_landing_url("entenda-o-sistema.html")}"' in src
+    assert 'target="_self"' in src
+    assert 'aria-label="Abrir página Como funciona na mesma aba"' in src
+    assert 'id="vf_nav_plans"' in src
+    assert 'href="{_build_landing_url("planos.html")}"' in src
+    assert 'aria-label="Abrir página de planos na mesma aba"' in src
+    assert 'id="vf_nav_support"' in src
+    assert 'href="{_build_landing_url("duvidas-suporte.html")}"' in src
+    assert 'aria-label="Abrir página de dúvidas e suporte na mesma aba"' in src
+    assert 'target="_blank"' not in src
