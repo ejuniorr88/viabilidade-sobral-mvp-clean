@@ -10,6 +10,7 @@ from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
 from core.env_secrets import get_secret_str
 from ui.auth_panel import render_google_login_box
+from ui.mobile_header import inject_mobile_header_styles, render_mobile_top_nav
 
 
 BLUE = "#071847"
@@ -88,6 +89,18 @@ def _get_landing_base_url() -> str:
 
 def _build_landing_url(path: str) -> str:
     return f"{_get_landing_base_url()}/{path.lstrip('/')}"
+
+
+def _build_client_area_entry_url() -> str:
+    return f"{get_app_url()}?client_area=1"
+
+
+def _open_client_area() -> None:
+    st.session_state["show_client_area"] = True
+    st.session_state["show_plans_page"] = False
+    if not st.session_state.get("auth_logged_in"):
+        st.session_state["post_login_action"] = "open_client_area"
+    st.rerun()
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -349,6 +362,12 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
+    inject_mobile_header_styles()
+    render_mobile_top_nav(
+        build_landing_url=_build_landing_url,
+        client_area_url=_build_client_area_entry_url(),
+    )
+
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
@@ -366,11 +385,7 @@ def render_top_nav() -> None:
 
     with cols[3]:
         if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=True):
-            st.session_state["show_client_area"] = True
-            st.session_state["show_plans_page"] = False
-            if not st.session_state.get("auth_logged_in"):
-                st.session_state["post_login_action"] = "open_client_area"
-            st.rerun()
+            _open_client_area()
 
     with cols[4]:
         st.markdown(
