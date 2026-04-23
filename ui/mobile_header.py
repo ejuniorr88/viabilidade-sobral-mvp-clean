@@ -1,231 +1,218 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+"""
+Mobile header implementation for Viabilidade Fácil's Streamlit app.
 
+This module isolates the code required to render a responsive mobile
+navigation bar. On small screens the traditional desktop header is
+hidden and a compact mobile header appears in its place. The mobile
+header includes a toggle button (hamburger / close icon), links to
+external landing pages and a button to open the "Área do cliente" using
+the same session logic as the desktop interface.
+"""
+
+from typing import Callable
 import streamlit as st
-
-from core.auth import get_app_url
-
-
-BLUE = "#071847"
-ORANGE = "#d68910"
-WHITE = "#ffffff"
 
 
 def inject_mobile_header_styles() -> None:
+    """Inject scoped CSS rules for the mobile header.
+
+    The CSS generated here hides the desktop header when the viewport
+    width is below 769px and hides the mobile header when the viewport
+    width is larger. It also defines the look and feel of the mobile
+    header, including the top bar, toggle button and navigation panel.
+    """
     st.markdown(
-        f'''
+        '''
         <style>
-        .vf-mobile-shell-marker,
-        .vf-mobile-menu-anchor,
-        .vf-mobile-brand-anchor {{
-            display: none;
-        }}
-
-        @media (max-width: 768px) {{
-            [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
+        /* Hide the custom mobile header on larger screens */
+        @media (min-width: 769px) {
+            .vf-mobile-shell {
                 display: none !important;
-            }}
+            }
+        }
+        /* Hide the desktop header on small screens by targeting the branded horizontal block */
+        @media (max-width: 768px) {
+            [data-testid="stHorizontalBlock"]:has(.vf-brand) {
+                display: none !important;
+            }
+        }
 
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) {{
-                background: {BLUE} !important;
-                border-bottom: 3px solid {ORANGE} !important;
-                min-height: 72px !important;
-                padding: 0.55rem 0.85rem !important;
-                margin: 0 0 0.85rem 0 !important;
-                border-radius: 0 !important;
-                align-items: center !important;
-            }}
+        /* Container for the entire mobile header */
+        .vf-mobile-shell {
+            width: 100%;
+            position: relative;
+            z-index: 9999;
+        }
 
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) > div,
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) [data-testid="stColumn"],
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) [data-testid="stColumn"] > div {{
-                min-height: 60px !important;
-                display: flex !important;
-                align-items: center !important;
-            }}
+        /* Top bar styling */
+        .vf-mobile-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #071847;
+            border-bottom: 3px solid #d68910;
+            padding: 0.5rem 1rem;
+            min-height: 56px;
+        }
 
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) [data-testid="stColumn"]:first-child > div {{
-                justify-content: flex-start !important;
-            }}
+        .vf-mobile-brand {
+            font-size: 24px;
+            font-weight: 800;
+            color: #ffffff;
+            text-decoration: none;
+            letter-spacing: -0.02em;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+        }
 
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) [data-testid="stColumn"]:last-child > div {{
-                justify-content: flex-end !important;
-            }}
+        .vf-mobile-brand-dot {
+            color: #d68910;
+            margin-left: 2px;
+        }
 
-            .vf-mobile-brand-anchor {{
-                display: block !important;
-            }}
+        /* Generic button resets for any button inside the mobile shell */
+        .vf-mobile-shell .stButton>button {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: #ffffff !important;
+            padding: 0.25rem 0.5rem !important;
+            line-height: 1 !important;
+            font-weight: 600 !important;
+            border-radius: 0 !important;
+            cursor: pointer !important;
+        }
 
-            .vf-mobile-brand,
-            .vf-mobile-brand:hover,
-            .vf-mobile-brand:focus,
-            .vf-mobile-brand:focus-visible,
-            .vf-mobile-brand:active,
-            .vf-mobile-brand:visited {{
-                color: {WHITE} !important;
-                text-decoration: none !important;
-                font-size: 24px !important;
-                font-weight: 800 !important;
-                letter-spacing: -0.02em !important;
-                line-height: 1 !important;
-                white-space: nowrap !important;
-                display: inline-flex !important;
-                align-items: center !important;
-                min-height: 44px !important;
-            }}
+        .vf-mobile-shell .stButton>button:hover {
+            opacity: 0.8 !important;
+            background: transparent !important;
+        }
 
-            .vf-mobile-brand-dot {{
-                color: {ORANGE} !important;
-                margin-left: 2px !important;
-            }}
+        /* Toggle button specific sizing */
+        .vf-mobile-bar .stButton>button {
+            font-size: 28px !important;
+        }
 
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) .stButton {{
-                width: auto !important;
-                margin: 0 !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: flex-end !important;
-            }}
+        /* Navigation panel styling */
+        .vf-mobile-panel {
+            width: 100%;
+            background-color: #071847;
+            padding: 0.5rem 0;
+        }
 
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) .stButton > button {{
-                width: 44px !important;
-                min-width: 44px !important;
-                height: 44px !important;
-                min-height: 44px !important;
-                padding: 0 !important;
-                border: none !important;
-                box-shadow: none !important;
-                background: transparent !important;
-                color: {WHITE} !important;
-                border-radius: 10px !important;
-                font-size: 28px !important;
-                font-weight: 700 !important;
-                line-height: 1 !important;
-                display: inline-flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-            }}
+        /* Links and buttons inside the panel share the same look */
+        .vf-mobile-panel a,
+        .vf-mobile-panel .stButton>button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 0.75rem 1rem;
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            text-decoration: none;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
 
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) .stButton > button:hover,
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) .stButton > button:focus,
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) .stButton > button:focus-visible,
-            [data-testid="stHorizontalBlock"]:has(.vf-mobile-brand-anchor) .stButton > button:active {{
-                border: none !important;
-                box-shadow: none !important;
-                background: rgba(255,255,255,0.08) !important;
-                color: {WHITE} !important;
-            }}
+        /* Remove top border on the first item to avoid a double line */
+        .vf-mobile-panel a:first-child,
+        .vf-mobile-panel .stButton:first-child>button {
+            border-top: none;
+        }
 
-            [data-testid="stVerticalBlock"]:has(.vf-mobile-menu-anchor) {{
-                background: {BLUE} !important;
-                border-bottom: 3px solid {ORANGE} !important;
-                padding: 0.4rem 0.85rem 0.9rem 0.85rem !important;
-                margin: -0.85rem 0 1rem 0 !important;
-            }}
-
-            .vf-mobile-menu-anchor {{
-                display: block !important;
-                width: 100% !important;
-                height: 0 !important;
-            }}
-
-            .vf-mobile-link,
-            .vf-mobile-link:hover,
-            .vf-mobile-link:focus,
-            .vf-mobile-link:focus-visible,
-            .vf-mobile-link:active,
-            .vf-mobile-link:visited {{
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                min-height: 44px !important;
-                margin: 0 0 0.5rem 0 !important;
-                padding: 0 0.8rem !important;
-                border-radius: 12px !important;
-                background: rgba(255,255,255,0.08) !important;
-                color: {WHITE} !important;
-                text-decoration: none !important;
-                font-size: 14px !important;
-                font-weight: 600 !important;
-                text-align: center !important;
-            }}
-
-            [data-testid="stVerticalBlock"]:has(.vf-mobile-menu-anchor) .stButton {{
-                width: 100% !important;
-                margin: 0 0 0.5rem 0 !important;
-            }}
-
-            [data-testid="stVerticalBlock"]:has(.vf-mobile-menu-anchor) .stButton > button {{
-                width: 100% !important;
-                min-height: 44px !important;
-                border: none !important;
-                box-shadow: none !important;
-                border-radius: 12px !important;
-                background: rgba(255,255,255,0.08) !important;
-                color: {WHITE} !important;
-                font-size: 14px !important;
-                font-weight: 600 !important;
-            }}
-
-            [data-testid="stVerticalBlock"]:has(.vf-mobile-menu-anchor) .stButton > button:hover,
-            [data-testid="stVerticalBlock"]:has(.vf-mobile-menu-anchor) .stButton > button:focus,
-            [data-testid="stVerticalBlock"]:has(.vf-mobile-menu-anchor) .stButton > button:focus-visible,
-            [data-testid="stVerticalBlock"]:has(.vf-mobile-menu-anchor) .stButton > button:active {{
-                border: none !important;
-                box-shadow: none !important;
-                background: rgba(255,255,255,0.16) !important;
-                color: {WHITE} !important;
-            }}
-        }}
+        .vf-mobile-panel a:hover,
+        .vf-mobile-panel .stButton>button:hover {
+            color: #d68910;
+        }
         </style>
         ''',
         unsafe_allow_html=True,
     )
 
 
-
 def render_mobile_top_nav(
     *,
-    build_landing_url: Callable[[str], str],
+    brand: str,
+    home_url: str,
+    how_url: str,
+    plans_url: str,
+    support_url: str,
     on_open_client_area: Callable[[], None],
 ) -> None:
-    st.session_state.setdefault("vf_mobile_nav_open", False)
+    """Render a responsive mobile navigation bar.
 
-    cols = st.columns([5.2, 0.8], gap="small")
+    Parameters
+    ----------
+    brand:
+        Text label for the brand (e.g. "Viabilidade-Fácil").
+    home_url:
+        URL to the home route of the app.
+    how_url:
+        Landing page URL for the "Como funciona" section.
+    plans_url:
+        Landing page URL for the "Planos" page.
+    support_url:
+        Landing page URL for the "Dúvidas/Suporte" page.
+    on_open_client_area:
+        Callback executed when the user clicks "Área do cliente" in the
+        mobile menu. This callback should replicate the behaviour of the
+        desktop header by updating session state and rerunning the app.
+    """
+    # Initialize the toggle state on first render
+    if 'vf_mobile_nav_open' not in st.session_state:
+        st.session_state.vf_mobile_nav_open = False
 
-    with cols[0]:
-        home_url = f"{get_app_url()}?nav=home"
+    # Begin the mobile header container
+    st.markdown('<div class="vf-mobile-shell">', unsafe_allow_html=True)
+
+    # Render the top bar with brand and toggle button
+    st.markdown('<div class="vf-mobile-bar">', unsafe_allow_html=True)
+
+    # Brand link to home
+    st.markdown(
+        f'<a class="vf-mobile-brand" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema">{brand}<span class="vf-mobile-brand-dot">.</span></a>',
+        unsafe_allow_html=True,
+    )
+
+    # Toggle button: ☰ when closed, ✕ when open
+    icon = '✕' if st.session_state.vf_mobile_nav_open else '☰'
+    if st.button(icon, key='vf_mobile_nav_toggle'):
+        st.session_state.vf_mobile_nav_open = not st.session_state.vf_mobile_nav_open
+
+    st.markdown('</div>', unsafe_allow_html=True)  # close vf-mobile-bar
+
+    # Render the navigation panel if the menu is open
+    if st.session_state.vf_mobile_nav_open:
+        st.markdown('<div class="vf-mobile-panel">', unsafe_allow_html=True)
+
+        # "Como funciona" link
         st.markdown(
-            f'<div class="vf-mobile-brand-anchor"></div><a class="vf-mobile-brand" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema no mobile">Viabilidade-Fácil<span class="vf-mobile-brand-dot">.</span></a>',
+            f'<a href="{how_url}" target="_self" aria-label="Abrir página Como funciona na mesma aba">Como funciona</a>',
             unsafe_allow_html=True,
         )
 
-    with cols[1]:
-        if st.button(
-            "✕" if st.session_state.get("vf_mobile_nav_open") else "☰",
-            key="vf_mobile_nav_toggle",
-            help="Abrir menu mobile",
-        ):
-            st.session_state["vf_mobile_nav_open"] = not st.session_state.get("vf_mobile_nav_open", False)
-            st.rerun()
+        # "Área do cliente" uses a button so Python can handle session updates
+        if st.button('Área do cliente', key='vf_mobile_nav_client_area', type='tertiary'):
+            # Close the menu before invoking the callback to avoid leftover state
+            st.session_state.vf_mobile_nav_open = False
+            on_open_client_area()
 
-    if st.session_state.get("vf_mobile_nav_open"):
-        with st.container():
-            st.markdown('<div class="vf-mobile-menu-anchor"></div>', unsafe_allow_html=True)
-            st.markdown(
-                f'''
-                <a class="vf-mobile-link" href="{build_landing_url("entenda-o-sistema.html")}" target="_self" aria-label="Abrir página Como funciona na mesma aba no mobile">Como funciona</a>
-                ''',
-                unsafe_allow_html=True,
-            )
-            if st.button("Área do cliente", key="vf_mobile_nav_client", use_container_width=True):
-                st.session_state["vf_mobile_nav_open"] = False
-                on_open_client_area()
-            st.markdown(
-                f'''
-                <a class="vf-mobile-link" href="{build_landing_url("planos.html")}" target="_self" aria-label="Abrir página de planos na mesma aba no mobile">Planos</a>
-                <a class="vf-mobile-link" href="{build_landing_url("duvidas-suporte.html")}" target="_self" aria-label="Abrir página de dúvidas e suporte na mesma aba no mobile">Dúvidas/Suporte</a>
-                ''',
-                unsafe_allow_html=True,
-            )
+        # "Planos" link
+        st.markdown(
+            f'<a href="{plans_url}" target="_self" aria-label="Abrir página de planos na mesma aba">Planos</a>',
+            unsafe_allow_html=True,
+        )
+
+        # "Dúvidas/Suporte" link
+        st.markdown(
+            f'<a href="{support_url}" target="_self" aria-label="Abrir página de dúvidas e suporte na mesma aba">Dúvidas/Suporte</a>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown('</div>', unsafe_allow_html=True)  # close vf-mobile-panel
+
+    st.markdown('</div>', unsafe_allow_html=True)  # close vf-mobile-shell
