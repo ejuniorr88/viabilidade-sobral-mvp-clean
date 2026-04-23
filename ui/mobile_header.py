@@ -26,14 +26,17 @@ def inject_mobile_header_styles() -> None:
     st.markdown(
         '''
         <style>
-        /* Hide the custom mobile header on larger screens */
-        @media (min-width: 769px) {
-            .vf-mobile-shell {
-                display: none !important;
-            }
+        /* Hide the custom mobile header by default. It will only appear on small screens. */
+        .vf-mobile-shell {
+            display: none !important;
         }
-        /* Hide the desktop header on small screens by targeting the branded horizontal block */
+
+        /* Show the mobile header on small screens (768px and below) */
         @media (max-width: 768px) {
+            .vf-mobile-shell {
+                display: block !important;
+            }
+            /* Hide the desktop header on small screens by targeting the branded horizontal block */
             [data-testid="stHorizontalBlock"]:has(.vf-brand) {
                 display: none !important;
             }
@@ -145,6 +148,14 @@ def render_mobile_top_nav(
 ) -> None:
     """Render a responsive mobile navigation bar.
 
+    This implementation keeps all elements of the mobile header grouped
+    together within Streamlit containers. Grouping ensures that the
+    underlying HTML structure remains intact and prevents the
+    mis-nesting issues observed when mixing `st.markdown` and `st.button`
+    calls across different containers. The bar uses two columns for the
+    brand and the toggle button, and the navigation panel is rendered
+    conditionally beneath the bar inside the same parent container.
+
     Parameters
     ----------
     brand:
@@ -162,57 +173,70 @@ def render_mobile_top_nav(
         mobile menu. This callback should replicate the behaviour of the
         desktop header by updating session state and rerunning the app.
     """
+
     # Initialize the toggle state on first render
     if 'vf_mobile_nav_open' not in st.session_state:
         st.session_state.vf_mobile_nav_open = False
 
-    # Begin the mobile header container
-    st.markdown('<div class="vf-mobile-shell">', unsafe_allow_html=True)
+    # Use a Streamlit container to group the entire mobile header.
+    # This avoids HTML elements leaking outside their intended parents.
+    with st.container():
+        # Open the shell wrapper
+        st.markdown('<div class="vf-mobile-shell">', unsafe_allow_html=True)
 
-    # Render the top bar with brand and toggle button
-    st.markdown('<div class="vf-mobile-bar">', unsafe_allow_html=True)
+        # Render the top bar. Use columns so that the brand and the toggle
+        # button share the same parent element. The open/close tag for
+        # `.vf-mobile-bar` is emitted before and after the columns to
+        # ensure proper nesting.
+        st.markdown('<div class="vf-mobile-bar">', unsafe_allow_html=True)
+        brand_col, toggle_col = st.columns([8, 1])
 
-    # Brand link to home
-    st.markdown(
-        f'<a class="vf-mobile-brand" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema">{brand}<span class="vf-mobile-brand-dot">.</span></a>',
-        unsafe_allow_html=True,
-    )
+        # Left column: brand link
+        with brand_col:
+            st.markdown(
+                f'<a class="vf-mobile-brand" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema">{brand}<span class="vf-mobile-brand-dot">.</span></a>',
+                unsafe_allow_html=True,
+            )
 
-    # Toggle button: ☰ when closed, ✕ when open
-    icon = '✕' if st.session_state.vf_mobile_nav_open else '☰'
-    if st.button(icon, key='vf_mobile_nav_toggle'):
-        st.session_state.vf_mobile_nav_open = not st.session_state.vf_mobile_nav_open
+        # Right column: toggle button
+        with toggle_col:
+            icon = '✕' if st.session_state.vf_mobile_nav_open else '☰'
+            # The tertiary style removes default button shading.
+            if st.button(icon, key='vf_mobile_nav_toggle', type='tertiary'):
+                st.session_state.vf_mobile_nav_open = not st.session_state.vf_mobile_nav_open
 
-    st.markdown('</div>', unsafe_allow_html=True)  # close vf-mobile-bar
+        # Close the top bar
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # Render the navigation panel if the menu is open
-    if st.session_state.vf_mobile_nav_open:
-        st.markdown('<div class="vf-mobile-panel">', unsafe_allow_html=True)
+        # If the menu is open, render the navigation panel
+        if st.session_state.vf_mobile_nav_open:
+            st.markdown('<div class="vf-mobile-panel">', unsafe_allow_html=True)
 
-        # "Como funciona" link
-        st.markdown(
-            f'<a href="{how_url}" target="_self" aria-label="Abrir página Como funciona na mesma aba">Como funciona</a>',
-            unsafe_allow_html=True,
-        )
+            # "Como funciona" link
+            st.markdown(
+                f'<a href="{how_url}" target="_self" aria-label="Abrir página Como funciona na mesma aba">Como funciona</a>',
+                unsafe_allow_html=True,
+            )
 
-        # "Área do cliente" uses a button so Python can handle session updates
-        if st.button('Área do cliente', key='vf_mobile_nav_client_area', type='tertiary'):
-            # Close the menu before invoking the callback to avoid leftover state
-            st.session_state.vf_mobile_nav_open = False
-            on_open_client_area()
+            # "Área do cliente" uses a button so Python can handle session updates
+            if st.button('Área do cliente', key='vf_mobile_nav_client_area', type='tertiary'):
+                # Close the menu before invoking the callback to avoid leftover state
+                st.session_state.vf_mobile_nav_open = False
+                on_open_client_area()
 
-        # "Planos" link
-        st.markdown(
-            f'<a href="{plans_url}" target="_self" aria-label="Abrir página de planos na mesma aba">Planos</a>',
-            unsafe_allow_html=True,
-        )
+            # "Planos" link
+            st.markdown(
+                f'<a href="{plans_url}" target="_self" aria-label="Abrir página de planos na mesma aba">Planos</a>',
+                unsafe_allow_html=True,
+            )
 
-        # "Dúvidas/Suporte" link
-        st.markdown(
-            f'<a href="{support_url}" target="_self" aria-label="Abrir página de dúvidas e suporte na mesma aba">Dúvidas/Suporte</a>',
-            unsafe_allow_html=True,
-        )
+            # "Dúvidas/Suporte" link
+            st.markdown(
+                f'<a href="{support_url}" target="_self" aria-label="Abrir página de dúvidas e suporte na mesma aba">Dúvidas/Suporte</a>',
+                unsafe_allow_html=True,
+            )
 
-        st.markdown('</div>', unsafe_allow_html=True)  # close vf-mobile-panel
+            st.markdown('</div>', unsafe_allow_html=True)  # close vf-mobile-panel
 
-    st.markdown('</div>', unsafe_allow_html=True)  # close vf-mobile-shell
+        # Close the shell wrapper
+        st.markdown('</div>', unsafe_allow_html=True)
