@@ -91,9 +91,6 @@ def _build_landing_url(path: str) -> str:
     return f"{_get_landing_base_url()}/{path.lstrip('/')}"
 
 
-def _build_client_area_entry_url() -> str:
-    return f"{get_app_url()}?client_area=1"
-
 
 def _open_client_area() -> None:
     st.session_state["show_client_area"] = True
@@ -365,7 +362,7 @@ def render_top_nav() -> None:
     inject_mobile_header_styles()
     render_mobile_top_nav(
         build_landing_url=_build_landing_url,
-        client_area_url=_build_client_area_entry_url(),
+        on_open_client_area=_open_client_area,
     )
 
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
