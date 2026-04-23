@@ -202,13 +202,20 @@ def render_indices_section(
         extra = f" ({gabarito_pav} pav.)" if isinstance(gabarito_pav, int) and gabarito_pav > 0 else ""
         gabarito_txt = f"{_fmt_number(gabarito_m, 2)} m{extra}"
 
+    display_subzone = (
+        calc.get("subzone_code")
+        or rule.get("requested_subzone_code")
+        or rule.get("subzone_code")
+        or "PADRAO"
+    )
+
     # ===== Renderização em linhas de 3 colunas, preservando estilo do card_func =====
     rows = [
         ("Zona", zone or "—", "Taxa de Permeabilidade (TP) mínima", _fmt_pct(tp_min_pct), "Taxa de Ocupação (TO) máxima", _fmt_pct(to_max_pct)),
         ("TO do Subsolo máxima", _fmt_pct(to_sub_pct), "Índice de Aproveitamento (IA) máximo", _fmt_number(ia_max, 2), "Índice de Aproveitamento (IA) mínimo", _fmt_number(ia_min, 2) if ia_min is not None else "—"),
         ("Recuo de Frente", _fmt_m(rf), "Recuo de Fundo", _fmt_m(rfd), "Recuo Lateral", recuo_lateral_txt),
         ("Área mínima do lote", _fmt_m2(area_min), "Testada mínima", testada_min_txt, "Altura máxima (gabarito)", gabarito_txt),
-        ("Área máxima do lote", _fmt_m2(area_max), "Testada máxima", f"{_fmt_number(test_max,2)} m" if test_max is not None else "—", "Subzona", (rule.get("subzone_code") or "PADRAO")),
+        ("Área máxima do lote", _fmt_m2(area_max), "Testada máxima", f"{_fmt_number(test_max,2)} m" if test_max is not None else "—", "Subzona", (display_subzone or "PADRAO")),
     ]
 
     for r in rows:
