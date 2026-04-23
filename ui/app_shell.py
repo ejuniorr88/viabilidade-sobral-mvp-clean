@@ -360,7 +360,7 @@ def render_top_nav() -> None:
 
     with cols[2]:
         st.markdown(
-            f'<div class="vf-nav-link-wrap"><a id="vf_nav_how" class="vf-nav-link-button" href="{_build_landing_url("entenda-o-sistema.html")}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página Como funciona em nova aba">Como funciona</a></div>',
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_how" class="vf-nav-link-button" href="{_build_landing_url("entenda-o-sistema.html")}" target="_self" aria-label="Abrir página Como funciona na mesma aba">Como funciona</a></div>',
             unsafe_allow_html=True,
         )
 
@@ -374,12 +374,15 @@ def render_top_nav() -> None:
 
     with cols[4]:
         st.markdown(
-            f'<div class="vf-nav-link-wrap"><a id="vf_nav_plans" class="vf-nav-link-button" href="{_build_landing_url("planos.html")}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página de planos em nova aba">Planos</a></div>',
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_plans" class="vf-nav-link-button" href="{_build_landing_url("planos.html")}" target="_self" aria-label="Abrir página de planos na mesma aba">Planos</a></div>',
             unsafe_allow_html=True,
         )
 
     with cols[5]:
-        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)
+        st.markdown(
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_support" class="vf-nav-link-button" href="{_build_landing_url("duvidas-suporte.html")}" target="_self" aria-label="Abrir página de dúvidas e suporte na mesma aba">Dúvidas/Suporte</a></div>',
+            unsafe_allow_html=True,
+        )
 
 
 def render_wallet_summary() -> None:
