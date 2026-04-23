@@ -91,15 +91,6 @@ def _build_landing_url(path: str) -> str:
     return f"{_get_landing_base_url()}/{path.lstrip('/')}"
 
 
-
-def _open_client_area() -> None:
-    st.session_state["show_client_area"] = True
-    st.session_state["show_plans_page"] = False
-    if not st.session_state.get("auth_logged_in"):
-        st.session_state["post_login_action"] = "open_client_area"
-    st.rerun()
-
-
 def card(title: str, value: Any, suffix: str = "") -> None:
     rendered = "—" if value is None or value == "" else f"{value}{suffix}"
     st.markdown(
@@ -359,12 +350,6 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
-    inject_mobile_header_styles()
-    render_mobile_top_nav(
-        build_landing_url=_build_landing_url,
-        on_open_client_area=_open_client_area,
-    )
-
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
@@ -382,7 +367,11 @@ def render_top_nav() -> None:
 
     with cols[3]:
         if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=True):
-            _open_client_area()
+            st.session_state["show_client_area"] = True
+            st.session_state["show_plans_page"] = False
+            if not st.session_state.get("auth_logged_in"):
+                st.session_state["post_login_action"] = "open_client_area"
+            st.rerun()
 
     with cols[4]:
         st.markdown(
@@ -396,6 +385,32 @@ def render_top_nav() -> None:
             unsafe_allow_html=True,
         )
 
+    # ---------------------------------------------------------------------
+    # Mobile header
+    # Inject scoped styles and render a separate navigation bar on small screens.
+    # ---------------------------------------------------------------------
+    inject_mobile_header_styles()
+
+    def _on_open_client_area() -> None:
+        st.session_state["show_client_area"] = True
+        st.session_state["show_plans_page"] = False
+        if not st.session_state.get("auth_logged_in"):
+            st.session_state["post_login_action"] = "open_client_area"
+        st.rerun()
+
+    _brand_home_url = f"{get_app_url()}?nav=home"
+    _how_url = _build_landing_url("entenda-o-sistema.html")
+    _plans_url = _build_landing_url("planos.html")
+    _support_url = _build_landing_url("duvidas-suporte.html")
+
+    render_mobile_top_nav(
+        brand="Viabilidade-Fácil",
+        home_url=_brand_home_url,
+        how_url=_how_url,
+        plans_url=_plans_url,
+        support_url=_support_url,
+        on_open_client_area=_on_open_client_area,
+    )
 
 def render_wallet_summary() -> None:
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
