@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.client_reports import build_download_signed_url, list_client_reports
+from core.snapshot_pdf import generate_snapshot_pdf_bytes
 from core.coupons import user_can_manage_coupons
 from ui.coupons_admin import render_coupons_admin_section
 from ui.relatorio import render_relatorio_section
@@ -156,6 +157,21 @@ def _render_reports_tab(user_id: str) -> None:
 
         if st.session_state.get(_PREVIEW_REPORT_KEY) == item.get("id"):
             _render_saved_report_preview(item)
+            ctx = item.get("report_context") if isinstance(item.get("report_context"), dict) else {}
+            calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
+            if calc_snapshot:
+                try:
+                    visual_pdf_bytes = generate_snapshot_pdf_bytes(item)
+                    st.download_button(
+                        label="⬇️ Baixar PDF visual do snapshot",
+                        data=visual_pdf_bytes,
+                        file_name=f"relatorio_visual_snapshot_{item.get('id') or 'salvo'}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key=f"download_snapshot_pdf_{item.get('id')}",
+                    )
+                except Exception as exc:
+                    st.warning(f"Não foi possível gerar o PDF visual do snapshot: {exc}")
 
 
 
