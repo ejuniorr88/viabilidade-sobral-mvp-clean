@@ -1,32 +1,33 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MOBILE_ENTRY = ROOT / "ui" / "mobile_sidebar_entry.py"
+SOURCE = ROOT / "ui" / "mobile_sidebar_entry.py"
 
 
-def test_mobile_sidebar_entry_removes_explanatory_card() -> None:
-    source = MOBILE_ENTRY.read_text(encoding="utf-8")
+def _source() -> str:
+    return SOURCE.read_text(encoding="utf-8")
 
-    removed_fragments = [
+
+def test_mobile_sidebar_entry_removes_instruction_card_copy() -> None:
+    src = _source()
+    forbidden = [
         "Comece por aqui",
         "Preencha os dados do terreno",
         "No celular, os campos da consulta",
+        "painel lateral para economizar espaço",
+        "Toque em Abrir dados",
+        "vf-mobile-sidebar-entry__card",
         "vf-mobile-sidebar-entry__eyebrow",
         "vf-mobile-sidebar-entry__title",
-        "vf-mobile-sidebar-entry__text",
-        "vf-mobile-sidebar-entry__hint",
-        "vf-mobile-sidebar-entry__icon",
-        "Orientação para abrir os dados da consulta",
+        "vf-mobile-sidebar-entry__callout",
     ]
+    for text in forbidden:
+        assert text not in src
 
-    for fragment in removed_fragments:
-        assert fragment not in source
 
-
-def test_mobile_sidebar_entry_keeps_native_sidebar_control_hint() -> None:
-    source = MOBILE_ENTRY.read_text(encoding="utf-8")
-
-    assert "stSidebarCollapsedControl" in source
-    assert "Abrir dados" in source
-    assert "@media (max-width: 768px)" in source
-    assert "unsafe_allow_html=True" in source
+def test_mobile_sidebar_entry_keeps_only_native_sidebar_control_hint() -> None:
+    src = _source()
+    assert 'data-testid="stSidebarCollapsedControl"' in src
+    assert 'content: "Abrir dados"' in src
+    assert "st.markdown" in src
+    assert "unsafe_allow_html=True" in src
