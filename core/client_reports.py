@@ -101,19 +101,31 @@ def _deep_pick(mapping: Any, keys: tuple[str, ...], *, max_depth: int = 4) -> An
 def _extract_zone(calc: Dict[str, Any], session_state: Dict[str, Any] | None = None) -> str:
     session_state = session_state or {}
     session_calc = session_state.get("calc") if isinstance(session_state.get("calc"), dict) else {}
+    zone_keys = ("zone", "zone_sigla", "zone_display_label", "zone_label", "zone_code", "zone_lookup")
     return _normalize_text(
         _pick_value(
-            calc.get("zone"),
-            calc.get("zone_sigla"),
-            calc.get("zone_display_label"),
-            calc.get("zone_label"),
-            calc.get("zone_code"),
-            calc.get("zone_lookup"),
-            session_calc.get("zone"),
-            session_calc.get("zone_sigla"),
-            session_calc.get("zone_display_label"),
-            session_calc.get("zone_label"),
-            _deep_pick(calc, ("zone", "zone_sigla", "zone_display_label", "zone_label", "zone_code", "zone_lookup")),
+            *(calc.get(k) for k in zone_keys),
+            *(session_calc.get(k) for k in zone_keys),
+            *(session_state.get(k) for k in zone_keys),
+            _deep_pick(calc, zone_keys),
+            _deep_pick(session_calc, zone_keys),
+            _deep_pick(session_state, zone_keys),
+        )
+    )
+
+
+def _extract_subzone(calc: Dict[str, Any], session_state: Dict[str, Any] | None = None) -> str:
+    session_state = session_state or {}
+    session_calc = session_state.get("calc") if isinstance(session_state.get("calc"), dict) else {}
+    keys = ("subzone_code", "subzona", "subzone", "setor")
+    return _normalize_text(
+        _pick_value(
+            *(calc.get(k) for k in keys),
+            *(session_calc.get(k) for k in keys),
+            *(session_state.get(k) for k in keys),
+            _deep_pick(calc, keys),
+            _deep_pick(session_calc, keys),
+            _deep_pick(session_state, keys),
         )
     )
 
@@ -121,19 +133,62 @@ def _extract_zone(calc: Dict[str, Any], session_state: Dict[str, Any] | None = N
 def _extract_road(calc: Dict[str, Any], session_state: Dict[str, Any] | None = None) -> str:
     session_state = session_state or {}
     session_calc = session_state.get("calc") if isinstance(session_state.get("calc"), dict) else {}
+    road_keys = ("street_name", "via_nome", "road_name", "logradouro", "road_label")
     return _normalize_text(
         _pick_value(
-            calc.get("street_name"),
-            calc.get("via_nome"),
-            calc.get("road_name"),
-            calc.get("logradouro"),
-            session_calc.get("street_name"),
-            session_calc.get("via_nome"),
-            session_calc.get("road_name"),
-            session_calc.get("logradouro"),
-            _deep_pick(calc, ("street_name", "via_nome", "road_name", "logradouro")),
+            *(calc.get(k) for k in road_keys),
+            *(session_calc.get(k) for k in road_keys),
+            *(session_state.get(k) for k in road_keys),
+            _deep_pick(calc, road_keys),
+            _deep_pick(session_calc, road_keys),
+            _deep_pick(session_state, road_keys),
         )
     )
+
+
+def _extract_road_type(calc: Dict[str, Any], session_state: Dict[str, Any] | None = None) -> str:
+    session_state = session_state or {}
+    session_calc = session_state.get("calc") if isinstance(session_state.get("calc"), dict) else {}
+    keys = ("road_type", "via_type", "tipo_via", "road_class", "via_classificacao")
+    return _normalize_text(
+        _pick_value(
+            *(calc.get(k) for k in keys),
+            *(session_calc.get(k) for k in keys),
+            *(session_state.get(k) for k in keys),
+            _deep_pick(calc, keys),
+            _deep_pick(session_calc, keys),
+            _deep_pick(session_state, keys),
+        )
+    )
+
+
+def _extract_status_marker(calc: Dict[str, Any], session_state: Dict[str, Any] | None = None) -> str:
+    session_state = session_state or {}
+    session_calc = session_state.get("calc") if isinstance(session_state.get("calc"), dict) else {}
+    keys = (
+        "status_curto",
+        "final_status",
+        "resultado_final",
+        "viability_status",
+        "viabilidade_status",
+        "zone_class",
+        "via_class",
+        "adequabilidade_zona",
+        "adequabilidade_via",
+    )
+    values: list[str] = []
+    for source in (calc, session_calc, session_state):
+        if not isinstance(source, dict):
+            continue
+        for key in keys:
+            value = source.get(key)
+            if value is not None and not (isinstance(value, str) and value.strip() == ""):
+                values.append(str(value).strip())
+        found = _deep_pick(source, keys)
+        if found is not None and not (isinstance(found, str) and str(found).strip() == ""):
+            values.append(str(found).strip())
+    return "|".join(dict.fromkeys(values))
+
 
 def _ctx(item: Dict[str, Any]) -> Dict[str, Any]:
     value = item.get("report_context")
@@ -166,10 +221,15 @@ def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) 
         "use_type_code": _normalize_text(calc.get("use_type_code")),
         "selected_use_label": _normalize_text(calc.get("selected_use_label")),
         "categoria_label": _normalize_text(calc.get("categoria_label")),
-        "zone": _normalize_text(calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_label")),
-        "road_name": _normalize_text(calc.get("street_name") or calc.get("road_name") or calc.get("logradouro")),
-        "road_type": _normalize_text(calc.get("road_type") or calc.get("via_type")),
-        "project_mode": _normalize_text(calc.get("project_mode")),
+        # Alguns cenários, especialmente “possível pela via”, guardam zona/via
+        # no snapshot de sessão e não diretamente no calc. Usar os extratores
+        # evita colisão de assinatura e falso already_exists/estorno.
+        "zone": _extract_zone(calc, session_state),
+        "subzone": _extract_subzone(calc, session_state),
+        "road_name": _extract_road(calc, session_state),
+        "road_type": _extract_road_type(calc, session_state),
+        "status_marker": _extract_status_marker(calc, session_state),
+        "project_mode": _normalize_text(_pick_value(calc.get("project_mode"), session_state.get("project_mode"))),
         "lot_area_m2": _normalize_number(_pick_value(session_state.get("lot_area_m2"), calc.get("lot_area_m2"))),
         "built_ground_m2": _normalize_number(
             _pick_value(
@@ -274,7 +334,7 @@ def _report_context(
         "zone_code": zone,
         "zone_label": zone,
         "road_name": road_name,
-        "road_type": _normalize_text(calc.get("road_type") or calc.get("via_type")),
+        "road_type": _extract_road_type(calc, session_state),
         "lot_area_m2": _normalize_number(session_state.get("lot_area_m2") or calc.get("lot_area_m2")),
         "pdf_bucket": bucket,
         "pdf_storage_path": storage_path,
