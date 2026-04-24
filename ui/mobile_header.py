@@ -182,15 +182,7 @@ def render_mobile_top_nav(
     # This avoids HTML elements leaking outside their intended parents.
     with st.container():
         # Open the shell wrapper
-        # Inline style ensures the shell is hidden by default on all screens. The
-        # accompanying CSS will override this on small viewports (<=768px),
-        # but having an inline "display: none" acts as a safeguard if the CSS
-        # fails to load or render for any reason. This prevents the mobile
-        # header from creating an unexpected bar on desktop.
-        st.markdown(
-            '<div class="vf-mobile-shell" style="display: none;">',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<div class="vf-mobile-shell" style="display: none;">', unsafe_allow_html=True)
 
         # Render the top bar. Use columns so that the brand and the toggle
         # button share the same parent element. The open/close tag for
