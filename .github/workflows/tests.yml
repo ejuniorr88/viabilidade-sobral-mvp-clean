@@ -30,6 +30,10 @@ jobs:
           python -m py_compile app.py
           python -m compileall -q core ui tests
 
+      - name: List discovered test files
+        run: |
+          find tests -name "test_*.py" | sort
+
       - name: Run consolidated tests
         run: |
-          pytest -q tests
+          pytest -vv tests
