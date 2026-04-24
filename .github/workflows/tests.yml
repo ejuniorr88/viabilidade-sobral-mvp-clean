@@ -2,9 +2,17 @@ name: tests
 
 on:
   push:
-    branches: [ "dev", "main" ]
+    branches:
+      - dev
+      - homolog
+      - main
+      - release/residencial-v1
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - dev
+      - homolog
+      - main
+      - release/residencial-v1
 
 jobs:
   pytest:
