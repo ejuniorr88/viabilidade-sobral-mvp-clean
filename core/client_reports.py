@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
@@ -332,6 +333,109 @@ def _minimal_row(user_id: str, signature: str, report_context: Dict[str, Any]) -
     }
 
 
+
+def _row_with_optional_columns(
+    *,
+    user_id: str,
+    user_email: str,
+    signature: str,
+    report_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Campos opcionais para compatibilidade com schemas antigos.
+
+    A gravação começa pelo insert mínimo. Estes campos só são adicionados
+    quando o Supabase real exigir uma coluna NOT NULL. Assim evitamos voltar
+    ao erro de depender de colunas que não existem em outro ambiente.
+    """
+    return {
+        "user_id": user_id,
+        "user_email": _normalize_text(user_email),
+        "title": report_context.get("title") or "Relatório salvo",
+        "report_type": report_context.get("report_type") or "urban_report",
+        "project_category": report_context.get("project_category") or "",
+        "project_option": report_context.get("project_option") or "",
+        "zone_code": report_context.get("zone_code") or report_context.get("zone_label") or "",
+        "zone_label": report_context.get("zone_label") or report_context.get("zone_code") or "",
+        "road_name": report_context.get("road_name") or "",
+        "road_type": report_context.get("road_type") or "",
+        "lot_area_m2": report_context.get("lot_area_m2") or 0,
+        "pdf_bucket": report_context.get("pdf_bucket") or _DEFAULT_BUCKET,
+        "pdf_storage_path": report_context.get("pdf_storage_path") or "",
+        "pdf_file_name": report_context.get("pdf_file_name") or "relatorio.pdf",
+        "pdf_size_bytes": report_context.get("pdf_size_bytes") or 0,
+        "file_path": report_context.get("pdf_storage_path") or report_context.get("file_path") or "",
+        "status": report_context.get("status") or "saved",
+        "report_signature": signature,
+        "report_context": report_context,
+    }
+
+
+def _extract_not_null_column(error: Exception) -> str:
+    message = str(error)
+    patterns = (
+        r'null value in column "([^"]+)"',
+        r"null value in column '([^']+)'",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, message, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _extract_unknown_column(error: Exception) -> str:
+    message = str(error)
+    patterns = (
+        r"Could not find the '([^']+)' column",
+        r'Could not find the "([^"]+)" column',
+        r'column [\w\.]+\."?([A-Za-z_][A-Za-z0-9_]*)"? does not exist',
+        r'column "([^"]+)" does not exist',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, message, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _insert_client_report_schema_compatible(
+    client: Client,
+    *,
+    minimal_row: Dict[str, Any],
+    optional_row: Dict[str, Any],
+) -> Any:
+    """Insere relatório tolerando pequenas diferenças reais de schema."""
+    row = dict(minimal_row)
+    blocked_columns: set[str] = set()
+    max_attempts = max(8, len(optional_row) + 3)
+
+    for _ in range(max_attempts):
+        try:
+            return client.table("client_reports").insert(row).execute()
+        except Exception as exc:
+            unknown_col = _extract_unknown_column(exc)
+            if unknown_col and unknown_col in row and unknown_col not in {"user_id", "report_signature"}:
+                row.pop(unknown_col, None)
+                blocked_columns.add(unknown_col)
+                continue
+
+            required_col = _extract_not_null_column(exc)
+            if (
+                required_col
+                and required_col in optional_row
+                and required_col not in row
+                and required_col not in blocked_columns
+            ):
+                row[required_col] = optional_row[required_col]
+                continue
+
+            raise
+
+    return client.table("client_reports").insert(row).execute()
+
+
+
+
 def _normalize_report_row(row: Dict[str, Any]) -> Dict[str, Any]:
     ctx = _ctx(row)
     normalized = dict(row)
@@ -402,7 +506,17 @@ def save_client_report(
     row = _minimal_row(user_id, signature, report_context)
 
     try:
-        inserted = client.table("client_reports").insert(row).execute()
+        optional_row = _row_with_optional_columns(
+            user_id=user_id,
+            user_email=user_email,
+            signature=signature,
+            report_context=report_context,
+        )
+        inserted = _insert_client_report_schema_compatible(
+            client,
+            minimal_row=row,
+            optional_row=optional_row,
+        )
         if inserted.data:
             return {"ok": True, "already_exists": False, "row": _normalize_report_row(inserted.data[0])}
         return {"ok": True, "already_exists": False, "row": _normalize_report_row(row)}
