@@ -9,6 +9,7 @@ import streamlit.components.v1 as components
 from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
 from core.env_secrets import get_secret_str
+from core.state_helpers import clear_all_checkout_states
 from ui.auth_panel import render_google_login_box
 from ui.mobile_header import inject_mobile_header_styles, render_mobile_top_nav
 
@@ -177,19 +178,32 @@ def inject_global_styles() -> None:
             min-height: 92px !important;
         }}
 
-        .vf-brand-home {{
-            text-decoration: none !important;
-            color: #ffffff !important;
+        .vf-brand-anchor {{
+            pointer-events: none !important;
+            position: absolute !important;
+            z-index: 25 !important;
         }}
 
-        .vf-brand-home:hover,
-        .vf-brand-home:focus,
-        .vf-brand-home:focus-visible,
-        .vf-brand-home:active,
-        .vf-brand-home:visited {{
-            text-decoration: none !important;
-            color: #ffffff !important;
-            outline: none !important;
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child {{
+            position: relative !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton {{
+            justify-content: flex-start !important;
+            position: absolute !important;
+            inset: 0 auto 0 0 !important;
+            z-index: 30 !important;
+            width: auto !important;
+            min-width: 285px !important;
+            margin: 0 !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] {{
+            opacity: 0 !important;
+            width: 285px !important;
+            min-width: 285px !important;
+            height: 92px !important;
+            margin: 0 !important;
         }}
 
         .vf-brand {{
@@ -353,11 +367,16 @@ def render_top_nav() -> None:
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
-        home_url = f"{get_app_url()}?nav=home"
         st.markdown(
-            f'<a class="vf-brand vf-brand-home" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema">Viabilidade-Fácil<span class="vf-brand-dot">.</span></a>',
+            '<div class="vf-brand vf-brand-anchor" aria-hidden="true">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
             unsafe_allow_html=True,
         )
+        if st.button("Viabilidade-Fácil.", key="vf_nav_home", type="tertiary", use_container_width=False):
+            st.session_state["show_client_area"] = False
+            st.session_state["show_plans_page"] = False
+            st.session_state["post_login_action"] = None
+            clear_all_checkout_states()
+            st.rerun()
 
     with cols[2]:
         st.markdown(
@@ -398,7 +417,7 @@ def render_top_nav() -> None:
             st.session_state["post_login_action"] = "open_client_area"
         st.rerun()
 
-    _brand_home_url = f"{get_app_url()}?nav=home"
+    _brand_home_url = "?nav=home"
     _how_url = _build_landing_url("entenda-o-sistema.html")
     _plans_url = _build_landing_url("planos.html")
     _support_url = _build_landing_url("duvidas-suporte.html")
