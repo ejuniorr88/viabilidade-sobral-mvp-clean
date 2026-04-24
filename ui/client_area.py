@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 from datetime import datetime
 from typing import Any, Dict
 from zoneinfo import ZoneInfo
@@ -16,8 +17,94 @@ from ui.relatorio import render_relatorio_section
 _TZ = ZoneInfo("America/Fortaleza")
 
 
+def _report_context(item: Dict[str, Any]) -> Dict[str, Any]:
+    value = item.get("report_context")
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _first_present(*values: Any, default: str = "—") -> str:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return default
+
+
+
+def _deep_pick(mapping: Any, keys: tuple[str, ...], *, max_depth: int = 4) -> Any:
+    if not isinstance(mapping, dict) or max_depth < 0:
+        return None
+    for key in keys:
+        value = mapping.get(key)
+        if value is not None and not (isinstance(value, str) and value.strip() == ""):
+            return value
+    for value in mapping.values():
+        if isinstance(value, dict):
+            found = _deep_pick(value, keys, max_depth=max_depth - 1)
+            if found is not None and not (isinstance(found, str) and str(found).strip() == ""):
+                return found
+    return None
+
+
+def _extract_zone_from_context(ctx: Dict[str, Any], item: Dict[str, Any]) -> str:
+    calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
+    session_snapshot = ctx.get("session_snapshot") if isinstance(ctx.get("session_snapshot"), dict) else {}
+    session_calc = session_snapshot.get("calc") if isinstance(session_snapshot.get("calc"), dict) else {}
+    return _first_present(
+        item.get("zone_label"),
+        item.get("zone_code"),
+        item.get("zone"),
+        ctx.get("zone_label"),
+        ctx.get("zone_code"),
+        ctx.get("zone"),
+        calc_snapshot.get("zone"),
+        calc_snapshot.get("zone_sigla"),
+        calc_snapshot.get("zone_display_label"),
+        calc_snapshot.get("zone_label"),
+        calc_snapshot.get("zone_lookup"),
+        session_calc.get("zone"),
+        session_calc.get("zone_sigla"),
+        session_calc.get("zone_display_label"),
+        _deep_pick(calc_snapshot, ("zone", "zone_sigla", "zone_display_label", "zone_label", "zone_code", "zone_lookup")),
+    )
+
+
+def _extract_road_from_context(ctx: Dict[str, Any], item: Dict[str, Any]) -> str:
+    calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
+    session_snapshot = ctx.get("session_snapshot") if isinstance(ctx.get("session_snapshot"), dict) else {}
+    session_calc = session_snapshot.get("calc") if isinstance(session_snapshot.get("calc"), dict) else {}
+    return _first_present(
+        item.get("road_name"),
+        item.get("via_nome"),
+        item.get("street_name"),
+        item.get("logradouro"),
+        ctx.get("road_name"),
+        ctx.get("via_nome"),
+        ctx.get("street_name"),
+        ctx.get("logradouro"),
+        calc_snapshot.get("street_name"),
+        calc_snapshot.get("via_nome"),
+        calc_snapshot.get("road_name"),
+        calc_snapshot.get("logradouro"),
+        session_calc.get("street_name"),
+        session_calc.get("via_nome"),
+        session_calc.get("road_name"),
+        session_calc.get("logradouro"),
+        _deep_pick(calc_snapshot, ("street_name", "via_nome", "road_name", "logradouro")),
+    )
+
 def _to_local_label(item: Dict[str, Any]) -> tuple[str, str]:
-    ctx = item.get("report_context") or {}
+    ctx = _report_context(item)
     saved_local = ctx.get("saved_at_local")
     if saved_local:
         try:
@@ -81,7 +168,7 @@ def _restore_saved_session_snapshot(backup: Dict[str, Any]) -> None:
 
 
 def _render_saved_report_preview(item: Dict[str, Any]) -> None:
-    ctx = item.get("report_context") or {}
+    ctx = _report_context(item)
     calc_snapshot = ctx.get("calc_snapshot") or {}
     session_snapshot = ctx.get("session_snapshot") or {}
     if not isinstance(calc_snapshot, dict) or not calc_snapshot:
@@ -99,7 +186,7 @@ def _render_saved_report_preview(item: Dict[str, Any]) -> None:
 
 
 def _render_snapshot_downloads(item: Dict[str, Any]) -> None:
-    ctx = item.get("report_context") if isinstance(item.get("report_context"), dict) else {}
+    ctx = _report_context(item)
     calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
     if not calc_snapshot:
         return
@@ -170,10 +257,29 @@ def _render_reports_tab(user_id: str) -> None:
 
     for item in reports:
         date_label, time_label = _to_local_label(item)
-        title = item.get("title") or "Relatório salvo"
-        zone = item.get("zone_label") or "—"
-        road = item.get("road_name") or "—"
-        path = item.get("pdf_storage_path") or ""
+        ctx = _report_context(item)
+        calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
+        session_snapshot = ctx.get("session_snapshot") if isinstance(ctx.get("session_snapshot"), dict) else {}
+
+        title = _first_present(
+            item.get("title"),
+            ctx.get("title"),
+            default="Relatório salvo",
+        )
+        zone = _extract_zone_from_context(ctx, item)
+        road = _extract_road_from_context(ctx, item)
+        path = _first_present(
+            item.get("pdf_storage_path"),
+            item.get("file_path"),
+            ctx.get("pdf_storage_path"),
+            ctx.get("file_path"),
+            default="",
+        )
+        bucket = _first_present(
+            item.get("pdf_bucket"),
+            ctx.get("pdf_bucket"),
+            default="",
+        )
 
         st.markdown(
             f"""
@@ -204,7 +310,7 @@ def _render_reports_tab(user_id: str) -> None:
         with e:
             signed_url = ""
             try:
-                signed_url = build_download_signed_url(path)
+                signed_url = build_download_signed_url(path, bucket=bucket)
             except Exception:
                 signed_url = ""
             if signed_url:

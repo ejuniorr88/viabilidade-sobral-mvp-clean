@@ -8,10 +8,12 @@ def test_app_py_restores_runtime_inputs_before_calc_signature() -> None:
     categoria_candidates = [
         'categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)',
         'categoria_label = st.selectbox(',
+        '= render_consultation_form(st.session_state)',
     ]
     lote_candidates = [
         'lot_area, built_ground, permeable_area = render_lot_inputs()',
         'lot_area, built_ground, permeable_area = render_lote_section()',
+        '= render_consultation_form(st.session_state)',
     ]
     mapa_line = 'radius_m = render_mapa_section(zones_gj)'
     signature_line = 'current_signature = report_confirmation_core.build_calc_signature('

@@ -24,7 +24,7 @@ from ui.app_shell import (
 )
 from ui.flow.primary_actions import render_primary_actions
 from ui.how_it_works_panel import render_how_it_works_panel
-from ui.flow.use_selector import render_use_selector
+from ui.consultation_form import render_consultation_form
 from ui.legal import render_privacy_page, render_terms_page
 
 
@@ -44,13 +44,14 @@ except Exception:
     from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
 
 from ui.map.section import render_mapa_section
-from ui.lot.inputs import render_lot_inputs
 from ui.location.section import render_localizacao_section
 from ui.indices.section import render_indices_section
 from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
 from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
 from ui.runtime.navigation_focus import render_navigation_focus_if_needed
+from ui.mobile_viewport import inject_mobile_viewport_detector, sync_mobile_viewport_state, is_mobile_view
+from ui.mobile_inline_consultation import render_mobile_inline_consultation_header
 from ui.runtime.report_navigation import arm_report_initial_focus
 from ui.relatorio import (
     render_relatorio_section,
@@ -272,16 +273,43 @@ with login_col:
         render_wallet_summary()
     render_google_login_top()
 
-with st.sidebar:
-    categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)
-    st.session_state.calc["use_type_code"] = selected_use_code
+inject_mobile_viewport_detector()
+sync_mobile_viewport_state(st.session_state)
+mobile_view_active = is_mobile_view(st.session_state)
 
-    st.markdown("### 📐 3. Dados do Lote")
-    st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
-
-    lot_area, built_ground, permeable_area = render_lot_inputs()
+if not mobile_view_active:
+    with st.sidebar:
+        (
+            categoria_label,
+            selected_use_label,
+            selected_use_code,
+            selected_multi_tipo,
+            lot_area,
+            built_ground,
+            permeable_area,
+        ) = render_consultation_form(st.session_state)
+else:
+    categoria_label = str(st.session_state.get("vf_categoria", "Residencial"))
+    selected_use_label = str(st.session_state.get("vf_residential_option", "Residencial Unifamiliar (Casa)"))
+    selected_use_code = str(st.session_state.calc.get("use_type_code", "RES_UNI"))
+    selected_multi_tipo = str(st.session_state.calc.get("multi_tipo", ""))
+    lot_area = float(st.session_state.calc.get("lot_area_m2", 300.0) or 300.0)
+    built_ground = float(st.session_state.calc.get("built_ground_m2", 0.0) or 0.0)
+    permeable_area = float(st.session_state.calc.get("area_permeavel_prevista_m2", 0.0) or 0.0)
 
 radius_m = render_mapa_section(zones_gj)
+
+if mobile_view_active:
+    render_mobile_inline_consultation_header()
+    (
+        categoria_label,
+        selected_use_label,
+        selected_use_code,
+        selected_multi_tipo,
+        lot_area,
+        built_ground,
+        permeable_area,
+    ) = render_consultation_form(st.session_state)
 
 clicked_calcular = render_primary_actions(
     session_state=st.session_state,
