@@ -367,15 +367,32 @@ def generate_snapshot_html_bytes(item: Dict[str, Any]) -> bytes:
 
 
 @lru_cache(maxsize=1)
-def snapshot_pdf_renderer_available() -> bool:
-    """Return True only when WeasyPrint can actually write a tiny PDF in this deploy."""
+def _snapshot_pdf_renderer_probe() -> tuple[bool, str]:
+    """Check whether WeasyPrint can really write a PDF in this deploy.
+
+    Importar o pacote não basta: em deploy Linux/Railway, o import pode passar e a
+    escrita falhar por falta de bibliotecas nativas como Pango, Cairo ou GDK-PixBuf.
+    """
     try:
         from weasyprint import HTML
 
         probe = HTML(string="<html><body>ok</body></html>").write_pdf()
-        return isinstance(probe, (bytes, bytearray)) and probe.startswith(b"%PDF")
-    except Exception:
-        return False
+        ok = isinstance(probe, (bytes, bytearray)) and probe.startswith(b"%PDF")
+        if ok:
+            return True, ""
+        return False, "WeasyPrint executou, mas não retornou bytes de PDF válidos."
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+
+
+def snapshot_pdf_renderer_available() -> bool:
+    """Return True only when WeasyPrint can actually write a tiny PDF in this deploy."""
+    return _snapshot_pdf_renderer_probe()[0]
+
+
+def snapshot_pdf_renderer_error() -> str:
+    """Return the cached renderer diagnostic for the Área do Cliente message."""
+    return _snapshot_pdf_renderer_probe()[1]
 
 
 def generate_snapshot_pdf_bytes(item: Dict[str, Any]) -> bytes:
