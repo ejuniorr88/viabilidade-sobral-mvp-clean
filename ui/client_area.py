@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime
+import importlib
 from typing import Any, Dict
 from zoneinfo import ZoneInfo
 
 import streamlit as st
 
 from core.client_reports import build_download_signed_url, list_client_reports
-import importlib
 from core.coupons import user_can_manage_coupons
 from ui.coupons_admin import render_coupons_admin_section
 from ui.relatorio import render_relatorio_section
@@ -144,10 +144,19 @@ def _render_snapshot_downloads(item: Dict[str, Any]) -> None:
         return
 
     if not snapshot_pdf_module.snapshot_pdf_renderer_available():
-        st.info(
+        diagnostic = ""
+        if hasattr(snapshot_pdf_module, "snapshot_pdf_renderer_error"):
+            try:
+                diagnostic = snapshot_pdf_module.snapshot_pdf_renderer_error()
+            except Exception:
+                diagnostic = ""
+        msg = (
             "PDF visual automático indisponível neste ambiente. Para não gerar um arquivo incompleto, "
             "use o HTML visual do snapshot e imprima/salve em PDF pelo navegador."
         )
+        if diagnostic:
+            msg += f" Diagnóstico técnico: {diagnostic}"
+        st.info(msg)
         return
 
     try:
