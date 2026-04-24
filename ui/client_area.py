@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.client_reports import build_download_signed_url, list_client_reports
-from core import snapshot_pdf as snapshot_pdf_module
+import importlib
 from core.coupons import user_can_manage_coupons
 from ui.coupons_admin import render_coupons_admin_section
 from ui.relatorio import render_relatorio_section
@@ -102,6 +102,15 @@ def _render_snapshot_downloads(item: Dict[str, Any]) -> None:
     ctx = item.get("report_context") if isinstance(item.get("report_context"), dict) else {}
     calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
     if not calc_snapshot:
+        return
+
+    try:
+        snapshot_pdf_module = importlib.import_module("core.snapshot_pdf")
+    except Exception as exc:
+        st.warning(
+            "O módulo de PDF visual do snapshot não está disponível neste deploy. "
+            "Substitua também o arquivo core/snapshot_pdf.py do mesmo patch para liberar esta função."
+        )
         return
 
     required_helpers = (
