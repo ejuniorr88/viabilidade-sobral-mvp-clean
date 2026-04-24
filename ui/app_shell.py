@@ -10,6 +10,7 @@ from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
 from core.env_secrets import get_secret_str
 from ui.auth_panel import render_google_login_box
+from ui.mobile_header import inject_mobile_header_styles, render_mobile_top_nav
 
 
 BLUE = "#071847"
@@ -384,6 +385,32 @@ def render_top_nav() -> None:
             unsafe_allow_html=True,
         )
 
+    # ---------------------------------------------------------------------
+    # Mobile header
+    # Inject scoped styles and render a separate navigation bar on small screens.
+    # ---------------------------------------------------------------------
+    inject_mobile_header_styles()
+
+    def _on_open_client_area() -> None:
+        st.session_state["show_client_area"] = True
+        st.session_state["show_plans_page"] = False
+        if not st.session_state.get("auth_logged_in"):
+            st.session_state["post_login_action"] = "open_client_area"
+        st.rerun()
+
+    _brand_home_url = f"{get_app_url()}?nav=home"
+    _how_url = _build_landing_url("entenda-o-sistema.html")
+    _plans_url = _build_landing_url("planos.html")
+    _support_url = _build_landing_url("duvidas-suporte.html")
+
+    render_mobile_top_nav(
+        brand="Viabilidade-Fácil",
+        home_url=_brand_home_url,
+        how_url=_how_url,
+        plans_url=_plans_url,
+        support_url=_support_url,
+        on_open_client_area=_on_open_client_area,
+    )
 
 def render_wallet_summary() -> None:
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"

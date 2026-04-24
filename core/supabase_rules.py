@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from .zone_resolution import build_lookup_candidates
 
@@ -145,44 +145,161 @@ def _lookup_candidates(zone_sigla: str, subzone_code: str = "PADRAO", zone_label
     return candidates
 
 
-def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO", zone_label: str = "") -> Optional[Dict[str, Any]]:
-    """Busca regra usando a resolução central de zona/subzona e fallback padronizado.
+def _normalize_text(value: Any) -> str:
+    return str(value or "").strip().upper()
 
-    Sem cache, para não congelar lookup antigo após ajuste de banco/código.
+
+def _normalize_subzone(value: Any) -> Optional[str]:
+    text = _normalize_text(value)
+    if not text or text == "NULL":
+        return None
+    return text
+
+
+def _subzone_candidates(subzone_code: Any) -> list[Optional[str]]:
+    normalized = _normalize_subzone(subzone_code)
+    candidates: list[Optional[str]] = []
+
+    def add(value: Optional[str]) -> None:
+        if value not in candidates:
+            candidates.append(value)
+
+    if normalized and normalized != "PADRAO":
+        add(normalized)
+    add("PADRAO")
+    add(None)
+    return candidates
+
+
+def _resolved_subzone_candidates(zone_sigla: str, subzone_code: Any, zone_label: str = "") -> list[Optional[str]]:
+    """Resolve subzone priority using the same normalization path as zone resolution.
+
+    This avoids choosing PADRAO when the input subzone is a human-facing variant
+    such as ``ZEIP 3`` while the database stores ``ZEIP_3``.
+    """
+    candidates: list[Optional[str]] = []
+
+    def add(value: Optional[str]) -> None:
+        if value not in candidates:
+            candidates.append(value)
+
+    for _zone, sub in _lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
+        normalized = _normalize_subzone(sub)
+        if normalized is not None:
+            add(normalized)
+
+    for value in _subzone_candidates(subzone_code):
+        add(value)
+
+    return candidates
+
+
+def _pick_best_row(
+    rows: Iterable[Dict[str, Any]],
+    *,
+    zone_sigla: str,
+    requested_subzone: Any,
+    zone_label: str = "",
+) -> Optional[Dict[str, Any]]:
+    subzone_order = {
+        value: idx
+        for idx, value in enumerate(
+            _resolved_subzone_candidates(zone_sigla=zone_sigla, subzone_code=requested_subzone, zone_label=zone_label)
+        )
+    }
+
+    best: Optional[Dict[str, Any]] = None
+    best_score: Optional[tuple[int, int]] = None
+    for row in rows:
+        row_subzone = _normalize_subzone(row.get("subzone_code"))
+        priority = subzone_order.get(row_subzone)
+        if priority is None:
+            continue
+        completeness = sum(1 for value in row.values() if value not in (None, ""))
+        score = (priority, -completeness)
+        if best is None or score < best_score:
+            best = row
+            best_score = score
+    return best
+
+
+def _use_type_candidates(use_type_code: str) -> list[str]:
+    """Return additive lookup candidates for residential multifamiliar variants.
+
+    The database may have parameters saved under only one multifamiliar subtype
+    even though the UI offers R2.1, R2.2 and R3 separately. For parameter lookup
+    they share the same urban indices, so when the requested multifamiliar code
+    has no exact row we must try the sibling multifamiliar codes before failing.
+    """
+    code = str(use_type_code or "").strip().upper()
+    if not code:
+        return []
+
+    variants = [code]
+    if code.startswith("RES_MULTI_") or code == "RES_MULTI":
+        for alt in ("RES_MULTI_R21", "RES_MULTI_R22", "RES_MULTI_R3", "RES_MULTI"):
+            if alt not in variants:
+                variants.append(alt)
+    return variants
+
+def fetch_rule(zone_sigla: str, use_type_code: str, subzone_code: str = "PADRAO", zone_label: str = "") -> Optional[Dict[str, Any]]:
+    """Busca regra usando resolução central de zona/subzona e fallback consistente.
+
+    Ordem de prioridade:
+    1) mesma zona + subzona exata (já normalizada pela resolução central)
+    2) mesma zona + PADRAO
+    3) mesma zona + subzona vazia/NULL
+
+    Para multifamiliar, se o subtipo pedido não existir, tenta os demais subtipos
+    irmãos sem ultrapassar a prioridade de subzona.
     """
     sb = get_supabase()
+    use_candidates = _use_type_candidates(use_type_code)
+    requested_code = str(use_type_code or "").strip().upper()
 
-    for zone, sub in _lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
-        q = (
-            sb.table("zone_rules")
-            .select("*")
-            .eq("zone_sigla", zone)
-            .eq("use_type_code", use_type_code)
-            .eq("subzone_code", sub)
-            .limit(1)
-        )
-        res = q.execute()
-        data = getattr(res, "data", None) or []
-        if data:
-            return normalize_rule(data[0])
+    # Caminho principal: mantém a prioridade exata das combinações resolvidas
+    # por zone_resolution/build_lookup_candidates.
+    for requested_use in use_candidates:
+        for zone, sub in _lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
+            q = (
+                sb.table("zone_rules")
+                .select("*")
+                .eq("zone_sigla", zone)
+                .eq("use_type_code", requested_use)
+                .eq("subzone_code", sub)
+                .limit(1)
+            )
+            res = q.execute()
+            data = getattr(res, "data", None) or []
+            if data:
+                rule = normalize_rule(data[0])
+                rule.setdefault("requested_use_type_code", requested_code)
+                rule.setdefault("resolved_use_type_code", requested_use)
+                return rule
 
-    # compat: bancos sem subzone_code ou registros antigos
+    # Compatibilidade com bancos antigos/linhas sem subzone_code: busca todas as
+    # linhas da zona+uso e escolhe a melhor pela mesma prioridade de subzona já
+    # normalizada (por exemplo: ZEIP 3 -> ZEIP_3 antes de PADRAO).
     zone_candidates: list[str] = []
     for zone, _ in _lookup_candidates(zone_sigla=zone_sigla, subzone_code=subzone_code, zone_label=zone_label):
         if zone not in zone_candidates:
             zone_candidates.append(zone)
 
-    for zone in zone_candidates:
-        q2 = (
-            sb.table("zone_rules")
-            .select("*")
-            .eq("zone_sigla", zone)
-            .eq("use_type_code", use_type_code)
-            .limit(1)
-        )
-        res2 = q2.execute()
-        data2 = getattr(res2, "data", None) or []
-        if data2:
-            return normalize_rule(data2[0])
+    for requested_use in use_candidates:
+        for zone in zone_candidates:
+            q2 = (
+                sb.table("zone_rules")
+                .select("*")
+                .eq("zone_sigla", zone)
+                .eq("use_type_code", requested_use)
+            )
+            res2 = q2.execute()
+            rows = getattr(res2, "data", None) or []
+            best = _pick_best_row(rows, zone_sigla=zone, requested_subzone=subzone_code, zone_label=zone_label)
+            if best:
+                rule = normalize_rule(best)
+                rule.setdefault("requested_use_type_code", requested_code)
+                rule.setdefault("resolved_use_type_code", requested_use)
+                return rule
 
     return None

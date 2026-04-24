@@ -239,3 +239,36 @@ def test_render_indices_section_fetches_rule_when_missing(monkeypatch):
 
     assert calc["rule"]["zone_sigla"] == "ZAP"
     assert _find_value(cards, "Zona") == "ZAP"
+
+
+def test_render_indices_section_prefers_calc_subzone_over_rule_padrao(monkeypatch):
+    _patch_streamlit(monkeypatch)
+    cards, card_func = _capture_cards()
+    calc = {
+        "zone_lookup": "ZEIP",
+        "use_type_code": "RES_MULTI_R21",
+        "subzone_code": "ZEIP_3",
+    }
+
+    def get_rule_func(**kwargs):
+        assert kwargs["zone_sigla"] == "ZEIP"
+        assert kwargs["subzone_code"] == "ZEIP_3"
+        return {
+            "zone_sigla": "ZEIP",
+            "subzone_code": "PADRAO",
+            "tp_min": 0.15,
+            "to_max": 0.70,
+            "to_subsolo_max": 0.60,
+            "ia_max": 2.0,
+            "ia_min": 0.2,
+            "recuo_frontal_m": 0,
+            "recuo_lateral_m": 0,
+            "recuo_fundos_m": 1.5,
+            "area_min_lote_m2": 125,
+            "testada_min_meio_m": 5,
+            "gabarito_m": 8,
+        }
+
+    indices_mod.render_indices_section(calc=calc, card_func=card_func, get_rule_func=get_rule_func)
+
+    assert _find_value(cards, "Subzona") == "ZEIP_3"
