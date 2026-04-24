@@ -3,73 +3,118 @@ from __future__ import annotations
 """
 Mobile header implementation for Viabilidade Fácil's Streamlit app.
 
-This module isolates the code required to render a responsive mobile
-navigation bar. On small screens the traditional desktop header is
-hidden and a compact mobile header appears in its place. The mobile
-header includes a toggle button (hamburger / close icon), links to
-external landing pages and a button to open the "Área do cliente" using
-the same session logic as the desktop interface.
+This module renders the mobile header as one single HTML/CSS block. Streamlit
+native layout widgets are intentionally not used here because they do not
+remain nested inside raw HTML wrappers created with markdown rendering. Keeping the mobile header as a single block prevents the
+mobile shell from leaking into the desktop layout.
 """
 
+from html import escape
 from typing import Callable
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
 import streamlit as st
 
 
-def inject_mobile_header_styles() -> None:
-    """Inject scoped CSS rules for the mobile header.
+def _with_query_param(url: str, key: str, value: str, *, remove_keys: set[str] | None = None) -> str:
+    """Return *url* with one query parameter replaced safely."""
+    remove_keys = remove_keys or set()
+    parts = urlsplit(url or "")
+    query = [
+        (current_key, current_value)
+        for current_key, current_value in parse_qsl(parts.query, keep_blank_values=True)
+        if current_key not in remove_keys and current_key != key
+    ]
+    query.append((key, value))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
-    The CSS generated here hides the desktop header when the viewport
-    width is below 769px and hides the mobile header when the viewport
-    width is larger. It also defines the look and feel of the mobile
-    header, including the top bar, toggle button and navigation panel.
-    """
+
+def inject_mobile_header_styles() -> None:
+    """Inject scoped CSS rules for the mobile header."""
     st.markdown(
         '''
         <style>
-        /* Hide the custom mobile header by default. It will only appear on small screens. */
+        /* The mobile shell is always hidden first. Only the mobile breakpoint can enable it. */
         .vf-mobile-shell {
             display: none !important;
         }
 
-        /* Show the mobile header on small screens (768px and below) */
+        @media (min-width: 769px) {
+            .vf-mobile-shell,
+            .vf-mobile-shell * {
+                display: none !important;
+                visibility: hidden !important;
+                pointer-events: none !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+            }
+        }
+
         @media (max-width: 768px) {
             .vf-mobile-shell {
                 display: block !important;
+                width: 100% !important;
+                position: relative !important;
+                z-index: 9999 !important;
+                margin: 0 0 1rem 0 !important;
             }
-            /* Hide the desktop header on small screens by targeting the branded horizontal block */
+
+            /* Hide only the desktop branded Streamlit header row on mobile. */
             [data-testid="stHorizontalBlock"]:has(.vf-brand) {
                 display: none !important;
+                visibility: hidden !important;
+                pointer-events: none !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
             }
         }
 
-        /* Container for the entire mobile header */
-        .vf-mobile-shell {
+        .vf-mobile-menu {
             width: 100%;
-            position: relative;
-            z-index: 9999;
+            background: #071847;
+            border-bottom: 3px solid #d68910;
+            box-shadow: 0 6px 18px rgba(7, 24, 71, 0.10);
         }
 
-        /* Top bar styling */
+        .vf-mobile-check {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+            width: 1px;
+            height: 1px;
+        }
+
         .vf-mobile-bar {
+            min-height: 58px;
+            padding: 0 14px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            background-color: #071847;
-            border-bottom: 3px solid #d68910;
-            padding: 0.5rem 1rem;
-            min-height: 56px;
+            justify-content: space-between;
+            gap: 12px;
         }
 
         .vf-mobile-brand {
-            font-size: 24px;
+            color: #ffffff !important;
+            text-decoration: none !important;
+            font-size: 22px;
             font-weight: 800;
-            color: #ffffff;
-            text-decoration: none;
             letter-spacing: -0.02em;
             line-height: 1;
-            display: flex;
-            align-items: center;
             white-space: nowrap;
+        }
+
+        .vf-mobile-brand:visited,
+        .vf-mobile-brand:hover,
+        .vf-mobile-brand:focus,
+        .vf-mobile-brand:active {
+            color: #ffffff !important;
+            text-decoration: none !important;
         }
 
         .vf-mobile-brand-dot {
@@ -77,59 +122,82 @@ def inject_mobile_header_styles() -> None:
             margin-left: 2px;
         }
 
-        /* Generic button resets for any button inside the mobile shell */
-        .vf-mobile-shell .stButton>button {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            color: #ffffff !important;
-            padding: 0.25rem 0.5rem !important;
-            line-height: 1 !important;
-            font-weight: 600 !important;
-            border-radius: 0 !important;
-            cursor: pointer !important;
+        .vf-mobile-toggle {
+            width: 42px;
+            height: 42px;
+            min-width: 42px;
+            border: 1px solid rgba(255,255,255,0.28);
+            border-radius: 10px;
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 23px;
+            font-weight: 700;
+            line-height: 1;
+            cursor: pointer;
+            user-select: none;
+            background: rgba(255,255,255,0.06);
+            transition: background 0.18s ease, border-color 0.18s ease;
         }
 
-        .vf-mobile-shell .stButton>button:hover {
-            opacity: 0.8 !important;
-            background: transparent !important;
+        .vf-mobile-toggle:hover,
+        .vf-mobile-toggle:focus {
+            background: rgba(255,255,255,0.14);
+            border-color: rgba(255,255,255,0.45);
+            outline: none;
         }
 
-        /* Toggle button specific sizing */
-        .vf-mobile-bar .stButton>button {
-            font-size: 28px !important;
+        .vf-mobile-icon-close {
+            display: none;
+            font-size: 26px;
+            transform: translateY(-1px);
         }
 
-        /* Navigation panel styling */
+        .vf-mobile-check:checked ~ .vf-mobile-bar .vf-mobile-icon-open {
+            display: none;
+        }
+
+        .vf-mobile-check:checked ~ .vf-mobile-bar .vf-mobile-icon-close {
+            display: inline-block;
+        }
+
         .vf-mobile-panel {
+            display: none;
+            flex-direction: column;
             width: 100%;
-            background-color: #071847;
-            padding: 0.5rem 0;
+            padding: 8px 0 10px 0;
+            background: #071847;
+            border-top: 1px solid rgba(255,255,255,0.10);
         }
 
-        /* Links and buttons inside the panel share the same look */
-        .vf-mobile-panel a,
-        .vf-mobile-panel .stButton>button {
+        .vf-mobile-check:checked ~ .vf-mobile-panel {
+            display: flex;
+        }
+
+        .vf-mobile-panel a {
             display: block;
             width: 100%;
-            text-align: left;
-            padding: 0.75rem 1rem;
-            font-size: 16px;
-            font-weight: 600;
-            color: #ffffff;
-            text-decoration: none;
-            border-top: 1px solid rgba(255,255,255,0.1);
+            box-sizing: border-box;
+            padding: 13px 18px;
+            color: #ffffff !important;
+            text-decoration: none !important;
+            font-size: 15px;
+            font-weight: 650;
+            line-height: 1.2;
+            border-top: 1px solid rgba(255,255,255,0.08);
         }
 
-        /* Remove top border on the first item to avoid a double line */
-        .vf-mobile-panel a:first-child,
-        .vf-mobile-panel .stButton:first-child>button {
+        .vf-mobile-panel a:first-child {
             border-top: none;
         }
 
         .vf-mobile-panel a:hover,
-        .vf-mobile-panel .stButton>button:hover {
-            color: #d68910;
+        .vf-mobile-panel a:focus {
+            color: #ffffff !important;
+            background: rgba(255,255,255,0.12);
+            text-decoration: none !important;
+            outline: none;
         }
         </style>
         ''',
@@ -146,97 +214,52 @@ def render_mobile_top_nav(
     support_url: str,
     on_open_client_area: Callable[[], None],
 ) -> None:
-    """Render a responsive mobile navigation bar.
+    """Render the mobile navigation bar.
 
-    This implementation keeps all elements of the mobile header grouped
-    together within Streamlit containers. Grouping ensures that the
-    underlying HTML structure remains intact and prevents the
-    mis-nesting issues observed when mixing `st.markdown` and `st.button`
-    calls across different containers. The bar uses two columns for the
-    brand and the toggle button, and the navigation panel is rendered
-    conditionally beneath the bar inside the same parent container.
-
-    Parameters
-    ----------
-    brand:
-        Text label for the brand (e.g. "Viabilidade-Fácil").
-    home_url:
-        URL to the home route of the app.
-    how_url:
-        Landing page URL for the "Como funciona" section.
-    plans_url:
-        Landing page URL for the "Planos" page.
-    support_url:
-        Landing page URL for the "Dúvidas/Suporte" page.
-    on_open_client_area:
-        Callback executed when the user clicks "Área do cliente" in the
-        mobile menu. This callback should replicate the behaviour of the
-        desktop header by updating session state and rerunning the app.
+    The callback parameter is kept in the signature to preserve the existing
+    ``ui.app_shell`` contract. The mobile header cannot call that callback
+    directly without reintroducing native Streamlit buttons inside raw HTML. For this
+    isolated mobile-only header, the "Área do cliente" item uses the app's
+    existing ``client_area=1`` query-param handoff, which is consumed by
+    ``consume_client_area_query_param(...)`` during runtime bootstrap.
     """
 
-    # Initialize the toggle state on first render
-    if 'vf_mobile_nav_open' not in st.session_state:
-        st.session_state.vf_mobile_nav_open = False
+    # Preserve the public call contract without mixing Streamlit widgets inside
+    # this HTML block. Mixing them caused the mobile header to leak into desktop.
+    _ = on_open_client_area
 
-    # Use a Streamlit container to group the entire mobile header.
-    # This avoids HTML elements leaking outside their intended parents.
-    with st.container():
-        # Open the shell wrapper
-        st.markdown('<div class="vf-mobile-shell" style="display: none;">', unsafe_allow_html=True)
+    safe_brand = escape(brand or "Viabilidade-Fácil")
+    safe_home_url = escape(home_url or "#", quote=True)
+    safe_how_url = escape(how_url or "#", quote=True)
+    safe_plans_url = escape(plans_url or "#", quote=True)
+    safe_support_url = escape(support_url or "#", quote=True)
+    safe_client_area_url = escape(
+        _with_query_param(home_url or "#", "client_area", "1", remove_keys={"nav"}),
+        quote=True,
+    )
 
-        # Render the top bar. Use columns so that the brand and the toggle
-        # button share the same parent element. The open/close tag for
-        # `.vf-mobile-bar` is emitted before and after the columns to
-        # ensure proper nesting.
-        st.markdown('<div class="vf-mobile-bar">', unsafe_allow_html=True)
-        brand_col, toggle_col = st.columns([8, 1])
-
-        # Left column: brand link
-        with brand_col:
-            st.markdown(
-                f'<a class="vf-mobile-brand" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema">{brand}<span class="vf-mobile-brand-dot">.</span></a>',
-                unsafe_allow_html=True,
-            )
-
-        # Right column: toggle button
-        with toggle_col:
-            icon = '✕' if st.session_state.vf_mobile_nav_open else '☰'
-            # The tertiary style removes default button shading.
-            if st.button(icon, key='vf_mobile_nav_toggle', type='tertiary'):
-                st.session_state.vf_mobile_nav_open = not st.session_state.vf_mobile_nav_open
-
-        # Close the top bar
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # If the menu is open, render the navigation panel
-        if st.session_state.vf_mobile_nav_open:
-            st.markdown('<div class="vf-mobile-panel">', unsafe_allow_html=True)
-
-            # "Como funciona" link
-            st.markdown(
-                f'<a href="{how_url}" target="_self" aria-label="Abrir página Como funciona na mesma aba">Como funciona</a>',
-                unsafe_allow_html=True,
-            )
-
-            # "Área do cliente" uses a button so Python can handle session updates
-            if st.button('Área do cliente', key='vf_mobile_nav_client_area', type='tertiary'):
-                # Close the menu before invoking the callback to avoid leftover state
-                st.session_state.vf_mobile_nav_open = False
-                on_open_client_area()
-
-            # "Planos" link
-            st.markdown(
-                f'<a href="{plans_url}" target="_self" aria-label="Abrir página de planos na mesma aba">Planos</a>',
-                unsafe_allow_html=True,
-            )
-
-            # "Dúvidas/Suporte" link
-            st.markdown(
-                f'<a href="{support_url}" target="_self" aria-label="Abrir página de dúvidas e suporte na mesma aba">Dúvidas/Suporte</a>',
-                unsafe_allow_html=True,
-            )
-
-            st.markdown('</div>', unsafe_allow_html=True)  # close vf-mobile-panel
-
-        # Close the shell wrapper
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'''
+        <div class="vf-mobile-shell" aria-label="Navegação mobile do sistema">
+            <div class="vf-mobile-menu">
+                <input id="vf-mobile-nav-check" class="vf-mobile-check" type="checkbox" aria-hidden="true" tabindex="-1" />
+                <div class="vf-mobile-bar">
+                    <a class="vf-mobile-brand" href="{safe_home_url}" target="_self" aria-label="Ir para a página inicial do sistema">
+                        {safe_brand}<span class="vf-mobile-brand-dot">.</span>
+                    </a>
+                    <label class="vf-mobile-toggle" for="vf-mobile-nav-check" aria-label="Abrir ou fechar menu mobile" role="button" tabindex="0">
+                        <span class="vf-mobile-icon-open" aria-hidden="true">☰</span>
+                        <span class="vf-mobile-icon-close" aria-hidden="true">×</span>
+                    </label>
+                </div>
+                <nav class="vf-mobile-panel" aria-label="Menu mobile">
+                    <a href="{safe_how_url}" target="_self">Como funciona</a>
+                    <a href="{safe_client_area_url}" target="_self">Área do cliente</a>
+                    <a href="{safe_plans_url}" target="_self">Planos</a>
+                    <a href="{safe_support_url}" target="_self">Dúvidas/Suporte</a>
+                </nav>
+            </div>
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
