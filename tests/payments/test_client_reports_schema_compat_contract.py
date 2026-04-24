@@ -35,7 +35,7 @@ def test_client_reports_uses_minimal_insert_row_to_avoid_schema_drift() -> None:
         '"road_name": road_name',
         '"status": "saved"',
     }
-    minimal_block = text.split("def _minimal_row", 1)[1].split("def _normalize_report_row", 1)[0]
+    minimal_block = text.split("def _minimal_row", 1)[1].split("def _row_with_optional_columns", 1)[0]
     overlap = [item for item in forbidden_direct_columns if item in minimal_block]
     assert not overlap, (
         "O insert direto em client_reports não deve depender de colunas variáveis "
@@ -82,10 +82,12 @@ def test_client_reports_extracts_zone_and_road_from_runtime_calc_keys() -> None:
     text = _read(ROOT / "core" / "client_reports.py")
     assert "def _extract_zone" in text
     assert "def _extract_road" in text
-    assert 'calc.get("zone_sigla")' in text
-    assert 'calc.get("zone_display_label")' in text
-    assert 'calc.get("via_nome")' in text
-    assert 'calc.get("street_name")' in text
+    assert '"zone_sigla"' in text
+    assert '"zone_display_label"' in text
+    assert '"via_nome"' in text
+    assert '"street_name"' in text
+    assert "session_state.get(k)" in text
+    assert "session_calc.get(k)" in text
 
 
 def test_client_area_reads_zone_and_road_from_nested_snapshots() -> None:
