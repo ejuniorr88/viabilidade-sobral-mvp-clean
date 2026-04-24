@@ -83,7 +83,15 @@ def _json_safe(value: Any) -> Any:
 
 def _ctx(item: Dict[str, Any]) -> Dict[str, Any]:
     value = item.get("report_context")
-    return value if isinstance(value, dict) else {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
 
 
 def _build_title(calc: Dict[str, Any], session_state: Dict[str, Any]) -> str:
