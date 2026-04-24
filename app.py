@@ -24,6 +24,7 @@ from ui.app_shell import (
 )
 from ui.flow.primary_actions import render_primary_actions
 from ui.how_it_works_panel import render_how_it_works_panel
+from ui.mobile_sidebar_entry import render_mobile_sidebar_entry
 from ui.flow.use_selector import render_use_selector
 from ui.legal import render_privacy_page, render_terms_page
 
@@ -209,6 +210,7 @@ elif legal_view == "privacy":
     st.stop()
 
 render_top_nav()
+render_mobile_sidebar_entry()
 
 zones_gj = _zones_geojson()
 zones_prepared = _zones_prepared()
