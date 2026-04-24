@@ -8,7 +8,13 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.client_reports import build_download_signed_url, list_client_reports
-from core.snapshot_pdf import generate_snapshot_pdf_bytes
+from core.snapshot_pdf import (
+    SnapshotPdfUnavailable,
+    generate_snapshot_html_bytes,
+    generate_snapshot_pdf_bytes,
+    snapshot_file_stem,
+    snapshot_pdf_renderer_available,
+)
 from core.coupons import user_can_manage_coupons
 from ui.coupons_admin import render_coupons_admin_section
 from ui.relatorio import render_relatorio_section
@@ -98,6 +104,50 @@ def _render_saved_report_preview(item: Dict[str, Any]) -> None:
         _restore_saved_session_snapshot(backup)
 
 
+def _render_snapshot_downloads(item: Dict[str, Any]) -> None:
+    ctx = item.get("report_context") if isinstance(item.get("report_context"), dict) else {}
+    calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
+    if not calc_snapshot:
+        return
+
+    file_stem = snapshot_file_stem(item)
+
+    try:
+        html_bytes = generate_snapshot_html_bytes(item)
+        st.download_button(
+            label="⬇️ Baixar HTML visual do snapshot para imprimir em PDF",
+            data=html_bytes,
+            file_name=f"{file_stem}.html",
+            mime="text/html",
+            use_container_width=True,
+            key=f"download_snapshot_html_{item.get('id')}",
+        )
+    except Exception as html_exc:
+        st.warning(f"Não foi possível gerar o HTML visual do snapshot: {html_exc}")
+        return
+
+    if not snapshot_pdf_renderer_available():
+        st.info(
+            "PDF visual automático indisponível neste ambiente. Para não gerar um arquivo incompleto, "
+            "use o HTML visual do snapshot e imprima/salve em PDF pelo navegador."
+        )
+        return
+
+    try:
+        visual_pdf_bytes = generate_snapshot_pdf_bytes(item)
+        st.download_button(
+            label="⬇️ Baixar PDF visual do snapshot",
+            data=visual_pdf_bytes,
+            file_name=f"{file_stem}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            key=f"download_snapshot_pdf_{item.get('id')}",
+        )
+    except SnapshotPdfUnavailable as exc:
+        st.info(str(exc))
+    except Exception as exc:
+        st.warning(f"Não foi possível gerar o PDF visual do snapshot real: {exc}")
+
 
 def _render_reports_tab(user_id: str) -> None:
     st.markdown("### Relatórios salvos")
@@ -157,23 +207,7 @@ def _render_reports_tab(user_id: str) -> None:
 
         if st.session_state.get(_PREVIEW_REPORT_KEY) == item.get("id"):
             _render_saved_report_preview(item)
-            ctx = item.get("report_context") if isinstance(item.get("report_context"), dict) else {}
-            calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
-            if calc_snapshot:
-                try:
-                    visual_pdf_bytes = generate_snapshot_pdf_bytes(item)
-                    st.download_button(
-                        label="⬇️ Baixar PDF visual do snapshot",
-                        data=visual_pdf_bytes,
-                        file_name=f"relatorio_visual_snapshot_{item.get('id') or 'salvo'}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key=f"download_snapshot_pdf_{item.get('id')}",
-                    )
-                except Exception as exc:
-                    st.warning(f"Não foi possível gerar o PDF visual do snapshot: {exc}")
-
-
+            _render_snapshot_downloads(item)
 
 
 def _client_area_tabs_for_user(user_email: str) -> list[str]:
@@ -182,11 +216,11 @@ def _client_area_tabs_for_user(user_email: str) -> list[str]:
         tabs.append("Cupons")
     return tabs
 
+
 def _render_coupons_tab(user_email: str) -> None:
     st.markdown("### Cupons")
     st.caption("Área interna para criar, editar e acompanhar cupons. Visível só para usuários autorizados.")
     render_coupons_admin_section(current_user_email=user_email)
-
 
 
 def render_client_area_page(user_id: str, user_name: str, user_email: str, credit_balance: Any) -> None:
