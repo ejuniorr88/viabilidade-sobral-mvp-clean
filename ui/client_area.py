@@ -204,7 +204,7 @@ def _render_reports_tab(user_id: str) -> None:
         with e:
             signed_url = ""
             try:
-                signed_url = build_download_signed_url(path)
+                signed_url = build_download_signed_url(path, bucket=item.get("pdf_bucket"))
             except Exception:
                 signed_url = ""
             if signed_url:
