@@ -3,9 +3,16 @@ from __future__ import annotations
 import html
 import json
 import os
+import tempfile
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Tuple
+from urllib.request import urlopen
 from zoneinfo import ZoneInfo
+
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover
+    Image = None
 
 _TZ = ZoneInfo("America/Fortaleza")
 
@@ -117,6 +124,41 @@ def _public_storage_url(bucket: str, path: str) -> str:
     if not base:
         return ""
     return f"{base}/storage/v1/object/public/{bucket}/{str(path).lstrip('/')}"
+
+
+def _download_temp_image(url: str) -> str:
+    """Baixa uma figura pública para uso temporário no fallback FPDF."""
+    try:
+        with urlopen(url, timeout=15) as response:
+            data = response.read()
+        lower = url.lower()
+        suffix = ".png"
+        if ".jpg" in lower or ".jpeg" in lower:
+            suffix = ".jpg"
+        elif ".webp" in lower:
+            suffix = ".webp"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp.write(data)
+        tmp.flush()
+        tmp.close()
+        return tmp.name
+    except Exception:
+        return ""
+
+
+def _fit_image_size(path: str, max_w: float, max_h: float) -> tuple[float, float]:
+    """Calcula tamanho proporcional da imagem para caber no PDF."""
+    if Image is None:
+        return max_w, min(max_h, 110)
+    try:
+        with Image.open(path) as img:
+            w_px, h_px = img.size
+        if not w_px or not h_px:
+            return max_w, min(max_h, 110)
+        ratio = min(max_w / float(w_px), max_h / float(h_px))
+        return max(1.0, w_px * ratio), max(1.0, h_px * ratio)
+    except Exception:
+        return max_w, min(max_h, 110)
 
 
 def _figure_blocks(calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> str:
@@ -280,6 +322,251 @@ def _build_html(item: Dict[str, Any]) -> str:
 """
 
 
+
+def _clean_pdf_text(value: Any, default: str = "-") -> str:
+    """Normaliza texto para o fallback FPDF, evitando caracteres fora do Latin-1."""
+    text = _safe_str(value, default)
+    replacements = {
+        "—": "-",
+        "–": "-",
+        "•": "-",
+        "→": "->",
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+        "º": "o",
+        "ª": "a",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
+def _snapshot_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+    ctx = item.get("report_context") if isinstance(item.get("report_context"), dict) else {}
+    calc = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
+    session_snapshot = ctx.get("session_snapshot") if isinstance(ctx.get("session_snapshot"), dict) else {}
+    inputs = ctx.get("inputs_snapshot") if isinstance(ctx.get("inputs_snapshot"), dict) else {}
+    rule = calc.get("rule") if isinstance(calc.get("rule"), dict) else {}
+
+    title = item.get("title") or calc.get("selected_use_label") or calc.get("categoria_label") or "Relatório de Viabilidade Urbanística"
+    zone = item.get("zone_label") or calc.get("zone") or calc.get("zone_sigla") or calc.get("zone_label")
+    road = item.get("road_name") or calc.get("street_name") or calc.get("road_name") or calc.get("logradouro")
+    road_type = item.get("road_type") or calc.get("road_type") or calc.get("via_tipo") or calc.get("street_type")
+    status = "Viável" if bool(calc.get("ok")) else "Atenção / condicionado"
+
+    lot_area = _pick(session_snapshot, "lot_area_m2", "area_lote_m2") or calc.get("lot_area_m2")
+    built_ground = _pick(inputs, "built_ground_m2") or _pick(session_snapshot, "built_ground_m2", "built_ground_input_m2") or _pick(calc, "built_ground_m2", "built_ground_input_m2")
+    permeable = _pick(inputs, "permeable_area_m2") or _pick(session_snapshot, "permeable_area_m2", "area_permeavel_prevista_m2") or _pick(calc, "permeable_area_m2", "area_permeavel_prevista_m2")
+    front = _pick(inputs, "lot_front_m") or _pick(session_snapshot, "lot_front_m", "lot_testada_m") or _pick(calc, "lot_front_m", "lot_testada_m")
+    depth = _pick(inputs, "lot_depth_m") or _pick(session_snapshot, "lot_depth_m", "lot_profundidade_m") or _pick(calc, "lot_depth_m", "lot_profundidade_m")
+
+    kpi_rows = [
+        ("Zona", zone),
+        ("Via", road),
+        ("Tipo de via", road_type),
+        ("Data do relatório", _local_datetime_label(item, ctx)),
+    ]
+    input_rows = [
+        ("Área do lote", f"{_fmt_num(lot_area)} m²"),
+        ("Área pretendida no térreo", f"{_fmt_num(built_ground)} m²"),
+        ("Área permeável prevista", f"{_fmt_num(permeable)} m²"),
+        ("Testada", f"{_fmt_num(front)} m"),
+        ("Profundidade", f"{_fmt_num(depth)} m"),
+        ("Tipo de lote", "Esquina" if bool(session_snapshot.get("lot_is_corner") or calc.get("lot_is_corner")) else "Meio de quadra"),
+    ]
+    urban_rows = [
+        ("Taxa de permeabilidade mínima", _fmt_pct(_rule_pct(rule, "tp_min_pct", "tp_min"))),
+        ("Taxa de ocupação máxima", _fmt_pct(_rule_pct(rule, "to_max_pct", "to_max"))),
+        ("TO subsolo", _fmt_pct(_rule_pct(rule, "to_subsolo_max_pct", "to_subsolo"))),
+        ("Índice de aproveitamento mínimo", _fmt_num(rule.get("ia_min"), 2)),
+        ("Índice de aproveitamento máximo", _fmt_num(rule.get("ia_max"), 2)),
+        ("Recuo de frente", f"{_fmt_num(rule.get('recuo_frontal_m'))} m"),
+        ("Recuo lateral", f"{_fmt_num(rule.get('recuo_lateral_m'))} m"),
+        ("Recuo de fundos", f"{_fmt_num(rule.get('recuo_fundos_m'))} m"),
+        ("Altura máxima", f"{_fmt_num(rule.get('gabarito_m'))} m"),
+    ]
+    notes: List[str] = []
+    for key in ("analysis_summary", "summary", "mensagem", "status_message", "zone_description"):
+        value = calc.get(key)
+        if value:
+            notes.append(_safe_str(value))
+    if not notes:
+        notes.append("Este PDF visual foi gerado a partir do snapshot salvo do relatório na Área do Cliente. Para interpretação oficial, consulte sempre o órgão competente.")
+
+    return {
+        "ctx": ctx,
+        "calc": calc,
+        "session_snapshot": session_snapshot,
+        "inputs": inputs,
+        "rule": rule,
+        "title": title,
+        "status": status,
+        "kpi_rows": kpi_rows,
+        "input_rows": input_rows,
+        "urban_rows": urban_rows,
+        "notes": notes,
+    }
+
+
+def _selected_figures(calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rule = calc.get("rule") if isinstance(calc.get("rule"), dict) else {}
+    src = _parse_rule_src(rule)
+    figures = src.get("figures") or src.get("figuras") or []
+    if not isinstance(figures, list):
+        return []
+    is_corner = bool(session_snapshot.get("lot_is_corner") or calc.get("lot_is_corner") or calc.get("lote_esquina"))
+    allowed = {5, 6, 7} if is_corner else {1, 2, 3, 4}
+    selected = []
+    for figure in figures:
+        if not isinstance(figure, dict):
+            continue
+        if _extract_figure_number(figure) in allowed:
+            selected.append(figure)
+    if not selected:
+        selected = [figure for figure in figures if isinstance(figure, dict)]
+    return selected
+
+
+def _write_pdf_section_title(pdf: Any, title: str) -> None:
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_text_color(18, 58, 102)
+    pdf.multi_cell(0, 7, _clean_pdf_text(title))
+    pdf.set_draw_color(245, 158, 11)
+    pdf.set_line_width(0.6)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.ln(4)
+    pdf.set_text_color(23, 32, 51)
+
+
+def _write_pdf_rows(pdf: Any, rows: Iterable[Tuple[str, Any]]) -> None:
+    for label, value in rows:
+        if pdf.get_y() > 265:
+            pdf.add_page()
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_fill_color(248, 250, 252)
+        pdf.multi_cell(55, 6, _clean_pdf_text(label), border=1, fill=True, new_x="RIGHT", new_y="TOP")
+        y0 = pdf.get_y()
+        pdf.set_font("Helvetica", "", 9)
+        x = pdf.get_x()
+        pdf.multi_cell(0, 6, _clean_pdf_text(value), border=1)
+        # Garante avanço quando o texto da esquerda for mais alto que o da direita.
+        if pdf.get_y() < y0 + 6:
+            pdf.set_y(y0 + 6)
+        pdf.set_x(pdf.l_margin)
+
+
+def _generate_snapshot_pdf_fpdf_bytes(item: Dict[str, Any]) -> bytes:
+    """Fallback sem WeasyPrint: usa FPDF2, dependência já usada pelo PDF formal."""
+    from fpdf import FPDF
+
+    payload = _snapshot_payload(item)
+    pdf = FPDF(format="A4")
+    pdf.set_auto_page_break(auto=True, margin=16)
+    pdf.add_page()
+
+    # Capa simples e estável.
+    pdf.set_fill_color(18, 58, 102)
+    pdf.rect(10, 10, 190, 45, style="F")
+    pdf.set_text_color(245, 158, 11)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_xy(18, 18)
+    pdf.cell(0, 5, "VIABILIDADE FACIL")
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_xy(18, 25)
+    pdf.multi_cell(174, 8, _clean_pdf_text(payload["title"]))
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_xy(18, 47)
+    pdf.cell(0, 5, _clean_pdf_text(payload["status"]))
+    pdf.set_text_color(23, 32, 51)
+    pdf.set_y(62)
+
+    _write_pdf_section_title(pdf, "Resumo da consulta")
+    _write_pdf_rows(pdf, payload["kpi_rows"])
+
+    _write_pdf_section_title(pdf, "Dados do lote e da consulta")
+    _write_pdf_rows(pdf, payload["input_rows"])
+
+    _write_pdf_section_title(pdf, "Parametros urbanisticos do snapshot")
+    _write_pdf_rows(pdf, payload["urban_rows"])
+
+    _write_pdf_section_title(pdf, "Observacoes do relatorio salvo")
+    pdf.set_font("Helvetica", "", 9.5)
+    for note in payload["notes"]:
+        pdf.multi_cell(0, 6, _clean_pdf_text(note))
+        pdf.ln(1)
+
+    figures = _selected_figures(payload["calc"], payload["session_snapshot"])
+    if figures:
+        _write_pdf_section_title(pdf, "Figuras anexas - Anexo V")
+        pdf.set_font("Helvetica", "", 9)
+        for figure in figures:
+            title = _safe_str(figure.get("title") or figure.get("titulo") or "Figura do Anexo V")
+            caption = _safe_str(figure.get("caption") or figure.get("legenda") or "")
+            bucket = _safe_str(figure.get("bucket"), "")
+            path = _safe_str(figure.get("path"), "")
+            url = _public_storage_url(bucket, path) if bucket and path else ""
+            if pdf.get_y() > 235:
+                pdf.add_page()
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.multi_cell(0, 6, _clean_pdf_text(title))
+            # O fallback FPDF evita download remoto para não travar a Área do Cliente.
+            # Quando WeasyPrint estiver disponível, as imagens entram visualmente pelo HTML.
+            if url:
+                temp_image = _download_temp_image(url)
+                if temp_image:
+                    try:
+                        max_w = pdf.w - pdf.l_margin - pdf.r_margin
+                        remaining_h = pdf.h - pdf.get_y() - pdf.b_margin - 14
+                        if remaining_h < 55:
+                            pdf.add_page()
+                            remaining_h = pdf.h - pdf.get_y() - pdf.b_margin - 14
+                        img_w, img_h = _fit_image_size(temp_image, max_w, min(remaining_h, 125))
+                        x = pdf.l_margin + (max_w - img_w) / 2
+                        pdf.image(temp_image, x=x, y=pdf.get_y(), w=img_w, h=img_h)
+                        pdf.set_y(pdf.get_y() + img_h + 2)
+                        pdf.set_x(pdf.l_margin)
+                    except Exception:
+                        pdf.set_font("Helvetica", "", 8)
+                        pdf.set_text_color(71, 85, 105)
+                        pdf.set_x(pdf.l_margin)
+                        pdf.multi_cell(0, 5, _clean_pdf_text("Imagem vinculada ao snapshot; não foi possível carregar a figura neste ambiente."))
+                        pdf.set_x(pdf.l_margin)
+                        pdf.set_text_color(23, 32, 51)
+                    finally:
+                        try:
+                            os.remove(temp_image)
+                        except Exception:
+                            pass
+                else:
+                    pdf.set_font("Helvetica", "", 8)
+                    pdf.set_text_color(71, 85, 105)
+                    pdf.set_x(pdf.l_margin)
+                    pdf.multi_cell(0, 5, _clean_pdf_text("Imagem vinculada ao snapshot; não foi possível carregar a figura neste ambiente."))
+                    pdf.set_x(pdf.l_margin)
+                    pdf.set_text_color(23, 32, 51)
+            if caption:
+                pdf.set_x(pdf.l_margin)
+                pdf.set_font("Helvetica", "", 8.5)
+                pdf.multi_cell(0, 5, _clean_pdf_text(caption))
+            pdf.ln(3)
+
+    pdf.set_y(-22)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(100, 116, 139)
+    pdf.multi_cell(0, 4, _clean_pdf_text("Documento visual gerado a partir do snapshot salvo na Area do Cliente. Este material tem carater orientativo e preliminar e nao substitui manifestacao oficial do orgao competente."))
+
+    output = pdf.output(dest="S")
+    if isinstance(output, bytearray):
+        return bytes(output)
+    if isinstance(output, bytes):
+        return output
+    return str(output).encode("latin-1", "replace")
+
+
 def generate_snapshot_pdf_bytes(item: Dict[str, Any]) -> bytes:
     """Gera um PDF visual a partir do report_context salvo em client_reports.
 
@@ -293,10 +580,15 @@ def generate_snapshot_pdf_bytes(item: Dict[str, Any]) -> bytes:
     if not calc:
         raise ValueError("Este relatório salvo ainda não possui calc_snapshot para gerar PDF visual.")
 
+    html_doc = _build_html(item)
+
+    # Caminho preferencial: HTML/WeasyPrint, quando o deploy tiver todas as dependências.
     try:
         from weasyprint import HTML
-    except Exception as exc:  # pragma: no cover - depende do ambiente de deploy
-        raise RuntimeError("WeasyPrint não está disponível para gerar o PDF visual do snapshot.") from exc
 
-    html_doc = _build_html(item)
-    return HTML(string=html_doc, base_url=os.getcwd()).write_pdf()
+        return HTML(string=html_doc, base_url=os.getcwd()).write_pdf()
+    except Exception:
+        # Caminho seguro: fallback em FPDF2, que já é dependência do PDF formal do sistema.
+        # Assim a Área do Cliente não mostra erro quando o Railway/ambiente não disponibilizar
+        # WeasyPrint ou alguma biblioteca nativa exigida por ele.
+        return _generate_snapshot_pdf_fpdf_bytes(item)
