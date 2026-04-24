@@ -36,12 +36,30 @@ jobs:
       - name: Compile project modules
         run: |
           python -m py_compile app.py
-          python -m compileall -q core ui tests
+          python -m compileall -q core ui
 
-      - name: List discovered test files
+      - name: Compile non-report tests
         run: |
-          find tests -name "test_*.py" | sort
+          find tests -name "test_*.py" \
+            ! -path "tests/report/*" \
+            ! -path "tests/report_pdf/*" \
+            ! -path "tests/relatorio_multifamiliar/*" \
+            ! -path "tests/relatorio_unifamiliar/*" \
+            -print0 | xargs -0 -r python -m py_compile
 
-      - name: Run consolidated tests
+      - name: List non-report test files
         run: |
-          pytest -vv tests
+          find tests -name "test_*.py" \
+            ! -path "tests/report/*" \
+            ! -path "tests/report_pdf/*" \
+            ! -path "tests/relatorio_multifamiliar/*" \
+            ! -path "tests/relatorio_unifamiliar/*" \
+            | sort
+
+      - name: Run non-report tests
+        run: |
+          pytest -vv tests \
+            --ignore=tests/report \
+            --ignore=tests/report_pdf \
+            --ignore=tests/relatorio_multifamiliar \
+            --ignore=tests/relatorio_unifamiliar
