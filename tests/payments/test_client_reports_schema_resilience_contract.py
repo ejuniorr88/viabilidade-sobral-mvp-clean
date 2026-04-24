@@ -124,3 +124,47 @@ def test_storage_upload_remains_non_overwriting_and_formal_pdf_path_is_preserved
     assert '"upsert": False' in text, "Storage não deve sobrescrever PDF já salvo."
     assert "def build_download_signed_url" in text, "Download do PDF formal antigo deve continuar disponível."
     assert "create_signed_url" in text, "Download deve continuar via signed URL do Supabase Storage."
+
+
+def test_signature_uses_session_snapshot_zone_and_via_for_possivel_pela_via_case() -> None:
+    text = _function_source("build_report_signature")
+    assert "_extract_zone(calc, session_state)" in text
+    assert "_extract_subzone(calc, session_state)" in text
+    assert "_extract_road(calc, session_state)" in text
+    assert "_extract_road_type(calc, session_state)" in text
+    assert "_extract_status_marker(calc, session_state)" in text
+    assert "falso already_exists/estorno" in text
+
+
+def test_extractors_read_top_level_and_nested_session_values() -> None:
+    ns = {
+        "Any": object,
+        "Dict": dict,
+        "_normalize_text": lambda value: "" if value is None else str(value).strip(),
+        "_pick_value": lambda *values: next((v for v in values if v is not None and not (isinstance(v, str) and v.strip() == "")), None),
+    }
+    for name in ("_deep_pick", "_extract_zone", "_extract_subzone", "_extract_road", "_extract_road_type"):
+        exec(textwrap.dedent(_function_source(name)), ns)
+
+    calc = {"use_type_code": "RES_UNI"}
+    session = {
+        "zone_sigla": "ZEPE1",
+        "subzone_code": "PADRAO",
+        "via_nome": "AVENIDA SENADOR JOSÉ ERMÍRIO DE MORAES",
+        "via_type": "arterial_existente",
+    }
+    assert ns["_extract_zone"] (calc, session) == "ZEPE1"
+    assert ns["_extract_subzone"] (calc, session) == "PADRAO"
+    assert ns["_extract_road"] (calc, session) == "AVENIDA SENADOR JOSÉ ERMÍRIO DE MORAES"
+    assert ns["_extract_road_type"] (calc, session) == "arterial_existente"
+
+    nested_session = {
+        "calc": {
+            "zone_sigla": "ZEPE2",
+            "via_nome": "RUA TESTE",
+            "road_type": "coletora_existente",
+        }
+    }
+    assert ns["_extract_zone"] (calc, nested_session) == "ZEPE2"
+    assert ns["_extract_road"] (calc, nested_session) == "RUA TESTE"
+    assert ns["_extract_road_type"] (calc, nested_session) == "coletora_existente"
