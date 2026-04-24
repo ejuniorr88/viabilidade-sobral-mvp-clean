@@ -7,6 +7,7 @@ import os
 import pkgutil
 import re
 from contextlib import contextmanager
+from functools import lru_cache
 from copy import deepcopy
 from typing import Any, Dict, Iterable
 
@@ -365,10 +366,14 @@ def generate_snapshot_html_bytes(item: Dict[str, Any]) -> bytes:
     return build_snapshot_print_html(item).encode("utf-8")
 
 
+@lru_cache(maxsize=1)
 def snapshot_pdf_renderer_available() -> bool:
+    """Return True only when WeasyPrint can actually write a tiny PDF in this deploy."""
     try:
-        from weasyprint import HTML  # noqa: F401
-        return True
+        from weasyprint import HTML
+
+        probe = HTML(string="<html><body>ok</body></html>").write_pdf()
+        return isinstance(probe, (bytes, bytearray)) and probe.startswith(b"%PDF")
     except Exception:
         return False
 
