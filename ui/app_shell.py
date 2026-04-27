@@ -264,6 +264,21 @@ def inject_global_styles() -> None:
             min-height: 92px !important;
         }}
 
+        /* Keep the real Streamlit logo button anchored to the left.
+           The generic nav button rule above centers menu buttons; this scoped
+           override preserves the working click behavior and restores the
+           original brand position. */
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton {{
+            width: auto !important;
+            justify-content: flex-start !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] {{
+            width: auto !important;
+            justify-content: flex-start !important;
+            text-align: left !important;
+        }}
+
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-wrap,
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-wrap > div,
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-wrap p {{
