@@ -6,10 +6,6 @@ import json
 import os
 import pkgutil
 import re
-import shutil
-import subprocess
-import tempfile
-from pathlib import Path
 from contextlib import contextmanager
 from copy import deepcopy
 from typing import Any, Dict, Iterable
@@ -215,19 +211,17 @@ class _StreamlitHtmlCapture:
             self.parts.append(f"<div class='image-placeholder'>{_inline_markdown(src or caption or 'Imagem')}</div>")
 
     def json(self, body: Any, *args: Any, **kwargs: Any) -> None:
-        # Não leva blocos técnicos/JSON para o relatório visual.
-        # Esses dados continuam no contexto interno salvo, mas não devem aparecer no PDF do cliente.
-        return None
+        try:
+            text = json.dumps(body, ensure_ascii=False, indent=2)
+        except Exception:
+            text = _safe_str(body)
+        self.parts.append(f"<pre class='json-block'>{html.escape(text, quote=False)}</pre>")
 
     def columns(self, spec: Any, *args: Any, **kwargs: Any) -> list[_ContextProxy]:
         count = spec if isinstance(spec, int) else len(spec)
         return [_ContextProxy(self, "<div class='snapshot-column'>", "</div>") for _ in range(count)]
 
     def expander(self, label: Any, *args: Any, **kwargs: Any) -> _ContextProxy:
-        label_text = _safe_str(label, "")
-        normalized = label_text.lower()
-        if "json" in normalized or "regra completa" in normalized:
-            return _ContextProxy(self)
         return _ContextProxy(
             self,
             f"<details class='snapshot-expander'><summary>{_inline_markdown(label)}</summary>",
@@ -322,30 +316,30 @@ def build_snapshot_print_html(item: Dict[str, Any]) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>{html.escape(title)}</title>
 <style>
-  @page {{ size: A4; margin: 0; }}
+  @page {{ size: A4; margin: 15mm 13mm; }}
   * {{ box-sizing: border-box; }}
-  body {{ margin:0; font-family: "Inter", "Segoe UI", Arial, Helvetica, "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif; color:#1f2937; background:#ffffff; font-size:17px; line-height:1.48; }}
-  main {{ max-width: 1040px; margin: 0 auto; padding: 24px 28px 42px; }}
+  body {{ margin:0; font-family: Arial, Helvetica, sans-serif; color:#162033; background:#ffffff; font-size:11.2pt; line-height:1.45; }}
+  main {{ max-width: 980px; margin: 0 auto; padding: 10px 0 24px; }}
   h1, h2, h3, h4 {{ color:#123a66; page-break-after: avoid; line-height:1.22; }}
-  h1 {{ font-size:34px; margin:0 0 16px; font-weight:800; }}
-  h2 {{ font-size:28px; margin:22px 0 14px; font-weight:800; }}
-  h3 {{ font-size:22px; margin:24px 0 12px; border-top:1px solid #e2e8f0; padding-top:18px; font-weight:800; }}
-  h4 {{ font-size:19px; margin:18px 0 10px; font-weight:800; }}
-  p {{ margin: 7px 0; }}
+  h1 {{ font-size:24pt; margin:0 0 14px; }}
+  h2 {{ font-size:18pt; margin:18px 0 10px; }}
+  h3 {{ font-size:15pt; margin:18px 0 9px; border-top:1px solid #d9e2ef; padding-top:14px; }}
+  h4 {{ font-size:12.5pt; margin:12px 0 6px; }}
+  p {{ margin: 6px 0; }}
   strong {{ color:#0f2742; }}
   hr {{ border:0; border-top:1px solid #d9e2ef; margin:18px 0 8px; }}
   a {{ color:#155da8; text-decoration:none; }}
   .caption {{ color:#64748b; font-size:9.5pt; }}
   .bullet {{ margin-left: 10px; }}
-  .notice {{ border-radius:12px; padding:13px 16px; margin:13px 0; border:1px solid #d8e1ef; background:#f8fafc; }}
+  .notice {{ border-radius:10px; padding:10px 12px; margin:10px 0; border:1px solid #d8e1ef; background:#f8fafc; }}
   .warning {{ background:#fff8db; border-color:#f1dd8b; }}
   .success {{ background:#eaf8ef; border-color:#bfe7cb; }}
   .error {{ background:#fff1f1; border-color:#f2b8b8; }}
   .snapshot-table {{ width:100%; border-collapse:collapse; margin:8px 0 12px; page-break-inside:auto; }}
-  .snapshot-table th, .snapshot-table td {{ border:1px solid #d8e1ef; padding:11px 12px; vertical-align:top; text-align:left; }}
+  .snapshot-table th, .snapshot-table td {{ border:1px solid #d8e1ef; padding:7px 8px; vertical-align:top; text-align:left; }}
   .snapshot-table th {{ background:#f1f5f9; font-weight:700; color:#123a66; }}
   .snapshot-figure {{ margin: 12px auto 18px; text-align:center; page-break-inside: avoid; }}
-  .snapshot-figure img {{ max-width:92%; max-height: 880px; object-fit: contain; }}
+  .snapshot-figure img {{ max-width:100%; max-height: 220mm; object-fit: contain; }}
   .snapshot-figure figcaption {{ margin-top:6px; color:#64748b; font-size:9.3pt; }}
   .snapshot-expander {{ border:1px solid #d8e1ef; border-radius:10px; padding:8px 10px; margin:10px 0; }}
   .snapshot-expander summary {{ font-weight:700; color:#123a66; }}
@@ -371,136 +365,30 @@ def generate_snapshot_html_bytes(item: Dict[str, Any]) -> bytes:
     return build_snapshot_print_html(item).encode("utf-8")
 
 
-def _find_executable(*names: str) -> str | None:
-    for name in names:
-        if not name:
-            continue
-        found = shutil.which(name)
-        if found:
-            return found
-        if os.path.exists(name) and os.access(name, os.X_OK):
-            return name
-    return None
-
-
-def _find_wkhtmltoimage_executable() -> str | None:
-    return _find_executable(
-        os.environ.get("WKHTMLTOIMAGE_PATH") or "",
-        "wkhtmltoimage",
-    )
-
-
-def _find_xvfb_run_executable() -> str | None:
-    return _find_executable("xvfb-run")
-
-
 def snapshot_pdf_renderer_available() -> bool:
-    return bool(_find_wkhtmltoimage_executable())
-
-
-def _snapshot_html_to_single_png(html_doc: str, workdir: str) -> str:
-    """Captura o HTML visual como uma imagem única usando wkhtmltoimage.
-
-    Esta frente evita WeasyPrint porque ele não preservou a identidade visual do snapshot.
-    Também evita depender do Chromium para o caminho principal, pois ele pode falhar em
-    ambiente headless/containers. O wkhtmltoimage é mais simples para esse uso: HTML
-    já pronto -> imagem -> PDF A4 fatiado.
-    """
-    renderer = _find_wkhtmltoimage_executable()
-    if not renderer:
-        raise SnapshotPdfUnavailable(
-            "wkhtmltoimage não está disponível neste ambiente. O HTML visual do snapshot continua disponível como alternativa segura."
-        )
-
-    html_path = Path(workdir) / "snapshot.html"
-    png_path = Path(workdir) / "snapshot_full.png"
-    html_path.write_text(html_doc, encoding="utf-8")
-
-    cmd = [
-        renderer,
-        "--enable-local-file-access",
-        "--encoding",
-        "utf-8",
-        "--quality",
-        "94",
-        "--width",
-        "1120",
-        str(html_path),
-        str(png_path),
-    ]
-
-    xvfb_run = _find_xvfb_run_executable()
-    if xvfb_run:
-        cmd = [xvfb_run, "-a"] + cmd
-
     try:
-        result = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, timeout=120)
-    except Exception as exc:
-        raise SnapshotPdfUnavailable(
-            "Não foi possível capturar o snapshot visual como imagem neste ambiente. O HTML visual foi mantido como alternativa segura."
-        ) from exc
-
-    if result.returncode != 0 or not png_path.exists() or png_path.stat().st_size <= 0:
-        detail = (result.stderr or result.stdout or "").strip()
-        msg = "wkhtmltoimage não conseguiu capturar o snapshot visual. O HTML visual foi mantido como alternativa segura."
-        if detail:
-            msg = f"{msg} Detalhe técnico: {detail[:500]}"
-        raise SnapshotPdfUnavailable(msg)
-
-    return str(png_path)
-
-
-def _png_snapshot_to_pdf_bytes(png_path: str, workdir: str) -> bytes:
-    try:
-        from PIL import Image
-        from fpdf import FPDF
-    except Exception as exc:
-        raise SnapshotPdfUnavailable(
-            "As dependências de imagem/PDF não estão disponíveis. O HTML visual foi mantido como alternativa segura."
-        ) from exc
-
-    image = Image.open(png_path).convert("RGB")
-    width_px, height_px = image.size
-    if width_px <= 0 or height_px <= 0:
-        raise SnapshotPdfUnavailable("A captura visual do snapshot ficou vazia.")
-
-    pdf = FPDF(unit="mm", format="A4")
-    page_w_mm, page_h_mm = 210.0, 297.0
-    slice_h_px = max(1, int(width_px * (page_h_mm / page_w_mm)))
-
-    y = 0
-    page_index = 1
-    while y < height_px:
-        bottom = min(y + slice_h_px, height_px)
-        crop = image.crop((0, y, width_px, bottom))
-
-        # Completa a última página com branco para manter o formato A4.
-        if crop.height < slice_h_px:
-            page_canvas = Image.new("RGB", (width_px, slice_h_px), "white")
-            page_canvas.paste(crop, (0, 0))
-            crop = page_canvas
-
-        page_path = Path(workdir) / f"snapshot_page_{page_index:03d}.jpg"
-        crop.save(page_path, format="JPEG", quality=94, optimize=True)
-        pdf.add_page()
-        pdf.image(str(page_path), x=0, y=0, w=page_w_mm, h=page_h_mm)
-        y = bottom
-        page_index += 1
-
-    return bytes(pdf.output(dest="S"))
+        from weasyprint import HTML  # noqa: F401
+        return True
+    except Exception:
+        return False
 
 
 def generate_snapshot_pdf_bytes(item: Dict[str, Any]) -> bytes:
-    """Gera PDF visual como print do HTML do snapshot.
+    """Generate a PDF from the real saved report renderer, not from a simplified field summary."""
+    if not snapshot_pdf_renderer_available():
+        raise SnapshotPdfUnavailable(
+            "WeasyPrint não está disponível neste ambiente. Para não gerar um PDF incompleto ou diferente do snapshot, "
+            "o sistema disponibiliza o HTML imprimível do snapshot."
+        )
 
-    Esta opção prioriza fidelidade visual e estabilidade: o HTML já aprovado é renderizado
-    como imagem com wkhtmltoimage e fatiado em páginas A4.
-    Não usa WeasyPrint como fallback, porque ele foi a causa do PDF diferente do snapshot.
-    """
     html_doc = build_snapshot_print_html(item)
-    with tempfile.TemporaryDirectory(prefix="vf_snapshot_pdf_") as workdir:
-        png_path = _snapshot_html_to_single_png(html_doc, workdir)
-        return _png_snapshot_to_pdf_bytes(png_path, workdir)
+    try:
+        from weasyprint import HTML
+        return HTML(string=html_doc, base_url=os.getcwd()).write_pdf()
+    except Exception as exc:
+        raise SnapshotPdfUnavailable(
+            "Não foi possível converter o snapshot real em PDF neste ambiente. O HTML imprimível foi mantido como alternativa segura."
+        ) from exc
 
 
 def snapshot_file_stem(item: Dict[str, Any]) -> str:
