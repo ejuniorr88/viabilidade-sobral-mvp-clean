@@ -28,6 +28,3 @@ pydyf==0.10.0
 cffi>=1.15
 tinycss2>=1.2
 cssselect2>=0.7
-
-# snapshot visual -> imagem -> PDF
-Pillow>=10.4.0
