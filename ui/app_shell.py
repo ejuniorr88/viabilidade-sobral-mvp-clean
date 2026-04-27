@@ -105,6 +105,17 @@ def card(title: str, value: Any, suffix: str = "") -> None:
     )
 
 
+def _return_to_study_from_header() -> None:
+    """Return to the study with the same reset used by the working back action.
+
+    This intentionally does not touch authentication/session keys.
+    """
+    st.session_state["show_client_area"] = False
+    st.session_state["show_plans_page"] = False
+    st.session_state["post_login_action"] = None
+    clear_all_checkout_states()
+
+
 def inject_global_styles() -> None:
     st.markdown(
         f'''
@@ -179,9 +190,7 @@ def inject_global_styles() -> None:
         }}
 
         .vf-brand-anchor {{
-            pointer-events: none !important;
-            position: absolute !important;
-            z-index: 25 !important;
+            display: none !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child {{
@@ -190,20 +199,40 @@ def inject_global_styles() -> None:
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton {{
             justify-content: flex-start !important;
-            position: absolute !important;
-            inset: 0 auto 0 0 !important;
+            position: static !important;
             z-index: 30 !important;
             width: auto !important;
-            min-width: 285px !important;
+            min-width: 0 !important;
             margin: 0 !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] {{
-            opacity: 0 !important;
-            width: 285px !important;
-            min-width: 285px !important;
+            opacity: 1 !important;
+            width: auto !important;
+            min-width: 0 !important;
             height: 92px !important;
+            min-height: 92px !important;
             margin: 0 !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: {WHITE} !important;
+            font-size: 30px !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.02em !important;
+            justify-content: flex-start !important;
+            text-align: left !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] p,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] span,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] div {{
+            color: {WHITE} !important;
+            font-size: 30px !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.02em !important;
+            line-height: 1 !important;
         }}
 
         .vf-brand {{
@@ -366,22 +395,13 @@ def inject_global_styles() -> None:
 def render_top_nav() -> None:
     cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
 
-    def _return_to_study() -> None:
-        # Mesma finalidade do botão "← Voltar para o estudo": sair de páginas especiais
-        # e voltar ao estudo sem trocar domínio, sem link externo e sem recarregar por URL.
-        st.session_state["show_client_area"] = False
-        st.session_state["show_plans_page"] = False
-        st.session_state["post_login_action"] = None
-        clear_all_checkout_states()
-        st.rerun()
-
     with cols[0]:
-        st.markdown(
-            '<div class="vf-brand vf-brand-anchor" aria-hidden="true">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
-            unsafe_allow_html=True,
-        )
+        # Hidden marker only to keep the scoped header CSS active.
+        # The visible logo is the real Streamlit button below.
+        st.markdown('<span class="vf-brand vf-brand-anchor" aria-hidden="true"></span>', unsafe_allow_html=True)
         if st.button("Viabilidade-Fácil.", key="vf_nav_home", type="tertiary", use_container_width=False):
-            _return_to_study()
+            _return_to_study_from_header()
+            st.rerun()
 
     with cols[2]:
         st.markdown(
