@@ -408,7 +408,7 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
-    cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
+    cols = st.columns([2.35, 2.55, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
         # Hidden marker only to keep the scoped header CSS active.
