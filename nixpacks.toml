@@ -1,22 +1,12 @@
-# Railway / Nixpacks
-# Mantem as bibliotecas nativas necessarias para o WeasyPrint converter
-# o HTML visual do snapshot em PDF no servidor.
-#
-# IMPORTANTE:
-# - O item "..." preserva os pacotes/fases autodetectados pelo Nixpacks.
-# - Sem "...", o plano padrao do Python pode ser sobrescrito no Railway.
-# - As fontes de emoji ajudam o PDF visual a se aproximar do snapshot exibido na tela.
-# - Este arquivo nao altera login, creditos, pagamentos, client_reports,
-#   regras urbanisticas nem fluxo principal do app.
-
 [phases.setup]
 aptPkgs = [
   "...",
+  "wkhtmltopdf",
+  "xvfb",
+  "fonts-noto-color-emoji",
   "libcairo2",
   "libpango-1.0-0",
   "libpangocairo-1.0-0",
   "libgdk-pixbuf-2.0-0",
-  "shared-mime-info",
-  "fonts-noto-color-emoji",
-  "fonts-dejavu-core"
+  "shared-mime-info"
 ]
