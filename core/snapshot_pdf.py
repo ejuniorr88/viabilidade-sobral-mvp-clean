@@ -135,6 +135,33 @@ class _ContextProxy:
         return getattr(self.capture, name)
 
 
+class _CollapsedExpanderProxy(_ContextProxy):
+    """Render Streamlit expanders as collapsed controls in the printable snapshot.
+
+    Streamlit keeps expanders collapsed on screen unless the user opens them.
+    The PDF must follow that visual state and must not dump hidden technical JSON
+    such as "Ver regra completa (JSON)" into the final report.
+    """
+
+    def __init__(self, capture: "_StreamlitHtmlCapture", label: Any) -> None:
+        super().__init__(capture)
+        self.label = label
+        self._content_start_index = 0
+
+    def __enter__(self) -> "_StreamlitHtmlCapture":
+        self.capture.parts.append(
+            "<div class='snapshot-expander-collapsed'>"
+            f"<span class='expander-caret'>▸</span> {_inline_markdown(self.label)}"
+            "</div>"
+        )
+        self._content_start_index = len(self.capture.parts)
+        return self.capture
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        del self.capture.parts[self._content_start_index:]
+        return False
+
+
 class _StreamlitHtmlCapture:
     """Small Streamlit-compatible renderer used only to replay the saved report snapshot.
 
@@ -222,9 +249,12 @@ class _StreamlitHtmlCapture:
         return [_ContextProxy(self, "<div class='snapshot-column'>", "</div>") for _ in range(count)]
 
     def expander(self, label: Any, *args: Any, **kwargs: Any) -> _ContextProxy:
+        expanded = bool(kwargs.get("expanded"))
+        if not expanded:
+            return _CollapsedExpanderProxy(self, label)
         return _ContextProxy(
             self,
-            f"<details class='snapshot-expander'><summary>{_inline_markdown(label)}</summary>",
+            f"<details class='snapshot-expander' open><summary>{_inline_markdown(label)}</summary>",
             "</details>",
         )
 
@@ -316,41 +346,76 @@ def build_snapshot_print_html(item: Dict[str, Any]) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>{html.escape(title)}</title>
 <style>
-  @page {{ size: A4; margin: 15mm 13mm; }}
+  @page {{ size: A4; margin: 13mm 12mm; }}
   * {{ box-sizing: border-box; }}
-  body {{ margin:0; font-family: Arial, Helvetica, sans-serif; color:#162033; background:#ffffff; font-size:11.2pt; line-height:1.45; }}
-  main {{ max-width: 980px; margin: 0 auto; padding: 10px 0 24px; }}
-  h1, h2, h3, h4 {{ color:#123a66; page-break-after: avoid; line-height:1.22; }}
-  h1 {{ font-size:24pt; margin:0 0 14px; }}
-  h2 {{ font-size:18pt; margin:18px 0 10px; }}
-  h3 {{ font-size:15pt; margin:18px 0 9px; border-top:1px solid #d9e2ef; padding-top:14px; }}
-  h4 {{ font-size:12.5pt; margin:12px 0 6px; }}
-  p {{ margin: 6px 0; }}
-  strong {{ color:#0f2742; }}
-  hr {{ border:0; border-top:1px solid #d9e2ef; margin:18px 0 8px; }}
-  a {{ color:#155da8; text-decoration:none; }}
-  .caption {{ color:#64748b; font-size:9.5pt; }}
-  .bullet {{ margin-left: 10px; }}
-  .notice {{ border-radius:10px; padding:10px 12px; margin:10px 0; border:1px solid #d8e1ef; background:#f8fafc; }}
+  body {{
+    margin:0;
+    font-family: "Inter", "Segoe UI", Arial, Helvetica, "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+    color:#1f2937;
+    background:#ffffff;
+    font-size:10.4pt;
+    line-height:1.44;
+  }}
+  main {{ max-width: 1120px; margin: 0 auto; padding: 4px 0 18px; }}
+  h1, h2, h3, h4 {{ color:#173b63; page-break-after: avoid; line-height:1.22; letter-spacing:-0.01em; }}
+  h1 {{ font-size:22pt; margin:0 0 12px; font-weight:800; }}
+  h2 {{ font-size:18pt; margin:14px 0 8px; font-weight:800; }}
+  h3 {{ font-size:14.2pt; margin:16px 0 8px; padding-top:12px; border-top:1px solid #e2e8f0; font-weight:800; }}
+  h4 {{ font-size:11.8pt; margin:10px 0 5px; font-weight:800; }}
+  h3 + p, h2 + p {{ margin-top: 4px; }}
+  p {{ margin: 5px 0; }}
+  strong {{ color:#142f4f; font-weight:800; }}
+  hr {{ border:0; border-top:1px solid #e2e8f0; margin:16px 0 8px; }}
+  a {{ color:#1769aa; text-decoration:none; }}
+  .caption {{ color:#64748b; font-size:9.2pt; }}
+  .bullet {{ margin: 4px 0 4px 14px; }}
+  .notice {{
+    border-radius:9px;
+    padding:9px 11px;
+    margin:8px 0;
+    border:1px solid #dbe6f3;
+    background:#f8fafc;
+    page-break-inside: avoid;
+  }}
+  .info {{ background:#eff6ff; border-color:#bfdbfe; }}
   .warning {{ background:#fff8db; border-color:#f1dd8b; }}
-  .success {{ background:#eaf8ef; border-color:#bfe7cb; }}
+  .success {{ background:#e7f7ed; border-color:#b7e3c5; color:#166534; }}
   .error {{ background:#fff1f1; border-color:#f2b8b8; }}
   .snapshot-table {{ width:100%; border-collapse:collapse; margin:8px 0 12px; page-break-inside:auto; }}
-  .snapshot-table th, .snapshot-table td {{ border:1px solid #d8e1ef; padding:7px 8px; vertical-align:top; text-align:left; }}
-  .snapshot-table th {{ background:#f1f5f9; font-weight:700; color:#123a66; }}
-  .snapshot-figure {{ margin: 12px auto 18px; text-align:center; page-break-inside: avoid; }}
-  .snapshot-figure img {{ max-width:100%; max-height: 220mm; object-fit: contain; }}
-  .snapshot-figure figcaption {{ margin-top:6px; color:#64748b; font-size:9.3pt; }}
-  .snapshot-expander {{ border:1px solid #d8e1ef; border-radius:10px; padding:8px 10px; margin:10px 0; }}
-  .snapshot-expander summary {{ font-weight:700; color:#123a66; }}
-  .snapshot-container {{ margin: 8px 0 12px; }}
-  .snapshot-metric {{ border:1px solid #d8e1ef; border-radius:12px; padding:10px 12px; margin:8px 0; background:#f8fafc; }}
-  .metric-label {{ color:#64748b; font-size:9.5pt; }}
-  .metric-value {{ color:#123a66; font-size:15pt; font-weight:700; }}
-  .metric-delta {{ color:#64748b; font-size:9.5pt; }}
-  .json-block {{ white-space:pre-wrap; font-size:8.5pt; background:#f8fafc; border:1px solid #d8e1ef; border-radius:8px; padding:8px; }}
-  .image-placeholder {{ border:1px dashed #9aa8ba; border-radius:10px; padding:20px; text-align:center; color:#64748b; }}
-  @media print {{ main {{ padding:0; }} .snapshot-expander, .snapshot-figure, .snapshot-metric {{ page-break-inside: avoid; }} }}
+  .snapshot-table th, .snapshot-table td {{
+    border:1px solid #dbe3ed;
+    padding:7px 8px;
+    vertical-align:top;
+    text-align:left;
+    font-size:10pt;
+  }}
+  .snapshot-table th {{ background:#f1f5f9; font-weight:800; color:#173b63; }}
+  .snapshot-figure {{ margin: 10px auto 16px; text-align:center; page-break-inside: avoid; }}
+  .snapshot-figure img {{ max-width:100%; max-height: 215mm; object-fit: contain; }}
+  .snapshot-figure figcaption {{ margin-top:6px; color:#64748b; font-size:9pt; }}
+  .snapshot-expander, .snapshot-expander-collapsed {{
+    border:1px solid #dbe3ed;
+    border-radius:9px;
+    padding:7px 9px;
+    margin:8px 0;
+    background:#ffffff;
+    color:#173b63;
+    font-weight:700;
+  }}
+  .snapshot-expander summary {{ font-weight:800; color:#173b63; }}
+  .expander-caret {{ color:#64748b; font-size:9pt; }}
+  .snapshot-container {{ margin: 7px 0 10px; }}
+  .snapshot-column {{ display:block; margin: 4px 0; }}
+  .snapshot-metric {{ border:1px solid #dbe3ed; border-radius:12px; padding:9px 11px; margin:7px 0; background:#f8fafc; }}
+  .metric-label {{ color:#64748b; font-size:9pt; }}
+  .metric-value {{ color:#173b63; font-size:14pt; font-weight:800; }}
+  .metric-delta {{ color:#64748b; font-size:9pt; }}
+  .json-block {{ white-space:pre-wrap; font-size:8pt; background:#f8fafc; border:1px solid #dbe3ed; border-radius:8px; padding:8px; }}
+  .image-placeholder {{ border:1px dashed #9aa8ba; border-radius:10px; padding:18px; text-align:center; color:#64748b; }}
+  @media print {{
+    main {{ padding:0; }}
+    .snapshot-expander, .snapshot-expander-collapsed, .snapshot-figure, .snapshot-metric, .notice {{ page-break-inside: avoid; }}
+  }}
 </style>
 </head>
 <body>
