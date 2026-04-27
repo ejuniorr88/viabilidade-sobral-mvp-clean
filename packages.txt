@@ -3,3 +3,6 @@ libpango-1.0-0
 libpangocairo-1.0-0
 libgdk-pixbuf-2.0-0
 shared-mime-info
+wkhtmltopdf
+xvfb
+fonts-noto-color-emoji
