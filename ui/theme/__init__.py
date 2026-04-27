@@ -1,3 +1,5 @@
-"""Theme helpers."""
-from .dark_mode import inject_dark_mode_readability_fix
-__all__ = ["inject_dark_mode_readability_fix"]
+"""Ajustes visuais de tema do sistema."""
+
+from .dark_mode import inject_dark_mode_text_fixes
+
+__all__ = ["inject_dark_mode_text_fixes"]
