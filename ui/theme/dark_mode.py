@@ -1,155 +1,145 @@
 from __future__ import annotations
 
 import streamlit as st
-
-MAIN_TEXT = "#061a3a"
-MUTED_TEXT = "#42526b"
-WHITE = "#ffffff"
-DARK_BUTTON = "#111827"
-DARK_BUTTON_HOVER = "#1f2937"
-LINK = "#0b5fff"
+import streamlit.components.v1 as components
 
 
-def inject_dark_mode_readability_fix() -> None:
-    """Isolated readability fix for Streamlit dark mode.
+def inject_dark_mode_text_fixes() -> None:
+    """Corrige legibilidade apenas quando o Streamlit estiver no modo escuro.
 
-    The app shell keeps the main content on a white surface. In dark mode,
-    Streamlit can render many labels and markdown fragments as light text,
-    making them almost invisible. This module only fixes contrast inside the
-    main content block. It does not touch sidebar styling, global scrollbars,
-    auth, credits, payments, reports, routing or urbanistic rules.
+    Regras desta frente:
+    - não altera o ui/app_shell.py;
+    - não mexe em scrollbar;
+    - não mexe na sidebar;
+    - não estiliza globalmente todos os botões;
+    - não altera o botão principal de consulta no modo claro;
+    - aplica correções de texto somente sob html[data-theme="dark"].
     """
+
     st.markdown(
-        f"""
-        <style id="vf-dark-mode-readability-fix-v9">
-        [data-testid="stAppViewContainer"] .block-container :where(
-            h1, h2, h3, h4, h5, h6,
-            p, li, label, small, strong, em,
-            div[data-testid="stMarkdownContainer"],
-            div[data-testid="stMarkdownContainer"] *,
-            div[data-testid="stCaptionContainer"],
-            div[data-testid="stCaptionContainer"] *,
-            div[data-testid="stMetric"], div[data-testid="stMetric"] *,
-            div[data-testid="stAlert"], div[data-testid="stAlert"] *,
-            .vf-card, .vf-card *,
-            .vf-client-area, .vf-client-area *,
-            .vf-wallet, .vf-wallet *,
-            .vf-report-container, .vf-report-container *,
-            .vf-section-card, .vf-section-card *,
-            .vf-summary-card, .vf-summary-card *,
-            .vf-report-snapshot, .vf-report-snapshot *,
-            .vf-report-block, .vf-report-block *,
-            .vf-report-item, .vf-report-item *,
-            .vf-report-list, .vf-report-list *,
-            .vf-table, .vf-table *,
-            .legal-doc-wrap, .legal-doc-wrap *
-        ) {{
-            color: {MAIN_TEXT} !important;
-            -webkit-text-fill-color: {MAIN_TEXT} !important;
-            opacity: 1 !important;
-            filter: none !important;
-        }}
+        """
+        <style id="vf-dark-mode-text-fixes">
+        html[data-theme="dark"] [data-testid="stAppViewContainer"] {
+            color: #f8fafc !important;
+        }
 
-        [data-testid="stAppViewContainer"] .block-container :where(
-            div[data-testid="stCaptionContainer"],
-            div[data-testid="stCaptionContainer"] *,
-            .vf-muted, .vf-muted *,
-            .vf-summary-label, .vf-help, .vf-help *
-        ) {{
-            color: {MUTED_TEXT} !important;
-            -webkit-text-fill-color: {MUTED_TEXT} !important;
-            opacity: 1 !important;
-            filter: none !important;
-        }}
+        html[data-theme="dark"] .block-container,
+        html[data-theme="dark"] .block-container p,
+        html[data-theme="dark"] .block-container span,
+        html[data-theme="dark"] .block-container label,
+        html[data-theme="dark"] .block-container li,
+        html[data-theme="dark"] .block-container div:not([data-testid="stDecoration"]),
+        html[data-theme="dark"] .vf-report-container,
+        html[data-theme="dark"] .vf-report-container *,
+        html[data-theme="dark"] .vf-section-card,
+        html[data-theme="dark"] .vf-section-card *,
+        html[data-theme="dark"] .vf-summary-card,
+        html[data-theme="dark"] .vf-summary-card * {
+            color: #f8fafc !important;
+        }
 
-        [data-testid="stAppViewContainer"] .block-container :where(
-            input, textarea, select,
-            [data-baseweb="input"], [data-baseweb="input"] *,
-            [data-baseweb="select"], [data-baseweb="select"] *,
-            [data-baseweb="textarea"], [data-baseweb="textarea"] *,
-            [role="combobox"], [role="combobox"] *
-        ) {{
-            color: {MAIN_TEXT} !important;
-            -webkit-text-fill-color: {MAIN_TEXT} !important;
-            opacity: 1 !important;
-            filter: none !important;
-        }}
+        html[data-theme="dark"] .block-container a,
+        html[data-theme="dark"] .vf-report-container a {
+            color: #93c5fd !important;
+        }
 
-        [data-testid="stAppViewContainer"] .block-container input::placeholder,
-        [data-testid="stAppViewContainer"] .block-container textarea::placeholder {{
-            color: {MUTED_TEXT} !important;
-            -webkit-text-fill-color: {MUTED_TEXT} !important;
-            opacity: 1 !important;
-        }}
+        html[data-theme="dark"] input,
+        html[data-theme="dark"] textarea,
+        html[data-theme="dark"] [data-baseweb="select"] *,
+        html[data-theme="dark"] [data-baseweb="input"] *,
+        html[data-theme="dark"] [data-baseweb="textarea"] * {
+            color: #f8fafc !important;
+        }
 
-        [data-testid="stAppViewContainer"] .block-container div.stButton > button:not([kind="tertiary"]),
-        [data-testid="stAppViewContainer"] .block-container div[data-testid="stDownloadButton"] > button {{
-            background-color: {DARK_BUTTON} !important;
-            border-color: {DARK_BUTTON} !important;
-            color: {WHITE} !important;
-            -webkit-text-fill-color: {WHITE} !important;
-            opacity: 1 !important;
-            filter: none !important;
-        }}
-
-        [data-testid="stAppViewContainer"] .block-container div.stButton > button:not([kind="tertiary"]) *,
-        [data-testid="stAppViewContainer"] .block-container div[data-testid="stDownloadButton"] > button * {{
-            color: {WHITE} !important;
-            -webkit-text-fill-color: {WHITE} !important;
-            opacity: 1 !important;
-            filter: none !important;
-        }}
-
-        [data-testid="stAppViewContainer"] .block-container div.stButton > button:not([kind="tertiary"]):hover,
-        [data-testid="stAppViewContainer"] .block-container div[data-testid="stDownloadButton"] > button:hover {{
-            background-color: {DARK_BUTTON_HOVER} !important;
-            border-color: {DARK_BUTTON_HOVER} !important;
-            color: {WHITE} !important;
-            -webkit-text-fill-color: {WHITE} !important;
-        }}
-
-        [data-testid="stAppViewContainer"] .block-container div.stButton > button:disabled,
-        [data-testid="stAppViewContainer"] .block-container div.stButton > button[disabled],
-        [data-testid="stAppViewContainer"] .block-container div.stButton > button[aria-disabled="true"],
-        [data-testid="stAppViewContainer"] .block-container div[data-testid="stDownloadButton"] > button:disabled,
-        [data-testid="stAppViewContainer"] .block-container div[data-testid="stDownloadButton"] > button[disabled],
-        [data-testid="stAppViewContainer"] .block-container div[data-testid="stDownloadButton"] > button[aria-disabled="true"] {{
-            background-color: {DARK_BUTTON} !important;
-            border-color: {DARK_BUTTON} !important;
-            color: {WHITE} !important;
-            -webkit-text-fill-color: {WHITE} !important;
-            opacity: 1 !important;
-            filter: none !important;
-            cursor: not-allowed !important;
-        }}
-
-        [data-testid="stAppViewContainer"] .block-container div.stButton > button:disabled *,
-        [data-testid="stAppViewContainer"] .block-container div.stButton > button[disabled] *,
-        [data-testid="stAppViewContainer"] .block-container div.stButton > button[aria-disabled="true"] *,
-        [data-testid="stAppViewContainer"] .block-container div[data-testid="stDownloadButton"] > button:disabled *,
-        [data-testid="stAppViewContainer"] .block-container div[data-testid="stDownloadButton"] > button[disabled] *,
-        [data-testid="stAppViewContainer"] .block-container div[data-testid="stDownloadButton"] > button[aria-disabled="true"] * {{
-            color: {WHITE} !important;
-            -webkit-text-fill-color: {WHITE} !important;
-            opacity: 1 !important;
-            filter: none !important;
-        }}
-
-        [data-testid="stAppViewContainer"] .block-container a:not(.vf-nav-link-button):not(.vf-brand):not(.vf-mobile-brand),
-        [data-testid="stAppViewContainer"] .block-container a:not(.vf-nav-link-button):not(.vf-brand):not(.vf-mobile-brand) * {{
-            color: {LINK} !important;
-            -webkit-text-fill-color: {LINK} !important;
-        }}
-
-        [data-testid="stHorizontalBlock"]:has(.vf-brand),
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) *,
-        .vf-brand, .vf-brand *,
-        .vf-nav-link-button, .vf-nav-link-button *,
-        .vf-mobile-shell, .vf-mobile-shell * {{
-            color: {WHITE} !important;
-            -webkit-text-fill-color: {WHITE} !important;
-        }}
+        html[data-theme="dark"] div[data-testid="stDownloadButton"] button,
+        html[data-theme="dark"] div[data-testid="stDownloadButton"] button * {
+            color: #ffffff !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
+    )
+
+    components.html(
+        """
+        <script>
+        (() => {
+            const REPORT_TEXTS = [
+                'gerar relatório do estudo de viabilidade',
+                'gerar relatorio do estudo de viabilidade',
+                'gerar relatório',
+                'gerar relatorio'
+            ];
+            const DARK_BACKGROUND = 'linear-gradient(180deg, #1e3a5f 0%, #14294a 100%)';
+            const DARK_BORDER = '1px solid #60a5fa';
+            const DARK_COLOR = '#ffffff';
+            const DARK_SHADOW = '0 2px 12px rgba(96, 165, 250, 0.22)';
+
+            function isDarkMode(doc) {
+                const htmlTheme = (doc.documentElement.getAttribute('data-theme') || '').toLowerCase();
+                const appTheme = (doc.body.getAttribute('data-theme') || '').toLowerCase();
+                return htmlTheme === 'dark' || appTheme === 'dark';
+            }
+
+            function normalizeButtonText(value) {
+                return (value || '')
+                    .toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            }
+
+            function findReportButton(doc) {
+                return [...doc.querySelectorAll('div[data-testid="stButton"] button')]
+                    .find((button) => {
+                        const label = normalizeButtonText(button.innerText);
+                        return REPORT_TEXTS.some((expected) => label.includes(normalizeButtonText(expected)));
+                    });
+            }
+
+            function applyDarkReportButtonStyle(button) {
+                button.dataset.vfDarkModeReportButton = '1';
+                button.style.setProperty('background', DARK_BACKGROUND, 'important');
+                button.style.setProperty('border', DARK_BORDER, 'important');
+                button.style.setProperty('color', DARK_COLOR, 'important');
+                button.style.setProperty('font-weight', '700', 'important');
+                button.style.setProperty('box-shadow', DARK_SHADOW, 'important');
+
+                [...button.querySelectorAll('*')].forEach((child) => {
+                    child.style.setProperty('color', DARK_COLOR, 'important');
+                });
+            }
+
+            function clearOnlyDarkReportButtonStyle(button) {
+                if (button.dataset.vfDarkModeReportButton !== '1') return;
+                delete button.dataset.vfDarkModeReportButton;
+                ['background', 'border', 'color', 'font-weight', 'box-shadow'].forEach((prop) => {
+                    button.style.removeProperty(prop);
+                });
+                [...button.querySelectorAll('*')].forEach((child) => {
+                    child.style.removeProperty('color');
+                });
+            }
+
+            function refresh() {
+                const doc = window.parent.document;
+                const button = findReportButton(doc);
+                if (!button) return;
+
+                if (isDarkMode(doc)) {
+                    applyDarkReportButtonStyle(button);
+                } else {
+                    clearOnlyDarkReportButtonStyle(button);
+                }
+            }
+
+            refresh();
+            window.setTimeout(refresh, 120);
+            window.setTimeout(refresh, 400);
+            window.setTimeout(refresh, 900);
+        })();
+        </script>
+        """,
+        height=0,
     )
