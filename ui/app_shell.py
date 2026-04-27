@@ -178,32 +178,29 @@ def inject_global_styles() -> None:
             min-height: 92px !important;
         }}
 
-        .vf-brand-anchor {{
-            pointer-events: none !important;
-            position: absolute !important;
-            z-index: 25 !important;
+        .vf-brand-home {{
+            pointer-events: auto !important;
+            color: {WHITE} !important;
+            text-decoration: none !important;
+            position: relative !important;
+            z-index: 30 !important;
+        }}
+
+        .vf-brand-home:visited {{
+            color: {WHITE} !important;
+            text-decoration: none !important;
+        }}
+
+        .vf-brand-home:hover,
+        .vf-brand-home:focus,
+        .vf-brand-home:active {{
+            color: {WHITE} !important;
+            text-decoration: none !important;
+            outline: none !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child {{
             position: relative !important;
-        }}
-
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton {{
-            justify-content: flex-start !important;
-            position: absolute !important;
-            inset: 0 auto 0 0 !important;
-            z-index: 30 !important;
-            width: auto !important;
-            min-width: 285px !important;
-            margin: 0 !important;
-        }}
-
-        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] {{
-            opacity: 0 !important;
-            width: 285px !important;
-            min-width: 285px !important;
-            height: 92px !important;
-            margin: 0 !important;
         }}
 
         .vf-brand {{
@@ -368,15 +365,9 @@ def render_top_nav() -> None:
 
     with cols[0]:
         st.markdown(
-            '<div class="vf-brand vf-brand-anchor" aria-hidden="true">Viabilidade-Fácil<span class="vf-brand-dot">.</span></div>',
+            '<a class="vf-brand vf-brand-home" href="?nav=home" target="_self" aria-label="Voltar para o estudo">Viabilidade-Fácil<span class="vf-brand-dot">.</span></a>',
             unsafe_allow_html=True,
         )
-        if st.button("Viabilidade-Fácil.", key="vf_nav_home", type="tertiary", use_container_width=False):
-            st.session_state["show_client_area"] = False
-            st.session_state["show_plans_page"] = False
-            st.session_state["post_login_action"] = None
-            clear_all_checkout_states()
-            st.rerun()
 
     with cols[2]:
         st.markdown(
