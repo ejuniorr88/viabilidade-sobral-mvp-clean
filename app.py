@@ -26,6 +26,7 @@ from ui.flow.primary_actions import render_primary_actions
 from ui.how_it_works_panel import render_how_it_works_panel
 from ui.consultation_form import render_consultation_form
 from ui.legal import render_privacy_page, render_terms_page
+from ui.theme.dark_mode import inject_dark_mode_text_safety
 
 
 bootstrap_session_state(st.session_state)
@@ -52,7 +53,6 @@ from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_s
 from ui.runtime.navigation_focus import render_navigation_focus_if_needed
 from ui.mobile_viewport import inject_mobile_viewport_detector, sync_mobile_viewport_state, is_mobile_view
 from ui.mobile_inline_consultation import render_mobile_inline_consultation_header
-from ui.theme.dark_mode import inject_dark_mode_text_safety
 from ui.runtime.report_navigation import arm_report_initial_focus
 from ui.relatorio import (
     render_relatorio_section,
