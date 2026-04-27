@@ -52,6 +52,7 @@ from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_s
 from ui.runtime.navigation_focus import render_navigation_focus_if_needed
 from ui.mobile_viewport import inject_mobile_viewport_detector, sync_mobile_viewport_state, is_mobile_view
 from ui.mobile_inline_consultation import render_mobile_inline_consultation_header
+from ui.theme.dark_mode import inject_dark_mode_text_safety
 from ui.runtime.report_navigation import arm_report_initial_focus
 from ui.relatorio import (
     render_relatorio_section,
@@ -197,6 +198,7 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
+inject_dark_mode_text_safety()
 consume_home_nav_query_param(st.session_state)
 consume_client_area_query_param(st.session_state)
 consume_landing_checkout_query_params(st.session_state)
