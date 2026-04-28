@@ -12,6 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 import streamlit.components.v1 as components
+from ui.theme.light_mode_lock import enforce_light_mode
 
 from core.session.bootstrap import bootstrap_session_state
 
@@ -26,7 +27,6 @@ from ui.flow.primary_actions import render_primary_actions
 from ui.how_it_works_panel import render_how_it_works_panel
 from ui.consultation_form import render_consultation_form
 from ui.legal import render_privacy_page, render_terms_page
-from ui.theme.dark_mode import inject_dark_mode_text_fixes
 
 
 bootstrap_session_state(st.session_state)
@@ -198,7 +198,7 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
-inject_dark_mode_text_fixes()
+enforce_light_mode()
 consume_home_nav_query_param(st.session_state)
 consume_client_area_query_param(st.session_state)
 consume_landing_checkout_query_params(st.session_state)
