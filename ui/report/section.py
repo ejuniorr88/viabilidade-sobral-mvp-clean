@@ -6,6 +6,8 @@ from typing import Any, Callable, Dict
 import streamlit as st
 import streamlit.components.v1 as components
 
+from core import snapshot_pdf as snapshot_pdf_module
+
 from ui.report.final_confirmation import render_final_confirmation
 from ui.report.review_panel import render_review_panel
 from ui.report.terms_gate import render_terms_gate
@@ -72,6 +74,21 @@ def _render_generate_report_button_style() -> None:
         height=0,
     )
 
+
+
+def _current_snapshot_item(*, report_calc: Dict[str, Any], report_session: Dict[str, Any], signature: Any) -> Dict[str, Any]:
+    return {
+        "id": signature or "atual",
+        "title": "Relatório Urbanístico",
+        "report_context": {
+            "calc_snapshot": deepcopy(report_calc),
+            "session_snapshot": deepcopy(report_session or {}),
+        },
+    }
+
+
+def _visual_pdf_state_key(signature: Any, suffix: str) -> str:
+    return f"current_visual_pdf_{suffix}_{signature or 'atual'}"
 
 
 
@@ -383,20 +400,50 @@ def render_report_section(
         render_relatorio_section_func(report_calc)
 
         st.markdown("### Download do relatório")
-        try:
-            pdf_bytes = st.session_state.get("last_generated_pdf_bytes")
-            if not pdf_bytes or st.session_state.get("last_generated_pdf_signature") != st.session_state.get("report_snapshot_signature"):
-                pdf_bytes = generate_report_pdf_bytes_func(calc=report_calc, session_state=report_session)
-                st.session_state["last_generated_pdf_bytes"] = pdf_bytes
-                st.session_state["last_generated_pdf_signature"] = st.session_state.get("report_snapshot_signature")
+        current_signature = st.session_state.get("report_snapshot_signature")
+        visual_bytes_key = _visual_pdf_state_key(current_signature, "bytes")
+        visual_error_key = _visual_pdf_state_key(current_signature, "error")
 
+        if st.session_state.get(visual_bytes_key):
             st.download_button(
                 label="⬇️ Baixar relatório em PDF",
-                data=pdf_bytes,
+                data=st.session_state[visual_bytes_key],
                 file_name="relatorio_viabilidade.pdf",
                 mime="application/pdf",
-                key="download_report_pdf",
+                key="download_report_pdf_visual_ready",
                 use_container_width=True,
             )
-        except Exception as e:
-            st.error(f"Falha ao preparar o PDF para download: {e}")
+        else:
+            if st.button("⬇️ Baixar relatório em PDF", key="prepare_report_visual_pdf", use_container_width=True):
+                try:
+                    snapshot_item = _current_snapshot_item(
+                        report_calc=report_calc,
+                        report_session=report_session,
+                        signature=current_signature,
+                    )
+                    st.session_state[visual_bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(snapshot_item)
+                    st.session_state.pop(visual_error_key, None)
+                    st.rerun()
+                except Exception as e:
+                    st.session_state[visual_error_key] = str(e)
+
+            if st.session_state.get(visual_error_key):
+                st.warning("Não foi possível gerar o PDF visual agora. Mantive o PDF técnico antigo como alternativa.")
+
+            try:
+                pdf_bytes = st.session_state.get("last_generated_pdf_bytes")
+                if not pdf_bytes or st.session_state.get("last_generated_pdf_signature") != current_signature:
+                    pdf_bytes = generate_report_pdf_bytes_func(calc=report_calc, session_state=report_session)
+                    st.session_state["last_generated_pdf_bytes"] = pdf_bytes
+                    st.session_state["last_generated_pdf_signature"] = current_signature
+
+                st.download_button(
+                    label="⬇️ Baixar PDF técnico antigo",
+                    data=pdf_bytes,
+                    file_name="relatorio_viabilidade_tecnico.pdf",
+                    mime="application/pdf",
+                    key="download_report_pdf_legacy",
+                    use_container_width=True,
+                )
+            except Exception as e:
+                st.error(f"Falha ao preparar o PDF para download: {e}")
