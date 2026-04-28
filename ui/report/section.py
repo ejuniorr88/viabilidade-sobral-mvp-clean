@@ -414,7 +414,7 @@ def render_report_section(
                 use_container_width=True,
             )
         else:
-            if st.button("⬇️ Baixar relatório em PDF", key="prepare_report_visual_pdf", use_container_width=True):
+            if st.button("⚙️ Preparar PDF visual", key="prepare_report_visual_pdf", use_container_width=True):
                 try:
                     snapshot_item = _current_snapshot_item(
                         report_calc=report_calc,
@@ -428,7 +428,7 @@ def render_report_section(
                     st.session_state[visual_error_key] = str(e)
 
             if st.session_state.get(visual_error_key):
-                st.warning("Não foi possível gerar o PDF visual agora. Mantive o PDF técnico antigo como alternativa.")
+                st.warning("Não foi possível preparar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes. Mantive o PDF técnico antigo como alternativa.")
 
             try:
                 pdf_bytes = st.session_state.get("last_generated_pdf_bytes")
