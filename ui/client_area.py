@@ -185,6 +185,56 @@ def _render_saved_report_preview(item: Dict[str, Any]) -> None:
         _restore_saved_session_snapshot(backup)
 
 
+
+def _snapshot_download_state_key(item: Dict[str, Any], suffix: str) -> str:
+    return f"snapshot_visual_pdf_{suffix}_{item.get('id')}"
+
+
+def _render_primary_download_action(item: Dict[str, Any], signed_url: str) -> None:
+    """Render the main saved-report download action without calling Render on page load.
+
+    The old stored PDF remains as fallback. The visual PDF is generated only after the
+    user clicks the button, then cached in session_state for the current page session.
+    """
+    ctx = _report_context(item)
+    calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
+    can_make_visual_pdf = bool(calc_snapshot) and hasattr(snapshot_pdf_module, "generate_snapshot_pdf_bytes")
+    file_stem = (
+        snapshot_pdf_module.snapshot_file_stem(item)
+        if hasattr(snapshot_pdf_module, "snapshot_file_stem")
+        else f"relatorio_visual_snapshot_{item.get('id') or 'salvo'}"
+    )
+    bytes_key = _snapshot_download_state_key(item, "bytes")
+    error_key = _snapshot_download_state_key(item, "error")
+
+    if st.session_state.get(bytes_key):
+        st.download_button(
+            "⬇️ Fazer download",
+            data=st.session_state[bytes_key],
+            file_name=f"{file_stem}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            key=f"download_visual_pdf_ready_{item.get('id')}",
+        )
+        return
+
+    if can_make_visual_pdf:
+        if st.button("⬇️ Fazer download", use_container_width=True, key=f"prepare_visual_pdf_{item.get('id')}"):
+            try:
+                st.session_state[bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(item)
+                st.session_state.pop(error_key, None)
+                st.rerun()
+            except Exception as exc:
+                st.session_state[error_key] = str(exc)
+
+        if st.session_state.get(error_key):
+            st.warning("Não foi possível gerar o PDF visual agora. Mantive o PDF salvo antigo como alternativa.")
+
+    if signed_url:
+        st.link_button("⬇️ Baixar PDF salvo antigo", signed_url, use_container_width=True)
+    elif not can_make_visual_pdf:
+        st.button("⬇️ Fazer download", disabled=True, use_container_width=True, key=f"download_disabled_{item.get('id')}")
+
 def _render_snapshot_downloads(item: Dict[str, Any]) -> None:
     ctx = _report_context(item)
     calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
@@ -221,6 +271,20 @@ def _render_snapshot_downloads(item: Dict[str, Any]) -> None:
         st.warning(f"Não foi possível gerar o HTML visual do snapshot: {html_exc}")
         return
 
+    preview_bytes_key = _snapshot_download_state_key(item, "preview_bytes")
+    preview_error_key = _snapshot_download_state_key(item, "preview_error")
+
+    if st.session_state.get(preview_bytes_key):
+        st.download_button(
+            label="⬇️ Baixar PDF visual do snapshot",
+            data=st.session_state[preview_bytes_key],
+            file_name=f"{file_stem}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            key=f"download_snapshot_pdf_{item.get('id')}",
+        )
+        return
+
     if not snapshot_pdf_module.snapshot_pdf_renderer_available():
         st.info(
             "PDF visual automático indisponível neste ambiente. Para não gerar um arquivo incompleto, "
@@ -228,20 +292,22 @@ def _render_snapshot_downloads(item: Dict[str, Any]) -> None:
         )
         return
 
-    try:
-        visual_pdf_bytes = snapshot_pdf_module.generate_snapshot_pdf_bytes(item)
-        st.download_button(
-            label="⬇️ Baixar PDF visual do snapshot",
-            data=visual_pdf_bytes,
-            file_name=f"{file_stem}.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-            key=f"download_snapshot_pdf_{item.get('id')}",
-        )
-    except getattr(snapshot_pdf_module, "SnapshotPdfUnavailable", RuntimeError) as exc:
-        st.info(str(exc))
-    except Exception as exc:
-        st.warning(f"Não foi possível gerar o PDF visual do snapshot real: {exc}")
+    if st.button(
+        "⬇️ Baixar PDF visual do snapshot",
+        use_container_width=True,
+        key=f"prepare_snapshot_pdf_{item.get('id')}",
+    ):
+        try:
+            st.session_state[preview_bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(item)
+            st.session_state.pop(preview_error_key, None)
+            st.rerun()
+        except getattr(snapshot_pdf_module, "SnapshotPdfUnavailable", RuntimeError) as exc:
+            st.session_state[preview_error_key] = str(exc)
+        except Exception as exc:
+            st.session_state[preview_error_key] = f"Não foi possível gerar o PDF visual do snapshot real: {exc}"
+
+    if st.session_state.get(preview_error_key):
+        st.warning(st.session_state[preview_error_key])
 
 def _render_reports_tab(user_id: str) -> None:
     st.markdown("### Relatórios salvos")
@@ -313,10 +379,7 @@ def _render_reports_tab(user_id: str) -> None:
                 signed_url = build_download_signed_url(path, bucket=bucket)
             except Exception:
                 signed_url = ""
-            if signed_url:
-                st.link_button("⬇️ Fazer download", signed_url, use_container_width=True)
-            else:
-                st.button("⬇️ Fazer download", disabled=True, use_container_width=True, key=f"download_disabled_{item.get('id')}")
+            _render_primary_download_action(item, signed_url)
 
         if st.session_state.get(_PREVIEW_REPORT_KEY) == item.get("id"):
             _render_saved_report_preview(item)
