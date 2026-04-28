@@ -219,7 +219,7 @@ def _render_primary_download_action(item: Dict[str, Any], signed_url: str) -> No
         return
 
     if can_make_visual_pdf:
-        if st.button("⬇️ Fazer download", use_container_width=True, key=f"prepare_visual_pdf_{item.get('id')}"):
+        if st.button("⚙️ Preparar PDF visual", use_container_width=True, key=f"prepare_visual_pdf_{item.get('id')}"):
             try:
                 st.session_state[bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(item)
                 st.session_state.pop(error_key, None)
@@ -228,7 +228,7 @@ def _render_primary_download_action(item: Dict[str, Any], signed_url: str) -> No
                 st.session_state[error_key] = str(exc)
 
         if st.session_state.get(error_key):
-            st.warning("Não foi possível gerar o PDF visual agora. Mantive o PDF salvo antigo como alternativa.")
+            st.warning("Não foi possível preparar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes. Mantive o PDF salvo antigo como alternativa.")
 
     if signed_url:
         st.link_button("⬇️ Baixar PDF salvo antigo", signed_url, use_container_width=True)
