@@ -1,5 +1,5 @@
-"""Ajustes visuais de tema do sistema."""
+"""Theme helpers for Viabilidade Fácil."""
 
-from .dark_mode import inject_dark_mode_text_fixes
+from .light_mode_lock import enforce_light_mode
 
-__all__ = ["inject_dark_mode_text_fixes"]
+__all__ = ["enforce_light_mode"]
