@@ -152,6 +152,18 @@
     return preferredUrl;
   }
 
+  function getAllowedStreamlitOrigin() {
+    const preferredUrl = getPreferredStreamlitAppUrl();
+    const fallbackUrl = runtimeCfg?.STREAMLIT_APP_URL || "";
+    const targetUrl = preferredUrl || fallbackUrl;
+
+    try {
+      return targetUrl ? new URL(targetUrl).origin : "";
+    } catch (_err) {
+      return "";
+    }
+  }
+
   function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), Number(timeoutMs || 12000));
@@ -231,8 +243,9 @@
 
   async function notifyParentAndMaybeClose(accessToken) {
     try {
-      if (window.opener && typeof window.opener.postMessage === "function") {
-        window.opener.postMessage({ type: "vf_auth_success", access_token: accessToken }, "*");
+      const targetOrigin = getAllowedStreamlitOrigin();
+      if (targetOrigin && window.opener && typeof window.opener.postMessage === "function") {
+        window.opener.postMessage({ type: "vf_auth_success", access_token: accessToken }, targetOrigin);
       }
     } catch (_err) {}
 
