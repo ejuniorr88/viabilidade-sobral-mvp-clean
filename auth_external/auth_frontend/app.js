@@ -1,24 +1,6 @@
 (function () {
   const baseCfg = window.AUTH_CONFIG || {};
 
-  const DEFAULT_ALLOWED_STREAMLIT_ORIGINS = [
-    "https://viabilidadeteste.streamlit.app",
-    "https://teste.viabilidadefacil.com.br",
-    "https://viabilidade-sobral-mvp-clean-stable.up.railway.app",
-    "https://app.viabilidadefacil.com.br",
-    "https://viabilidade-sobral-mvp-clean-production.up.railway.app"
-  ];
-
-  const DEFAULT_ALLOWED_GATEWAY_ORIGINS = [
-    "https://viabilidade-auth-gateway-staging.onrender.com"
-  ];
-
-  const FORBIDDEN_TOKEN_DESTINATION_ORIGINS = [
-    "https://viabilidadefacil.com.br",
-    "https://www.viabilidadefacil.com.br",
-    "https://homolog.viabilidadefacil.com.br"
-  ];
-
   const STORAGE_KEYS = {
     preferredAppUrl: "vf_preferred_streamlit_app_url",
     popupToken: "vf_auth_popup_token",
@@ -98,78 +80,6 @@
     return raw.replace(/\/+$/, "");
   }
 
-  function toOrigin(value) {
-    try {
-      const url = normalizeUrl(value);
-      return url ? new URL(url).origin : "";
-    } catch (_err) {
-      return "";
-    }
-  }
-
-  function normalizeOriginList(values) {
-    const rawList = Array.isArray(values) ? values : String(values || "").split(",");
-    return rawList.map((item) => toOrigin(item)).filter(Boolean);
-  }
-
-  function uniqueOrigins(origins) {
-    return Array.from(new Set((origins || []).map((origin) => toOrigin(origin)).filter(Boolean)));
-  }
-
-  function allowedStreamlitOrigins() {
-    return uniqueOrigins([
-      ...DEFAULT_ALLOWED_STREAMLIT_ORIGINS,
-      ...normalizeOriginList(baseCfg.ALLOWED_STREAMLIT_ORIGINS),
-    ]);
-  }
-
-  function allowedGatewayOrigins() {
-    return uniqueOrigins([
-      ...DEFAULT_ALLOWED_GATEWAY_ORIGINS,
-      ...normalizeOriginList(baseCfg.ALLOWED_GATEWAY_ORIGINS),
-    ]);
-  }
-
-  function assertAllowedUrl(rawValue, allowedOrigins, label) {
-    const value = normalizeUrl(rawValue);
-    if (!value) return "";
-
-    const origin = toOrigin(value);
-    if (!origin) {
-      throw new Error(`${label} inválida.`);
-    }
-
-    if (FORBIDDEN_TOKEN_DESTINATION_ORIGINS.includes(origin)) {
-      throw new Error(`${label} aponta para a landing pública, que não pode receber token de login.`);
-    }
-
-    if (!allowedOrigins.includes(origin)) {
-      throw new Error(`${label} não está na lista de origens permitidas: ${origin}`);
-    }
-
-    return value;
-  }
-
-  function assertLoginRedirectUrl(rawValue) {
-    const value = normalizeUrl(rawValue || (window.location.origin + window.location.pathname));
-    const origin = toOrigin(value);
-
-    if (!origin) {
-      throw new Error("LOGIN_REDIRECT_URL inválida.");
-    }
-
-    const allowed = uniqueOrigins([
-      window.location.origin,
-      ...normalizeOriginList(baseCfg.ALLOWED_LOGIN_REDIRECT_ORIGINS),
-    ]);
-
-    if (!allowed.includes(origin)) {
-      throw new Error(`LOGIN_REDIRECT_URL fora da origem do login: ${origin}`);
-    }
-
-    return value;
-  }
-
   function persistRuntimeConfig(cfg) {
     if (cfg.SUPABASE_URL) writeStorage(STORAGE_KEYS.supabaseUrl, cfg.SUPABASE_URL);
     if (cfg.SUPABASE_ANON_KEY) writeStorage(STORAGE_KEYS.supabaseAnonKey, cfg.SUPABASE_ANON_KEY);
@@ -179,18 +89,6 @@
   }
 
   function buildRuntimeConfig() {
-    const rawStreamlitAppUrl = normalizeUrl(
-      getQueryParam("streamlit_app_url") ||
-      readStorage(STORAGE_KEYS.preferredAppUrl) ||
-      baseCfg.STREAMLIT_APP_URL
-    );
-
-    const rawGatewayBaseUrl = normalizeUrl(
-      getQueryParam("gateway_base_url") ||
-      readStorage(STORAGE_KEYS.gatewayBaseUrl) ||
-      baseCfg.GATEWAY_BASE_URL
-    );
-
     const cfg = {
       SUPABASE_URL: normalizeUrl(
         getQueryParam("supabase_url") ||
@@ -203,21 +101,21 @@
         baseCfg.SUPABASE_ANON_KEY ||
         ""
       ).trim(),
-      GATEWAY_BASE_URL: assertAllowedUrl(
-        rawGatewayBaseUrl,
-        allowedGatewayOrigins(),
-        "GATEWAY_BASE_URL"
+      GATEWAY_BASE_URL: normalizeUrl(
+        getQueryParam("gateway_base_url") ||
+        readStorage(STORAGE_KEYS.gatewayBaseUrl) ||
+        baseCfg.GATEWAY_BASE_URL
       ),
-      LOGIN_REDIRECT_URL: assertLoginRedirectUrl(
+      LOGIN_REDIRECT_URL: normalizeUrl(
         getQueryParam("login_redirect_url") ||
         readStorage(STORAGE_KEYS.loginRedirectUrl) ||
         baseCfg.LOGIN_REDIRECT_URL ||
         (window.location.origin + window.location.pathname)
       ),
-      STREAMLIT_APP_URL: assertAllowedUrl(
-        rawStreamlitAppUrl,
-        allowedStreamlitOrigins(),
-        "STREAMLIT_APP_URL"
+      STREAMLIT_APP_URL: normalizeUrl(
+        getQueryParam("streamlit_app_url") ||
+        readStorage(STORAGE_KEYS.preferredAppUrl) ||
+        baseCfg.STREAMLIT_APP_URL
       ),
     };
 
@@ -238,19 +136,12 @@
   }
 
   function getPreferredStreamlitAppUrl() {
-    const runtimeUrl = runtimeCfg?.STREAMLIT_APP_URL || "";
-    if (runtimeUrl) return runtimeUrl;
-
-    try {
-      return assertAllowedUrl(
-        readStorage(STORAGE_KEYS.preferredAppUrl),
-        allowedStreamlitOrigins(),
-        "STREAMLIT_APP_URL"
-      );
-    } catch (_err) {
-      clearStorage(STORAGE_KEYS.preferredAppUrl);
-      return "";
-    }
+    return (
+      getQueryParam("streamlit_app_url") ||
+      readStorage(STORAGE_KEYS.preferredAppUrl) ||
+      runtimeCfg?.STREAMLIT_APP_URL ||
+      ""
+    );
   }
 
   function persistPreferredStreamlitAppUrl() {
@@ -541,11 +432,9 @@
           throw new Error("URL do sistema principal não informada.");
         }
 
-        // Segurança: o access_token nunca deve ser colocado na URL.
-        // O fluxo principal usa popup/componente para entregar o token ao Streamlit.
-        // Em abertura direta do frontend de login, seguimos para o sistema sem anexar token.
-        writeStorage(STORAGE_KEYS.popupToken, data.session.access_token);
-        window.location.href = new URL(targetUrl).toString();
+        const streamlitUrl = new URL(targetUrl);
+        streamlitUrl.searchParams.set("ext_access_token", data.session.access_token);
+        window.location.href = streamlitUrl.toString();
       } catch (err) {
         setStatus(err.message || String(err), "error");
       }
