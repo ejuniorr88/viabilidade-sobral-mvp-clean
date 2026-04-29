@@ -219,7 +219,7 @@ def _render_primary_download_action(item: Dict[str, Any], signed_url: str) -> No
         return
 
     if can_make_visual_pdf:
-        if st.button("⚙️ Preparar PDF visual", use_container_width=True, key=f"prepare_visual_pdf_{item.get('id')}"):
+        if st.button("📄 Gerar relatório em PDF", use_container_width=True, key=f"prepare_visual_pdf_{item.get('id')}"):
             try:
                 st.session_state[bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(item)
                 st.session_state.pop(error_key, None)
