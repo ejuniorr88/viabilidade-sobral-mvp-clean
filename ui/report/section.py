@@ -415,35 +415,19 @@ def render_report_section(
             )
         else:
             if st.button("📄 Gerar relatório em PDF", key="prepare_report_visual_pdf", use_container_width=True):
+                st.info("Gerando relatório, aguarde alguns segundos para fazer o download.")
                 try:
                     snapshot_item = _current_snapshot_item(
                         report_calc=report_calc,
                         report_session=report_session,
                         signature=current_signature,
                     )
-                    st.session_state[visual_bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(snapshot_item)
+                    with st.spinner("Gerando relatório em PDF..."):
+                        st.session_state[visual_bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(snapshot_item)
                     st.session_state.pop(visual_error_key, None)
                     st.rerun()
                 except Exception as e:
                     st.session_state[visual_error_key] = str(e)
 
             if st.session_state.get(visual_error_key):
-                st.warning("Não foi possível preparar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes. Mantive o PDF técnico antigo como alternativa.")
-
-            try:
-                pdf_bytes = st.session_state.get("last_generated_pdf_bytes")
-                if not pdf_bytes or st.session_state.get("last_generated_pdf_signature") != current_signature:
-                    pdf_bytes = generate_report_pdf_bytes_func(calc=report_calc, session_state=report_session)
-                    st.session_state["last_generated_pdf_bytes"] = pdf_bytes
-                    st.session_state["last_generated_pdf_signature"] = current_signature
-
-                st.download_button(
-                    label="⬇️ Baixar PDF técnico antigo",
-                    data=pdf_bytes,
-                    file_name="relatorio_viabilidade_tecnico.pdf",
-                    mime="application/pdf",
-                    key="download_report_pdf_legacy",
-                    use_container_width=True,
-                )
-            except Exception as e:
-                st.error(f"Falha ao preparar o PDF para download: {e}")
+                st.warning("Não foi possível gerar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes.")
