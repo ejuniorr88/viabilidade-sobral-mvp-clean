@@ -379,6 +379,7 @@ def get_auth_url(force_select_account: bool = False) -> Optional[str]:
 
 
 def logout_limpo() -> None:
+    st.session_state["auth_clear_browser_token"] = True
     keep = {
         "_supabase_auth_client": st.session_state.get("_supabase_auth_client"),
     }
