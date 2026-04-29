@@ -79,12 +79,33 @@ def commit_report_snapshot(
 
 
 def clear_pending_report(session_state: MutableMapping[str, Any]) -> None:
+    """Clear every transient report-confirmation state.
+
+    This function is intentionally broader than the legacy
+    ``confirm_new_report`` reset. The report flow currently has two
+    confirmation paths while the app is being modularized:
+
+    * legacy pending report confirmation;
+    * newer review/terms/final-confirmation panel.
+
+    Both paths can eventually lead to credit consumption. A blocked
+    or inadequate scenario must therefore clear all transient states,
+    otherwise a later allowed scenario can inherit a stale confirmation.
+    """
+
     session_state["confirm_new_report"] = False
     session_state["pending_report_calc"] = None
     session_state["pending_report_session"] = None
     session_state["pending_report_signature"] = None
-    session_state["report_review_open"] = False
 
+    session_state["report_review_open"] = False
+    session_state["report_review_signature"] = None
+    session_state["report_review_calc"] = None
+    session_state["report_review_session"] = None
+    session_state["report_review_is_new_report"] = False
+
+    session_state["report_review_seen_signature"] = None
+    session_state["legacy_report_confirm_seen_signature"] = None
 
 def clear_report_runtime_state(
     *,
