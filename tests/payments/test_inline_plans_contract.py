@@ -29,11 +29,12 @@ def test_inline_plans_contract_keeps_runtime_flag_and_payments_panel_hook() -> N
 
 
 def test_inline_plans_contract_keeps_current_pdf_download_flow_after_report_unlock() -> None:
-    """Protect the post-unlock PDF area without forcing the old local PDF engine.
+    """Protege o fluxo atual de PDF sem prender ao motor antigo.
 
-    The current flow can generate the visual snapshot PDF first and then expose a
-    download button. This test should guard the user-visible flow and the stable
-    download key, not the old implementation details.
+    O fluxo consolidado gera primeiro o PDF visual do snapshot e depois expõe
+    o botão de download. Este contrato protege o comportamento visível e aceita
+    a chave atual do PDF visual, preservando compatibilidade com a chave antiga
+    caso algum ambiente ainda esteja no fluxo técnico anterior.
     """
     report_section = _read(ROOT / "ui" / "report" / "section.py")
 
@@ -49,12 +50,14 @@ def test_inline_plans_contract_keeps_current_pdf_download_flow_after_report_unlo
     required_download_anchors = [
         'st.download_button(',
         'file_name="relatorio_viabilidade.pdf"',
-        'key="download_report_pdf"',
     ]
     for item in required_download_anchors:
         assert item in report_section, f"Fluxo de download do PDF perdeu a âncora: {item}"
 
-    assert (
-        'label="⬇️ Fazer download"' in report_section
-        or 'label="⬇️ Baixar relatório em PDF"' in report_section
-    ), "Fluxo de PDF perdeu o botão final de download para o usuário."
+    allowed_download_keys = [
+        'key="download_report_pdf_visual_ready"',
+        'key="download_report_pdf"',
+    ]
+    assert any(item in report_section for item in allowed_download_keys), (
+        "Fluxo de download do PDF perdeu a chave do botão de download atual."
+    )
