@@ -220,18 +220,18 @@ def _render_primary_download_action(item: Dict[str, Any], signed_url: str) -> No
 
     if can_make_visual_pdf:
         if st.button("📄 Gerar relatório em PDF", use_container_width=True, key=f"prepare_visual_pdf_{item.get('id')}"):
+            st.info("Gerando relatório, aguarde alguns segundos para fazer o download.")
             try:
-                st.session_state[bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(item)
+                with st.spinner("Gerando relatório em PDF..."):
+                    st.session_state[bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(item)
                 st.session_state.pop(error_key, None)
                 st.rerun()
             except Exception as exc:
                 st.session_state[error_key] = str(exc)
 
         if st.session_state.get(error_key):
-            st.warning("Não foi possível preparar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes. Mantive o PDF salvo antigo como alternativa.")
+            st.warning("Não foi possível gerar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes.")
 
-    if signed_url:
-        st.link_button("⬇️ Baixar PDF salvo antigo", signed_url, use_container_width=True)
     elif not can_make_visual_pdf:
         st.button("⬇️ Fazer download", disabled=True, use_container_width=True, key=f"download_disabled_{item.get('id')}")
 
