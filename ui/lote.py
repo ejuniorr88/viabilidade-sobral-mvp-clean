@@ -91,11 +91,18 @@ def render_lote_section() -> Tuple[float, float, float]:
             key="lot_irregular_checkbox",
         )
 
+    # Terreno irregular usa a área total informada e não deve acumular
+    # a lógica visual/funcional de lote de meio de quadra ou de esquina.
+    if terreno_irregular:
+        st.session_state["lot_midblock_checkbox"] = False
+        st.session_state["lot_corner_checkbox"] = False
+
     with f2:
         st.checkbox(
             "Lote meio de quadra",
             key="lot_midblock_checkbox",
             on_change=_activate_midblock,
+            disabled=bool(terreno_irregular),
         )
 
     f3, f4 = st.columns(2, gap="small")
@@ -104,12 +111,18 @@ def render_lote_section() -> Tuple[float, float, float]:
             "Lote de esquina",
             key="lot_corner_checkbox",
             on_change=_activate_corner,
+            disabled=bool(terreno_irregular),
         )
 
     lote_meio_quadra = bool(st.session_state.get("lot_midblock_checkbox", True))
     lote_esquina = bool(st.session_state.get("lot_corner_checkbox", False))
 
-    if lote_meio_quadra and lote_esquina:
+    if terreno_irregular:
+        lote_meio_quadra = False
+        lote_esquina = False
+        st.session_state["lot_midblock_checkbox"] = False
+        st.session_state["lot_corner_checkbox"] = False
+    elif lote_meio_quadra and lote_esquina:
         lote_meio_quadra = False
         lote_esquina = True
         st.session_state["lot_midblock_checkbox"] = False
