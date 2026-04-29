@@ -341,9 +341,8 @@ def handle_oauth_callback() -> None:
             _try_restore_from_external_token(force_verify=True)
             st.session_state["auth_message"] = "Login efetuado com sucesso."
             st.session_state.pop("oauth_url", None)
-            # Segurança: depois que o token externo é validado e salvo no
-            # session_state, ele não deve permanecer exposto na URL.
-            clear_auth_query_params(remove_external_token=True)
+            # Mantém o ext_access_token para permitir reidratação no refresh.
+            clear_auth_query_params(remove_external_token=False)
             st.rerun()
             return
         except Exception as e:
