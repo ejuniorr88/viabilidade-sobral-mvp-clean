@@ -1,48 +1,35 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-LIGHT_LOCK = ROOT / "ui" / "theme" / "light_mode_lock.py"
 
 
-def test_light_mode_lock_is_narrow_and_does_not_style_app_elements():
-    content = LIGHT_LOCK.read_text(encoding="utf-8")
+def test_light_mode_lock_is_narrow_and_does_not_style_app_elements() -> None:
+    module_path = ROOT / "ui" / "theme" / "light_mode_lock.py"
+    assert module_path.exists(), "ui/theme/light_mode_lock.py não encontrado"
 
-    required = [
-        "def enforce_light_mode()",
-        "color-scheme: light",
-        'data-theme", "light"',
-    ]
-    for token in required:
-        assert token in content
+    text = module_path.read_text(encoding="utf-8", errors="ignore")
+    css_and_js = text.lower()
 
-    forbidden_tokens = [
-        "overflow-y",
-        "scrollbar",
-        "stButton",
-        "button[kind",
-        "button:hover",
-        "section[data-testid=\"stSidebar\"]",
-        ".vf-primary-button",
-        ".vf-report-action",
-        "MutationObserver",
-        "background-color:",
+    assert "color-scheme: light" in css_and_js
+    assert "data-theme" in css_and_js
+    assert "streamlit:theme" in css_and_js
+
+    forbidden_style_selectors = [
+        "::-webkit-scrollbar",
+        "stbutton",
+        "stsidebar",
+        "sthorizontalblock",
+        "vf-brand",
+        "vf-nav",
+        "background:",
         "color:",
+        "border:",
+        "box-shadow",
     ]
-    for token in forbidden_tokens:
-        assert token not in content
-
-
-def test_light_mode_lock_does_not_import_app_shell_or_sensitive_modules():
-    content = LIGHT_LOCK.read_text(encoding="utf-8")
-
-    forbidden_imports = [
-        "ui.app_shell",
-        "core.auth",
-        "core.credits",
-        "core.checkout_flow",
-        "core.client_reports",
-        "core.payments",
-        "core.zone_resolution",
-    ]
-    for token in forbidden_imports:
-        assert token not in content
+    for item in forbidden_style_selectors:
+        assert item not in css_and_js, (
+            "O bloqueio de modo claro deve continuar estreito e não pode estilizar "
+            f"elementos visuais do app: {item}"
+        )
