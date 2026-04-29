@@ -1,7 +1,9 @@
 (function () {
   const root = document.getElementById("root");
   const POPUP_TOKEN_KEY = "vf_auth_popup_token";
-  let currentArgs = { auth_url: "", label: "Entrar com Google", subtle: false };
+  const PERSISTED_TOKEN_KEY = "vf_auth_streamlit_access_token";
+  let currentArgs = { auth_url: "", label: "Entrar com Google", subtle: false, restore_token: true, clear_browser_token: false };
+  let restoredPersistedTokenSent = false;
   let activeMessageHandler = null;
   let activeBroadcastChannel = null;
 
@@ -47,15 +49,36 @@
     ].join(",");
   }
 
+  function clearBrowserTokens() {
+    try { window.localStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
+    try { window.sessionStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
+    try { window.localStorage.removeItem(PERSISTED_TOKEN_KEY); } catch (_err) {}
+    try { window.sessionStorage.removeItem(PERSISTED_TOKEN_KEY); } catch (_err) {}
+  }
+
+  function persistTokenForRefresh(token) {
+    if (!token) return;
+    try { window.localStorage.setItem(PERSISTED_TOKEN_KEY, token); } catch (_err) {}
+    try { window.sessionStorage.setItem(PERSISTED_TOKEN_KEY, token); } catch (_err) {}
+  }
+
+  function readPersistedToken() {
+    try {
+      return (window.sessionStorage.getItem(PERSISTED_TOKEN_KEY) || window.localStorage.getItem(PERSISTED_TOKEN_KEY) || "").trim();
+    } catch (_err) {
+      return "";
+    }
+  }
+
   function consumePopupToken(rawValue) {
     const token = (rawValue || "").trim();
     if (!token) return;
 
+    persistTokenForRefresh(token);
     setComponentValue(token);
 
-    try {
-      window.localStorage.removeItem(POPUP_TOKEN_KEY);
-    } catch (_err) {}
+    try { window.localStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
+    try { window.sessionStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
   }
 
   function getExpectedAuthOrigin() {
@@ -161,6 +184,19 @@
     });
 
     root.appendChild(button);
+
+    if (currentArgs.clear_browser_token) {
+      clearBrowserTokens();
+      restoredPersistedTokenSent = true;
+      setComponentValue(null);
+    } else if (currentArgs.restore_token && !restoredPersistedTokenSent) {
+      const persistedToken = readPersistedToken();
+      if (persistedToken) {
+        restoredPersistedTokenSent = true;
+        setComponentValue(persistedToken);
+      }
+    }
+
     setFrameHeight(subtle ? 44 : 54);
   }
 
