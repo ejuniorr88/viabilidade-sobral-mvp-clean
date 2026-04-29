@@ -12,6 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 import streamlit.components.v1 as components
+from ui.theme.light_mode_lock import enforce_light_mode
 
 from core.session.bootstrap import bootstrap_session_state
 
@@ -197,6 +198,7 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
+enforce_light_mode()
 consume_home_nav_query_param(st.session_state)
 consume_client_area_query_param(st.session_state)
 consume_landing_checkout_query_params(st.session_state)

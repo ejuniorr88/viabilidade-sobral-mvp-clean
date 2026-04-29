@@ -8,26 +8,18 @@ def _source() -> str:
     return SOURCE.read_text(encoding="utf-8")
 
 
-def test_mobile_sidebar_entry_removes_instruction_card_copy() -> None:
+def test_mobile_sidebar_entry_has_no_visual_instruction_card() -> None:
     src = _source()
-    forbidden = [
-        "Comece por aqui",
-        "Preencha os dados do terreno",
-        "No celular, os campos da consulta",
-        "painel lateral para economizar espaço",
-        "Toque em Abrir dados",
-        "vf-mobile-sidebar-entry__card",
-        "vf-mobile-sidebar-entry__eyebrow",
-        "vf-mobile-sidebar-entry__title",
-        "vf-mobile-sidebar-entry__callout",
-    ]
-    for text in forbidden:
-        assert text not in src
 
-
-def test_mobile_sidebar_entry_keeps_only_native_sidebar_control_hint() -> None:
-    src = _source()
-    assert 'data-testid="stSidebarCollapsedControl"' in src
-    assert 'content: "Abrir dados"' in src
-    assert "st.markdown" in src
+    assert src.count("st.markdown") == 1
+    assert "data-testid=\"stSidebarCollapsedControl\"" in src
+    assert "content: \"Abrir dados\"" in src
     assert "unsafe_allow_html=True" in src
+
+    # O arquivo deve ficar limitado ao reforço discreto do controle nativo.
+    assert "__card" not in src
+    assert "__eyebrow" not in src
+    assert "__title" not in src
+    assert "__callout" not in src
+    assert "<h" not in src
+    assert "<p" not in src

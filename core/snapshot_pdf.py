@@ -365,29 +365,64 @@ def generate_snapshot_html_bytes(item: Dict[str, Any]) -> bytes:
     return build_snapshot_print_html(item).encode("utf-8")
 
 
-def snapshot_pdf_renderer_available() -> bool:
+def _external_snapshot_pdf_available() -> bool:
+    try:
+        from core.snapshot_pdf_external import external_converter_available
+
+        return bool(external_converter_available())
+    except Exception:
+        return False
+
+
+def _local_weasyprint_available() -> bool:
     try:
         from weasyprint import HTML  # noqa: F401
+
         return True
     except Exception:
         return False
 
 
+def snapshot_pdf_renderer_available() -> bool:
+    return _external_snapshot_pdf_available() or _local_weasyprint_available()
+
+
 def generate_snapshot_pdf_bytes(item: Dict[str, Any]) -> bytes:
-    """Generate a PDF from the real saved report renderer, not from a simplified field summary."""
-    if not snapshot_pdf_renderer_available():
+    """Generate a PDF from the real saved report renderer, not from a simplified field summary.
+
+    The preferred path is the external converter configured by SNAPSHOT_PDF_CONVERTER_URL.
+    This keeps heavy PDF/browser dependencies outside the Streamlit app. If the external
+    converter is not configured, the legacy local WeasyPrint path remains available as a
+    safe fallback for environments where it already worked.
+    """
+    html_doc = build_snapshot_print_html(item)
+    html_bytes = html_doc.encode("utf-8")
+
+    if _external_snapshot_pdf_available():
+        try:
+            from core.snapshot_pdf_external import generate_pdf_from_snapshot_html
+
+            return generate_pdf_from_snapshot_html(html_bytes)
+        except Exception as exc:
+            raise SnapshotPdfUnavailable(
+                "Não foi possível gerar o PDF visual pelo conversor externo. "
+                "O HTML visual permanece disponível como alternativa segura."
+            ) from exc
+
+    if not _local_weasyprint_available():
         raise SnapshotPdfUnavailable(
-            "WeasyPrint não está disponível neste ambiente. Para não gerar um PDF incompleto ou diferente do snapshot, "
-            "o sistema disponibiliza o HTML imprimível do snapshot."
+            "PDF visual automático indisponível neste ambiente. Use o HTML visual do snapshot "
+            "e imprima/salve em PDF pelo navegador."
         )
 
-    html_doc = build_snapshot_print_html(item)
     try:
         from weasyprint import HTML
+
         return HTML(string=html_doc, base_url=os.getcwd()).write_pdf()
     except Exception as exc:
         raise SnapshotPdfUnavailable(
-            "Não foi possível converter o snapshot real em PDF neste ambiente. O HTML imprimível foi mantido como alternativa segura."
+            "Não foi possível converter o snapshot real em PDF neste ambiente. "
+            "O HTML imprimível foi mantido como alternativa segura."
         ) from exc
 
 

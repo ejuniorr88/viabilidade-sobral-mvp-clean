@@ -22,15 +22,15 @@ def test_consultation_form_is_centralized_for_sidebar_and_mobile() -> None:
     assert 'st.markdown("### 📐 3. Dados do Lote")' in source
 
 
-def test_mobile_flow_renders_form_after_map_and_before_calculate_button() -> None:
+def test_mobile_flow_keeps_form_after_map_and_before_calculate_button() -> None:
     source = _read(APP)
 
     map_pos = source.index("radius_m = render_mapa_section(zones_gj)")
-    mobile_header_pos = source.index("render_mobile_inline_consultation_header()")
-    mobile_form_pos = source.index("= render_consultation_form(st.session_state)", mobile_header_pos)
+    mobile_anchor_pos = source.index("render_mobile_inline_consultation_header()")
+    mobile_form_pos = source.index("= render_consultation_form(st.session_state)", mobile_anchor_pos)
     primary_actions_pos = source.index("clicked_calcular = render_primary_actions(")
 
-    assert map_pos < mobile_header_pos < mobile_form_pos < primary_actions_pos
+    assert map_pos < mobile_anchor_pos < mobile_form_pos < primary_actions_pos
 
 
 def test_desktop_keeps_sidebar_and_mobile_skips_sidebar() -> None:
@@ -48,6 +48,22 @@ def test_viewport_detector_preserves_existing_query_params() -> None:
     assert "new URL(parentWindow.location.href)" in source
     assert "url.searchParams.set(\"vf_mobile\", expected)" in source
     assert "parentWindow.location.replace(url.toString())" in source
+
+
+def test_mobile_inline_module_keeps_only_invisible_anchor() -> None:
+    source = _read(MOBILE_INLINE)
+
+    assert "ANCHOR_CLASS" in source
+    assert "ANCHOR_ID" in source
+    assert "vf-mobile-inline-consultation-anchor" in source
+    assert "vf-mobile-inline-consultation" in source
+    assert 'aria-hidden="true"' in source
+    assert "display: none" in source
+    assert "<h" not in source
+    assert "<p" not in source
+    assert "kicker" not in source
+    assert "title" not in source.lower()
+    assert "text" not in source.lower()
 
 
 def test_mobile_inline_module_does_not_touch_protected_areas() -> None:

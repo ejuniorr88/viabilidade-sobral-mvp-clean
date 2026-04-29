@@ -15,8 +15,7 @@ def test_app_py_keeps_expected_section_delegations() -> None:
     required_calls = [
         "bootstrap_session_state(st.session_state)",
         "apply_post_login_runtime_flags(",
-        "categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)",
-        "lot_area, built_ground, permeable_area = render_lot_inputs()",
+        "render_consultation_form(st.session_state)",
         "radius_m = render_mapa_section(zones_gj)",
         "render_localizacao_section(True, zones_prepared, radius_m)",
         "render_localizacao_section(False, zones_prepared, radius_m)",
@@ -38,8 +37,7 @@ def test_app_py_keeps_main_flow_order() -> None:
 
     anchors = [
         "apply_post_login_runtime_flags(",
-        "render_use_selector(st.session_state)",
-        "render_lot_inputs()",
+        "render_consultation_form(st.session_state)",
         "render_mapa_section(zones_gj)",
         "render_localizacao_section(True, zones_prepared, radius_m)",
         "render_indices_section(",

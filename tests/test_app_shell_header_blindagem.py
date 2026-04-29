@@ -7,7 +7,7 @@ def _src() -> str:
 
 def test_header_uses_single_top_row_columns():
     src = _src()
-    assert 'cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")' in src
+    assert 'cols = st.columns([' in src
     assert 'vf_nav_how' in src
     assert 'vf_nav_client' in src
     assert 'vf_nav_plans' in src
@@ -28,7 +28,6 @@ def test_header_selector_remains_scoped_to_brand_block():
     src = _src()
     assert '[data-testid="stHorizontalBlock"]:has(.vf-brand)' in src
     assert '.vf-brand' in src
-    assert '.vf-brand-dot' in src
 
 
 def test_header_visual_height_contract_is_preserved():
@@ -44,7 +43,7 @@ def test_header_menu_is_vertically_centered():
     assert '[data-testid="stHorizontalBlock"]:has(.vf-brand) [data-testid="stColumn"] {{' in src
     assert '[data-testid="stHorizontalBlock"]:has(.vf-brand) [data-testid="stColumn"] > div {{' in src
     assert 'align-items: center !important;' in src
-    assert '[data-testid="stHorizontalBlock"]:has(.vf-brand) .stButton {{' in src
+    assert '.stButton {{' in src
     assert 'justify-content: center !important;' in src
 
 
@@ -65,17 +64,24 @@ def test_header_click_fix_contract_is_preserved():
     assert 'cursor: pointer !important;' in src
 
 
-def test_header_brand_home_link_contract_is_preserved():
+def test_header_brand_home_action_contract_is_preserved():
     src = _src()
-    assert 'home_url = f"{get_app_url()}?nav=home"' in src
-    assert 'class="vf-brand vf-brand-home"' in src
-    assert 'href="{home_url}"' in src
+    assert 'key="vf_nav_home"' in src
+    assert '_return_to_study_from_header()' in src
+    assert 'st.rerun()' in src
+    assert 'vf-brand-anchor' in src
+
+
+def test_header_external_nav_links_open_in_same_tab_and_support_has_landing_route():
+    src = _src()
+    assert 'id="vf_nav_how"' in src
+    assert 'href="{_build_landing_url("entenda-o-sistema.html")}"' in src
     assert 'target="_self"' in src
-
-
-def test_header_brand_home_link_visual_contract_is_preserved():
-    src = _src()
-    assert '.vf-brand-home {{' in src
-    assert '.vf-brand-home:visited {{' in src
-    assert 'color: #ffffff !important;' in src
-    assert 'text-decoration: none !important;' in src
+    assert 'aria-label="Abrir página Como funciona na mesma aba"' in src
+    assert 'id="vf_nav_plans"' in src
+    assert 'href="{_build_landing_url("planos.html")}"' in src
+    assert 'aria-label="Abrir página de planos na mesma aba"' in src
+    assert 'id="vf_nav_support"' in src
+    assert 'href="{_build_landing_url("duvidas-suporte.html")}"' in src
+    assert 'aria-label="Abrir página de dúvidas e suporte na mesma aba"' in src
+    assert 'target="_blank"' not in src

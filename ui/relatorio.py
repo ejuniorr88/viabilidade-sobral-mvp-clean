@@ -531,5 +531,3 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         st.markdown(item_headings[item_key])
         UNIFAMILIAR_ITEM_RENDERERS[item_key](ctx)
 
-    with st.expander("Ver regra completa (JSON)"):
-        st.json(rule)
