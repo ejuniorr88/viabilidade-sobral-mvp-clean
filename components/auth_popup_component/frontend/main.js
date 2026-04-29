@@ -58,6 +58,17 @@
     } catch (_err) {}
   }
 
+  function getExpectedAuthOrigin() {
+    const authUrl = (currentArgs && currentArgs.auth_url ? currentArgs.auth_url : "").trim();
+    if (!authUrl) return "";
+
+    try {
+      return new URL(authUrl).origin;
+    } catch (_err) {
+      return "";
+    }
+  }
+
   function cleanupMessageHandler() {
     if (activeMessageHandler) {
       window.removeEventListener("message", activeMessageHandler);
@@ -70,6 +81,11 @@
   }
 
   function handleAuthSuccess(event) {
+    const expectedOrigin = getExpectedAuthOrigin();
+    if (!expectedOrigin || !event || event.origin !== expectedOrigin) {
+      return;
+    }
+
     const data = event && event.data ? event.data : null;
     if (!data || data.type !== "vf_auth_success" || !data.access_token) {
       return;
@@ -79,7 +95,7 @@
 
     try {
       if (event.source && typeof event.source.postMessage === "function") {
-        event.source.postMessage({ type: "vf_auth_ack" }, "*");
+        event.source.postMessage({ type: "vf_auth_ack" }, expectedOrigin);
       }
     } catch (_err) {}
 
