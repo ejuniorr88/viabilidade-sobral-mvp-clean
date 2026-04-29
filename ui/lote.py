@@ -91,47 +91,58 @@ def render_lote_section() -> Tuple[float, float, float]:
             key="lot_irregular_checkbox",
         )
 
-    # Terreno irregular usa a área total informada e não deve acumular
-    # a lógica visual/funcional de lote de meio de quadra ou de esquina.
-    if terreno_irregular:
-        st.session_state["lot_midblock_checkbox"] = False
-        st.session_state["lot_corner_checkbox"] = False
-
     with f2:
-        st.checkbox(
-            "Lote meio de quadra",
-            key="lot_midblock_checkbox",
-            on_change=_activate_midblock,
-            disabled=bool(terreno_irregular),
-        )
+        if terreno_irregular:
+            st.checkbox(
+                "Lote meio de quadra",
+                value=False,
+                key="lot_midblock_checkbox_disabled_irregular",
+                disabled=True,
+                help="Para terreno irregular, os cálculos usam apenas a área total informada.",
+            )
+        else:
+            st.checkbox(
+                "Lote meio de quadra",
+                key="lot_midblock_checkbox",
+                on_change=_activate_midblock,
+            )
 
     f3, f4 = st.columns(2, gap="small")
     with f3:
-        st.checkbox(
-            "Lote de esquina",
-            key="lot_corner_checkbox",
-            on_change=_activate_corner,
-            disabled=bool(terreno_irregular),
-        )
-
-    lote_meio_quadra = bool(st.session_state.get("lot_midblock_checkbox", True))
-    lote_esquina = bool(st.session_state.get("lot_corner_checkbox", False))
+        if terreno_irregular:
+            st.checkbox(
+                "Lote de esquina",
+                value=False,
+                key="lot_corner_checkbox_disabled_irregular",
+                disabled=True,
+                help="Para terreno irregular, os cálculos usam apenas a área total informada.",
+            )
+        else:
+            st.checkbox(
+                "Lote de esquina",
+                key="lot_corner_checkbox",
+                on_change=_activate_corner,
+            )
 
     if terreno_irregular:
+        # Terreno irregular não deve combinar com meio de quadra nem esquina.
+        # A regra é aplicada apenas nas variáveis de cálculo, sem reescrever
+        # st.session_state das chaves dos widgets já renderizados.
         lote_meio_quadra = False
         lote_esquina = False
-        st.session_state["lot_midblock_checkbox"] = False
-        st.session_state["lot_corner_checkbox"] = False
-    elif lote_meio_quadra and lote_esquina:
-        lote_meio_quadra = False
-        lote_esquina = True
-        st.session_state["lot_midblock_checkbox"] = False
-        st.session_state["lot_corner_checkbox"] = True
-    elif not lote_meio_quadra and not lote_esquina:
-        lote_meio_quadra = True
-        lote_esquina = False
-        st.session_state["lot_midblock_checkbox"] = True
-        st.session_state["lot_corner_checkbox"] = False
+    else:
+        lote_meio_quadra = bool(st.session_state.get("lot_midblock_checkbox", True))
+        lote_esquina = bool(st.session_state.get("lot_corner_checkbox", False))
+
+        # Proteção lógica sem alterar session_state dos widgets depois da renderização.
+        # Se algum estado antigo vier inconsistente, a regra local corrige o cálculo,
+        # mas não tenta modificar a chave do checkbox no mesmo ciclo do Streamlit.
+        if lote_meio_quadra and lote_esquina:
+            lote_meio_quadra = False
+            lote_esquina = True
+        elif not lote_meio_quadra and not lote_esquina:
+            lote_meio_quadra = True
+            lote_esquina = False
 
     # ======================================================
     # Área do lote quando irregular
