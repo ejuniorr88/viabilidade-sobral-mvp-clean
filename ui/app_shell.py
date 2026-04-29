@@ -407,7 +407,23 @@ def inject_global_styles() -> None:
     )
 
 
+def _render_header_link(link_id: str, label: str, href: str, aria_label: str) -> None:
+    st.markdown(
+        f'<div class="vf-nav-link-wrap"><a id="{link_id}" class="vf-nav-link-button" href="{href}" target="_self" aria-label="{aria_label}">{label}</a></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _open_plans_from_header() -> None:
+    st.session_state["show_plans_page"] = True
+    st.session_state["show_client_area"] = False
+    if not st.session_state.get("auth_logged_in"):
+        st.session_state["post_login_action"] = "open_plans_page"
+    st.rerun()
+
+
 def render_top_nav() -> None:
+    is_logged_in = bool(st.session_state.get("auth_logged_in"))
     cols = st.columns([2.35, 2.55, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
@@ -419,10 +435,17 @@ def render_top_nav() -> None:
             st.rerun()
 
     with cols[2]:
-        st.markdown(
-            f'<div class="vf-nav-link-wrap"><a id="vf_nav_how" class="vf-nav-link-button" href="{_build_landing_url("entenda-o-sistema.html")}" target="_self" aria-label="Abrir página Como funciona na mesma aba">Como funciona</a></div>',
-            unsafe_allow_html=True,
-        )
+        if is_logged_in:
+            if st.button("Como funciona", key="vf_nav_how_internal", type="tertiary", use_container_width=True):
+                _return_to_study_from_header()
+                st.rerun()
+        else:
+            _render_header_link(
+                "vf_nav_how",
+                "Como funciona",
+                _build_landing_url("entenda-o-sistema.html"),
+                "Abrir página Como funciona na mesma aba",
+            )
 
     with cols[3]:
         if st.button("Área do cliente", key="vf_nav_client", type="tertiary", use_container_width=True):
@@ -433,16 +456,32 @@ def render_top_nav() -> None:
             st.rerun()
 
     with cols[4]:
-        st.markdown(
-            f'<div class="vf-nav-link-wrap"><a id="vf_nav_plans" class="vf-nav-link-button" href="{_build_landing_url("planos.html")}" target="_self" aria-label="Abrir página de planos na mesma aba">Planos</a></div>',
-            unsafe_allow_html=True,
-        )
+        if is_logged_in:
+            if st.button("Planos", key="vf_nav_plans_internal", type="tertiary", use_container_width=True):
+                _open_plans_from_header()
+        else:
+            _render_header_link(
+                "vf_nav_plans",
+                "Planos",
+                _build_landing_url("planos.html"),
+                "Abrir página de planos na mesma aba",
+            )
 
     with cols[5]:
-        st.markdown(
-            f'<div class="vf-nav-link-wrap"><a id="vf_nav_support" class="vf-nav-link-button" href="{_build_landing_url("duvidas-suporte.html")}" target="_self" aria-label="Abrir página de dúvidas e suporte na mesma aba">Dúvidas/Suporte</a></div>',
-            unsafe_allow_html=True,
-        )
+        if is_logged_in:
+            _render_header_link(
+                "vf_nav_support_internal",
+                "Dúvidas/Suporte",
+                "mailto:suporteviabilidadefacil@gmail.com",
+                "Abrir e-mail de suporte",
+            )
+        else:
+            _render_header_link(
+                "vf_nav_support",
+                "Dúvidas/Suporte",
+                _build_landing_url("duvidas-suporte.html"),
+                "Abrir página de dúvidas e suporte na mesma aba",
+            )
 
     # ---------------------------------------------------------------------
     # Mobile header
@@ -458,9 +497,9 @@ def render_top_nav() -> None:
         st.rerun()
 
     _brand_home_url = "?nav=home"
-    _how_url = _build_landing_url("entenda-o-sistema.html")
-    _plans_url = _build_landing_url("planos.html")
-    _support_url = _build_landing_url("duvidas-suporte.html")
+    _how_url = "?nav=home" if is_logged_in else _build_landing_url("entenda-o-sistema.html")
+    _plans_url = "?checkout=1" if is_logged_in else _build_landing_url("planos.html")
+    _support_url = "mailto:suporteviabilidadefacil@gmail.com" if is_logged_in else _build_landing_url("duvidas-suporte.html")
 
     render_mobile_top_nav(
         brand="Viabilidade-Fácil",
@@ -470,6 +509,7 @@ def render_top_nav() -> None:
         support_url=_support_url,
         on_open_client_area=_on_open_client_area,
     )
+
 
 def render_wallet_summary() -> None:
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"
