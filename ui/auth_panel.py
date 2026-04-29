@@ -33,6 +33,7 @@ def render_google_login_cta(
     force_select_account: bool = False,
     subtle: bool = False,
     context: str = "default",
+    restore_token: bool = True,
 ) -> None:
     auth_url = start_google_login(force_select_account=force_select_account)
 
@@ -55,7 +56,7 @@ def render_google_login_cta(
             subtle=subtle,
             force_select_account=force_select_account,
         ),
-        restore_token=True,
+        restore_token=bool(restore_token),
         clear_browser_token=clear_browser_token,
     )
 
@@ -89,6 +90,7 @@ def _render_logged_in_box(prefix: str) -> None:
             force_select_account=True,
             subtle=True,
             context=f"{prefix}_swap_user",
+            restore_token=False,
         )
 
 
