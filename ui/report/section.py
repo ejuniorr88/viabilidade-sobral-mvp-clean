@@ -414,7 +414,7 @@ def render_report_section(
                 use_container_width=True,
             )
         else:
-            if st.button("⚙️ Preparar PDF visual", key="prepare_report_visual_pdf", use_container_width=True):
+            if st.button("📄 Gerar relatório em PDF", key="prepare_report_visual_pdf", use_container_width=True):
                 try:
                     snapshot_item = _current_snapshot_item(
                         report_calc=report_calc,
