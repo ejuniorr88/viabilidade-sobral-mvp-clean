@@ -192,7 +192,7 @@ def test_auth_frontend_popup_callback_handoff_is_fast_and_does_not_hit_gateway()
 
     assert result['fetchCalls'] == [], 'Popup no retorno do Google não deve bater no gateway antes de devolver o token.'
     assert result['postMessages'] == [
-        {'payload': {'type': 'vf_auth_success', 'access_token': 'tok_popup'}, 'target': '*'}
+        {'payload': {'type': 'vf_auth_success', 'access_token': 'tok_popup'}, 'target': 'https://app.example.com'}
     ]
     assert result['broadcasts'] == [
         {'name': 'vf-auth-popup', 'payload': {'type': 'vf_auth_success', 'access_token': 'tok_popup'}}

@@ -138,10 +138,21 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
     uso_label = _use_label(uso)
 
     A = float(calc.get("lot_area_m2") or 0.0)
-    W = float(st.session_state.get("lot_front_m") or 0.0)
-    D = float(st.session_state.get("lot_depth_m") or 0.0)
-    is_corner = bool(st.session_state.get("lot_is_corner") or False)
-    tipo_lote = "Esquina" if is_corner else "Meio de quadra"
+    is_irregular = bool(
+        st.session_state.get("lot_is_irregular")
+        or calc.get("lot_irregular")
+        or calc.get("lot_is_irregular")
+    )
+    if is_irregular:
+        W = 0.0
+        D = 0.0
+        is_corner = False
+        tipo_lote = "Terreno irregular"
+    else:
+        W = float(st.session_state.get("lot_front_m") or calc.get("lot_front_m") or 0.0)
+        D = float(st.session_state.get("lot_depth_m") or calc.get("lot_depth_m") or 0.0)
+        is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
+        tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
     tp_min = _to_pct(rule, "tp_min_pct", "tp_min")
@@ -236,6 +247,7 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         "W": W,
         "D": D,
         "is_corner": is_corner,
+        "is_irregular": is_irregular,
         "tipo_lote": tipo_lote,
         "to_max": to_max,
         "tp_min": tp_min,
@@ -343,16 +355,27 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     via_tipo = calc.get("via_tipo") or calc.get("street_type") or "—"
     uso = calc.get("use_type_code") or "RES_UNI"
     uso_label = _use_label(uso)
+    is_irregular = bool(
+        st.session_state.get("lot_is_irregular")
+        or calc.get("lot_irregular")
+        or calc.get("lot_is_irregular")
+    )
 
     if str(uso).startswith("RES_MULTI_") and calc.get("project_mode") == "GUIA_FASE_1":
         render_multifamiliar_guia(calc=calc, rule=rule, is_irregular=is_irregular)
         return
 
     A = float(calc.get("lot_area_m2") or 0.0)
-    W = float(st.session_state.get("lot_front_m") or 0.0)
-    D = float(st.session_state.get("lot_depth_m") or 0.0)
-    is_corner = bool(st.session_state.get("lot_is_corner") or False)
-    tipo_lote = "Esquina" if is_corner else "Meio de quadra"
+    if is_irregular:
+        W = 0.0
+        D = 0.0
+        is_corner = False
+        tipo_lote = "Terreno irregular"
+    else:
+        W = float(st.session_state.get("lot_front_m") or calc.get("lot_front_m") or 0.0)
+        D = float(st.session_state.get("lot_depth_m") or calc.get("lot_depth_m") or 0.0)
+        is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
+        tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
     tp_min = _to_pct(rule, "tp_min_pct", "tp_min")

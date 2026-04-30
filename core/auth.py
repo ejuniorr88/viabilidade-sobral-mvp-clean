@@ -273,6 +273,21 @@ def _get_external_token() -> Optional[str]:
     return st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
 
 
+def _reject_external_token_for_browser_cleanup(token: Optional[str]) -> None:
+    """Mark a browser-persisted token as rejected and ask the component to clear it.
+
+    A stale token stored in the browser can be returned by the Streamlit
+    component on every render. If validation fails, keep the rejected-token
+    marker until the component returns a clean value; otherwise the same token
+    can be reprocessed in a rerun loop.
+    """
+    cleaned = (token or "").strip()
+    if cleaned:
+        st.session_state["auth_rejected_external_token"] = cleaned
+    st.session_state.pop("auth_external_access_token", None)
+    st.session_state["auth_clear_browser_token"] = True
+
+
 def _try_restore_from_external_token(force_verify: bool = False) -> bool:
     token = _get_external_token()
     if not token:
@@ -305,7 +320,9 @@ def sync_auth_state(force: bool = False) -> bool:
         st.session_state["auth_sync_done"] = True
         return restored
     except Exception as e:
+        failed_token = st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
         clear_user_in_state()
+        _reject_external_token_for_browser_cleanup(failed_token)
         st.session_state["auth_last_error"] = f"Falha ao restaurar login: {e}"
         return False
 
@@ -347,6 +364,7 @@ def handle_oauth_callback() -> None:
             return
         except Exception as e:
             clear_user_in_state()
+            _reject_external_token_for_browser_cleanup(external_access_token)
             st.session_state["auth_last_error"] = f"Falha ao concluir login: {e}"
             st.session_state.pop("oauth_url", None)
             # Se o token falhar, limpamos para evitar travar em estado intermediário.
@@ -379,6 +397,7 @@ def get_auth_url(force_select_account: bool = False) -> Optional[str]:
 
 
 def logout_limpo() -> None:
+    st.session_state["auth_clear_browser_token"] = True
     keep = {
         "_supabase_auth_client": st.session_state.get("_supabase_auth_client"),
     }

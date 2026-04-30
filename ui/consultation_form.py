@@ -32,6 +32,8 @@ def render_consultation_form(session_state: Any) -> ConsultationFormResult:
 
     categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(session_state)
     session_state.calc["use_type_code"] = selected_use_code
+    session_state.calc["selected_use_label"] = selected_use_label
+    session_state.calc["categoria_label"] = categoria_label
 
     st.markdown("### 📐 3. Dados do Lote")
     st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
