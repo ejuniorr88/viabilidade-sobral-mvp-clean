@@ -5,7 +5,9 @@
   let currentArgs = { auth_url: "", label: "Entrar com Google", subtle: false, restore_token: true, clear_browser_token: false };
   let restoredPersistedTokenSent = false;
   let activeMessageHandler = null;
+  let activeStorageHandler = null;
   let activeBroadcastChannel = null;
+  let lastDeliveredToken = "";
 
   function sendMessageToStreamlitClient(type, data) {
     const outData = Object.assign(
@@ -70,12 +72,26 @@
     }
   }
 
-  function consumePopupToken(rawValue) {
+  function deliverTokenToStreamlit(rawValue, options) {
     const token = (rawValue || "").trim();
     if (!token) return;
 
-    persistTokenForRefresh(token);
+    // Evita entregas duplicadas quando postMessage, BroadcastChannel e storage
+    // disparam para o mesmo token no mesmo ciclo do componente. A defesa
+    // principal contra rerun entre ciclos fica no Python, que reconhece tokens
+    // já recusados e solicita limpeza do navegador.
+    if (token === lastDeliveredToken) return;
+    lastDeliveredToken = token;
+
+    const opts = options || {};
+    if (opts.persist !== false) {
+      persistTokenForRefresh(token);
+    }
     setComponentValue(token);
+  }
+
+  function consumePopupToken(rawValue) {
+    deliverTokenToStreamlit(rawValue, { persist: true });
 
     try { window.localStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
     try { window.sessionStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
@@ -96,6 +112,10 @@
     if (activeMessageHandler) {
       window.removeEventListener("message", activeMessageHandler);
       activeMessageHandler = null;
+    }
+    if (activeStorageHandler) {
+      window.removeEventListener("storage", activeStorageHandler);
+      activeStorageHandler = null;
     }
     if (activeBroadcastChannel) {
       try { activeBroadcastChannel.close(); } catch (_err) {}
@@ -136,8 +156,9 @@
   function attachPopupListeners() {
     cleanupMessageHandler();
     activeMessageHandler = handleAuthSuccess;
+    activeStorageHandler = handleStorageEvent;
     window.addEventListener("message", activeMessageHandler);
-    window.addEventListener("storage", handleStorageEvent);
+    window.addEventListener("storage", activeStorageHandler);
 
     try {
       activeBroadcastChannel = new BroadcastChannel("vf-auth-popup");
@@ -188,12 +209,13 @@
     if (currentArgs.clear_browser_token) {
       clearBrowserTokens();
       restoredPersistedTokenSent = true;
+      lastDeliveredToken = "";
       setComponentValue(null);
     } else if (currentArgs.restore_token && !restoredPersistedTokenSent) {
       const persistedToken = readPersistedToken();
       if (persistedToken) {
         restoredPersistedTokenSent = true;
-        setComponentValue(persistedToken);
+        deliverTokenToStreamlit(persistedToken, { persist: false });
       }
     }
 
@@ -209,7 +231,6 @@
   }
 
   window.addEventListener("message", onRenderEvent);
-  window.addEventListener("storage", handleStorageEvent);
   sendMessageToStreamlitClient("streamlit:componentReady", { apiVersion: 1 });
   setFrameHeight(54);
 })();
