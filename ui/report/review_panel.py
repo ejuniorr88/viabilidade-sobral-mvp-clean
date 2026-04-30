@@ -180,6 +180,27 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
         unsafe_allow_html=True,
     )
 
+    is_irregular = bool(
+        session_snapshot.get("lot_is_irregular")
+        or calc.get("lot_irregular")
+        or calc.get("lot_is_irregular")
+    )
+    dimensoes_value = (
+        "Terreno irregular — área total informada"
+        if is_irregular
+        else f"{_fmt_num(session_snapshot.get('lot_front_m'))} m × {_fmt_num(session_snapshot.get('lot_depth_m'))} m"
+    )
+    dimensoes_hint = (
+        "Testada e profundidade não entram no cálculo deste terreno."
+        if is_irregular
+        else "Confira frente e profundidade informadas."
+    )
+    area_hint = (
+        "Área total informada para o terreno irregular."
+        if is_irregular
+        else "Área calculada a partir dos dados atuais do lote."
+    )
+
     c1, c2 = st.columns(2)
     with c1:
         _render_item("Zona do lote", _pick_zone(calc), "Verifique se a zona identificada corresponde ao terreno selecionado.")
@@ -188,11 +209,11 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
     with c2:
         _render_item(
             "Dimensões do terreno",
-            f"{_fmt_num(session_snapshot.get('lot_front_m'))} m × {_fmt_num(session_snapshot.get('lot_depth_m'))} m",
-            "Confira frente e profundidade informadas.",
+            dimensoes_value,
+            dimensoes_hint,
         )
         st.markdown("<div class='review-grid-gap'></div>", unsafe_allow_html=True)
-        _render_item("Área do lote", f"{_fmt_num(session_snapshot.get('lot_area_m2'))} m²", "Área calculada a partir dos dados atuais do lote.")
+        _render_item("Área do lote", f"{_fmt_num(session_snapshot.get('lot_area_m2'))} m²", area_hint)
 
     area_pretendida = _pick_built_area(calc, session_snapshot)
     if area_pretendida is None:
