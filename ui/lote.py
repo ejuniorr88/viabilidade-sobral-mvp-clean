@@ -50,6 +50,13 @@ def render_lote_section() -> Tuple[float, float, float]:
 
     calc = _ensure_calc()
 
+    terreno_irregular_pre = bool(
+        st.session_state.get(
+            "lot_irregular_checkbox",
+            calc.get("lot_irregular", calc.get("lot_is_irregular", False)),
+        )
+    )
+
     # ======================================================
     # Campos empilhados para evitar desalinhamento na sidebar
     # ======================================================
@@ -60,6 +67,8 @@ def render_lote_section() -> Tuple[float, float, float]:
         step=0.1,
         format="%.2f",
         key="lot_testada_m_input",
+        disabled=terreno_irregular_pre,
+        help="Em terreno irregular, testada e profundidade não entram no cálculo.",
     )
 
     profundidade = st.number_input(
@@ -69,10 +78,15 @@ def render_lote_section() -> Tuple[float, float, float]:
         step=0.1,
         format="%.2f",
         key="lot_profundidade_m_input",
+        disabled=terreno_irregular_pre,
+        help="Em terreno irregular, testada e profundidade não entram no cálculo.",
     )
 
     area_calc = float(testada) * float(profundidade)
-    st.caption(f"Área calculada: {_fmt_ptbr(area_calc)} m²")
+    if terreno_irregular_pre:
+        st.caption("Terreno irregular: testada e profundidade serão desconsideradas. Informe a área total do lote abaixo.")
+    else:
+        st.caption(f"Área calculada: {_fmt_ptbr(area_calc)} m²")
 
     # ======================================================
     # Checkboxes alinhados
@@ -149,12 +163,17 @@ def render_lote_section() -> Tuple[float, float, float]:
     # ======================================================
     if terreno_irregular:
         area_lote = st.number_input(
-            "Área do lote (m²):",
+            "Área total do lote irregular (m²):",
             min_value=0.0,
             value=float(calc.get("lot_area_m2", area_calc) or area_calc),
             step=1.0,
             format="%.2f",
             key="lot_area_m2_input",
+            help="Use a área total da matrícula ou do levantamento. Testada e profundidade não serão usadas no cálculo.",
+        )
+        st.info(
+            "Por se tratar de terreno irregular, os cálculos de TO, TP e IA usarão somente a área total informada. "
+            "A implantação deve ser conferida em projeto conforme a geometria real do lote."
         )
     else:
         area_lote = area_calc
@@ -175,19 +194,42 @@ def render_lote_section() -> Tuple[float, float, float]:
     calc["built_ground_m2"] = area_terreo_pretendida
     calc["built_ground_input_m2"] = area_terreo_pretendida
 
+    if terreno_irregular:
+        # Neutraliza dimensões retangulares apenas nos dados finais usados por
+        # cálculo/relatório. Não altera o session_state dos widgets já renderizados.
+        testada_final = 0.0
+        profundidade_final = 0.0
+        tipo_lote = "Terreno irregular"
+    else:
+        testada_final = float(testada)
+        profundidade_final = float(profundidade)
+        tipo_lote = "Esquina" if lote_esquina else "Meio de quadra"
+
     # Persistência do lote
-    calc["lot_testada_m"] = float(testada)
-    calc["lot_profundidade_m"] = float(profundidade)
+    calc["lot_testada_m"] = float(testada_final)
+    calc["lot_profundidade_m"] = float(profundidade_final)
+    calc["lot_front_m"] = float(testada_final)
+    calc["lot_depth_m"] = float(profundidade_final)
     calc["lot_irregular"] = bool(terreno_irregular)
+    calc["lot_is_irregular"] = bool(terreno_irregular)
     calc["lot_is_corner"] = bool(lote_esquina)
     calc["lot_is_midblock"] = bool(lote_meio_quadra)
+    calc["lot_type_label"] = tipo_lote
+    calc["lot_dimensions_label"] = (
+        "Terreno irregular – cálculo pela área total informada"
+        if terreno_irregular
+        else f"{_fmt_ptbr(testada_final)} m × {_fmt_ptbr(profundidade_final)} m"
+    )
     calc["lot_area_m2"] = float(area_lote)
 
     st.session_state["lot_is_corner"] = bool(lote_esquina)
     st.session_state["lot_is_midblock"] = bool(lote_meio_quadra)
     st.session_state["lot_is_irregular"] = bool(terreno_irregular)
-    st.session_state["lot_front_m"] = float(testada)
-    st.session_state["lot_depth_m"] = float(profundidade)
+    st.session_state["lot_type_label"] = tipo_lote
+    st.session_state["lot_dimensions_label"] = calc["lot_dimensions_label"]
+    st.session_state["lot_area_m2"] = float(area_lote)
+    st.session_state["lot_front_m"] = float(testada_final)
+    st.session_state["lot_depth_m"] = float(profundidade_final)
 
     # Área permeável prevista
     area_permeavel_prevista = float(calc.get("area_permeavel_prevista_m2", 0.0) or 0.0)
