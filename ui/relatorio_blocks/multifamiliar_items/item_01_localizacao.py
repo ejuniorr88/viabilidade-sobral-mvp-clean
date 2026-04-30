@@ -1,16 +1,28 @@
 from __future__ import annotations
-from . import common
 
-def render(ctx):
-    common.st.markdown("Aqui entram:")
-    common.st.markdown(
+from .common import md, fmt_num
+
+
+def render(ctx: dict) -> None:
+    md("Aqui estão os dados principais usados nesta análise:")
+    dimensoes = (
+        "Terreno irregular – cálculo pela área total informada"
+        if ctx.get("is_irregular")
+        else f"{fmt_num(ctx['W'])} m × {fmt_num(ctx['D'])} m"
+    )
+    md(
         f"- **Uso informado:** {ctx['uso_label']}\n"
-        f"- **Área do terreno:** {common._fmt_num(ctx['lot_area_f'])} m²\n"
-        f"- **Dimensões:** {common._fmt_num(ctx['lot_front'])} m × {common._fmt_num(ctx['lot_depth'])} m\n"
-        f"- **Zona:** {ctx['zona'] or '—'}\n"
-        f"- **Subzona / setor:** {ctx['subzona']}\n"
+        f"- **Área do terreno:** {fmt_num(ctx['A'])} m²\n"
+        f"- **Dimensões/forma:** {dimensoes}\n"
+        f"- **Zona:** {ctx['zone']}\n"
+        f"- **Subzona / setor:** {ctx['subzone_code']}\n"
         f"- **Tipo de lote:** {ctx['tipo_lote']}\n"
         f"- **Via:** {ctx['via']}\n"
-        f"- **Tipo de via:** {ctx['via_tipo_txt'] or '—'}"
+        f"- **Tipo de via:** {ctx['via_tipo']}"
     )
-    common.st.markdown("**Essas informações são a base de toda a leitura do relatório.**")
+    if ctx.get("is_irregular"):
+        md(
+            "> **Observação técnica:** Por se tratar de terreno irregular, os cálculos foram feitos com base na área total informada. "
+            "A implantação da edificação deve ser conferida em projeto, considerando a geometria real do lote, divisas, recuos e condicionantes locais."
+        )
+    md("Essas informações são a base de todo o relatório.")
