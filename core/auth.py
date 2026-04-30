@@ -1,145 +1,422 @@
 from __future__ import annotations
 
-from typing import Optional
+import json
+from typing import Any, Dict, Optional
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request, urlopen
 
 import streamlit as st
+from supabase import Client, create_client
 
-from components.auth_popup_component import render_auth_popup_button
-from core.auth import start_google_login, sign_out_current_user
-from ui.auth_login_keys import build_auth_popup_key
-
-
-def _is_logged_in() -> bool:
-    return bool(st.session_state.get("auth_logged_in")) and bool(st.session_state.get("auth_user_id"))
+from core.env_secrets import get_secret, get_secret_str
 
 
-def _user_name() -> str:
-    return (
-        st.session_state.get("auth_user_name")
-        or st.session_state.get("auth_user_email")
-        or "Usuário"
+AUTH_STATE_KEYS = [
+    "auth_logged_in",
+    "auth_user_id",
+    "auth_user_email",
+    "auth_user_name",
+    "auth_message",
+    "auth_last_error",
+    "oauth_url",
+    "last_oauth_code",
+    "auth_sync_done",
+]
+
+_VERIFY_TIMEOUT_SECONDS = 8
+
+
+def get_supabase_auth_client() -> Client:
+    client = st.session_state.get("_supabase_auth_client")
+    if client is None:
+        client = create_client(
+            get_secret_str("SUPABASE_URL", required=True),
+            get_secret("SUPABASE_SERVICE_ROLE_KEY")
+            if get_secret("SUPABASE_SERVICE_ROLE_KEY")
+            else get_secret_str("SUPABASE_ANON_KEY", required=True),
+        )
+        st.session_state["_supabase_auth_client"] = client
+    return client
+
+
+def _normalized_env_url(secret_name: str, fallback: str = "", *, required: bool = False) -> str:
+    raw = get_secret_str(secret_name, fallback).strip()
+    if not raw:
+        if required:
+            raise RuntimeError(f"Missing required environment variable: {secret_name}")
+        return ""
+
+    parsed = urlparse(raw)
+    if not parsed.scheme or not parsed.netloc:
+        if required:
+            raise RuntimeError(f"Invalid URL in environment variable: {secret_name}")
+        return ""
+
+    return raw.rstrip("/")
+
+
+def get_app_url() -> str:
+    return _normalized_env_url("REDIRECT_URL", get_secret_str("APP_URL", "http://localhost:8501")) or "http://localhost:8501"
+
+
+def get_external_login_url() -> str:
+    raw = _normalized_env_url("EXTERNAL_LOGIN_URL")
+    if raw:
+        return raw
+
+    app_url = get_app_url()
+    if app_url.startswith("http://localhost") or app_url.startswith("http://127.0.0.1"):
+        return "http://localhost:3000"
+
+    raise RuntimeError("Missing required environment variable: EXTERNAL_LOGIN_URL")
+
+
+def get_gateway_url() -> str:
+    raw = _normalized_env_url("AUTH_GATEWAY_URL")
+    if raw:
+        return raw
+
+    app_url = get_app_url()
+    if app_url.startswith("http://localhost") or app_url.startswith("http://127.0.0.1"):
+        return "http://localhost:8000"
+
+    raise RuntimeError("Missing required environment variable: AUTH_GATEWAY_URL")
+
+
+def build_auth_callback_url() -> str:
+    return get_app_url()
+
+
+def safe_get_query_param(name: str) -> Optional[str]:
+    try:
+        value = st.query_params.get(name)
+        if isinstance(value, list):
+            return value[0] if value else None
+        return value
+    except Exception:
+        try:
+            params = st.experimental_get_query_params()
+            values = params.get(name)
+            if not values:
+                return None
+            return values[0]
+        except Exception:
+            return None
+
+
+def clear_auth_query_params(remove_external_token: bool = False) -> None:
+    keys = [
+        "code",
+        "state",
+        "error",
+        "error_code",
+        "error_description",
+        "auth_flow",
+    ]
+    if remove_external_token:
+        keys.append("ext_access_token")
+
+    try:
+        for key in keys:
+            try:
+                del st.query_params[key]
+            except Exception:
+                pass
+    except Exception:
+        try:
+            current = st.experimental_get_query_params()
+            cleaned = {k: v for k, v in current.items() if k not in keys}
+            st.experimental_set_query_params(**cleaned)
+        except Exception:
+            pass
+
+
+def extract_user_fields(user_obj: Any) -> Dict[str, Optional[str]]:
+    if user_obj is None:
+        return {"id": None, "email": None, "name": None}
+
+    if isinstance(user_obj, dict):
+        meta = user_obj.get("user_metadata") or {}
+        return {
+            "id": user_obj.get("id"),
+            "email": user_obj.get("email"),
+            "name": user_obj.get("name") or meta.get("full_name") or meta.get("name"),
+        }
+
+    meta = getattr(user_obj, "user_metadata", None) or {}
+    if not isinstance(meta, dict):
+        meta = {}
+
+    return {
+        "id": getattr(user_obj, "id", None),
+        "email": getattr(user_obj, "email", None),
+        "name": meta.get("full_name") or meta.get("name"),
+    }
+
+
+def _clear_cross_account_runtime_state() -> None:
+    from core import report_confirmation as report_confirmation_core
+
+    report_confirmation_core.clear_report_runtime_state(
+        session_state=st.session_state,
+        clear_last_calc_signature=True,
+        preserve_snapshot=False,
+        preserve_pending=False,
     )
 
+    st.session_state["calc"] = {"use_type_code": "RES_UNI"}
 
-def _user_email() -> str:
-    return st.session_state.get("auth_user_email") or "-"
+    keys_to_clear = [
+        # mapa / localização
+        "selected_lat",
+        "selected_lon",
+        "last_click",
+        "click_hash",
+        # lote e inputs associados
+        "lot_is_corner",
+        "lot_is_midblock",
+        "lot_is_irregular",
+        "lot_front_m",
+        "lot_depth_m",
+        "lot_midblock_checkbox",
+        "lot_corner_checkbox",
+        "lot_irregular_checkbox",
+        "lot_testada_m_input",
+        "lot_profundidade_m_input",
+        "lot_area_m2_input",
+        "built_ground_m2_input",
+        "built_ground_m2",
+        "built_ground_input_m2",
+        "area_permeavel_prevista_m2",
+        "permeable_area_m2",
+        # fluxo de cálculo / UX
+        "free_calc_done",
+        "show_login_gate",
+        "scroll_to_login_gate",
+        "scroll_to_item3",
+        "post_login_action",
+        "show_inline_payments",
+        "show_client_area",
+        "confirm_clear_all",
+        # widgets do seletor de uso / busca
+        "vf_categoria",
+        "vf_residential_option",
+        "vf_busca_direta",
+        "use_type_code_readonly",
+        # carteira / reconciliação visual
+        "wallet_reconcile_done_for",
+        "wallet_reconcile_result",
+        "wallet_reconcile_error",
+        # rastros de relatório auxiliares
+        "last_report_storage_error",
+        "last_report_refund_result",
+    ]
+    for key in keys_to_clear:
+        st.session_state.pop(key, None)
+
+    # Reinstala o calc mínimo para o app subir limpo no próximo ciclo.
+    st.session_state["calc"] = {"use_type_code": "RES_UNI"}
+    st.session_state["show_client_area"] = False
+    st.session_state["post_login_action"] = None
 
 
-def render_google_login_cta(
-    label: str = "Entrar com Google",
-    *,
-    full_width: bool = False,
-    message: Optional[str] = None,
-    force_select_account: bool = False,
-    subtle: bool = False,
-    context: str = "default",
-    restore_token: bool = True,
-) -> None:
-    auth_url = start_google_login(force_select_account=force_select_account)
+def store_user_in_state(user_obj: Any) -> None:
+    info = extract_user_fields(user_obj)
+    previous_user_id = st.session_state.get("auth_user_id")
+    previous_user_email = st.session_state.get("auth_user_email")
+    next_user_id = info["id"]
+    next_user_email = info["email"]
 
-    if message:
-        st.info(message)
+    changed_user = bool(
+        previous_user_id
+        and next_user_id
+        and str(previous_user_id) != str(next_user_id)
+    ) or bool(
+        previous_user_email
+        and next_user_email
+        and str(previous_user_email).strip().lower() != str(next_user_email).strip().lower()
+    )
 
-    if not auth_url:
-        st.error("Não foi possível iniciar o login com Google.")
+    if changed_user:
+        _clear_cross_account_runtime_state()
+
+    st.session_state["auth_logged_in"] = bool(info["id"] or info["email"])
+    st.session_state["auth_user_id"] = info["id"]
+    st.session_state["auth_user_email"] = info["email"]
+    st.session_state["auth_user_name"] = info["name"]
+    st.session_state["auth_sync_done"] = True
+
+
+def clear_user_in_state() -> None:
+    st.session_state["auth_logged_in"] = False
+    st.session_state["auth_user_id"] = None
+    st.session_state["auth_user_email"] = None
+    st.session_state["auth_user_name"] = None
+    st.session_state["auth_sync_done"] = True
+
+
+def _verify_external_access_token(access_token: str) -> Dict[str, Any]:
+    payload = json.dumps({"access_token": access_token}).encode("utf-8")
+    req = Request(
+        f"{get_gateway_url()}/api/auth/session/verify",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with urlopen(req, timeout=_VERIFY_TIMEOUT_SECONDS) as resp:
+        body = resp.read().decode("utf-8")
+        return json.loads(body) if body else {}
+
+
+def _get_external_token() -> Optional[str]:
+    return st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
+
+
+def _reject_external_token_for_browser_cleanup(token: Optional[str]) -> None:
+    """Mark a browser-persisted token as rejected and ask the component to clear it.
+
+    A stale token stored in the browser can be returned by the Streamlit
+    component on every render. If validation fails, keep the rejected-token
+    marker until the component returns a clean value; otherwise the same token
+    can be reprocessed in a rerun loop.
+    """
+    cleaned = (token or "").strip()
+    if cleaned:
+        st.session_state["auth_rejected_external_token"] = cleaned
+    st.session_state.pop("auth_external_access_token", None)
+    st.session_state["auth_clear_browser_token"] = True
+
+
+def _try_restore_from_external_token(force_verify: bool = False) -> bool:
+    token = _get_external_token()
+    if not token:
+        return False
+
+    cached_token = st.session_state.get("auth_external_access_token")
+    has_user = bool(st.session_state.get("auth_user_id") and st.session_state.get("auth_logged_in"))
+
+    if not force_verify and has_user and cached_token == token:
+        st.session_state["auth_sync_done"] = True
+        return True
+
+    verified = _verify_external_access_token(token)
+    user_obj = verified.get("user") or {}
+    if not user_obj:
+        raise RuntimeError("Usuário não retornado pelo gateway.")
+
+    store_user_in_state(user_obj)
+    st.session_state["auth_external_access_token"] = token
+    st.session_state.pop("auth_last_error", None)
+    return True
+
+
+def sync_auth_state(force: bool = False) -> bool:
+    if st.session_state.get("auth_sync_done") and not force:
+        return bool(st.session_state.get("auth_logged_in"))
+
+    try:
+        restored = _try_restore_from_external_token(force_verify=force)
+        st.session_state["auth_sync_done"] = True
+        return restored
+    except Exception as e:
+        failed_token = st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
+        clear_user_in_state()
+        _reject_external_token_for_browser_cleanup(failed_token)
+        st.session_state["auth_last_error"] = f"Falha ao restaurar login: {e}"
+        return False
+
+
+def handle_oauth_callback() -> None:
+    error = safe_get_query_param("error")
+    error_description = safe_get_query_param("error_description")
+    external_access_token = safe_get_query_param("ext_access_token")
+
+    if error:
+        clear_user_in_state()
+        st.session_state["auth_last_error"] = (
+            f"Erro no login Google: {error}"
+            + (f" — {error_description}" if error_description else "")
+        )
+        st.session_state.pop("oauth_url", None)
+        clear_auth_query_params(remove_external_token=True)
+        st.rerun()
         return
 
-    clear_browser_token = bool(st.session_state.pop("auth_clear_browser_token", False))
+    if external_access_token:
+        try:
+            # Se já validamos este mesmo token nesta sessão, não chama o gateway de novo.
+            if (
+                st.session_state.get("auth_external_access_token") == external_access_token
+                and st.session_state.get("auth_logged_in")
+                and st.session_state.get("auth_user_id")
+            ):
+                st.session_state["auth_sync_done"] = True
+                st.session_state.pop("auth_last_error", None)
+                return
 
-    token = render_auth_popup_button(
-        auth_url=auth_url,
-        label=label,
-        subtle=subtle,
-        key=build_auth_popup_key(
-            context=context,
-            label=label,
-            subtle=subtle,
-            force_select_account=force_select_account,
-        ),
-        restore_token=restore_token,
-        clear_browser_token=clear_browser_token,
-    )
-
-    if token:
-        rejected_token = st.session_state.get("auth_rejected_external_token")
-        if rejected_token and token == rejected_token:
-            # Não processe novamente um token que já falhou.
-            # Se esta renderização já pediu limpeza do navegador, não force outro
-            # rerun aqui: o componente ainda pode devolver o valor antigo uma vez
-            # antes de aplicar setComponentValue(null).
-            st.session_state.pop("auth_external_access_token", None)
-            st.session_state["auth_clear_browser_token"] = True
-            if not clear_browser_token:
-                st.rerun()
+            _try_restore_from_external_token(force_verify=True)
+            st.session_state["auth_message"] = "Login efetuado com sucesso."
+            st.session_state.pop("oauth_url", None)
+            # Mantém o ext_access_token para permitir reidratação no refresh.
+            clear_auth_query_params(remove_external_token=False)
+            st.rerun()
+            return
+        except Exception as e:
+            clear_user_in_state()
+            _reject_external_token_for_browser_cleanup(external_access_token)
+            st.session_state["auth_last_error"] = f"Falha ao concluir login: {e}"
+            st.session_state.pop("oauth_url", None)
+            # Se o token falhar, limpamos para evitar travar em estado intermediário.
+            clear_auth_query_params(remove_external_token=True)
+            st.rerun()
             return
 
-        # Se chegou um token diferente do recusado, uma nova tentativa de login
-        # está em andamento; a marca antiga não deve bloquear o fluxo.
-        st.session_state.pop("auth_rejected_external_token", None)
-
-        current_token = st.session_state.get("auth_external_access_token")
-        already_logged = bool(st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"))
-        if token != current_token or not already_logged:
-            st.session_state["auth_external_access_token"] = token
-            st.session_state["auth_sync_done"] = False
-            st.rerun()
-
-    if not subtle:
-        st.caption("O login abrirá em uma janela popup segura.")
+    sync_auth_state(force=False)
 
 
-def _render_logged_in_box(prefix: str) -> None:
-    st.success(f"{_user_name()} • {_user_email()}")
+def get_auth_url(force_select_account: bool = False) -> Optional[str]:
+    base = get_external_login_url()
+    supabase_url = _normalized_env_url("SUPABASE_URL", required=True)
+    supabase_anon_key = get_secret_str("SUPABASE_ANON_KEY", required=True).strip()
+    gateway_url = get_gateway_url()
+    app_url = get_app_url()
 
-    col1, col2 = st.columns([1.25, 1])
+    params: Dict[str, Any] = {
+        "streamlit_app_url": app_url,
+        "gateway_base_url": gateway_url,
+        "supabase_url": supabase_url,
+        "supabase_anon_key": supabase_anon_key,
+        "login_redirect_url": base,
+        "env_key": f"{supabase_url}|{base}|{app_url}",
+    }
+    if force_select_account:
+        params["switch_account"] = "1"
 
-    with col1:
-        if st.button("Sair", key=f"btn_logout_{prefix}", use_container_width=True):
-            st.session_state["auth_clear_browser_token"] = True
-            sign_out_current_user()
-            st.rerun()
-
-    with col2:
-        render_google_login_cta(
-            "Trocar usuário",
-            full_width=True,
-            force_select_account=True,
-            subtle=True,
-            context=f"{prefix}_swap_user",
-            restore_token=False,
-        )
-
-
-def _render_logged_out_box(prefix: str) -> None:
-    render_google_login_cta(
-        "Entrar com Google",
-        full_width=True,
-        force_select_account=False,
-        context=f"{prefix}_login",
-    )
+    return f"{base}?{urlencode(params)}"
 
 
-def render_google_login_top() -> None:
-    if _is_logged_in():
-        _render_logged_in_box("top")
-    else:
-        _render_logged_out_box("top")
+def logout_limpo() -> None:
+    st.session_state["auth_clear_browser_token"] = True
+    keep = {
+        "_supabase_auth_client": st.session_state.get("_supabase_auth_client"),
+    }
+    _clear_cross_account_runtime_state()
+    for k in AUTH_STATE_KEYS:
+        st.session_state.pop(k, None)
+    clear_user_in_state()
+    st.session_state.pop("auth_external_access_token", None)
+    st.session_state.pop("oauth_url", None)
+    if keep.get("_supabase_auth_client") is not None:
+        st.session_state["_supabase_auth_client"] = keep["_supabase_auth_client"]
+    clear_auth_query_params(remove_external_token=True)
+    st.rerun()
 
 
+# Compat wrappers for existing ui/auth_panel.py
+def start_google_login(force_select_account: bool = False) -> Optional[str]:
+    return get_auth_url(force_select_account=force_select_account)
 
-def render_google_login_box(
-    *,
-    title: str = "Faça login para continuar",
-    message: Optional[str] = None,
-    context: str = "box",
-) -> None:
-    st.subheader(title)
 
-    if message:
-        st.info(message)
-
-    if _is_logged_in():
-        _render_logged_in_box(context)
-        return
-
-    _render_logged_out_box(context)
+def sign_out_current_user() -> None:
+    logout_limpo()
