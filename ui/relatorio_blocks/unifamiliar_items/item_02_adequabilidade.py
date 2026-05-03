@@ -51,7 +51,7 @@ def render(ctx: dict) -> None:
             "PERMITE PELA VIA SOMENTE PEQUENO PORTE",
             "PERMITE PELA VIA PEQUENO OU MÉDIO PORTE",
         ):
-            st.success(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
+            st.success(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
         elif ctx['status_curto'] in (
             "DEPENDE DO PORTE",
             "PROJETO ESPECIAL",
@@ -61,6 +61,6 @@ def render(ctx: dict) -> None:
             "POSSÍVEL PELA VIA — PEQUENO OU MÉDIO PORTE",
             "PROJETO ESPECIAL PELA VIA",
         ):
-            st.warning(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
+            st.warning(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
         else:
-            st.error(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
+            st.error(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
