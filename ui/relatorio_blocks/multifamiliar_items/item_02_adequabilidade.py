@@ -5,7 +5,9 @@ from . import common
 
 def render(ctx):
     common.st.markdown(
-        "**Para o uso residencial multifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via e do porte do empreendimento.**"
+        "common.st.markdown(
+    "**Para saber se o uso residencial multifamiliar é viável neste terreno, a análise cruza duas informações principais: as regras de uso e ocupação do solo da zona onde o lote está localizado e a classificação da via de acesso pelo sistema viário. Em alguns casos, o sistema viário pode mudar a leitura da viabilidade, por isso os dois pontos precisam ser verificados juntos.**"
+)"
     )
 
     if not ctx["zone_class"] and not ctx["via_class"]:
