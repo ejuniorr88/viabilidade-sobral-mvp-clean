@@ -29,6 +29,9 @@ def render(ctx: dict) -> None:
             "PERMITE",
             "PERMITE SOMENTE PEQUENO PORTE",
             "PERMITE PEQUENO OU MÉDIO PORTE",
+            "PERMITE PELA VIA",
+            "PERMITE PELA VIA SOMENTE PEQUENO PORTE",
+            "PERMITE PELA VIA PEQUENO OU MÉDIO PORTE",
         ):
             st.success(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
         elif ctx['status_curto'] in (
