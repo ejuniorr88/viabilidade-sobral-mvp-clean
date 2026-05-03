@@ -25,15 +25,17 @@ def render(ctx: dict) -> None:
             + via_line
             + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
         )
-        if ctx['status_curto'] == "PERMITE":
+        if ctx['status_curto'] in (
+            "PERMITE",
+            "PERMITE SOMENTE PEQUENO PORTE",
+            "PERMITE PEQUENO OU MÉDIO PORTE",
+        ):
             st.success(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
         elif ctx['status_curto'] in (
             "DEPENDE DO PORTE",
             "PROJETO ESPECIAL",
             "POSSÍVEL PELA VIA",
             "SEM DADO",
-            "PERMITE SOMENTE PEQUENO PORTE",
-            "PERMITE PEQUENO OU MÉDIO PORTE",
             "POSSÍVEL PELA VIA — PEQUENO PORTE",
             "POSSÍVEL PELA VIA — PEQUENO OU MÉDIO PORTE",
         ):
