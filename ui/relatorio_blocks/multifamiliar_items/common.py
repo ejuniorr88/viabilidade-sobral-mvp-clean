@@ -153,6 +153,10 @@ def _via_tipo_norm(v: Any) -> Optional[str]:
         return "ARTERIAL"
     if "coletora" in s:
         return "COLETORA"
+    if "troncal" in s or "rodovia federal" in s or "br-" in s or s.startswith("br "):
+        return "TRONCAL"
+    if "regional" in s or "rodovia estadual" in s or "ce-" in s or s.startswith("ce "):
+        return "REGIONAL"
     return None
 
 
@@ -206,6 +210,23 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
 
     # Quando a via É arterial/coletora, paisagística ou não,
     # a classificação viária pode se sobrepor à leitura da zona.
+    # Via troncal/regional não aparece literalmente no Art. 99, mas é tratada
+    # como leitura favorável pela hierarquia/função rodoviária, com ressalva
+    # obrigatória sobre anuência do órgão rodoviário competente.
+    if via_norm == "TRONCAL":
+        return (
+            "✅",
+            "PERMITE PELA VIA",
+            "Na prática, a via troncal permite uma leitura mais ampla da adequabilidade do uso. Por isso, o projeto não fica limitado apenas ao pequeno porte indicado pela zona, mas ainda precisa respeitar os limites urbanísticos do terreno, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima. Atenção: quando se tratar de BR ou rodovia federal, o projeto pode depender também de análise/autorização do DNIT, especialmente para acesso de veículos, entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
+        )
+
+    if via_norm == "REGIONAL":
+        return (
+            "✅",
+            "PERMITE PELA VIA",
+            "Na prática, a via regional permite uma leitura mais ampla da adequabilidade do uso. Por isso, o projeto não fica limitado apenas ao pequeno porte indicado pela zona, mas ainda precisa respeitar os limites urbanísticos do terreno, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima. Atenção: quando se tratar de CE ou rodovia estadual, o projeto pode depender também de análise/autorização da SOP/CE, especialmente para acesso de veículos, entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
+        )
+
     if v == "I":
         return (
             "❌",
