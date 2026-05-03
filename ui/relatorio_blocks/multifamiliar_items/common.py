@@ -172,14 +172,14 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
             return (
                 "⚠️",
                 "PERMITE SOMENTE PEQUENO PORTE",
-                "A zona indicou AP — Adequado Pequeno Porte. Portanto, o uso é admitido apenas dentro do limite de pequeno porte, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+                "O uso residencial unifamiliar é admitido nesta zona apenas como pequeno porte. A análise ainda deve respeitar a Taxa de Ocupação, a Taxa de Permeabilidade, o Índice de Aproveitamento, os recuos, a altura máxima e as demais regras urbanísticas aplicáveis."
             )
 
         if z == "AP/AM":
             return (
                 "⚠️",
                 "PERMITE PEQUENO OU MÉDIO PORTE",
-                "A zona indicou AP/AM — Adequado Pequeno ou Médio Porte. Portanto, o uso é admitido dentro dos limites de pequeno e médio porte, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+                "O uso é admitido nesta zona nos portes pequeno ou médio. A análise ainda deve respeitar a Taxa de Ocupação, a Taxa de Permeabilidade, o Índice de Aproveitamento, os recuos, a altura máxima e as demais regras urbanísticas aplicáveis."
             )
 
         if z == "PE":
