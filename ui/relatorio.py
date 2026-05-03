@@ -61,9 +61,9 @@ def _append_zeia_ambiental_observacao(*, zona: Any, status_curto: str, explicaca
     if not (_is_zeia_zone_for_report(zona) and str(status_curto or "").strip().upper() == "PERMITE PELA VIA"):
         return explicacao
     observacao = (
-        " Observação importante: mesmo quando a leitura pela via indicar possibilidade de implantação do uso, "
-        "o terreno está em área de interesse ambiental. Por isso, a viabilidade final não dispensa análise do órgão municipal competente, "
-        "verificação das restrições ambientais aplicáveis, atendimento aos parâmetros urbanísticos da zona e comprovação da regularidade documental do imóvel, "
+        "\n\n**Observação ambiental e documental:** como o terreno está em área de interesse ambiental, "
+        "a viabilidade final não dispensa análise do órgão municipal competente, verificação das restrições ambientais aplicáveis, "
+        "atendimento aos parâmetros urbanísticos da zona e comprovação da regularidade documental do imóvel, "
         "como matrícula, escritura, registro ou outro documento hábil exigido no licenciamento."
     )
     if observacao.strip() in str(explicacao or ""):
