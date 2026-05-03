@@ -1,74 +1,117 @@
-"""Contratos para adequabilidade por vias troncal/regional e exceções.
+from __future__ import annotations
 
-Garante que:
-- via local, via de pedestre e via compartilhada NÃO sobrepõem a zona;
-- via arterial/coletora e paisagísticas continuam aplicando leitura pela via;
-- via troncal/BR aplica leitura favorável com alerta DNIT;
-- via regional/CE aplica leitura favorável com alerta SOP/CE.
-"""
-
+import importlib.util
 import sys
 import types
-
-streamlit_stub = types.SimpleNamespace(
-    markdown=lambda *args, **kwargs: None,
-    session_state={},
-)
-sys.modules.setdefault("streamlit", streamlit_stub)
-
-from ui.relatorio_blocks.multifamiliar_items.common import (
-    _summarize_adequabilidade,
-    _via_tipo_norm,
-)
+from pathlib import Path
 
 
-def test_vias_sem_sobreposicao_preservam_regra_da_zona():
+def _install_streamlit_stub() -> None:
+    """Evita depender do Streamlit real para testar helpers puros do common.py."""
+    if "streamlit" in sys.modules:
+        return
+
+    streamlit_stub = types.SimpleNamespace(
+        markdown=lambda *args, **kwargs: None,
+        json=lambda *args, **kwargs: None,
+        warning=lambda *args, **kwargs: None,
+        success=lambda *args, **kwargs: None,
+        error=lambda *args, **kwargs: None,
+        info=lambda *args, **kwargs: None,
+        expander=lambda *args, **kwargs: _DummyContextManager(),
+        session_state={},
+    )
+    sys.modules["streamlit"] = streamlit_stub
+
+
+class _DummyContextManager:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def _load_common_module():
+    _install_streamlit_stub()
+
+    repo_root = Path(__file__).resolve().parents[2]
+    common_path = repo_root / "ui" / "relatorio_blocks" / "multifamiliar_items" / "common.py"
+    spec = importlib.util.spec_from_file_location("multifamiliar_common_for_test", common_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_via_local_pedestre_compartilhada_nao_sobrepoem_zona():
+    common = _load_common_module()
+
     for via_texto in ("via local", "via de pedestre", "via compartilhada"):
-        via_norm = _via_tipo_norm(via_texto)
-        assert via_norm is None
+        assert common._via_tipo_norm(via_texto) is None
 
-        icon, status, explicacao = _summarize_adequabilidade(
-            zone_class="AP",
-            via_norm=via_norm,
+        icon, status, explicacao = common._summarize_adequabilidade(
+            zone_class="I",
+            via_norm=common._via_tipo_norm(via_texto),
             via_class=None,
         )
 
-        assert icon == "✅"
-        assert status == "PERMITE SOMENTE PEQUENO PORTE"
-        assert "apenas como pequeno porte" in explicacao
+        assert icon == "❌"
+        assert status == "NÃO PERMITE"
+        assert "prevalece a regra da zona" in explicacao
 
 
-def test_arterial_coletora_e_paisagisticas_continuam_sobrepondo_pela_via():
-    casos = {
-        "via arterial_existente": "ARTERIAL",
-        "via coletora_existente": "COLETORA",
-        "via arterial_paisagistica_existente": "ARTERIAL_PAISAGISTICA",
-        "via coletora_paisagistica_existente": "COLETORA_PAISAGISTICA",
-    }
+def test_vias_arterial_e_coletora_sobrepoem_classificacao_da_zona_quando_via_for_a():
+    common = _load_common_module()
 
-    for via_texto, esperado in casos.items():
-        via_norm = _via_tipo_norm(via_texto)
-        assert via_norm == esperado
+    for via_texto in ("via arterial", "via arterial_existente", "via coletora", "via coletora_existente"):
+        via_norm = common._via_tipo_norm(via_texto)
+        assert via_norm in {"ARTERIAL", "COLETORA"}
 
-        icon, status, explicacao = _summarize_adequabilidade(
-            zone_class="AP",
+        icon, status, explicacao = common._summarize_adequabilidade(
+            zone_class="I",
             via_norm=via_norm,
             via_class="A",
         )
 
         assert icon == "✅"
         assert status == "PERMITE PELA VIA"
-        assert "via permite o uso de forma mais ampla" in explicacao
+        assert "não fica limitada apenas à classificação indicada pela zona" in explicacao
         assert "Art. 99 da LC 91/2023" in explicacao
 
 
-def test_via_troncal_e_br_permite_pela_via_com_alerta_dnit():
+def test_vias_paisagisticas_sobrepoem_classificacao_da_zona_quando_via_for_a():
+    common = _load_common_module()
+
+    casos = {
+        "via arterial paisagística": "ARTERIAL_PAISAGISTICA",
+        "via coletora paisagística": "COLETORA_PAISAGISTICA",
+    }
+
+    for via_texto, esperado in casos.items():
+        via_norm = common._via_tipo_norm(via_texto)
+        assert via_norm == esperado
+
+        icon, status, explicacao = common._summarize_adequabilidade(
+            zone_class="I",
+            via_norm=via_norm,
+            via_class="A",
+        )
+
+        assert icon == "✅"
+        assert status == "PERMITE PELA VIA"
+        assert "não fica limitada apenas à classificação indicada pela zona" in explicacao
+
+
+def test_via_troncal_ou_br_permite_pela_via_com_alerta_dnit_sem_texto_de_pequeno_porte_fixo():
+    common = _load_common_module()
+
     for via_texto in ("via troncal", "RODOVIA BR-222", "BR 222", "rodovia federal"):
-        via_norm = _via_tipo_norm(via_texto)
+        via_norm = common._via_tipo_norm(via_texto)
         assert via_norm == "TRONCAL"
 
-        icon, status, explicacao = _summarize_adequabilidade(
-            zone_class="AP",
+        icon, status, explicacao = common._summarize_adequabilidade(
+            zone_class="I",
             via_norm=via_norm,
             via_class=None,
         )
@@ -76,17 +119,19 @@ def test_via_troncal_e_br_permite_pela_via_com_alerta_dnit():
         assert icon == "✅"
         assert status == "PERMITE PELA VIA"
         assert "DNIT" in explicacao
-        assert "rodovia federal" in explicacao.lower() or "br" in explicacao.lower()
-        assert "não fica limitado apenas ao pequeno porte" in explicacao
+        assert "não fica limitada apenas à classificação indicada pela zona" in explicacao
+        assert "não fica limitado apenas ao pequeno porte" not in explicacao
 
 
-def test_via_regional_e_ce_permite_pela_via_com_alerta_sop_ce():
+def test_via_regional_ou_ce_permite_pela_via_com_alerta_sop_sem_texto_de_pequeno_porte_fixo():
+    common = _load_common_module()
+
     for via_texto in ("via regional", "CE-362", "CE 362", "rodovia estadual"):
-        via_norm = _via_tipo_norm(via_texto)
+        via_norm = common._via_tipo_norm(via_texto)
         assert via_norm == "REGIONAL"
 
-        icon, status, explicacao = _summarize_adequabilidade(
-            zone_class="AP",
+        icon, status, explicacao = common._summarize_adequabilidade(
+            zone_class="I",
             via_norm=via_norm,
             via_class=None,
         )
@@ -94,5 +139,5 @@ def test_via_regional_e_ce_permite_pela_via_com_alerta_sop_ce():
         assert icon == "✅"
         assert status == "PERMITE PELA VIA"
         assert "SOP/CE" in explicacao
-        assert "rodovia estadual" in explicacao.lower() or "ce" in explicacao.lower()
-        assert "não fica limitado apenas ao pequeno porte" in explicacao
+        assert "não fica limitada apenas à classificação indicada pela zona" in explicacao
+        assert "não fica limitado apenas ao pequeno porte" not in explicacao
