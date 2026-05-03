@@ -217,7 +217,7 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
         return (
             "✅",
             "PERMITE PELA VIA",
-            "A classificação viária indicou A — Adequado. Como o imóvel possui frente para via arterial ou coletora, paisagística ou não, a adequabilidade pela via pode se sobrepor à leitura da zona, conforme o Art. 99 da LC 91/2023. Ainda devem ser respeitados os parâmetros urbanísticos da zona, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos, altura máxima e demais regras aplicáveis."
+            "Na prática, a via permite o uso de forma mais ampla do que a zona. Por isso, o projeto não fica limitado apenas ao pequeno porte indicado pela zona, mas ainda precisa respeitar os limites urbanísticos do terreno, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima. Essa leitura decorre da regra de sobreposição da adequabilidade pela via prevista no Art. 99 da LC 91/2023."
         )
 
     if v == "AP":
