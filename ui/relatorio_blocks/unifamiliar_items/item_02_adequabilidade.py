@@ -18,13 +18,36 @@ def render(ctx: dict) -> None:
             if ctx['via_norm'] and ctx['via_class']
             else f"- **Por via:** {ctx['via_tipo'] or 'via local'}"
         )
-        md(
-            f"- **Por zona:** {ctx['zone_class'] or 'não encontrado'}"
-            + (f" ({ctx['_mf_sigla_nome'](ctx['zone_class'])})" if ctx['zone_class'] else "")
-            + "\n"
-            + via_line
-            + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
-        )
+                 if ctx['status_curto'] == "PERMITE PELA VIA":
+            zona_obs = ""
+            if ctx.get("zone_class"):
+                zona_obs = (
+                    f"\n- **Observação técnica:** a zona indicou {ctx['zone_class']}"
+                    + (f" ({ctx['_mf_sigla_nome'](ctx['zone_class'])})" if ctx['zone_class'] else "")
+                    + ", mas neste caso prevalece a leitura pela classificação viária, conforme a regra de sobreposição."
+                )
+
+            md(
+                via_line
+                + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
+                + zona_obs
+            )
+        else:
+            md(
+                f"- **Por zona:** {ctx['zone_class'] or 'não encontrado'}"
+                + (f" ({ctx['_mf_sigla_nome'](ctx['zone_class'])})" if ctx['zone_class'] else "")
+                + "\n"
+                + via_line
+                + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
+            )
+        else:
+            md(
+                f"- **Por zona:** {ctx['zone_class'] or 'não encontrado'}"
+                + (f" ({ctx['_mf_sigla_nome'](ctx['zone_class'])})" if ctx['zone_class'] else "")
+                + "\n"
+                + via_line
+                + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
+            )
         if ctx['status_curto'] in (
             "PERMITE",
             "PERMITE SOMENTE PEQUENO PORTE",
