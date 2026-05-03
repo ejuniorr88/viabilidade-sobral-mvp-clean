@@ -223,14 +223,14 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
         return (
             "✅",
             "PERMITE PELA VIA",
-            "Na prática, a via troncal permite uma leitura mais ampla da adequabilidade do uso. Por isso, o projeto não fica limitado apenas ao pequeno porte indicado pela zona, mas ainda precisa respeitar os limites urbanísticos do terreno, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima. Atenção: quando se tratar de BR ou rodovia federal, o projeto pode depender também de análise/autorização do DNIT, especialmente para acesso de veículos, entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
+            "Na prática, a via troncal permite uma leitura mais ampla da adequabilidade do uso. Por isso, a análise não fica limitada apenas à classificação indicada pela zona, mas ainda precisa respeitar os limites urbanísticos do terreno, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima. Atenção: quando se tratar de BR ou rodovia federal, o projeto pode depender também de análise/autorização do DNIT, especialmente para acesso de veículos, entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
         )
 
     if via_norm == "REGIONAL":
         return (
             "✅",
             "PERMITE PELA VIA",
-            "Na prática, a via regional permite uma leitura mais ampla da adequabilidade do uso. Por isso, o projeto não fica limitado apenas ao pequeno porte indicado pela zona, mas ainda precisa respeitar os limites urbanísticos do terreno, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima. Atenção: quando se tratar de CE ou rodovia estadual, o projeto pode depender também de análise/autorização da SOP/CE, especialmente para acesso de veículos, entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
+            "Na prática, a via regional permite uma leitura mais ampla da adequabilidade do uso. Por isso, a análise não fica limitada apenas à classificação indicada pela zona, mas ainda precisa respeitar os limites urbanísticos do terreno, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima. Atenção: quando se tratar de CE ou rodovia estadual, o projeto pode depender também de análise/autorização da SOP/CE, especialmente para acesso de veículos, entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
         )
 
     if v == "I":
@@ -244,7 +244,7 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
         return (
             "✅",
             "PERMITE PELA VIA",
-            "Na prática, a via permite o uso de forma mais ampla do que a zona. Por isso, o projeto não fica limitado apenas ao pequeno porte indicado pela zona, mas ainda precisa respeitar os limites urbanísticos do terreno, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima. Essa leitura decorre da regra de sobreposição da adequabilidade pela via prevista no Art. 99 da LC 91/2023."
+            "Na prática, a via permite uma leitura mais ampla da adequabilidade do uso. Por isso, a análise não fica limitada apenas à classificação indicada pela zona, mas ainda precisa respeitar os limites urbanísticos do terreno, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima. Essa leitura decorre da regra de sobreposição da adequabilidade pela via prevista no Art. 99 da LC 91/2023."
         )
 
     if v == "AP":
