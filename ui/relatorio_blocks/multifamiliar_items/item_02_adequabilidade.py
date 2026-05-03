@@ -37,7 +37,7 @@ def render(ctx):
             "PERMITE PELA VIA SOMENTE PEQUENO PORTE",
             "PERMITE PELA VIA PEQUENO OU MÉDIO PORTE",
         ):
-            common.st.success(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
+            common.st.success(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
         elif ctx["status_curto"] in (
             "DEPENDE DO PORTE",
             "PROJETO ESPECIAL",
@@ -47,6 +47,6 @@ def render(ctx):
             "POSSÍVEL PELA VIA — PEQUENO OU MÉDIO PORTE",
             "PROJETO ESPECIAL PELA VIA",
         ):
-            common.st.warning(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
+            common.st.warning(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
         else:
-            common.st.error(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
+            common.st.error(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
