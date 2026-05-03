@@ -6,8 +6,8 @@ from .common import md
 
 
 def render(ctx: dict) -> None:
-    md("**Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.**")
-
+    md("**Para saber se o uso residencial unifamiliar é viável neste terreno, a análise cruza duas informações principais: as regras de uso e ocupação do solo da zona onde o lote está localizado e a classificação da via de acesso pelo sistema viário. Em alguns casos, o sistema viário pode mudar a leitura da viabilidade, por isso os dois pontos precisam ser verificados juntos.**"
+)
     if not ctx['zone_class'] and not ctx['via_class']:
         st.warning(
             "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. "
