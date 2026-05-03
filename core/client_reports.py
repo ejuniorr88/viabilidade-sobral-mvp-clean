@@ -149,7 +149,16 @@ def _extract_road(calc: Dict[str, Any], session_state: Dict[str, Any] | None = N
 def _extract_road_type(calc: Dict[str, Any], session_state: Dict[str, Any] | None = None) -> str:
     session_state = session_state or {}
     session_calc = session_state.get("calc") if isinstance(session_state.get("calc"), dict) else {}
-    keys = ("road_type", "via_type", "tipo_via", "road_class", "via_classificacao")
+    keys = (
+        "road_type",
+        "via_type",
+        "via_tipo",
+        "street_type",
+        "tipo_via",
+        "road_class",
+        "via_classificacao",
+        "via_tipo_txt",
+    )
     return _normalize_text(
         _pick_value(
             *(calc.get(k) for k in keys),
