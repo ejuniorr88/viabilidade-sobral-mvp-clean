@@ -223,8 +223,8 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
         return (
             "✅",
             "PERMITE PELA VIA",
-            "**Leitura pela via:** a via troncal permite uma leitura mais ampla da adequabilidade do uso. "
-            "Por isso, a análise não fica limitada apenas à classificação indicada pela zona.\n\n"
+            "**Análise pela via:** como o terreno tem frente para uma via troncal, a viabilidade pode ser analisada de forma mais ampla. "
+            "Por isso, o resultado não fica limitado apenas à classificação indicada pela zona.\n\n"
             "**Limites urbanísticos:** mesmo com leitura favorável pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
             "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
             "**Atenção — rodovia federal/BR:** o projeto pode depender também de análise/autorização do DNIT, especialmente para acesso de veículos, "
@@ -235,8 +235,8 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
         return (
             "✅",
             "PERMITE PELA VIA",
-            "**Leitura pela via:** a via regional permite uma leitura mais ampla da adequabilidade do uso. "
-            "Por isso, a análise não fica limitada apenas à classificação indicada pela zona.\n\n"
+            "**Análise pela via:** como o terreno tem frente para uma via regional, a viabilidade pode ser analisada de forma mais ampla. "
+            "Por isso, o resultado não fica limitado apenas à classificação indicada pela zona.\n\n"
             "**Limites urbanísticos:** mesmo com leitura favorável pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
             "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
             "**Atenção — rodovia estadual/CE:** o projeto pode depender também de análise/autorização da SOP/CE, especialmente para acesso de veículos, "
@@ -254,8 +254,8 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
         return (
             "✅",
             "PERMITE PELA VIA",
-            "**Leitura pela via:** a classificação viária permite uma leitura mais ampla da adequabilidade do uso. "
-            "Por isso, a análise não fica limitada apenas à classificação indicada pela zona.\n\n"
+            "**Análise pela via:** a classificação da via permite que a viabilidade seja analisada de forma mais ampla. "
+            "Por isso, o resultado não fica limitado apenas à classificação indicada pela zona.\n\n"
             "**Limites urbanísticos:** mesmo com leitura favorável pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
             "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
             "**Base da leitura:** essa interpretação decorre da regra de sobreposição da adequabilidade pela via prevista no Art. 99 da LC 91/2023."
