@@ -162,28 +162,107 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
 
     if not via_norm:
         if z == "I":
-            return ("❌", "NÃO PERMITE", "A zona indicou I (Inadequado / não permitido). Em via local, normalmente vale a regra da zona.")
+            return (
+                "❌",
+                "NÃO PERMITE",
+                "A zona indicou I — Inadequado. Como a via identificada não se enquadra nas categorias arterial ou coletora previstas para sobreposição da adequabilidade viária, prevalece a regra da zona."
+            )
+
+        if z == "AP":
+            return (
+                "⚠️",
+                "PERMITE SOMENTE PEQUENO PORTE",
+                "A zona indicou AP — Adequado Pequeno Porte. Portanto, o uso é admitido apenas dentro do limite de pequeno porte, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+            )
+
         if z == "AP/AM":
-            return ("⚠️", "DEPENDE DO PORTE", "A zona indicou AP/AM (depende do porte). Em via local, normalmente vale a regra da zona.")
+            return (
+                "⚠️",
+                "PERMITE PEQUENO OU MÉDIO PORTE",
+                "A zona indicou AP/AM — Adequado Pequeno ou Médio Porte. Portanto, o uso é admitido dentro dos limites de pequeno e médio porte, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+            )
+
         if z == "PE":
-            return ("⚠️", "PROJETO ESPECIAL", "A zona indicou PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
-        if z in ("A", "AP", "AM"):
-            return ("✅", "PERMITE", "A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.")
-        return ("⚠️", "SEM DADO", "Não foi possível determinar o resultado por zona.")
+            return (
+                "⚠️",
+                "PROJETO ESPECIAL",
+                "A zona indicou PE — Projeto Especial. Pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
+            )
+
+        if z == "A":
+            return (
+                "✅",
+                "PERMITE",
+                "A zona permite o uso, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+            )
+
+        return (
+            "⚠️",
+            "SEM DADO",
+            "Não foi possível determinar o resultado por zona."
+        )
 
     if v == "I":
-        return ("❌", "NÃO PERMITE", "O tipo de via indicou I (não permitido), mesmo que a zona permita.")
-    if z == "I" and v in ("A", "AP", "AM"):
-        return ("⚠️", "POSSÍVEL PELA VIA", "A zona deu I, mas o tipo de via permite. O licenciamento pode considerar o resultado por tipo de via.")
+        return (
+            "❌",
+            "NÃO PERMITE",
+            "O tipo de via indicou I — Inadequado, mesmo que a zona permita."
+        )
+
+    if z == "I" and v == "A":
+        return (
+            "⚠️",
+            "POSSÍVEL PELA VIA",
+            "A zona indicou I — Inadequado, mas a classificação viária indicou A — Adequado. Pelo Art. 99 da LC 91/2023, a adequabilidade pela via arterial ou coletora, paisagística ou não, pode se sobrepor à adequabilidade da zona. Ainda assim, devem ser observados os parâmetros da zona e a confirmação no licenciamento."
+        )
+
+    if z == "I" and v == "AP":
+        return (
+            "⚠️",
+            "POSSÍVEL PELA VIA — PEQUENO PORTE",
+            "A zona indicou I — Inadequado, mas a classificação viária indicou AP — Adequado Pequeno Porte. Pelo Art. 99 da LC 91/2023, a adequabilidade pela via arterial ou coletora, paisagística ou não, pode se sobrepor à adequabilidade da zona, limitada ao pequeno porte e observados os parâmetros da zona."
+        )
+
     if z == "I" and v == "AP/AM":
-        return ("⚠️", "DEPENDE DO PORTE", "A zona deu I, mas o tipo de via deu AP/AM (depende do porte). Pode depender do licenciamento.")
+        return (
+            "⚠️",
+            "POSSÍVEL PELA VIA — PEQUENO OU MÉDIO PORTE",
+            "A zona indicou I — Inadequado, mas a classificação viária indicou AP/AM — Adequado Pequeno ou Médio Porte. Pelo Art. 99 da LC 91/2023, a adequabilidade pela via arterial ou coletora, paisagística ou não, pode se sobrepor à adequabilidade da zona, limitada aos portes pequeno e médio e observados os parâmetros da zona."
+        )
+
     if z == "I" and v == "PE":
-        return ("⚠️", "PROJETO ESPECIAL", "A zona deu I, mas o tipo de via indica PE (Projeto especial). Pode exigir análise/condições extras.")
+        return (
+            "⚠️",
+            "PROJETO ESPECIAL",
+            "A zona indicou I — Inadequado, mas a classificação viária indicou PE — Projeto Especial. Pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
+        )
+
+    if z == "AP" or v == "AP":
+        return (
+            "⚠️",
+            "PERMITE SOMENTE PEQUENO PORTE",
+            "Existe indicação AP — Adequado Pequeno Porte. Portanto, o uso é admitido apenas dentro do limite de pequeno porte, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        )
+
     if z == "AP/AM" or v == "AP/AM":
-        return ("⚠️", "DEPENDE DO PORTE", "Existe indicação AP/AM (depende do porte). Confira se o empreendimento é pequeno ou médio.")
+        return (
+            "⚠️",
+            "PERMITE PEQUENO OU MÉDIO PORTE",
+            "Existe indicação AP/AM — Adequado Pequeno ou Médio Porte. Portanto, o uso é admitido dentro dos limites de pequeno e médio porte, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        )
+
     if z == "PE" or v == "PE":
-        return ("⚠️", "PROJETO ESPECIAL", "Existe indicação PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
-    return ("✅", "PERMITE", "Zona e/ou tipo de via permitem. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.")
+        return (
+            "⚠️",
+            "PROJETO ESPECIAL",
+            "Existe indicação PE — Projeto Especial. Pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
+        )
+
+    return (
+        "✅",
+        "PERMITE",
+        "Zona e/ou tipo de via permitem o uso, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+    )
 
 
 def _fetch_adequabilidade(*, zone_sigla: str, via_tipo_texto: Optional[str], use_type_code: str) -> Tuple[Optional[str], Optional[str], Dict[str, Any]]:
