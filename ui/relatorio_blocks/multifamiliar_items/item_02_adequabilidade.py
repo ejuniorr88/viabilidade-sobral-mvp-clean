@@ -22,10 +22,25 @@ def render(ctx):
             + via_line
             + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
         )
-        if ctx["status_curto"] == "PERMITE":
+                if ctx["status_curto"] in (
+            "PERMITE",
+            "PERMITE SOMENTE PEQUENO PORTE",
+            "PERMITE PEQUENO OU MÉDIO PORTE",
+            "PERMITE PELA VIA",
+            "PERMITE PELA VIA SOMENTE PEQUENO PORTE",
+            "PERMITE PELA VIA PEQUENO OU MÉDIO PORTE",
+        ):
             common.st.success(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
-        elif ctx["status_curto"] in ("DEPENDE DO PORTE", "PROJETO ESPECIAL", "POSSÍVEL PELA VIA", "SEM DADO"):
+        elif ctx["status_curto"] in (
+            "DEPENDE DO PORTE",
+            "PROJETO ESPECIAL",
+            "POSSÍVEL PELA VIA",
+            "SEM DADO",
+            "POSSÍVEL PELA VIA — PEQUENO PORTE",
+            "POSSÍVEL PELA VIA — PEQUENO OU MÉDIO PORTE",
+            "PROJETO ESPECIAL PELA VIA",
+        ):
             common.st.warning(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
         else:
             common.st.error(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
-    common.st.markdown("**Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.**")
+    
