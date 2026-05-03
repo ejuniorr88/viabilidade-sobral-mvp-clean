@@ -160,6 +160,12 @@ def _via_tipo_norm(v: Any) -> Optional[str]:
     return None
 
 
+def _is_zeia_zone(zona: Any) -> bool:
+    z = _norm(zona)
+    z_key = z.replace("-", "").replace("/", "").replace(" ", "")
+    return z_key in {"ZEIAAPP", "ZEIA1", "ZEIA2", "ZEIA3"}
+
+
 def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, via_class: str | None) -> tuple[str, str, str]:
     z = _norm(zone_class)
     v = _norm(via_class)
@@ -654,6 +660,14 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
     )
     via_norm = _via_tipo_norm(via_tipo_txt)
     icon, status_curto, explicacao = _summarize_adequabilidade(zone_class=zone_class, via_norm=via_norm, via_class=via_class)
+
+    if _is_zeia_zone(zona) and status_curto == "PERMITE PELA VIA":
+        explicacao += (
+            " Observação importante: mesmo quando a leitura pela via indicar possibilidade de implantação do uso, "
+            "o terreno está em área de interesse ambiental. Por isso, a viabilidade final não dispensa análise do órgão municipal competente, "
+            "verificação das restrições ambientais aplicáveis, atendimento aos parâmetros urbanísticos da zona e comprovação da regularidade documental do imóvel, "
+            "como matrícula, escritura, registro ou outro documento hábil exigido no licenciamento."
+        )
 
     try:
         from core.zone_descriptions import fetch_zone_description
