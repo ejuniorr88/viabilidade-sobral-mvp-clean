@@ -5,15 +5,13 @@ from . import common
 
 def render(ctx):
     common.st.markdown(
-        "common.st.markdown(
-    "**Para saber se o uso residencial multifamiliar é viável neste terreno, a análise cruza duas informações principais: as regras de uso e ocupação do solo da zona onde o lote está localizado e a classificação da via de acesso pelo sistema viário. Em alguns casos, o sistema viário pode mudar a leitura da viabilidade, por isso os dois pontos precisam ser verificados juntos.**"
-)"
+        "**Para saber se o uso residencial multifamiliar é viável neste terreno, a análise cruza duas informações principais: as regras de uso e ocupação do solo da zona onde o lote está localizado e a classificação da via de acesso pelo sistema viário. Em alguns casos, o sistema viário pode mudar a leitura da viabilidade, por isso os dois pontos precisam ser verificados juntos.**"
     )
 
     if not ctx["zone_class"] and not ctx["via_class"]:
-        common.st.markdown(
-    "**A viabilidade do uso residencial multifamiliar depende da leitura conjunta da zona do terreno e da classificação da via. A zona mostra a regra de uso e ocupação do solo, enquanto o sistema viário pode, em alguns casos, permitir uma leitura diferente pela via de acesso.**"
-)
+        common.st.warning(
+            "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. Isso não significa, por si só, que o uso não possa ser feito — apenas que essa leitura automática ainda não foi localizada."
+        )
         with common.st.expander("🔎 Diagnóstico (para conferência)"):
             common.st.json(ctx["dbg"])
     else:
