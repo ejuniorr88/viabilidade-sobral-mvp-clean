@@ -11,9 +11,9 @@ def render(ctx):
     )
 
     if not ctx["zone_class"] and not ctx["via_class"]:
-        common.st.warning(
-            "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. Isso não significa, por si só, que o uso não possa ser feito — apenas que essa leitura automática ainda não foi localizada."
-        )
+        common.st.markdown(
+    "**A viabilidade do uso residencial multifamiliar depende da leitura conjunta da zona do terreno e da classificação da via. A zona mostra a regra de uso e ocupação do solo, enquanto o sistema viário pode, em alguns casos, permitir uma leitura diferente pela via de acesso.**"
+)
         with common.st.expander("🔎 Diagnóstico (para conferência)"):
             common.st.json(ctx["dbg"])
     else:
