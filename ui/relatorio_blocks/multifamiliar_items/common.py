@@ -160,108 +160,73 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
     z = _norm(zone_class)
     v = _norm(via_class)
 
-    if not via_norm:
-        if z == "I":
-            return (
-                "❌",
-                "NÃO PERMITE",
-                "A zona indicou I — Inadequado. Como a via identificada não se enquadra nas categorias arterial ou coletora previstas para sobreposição da adequabilidade viária, prevalece a regra da zona."
-            )
-
-        if z == "AP":
-            return (
-                "⚠️",
-                "PERMITE SOMENTE PEQUENO PORTE",
-                "O uso residencial unifamiliar é admitido nesta zona apenas como pequeno porte. A análise ainda deve respeitar a Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos, altura máxima e as demais regras urbanísticas aplicáveis."
-            )
-
-        if z == "AP/AM":
-            return (
-                "⚠️",
-                "PERMITE PEQUENO OU MÉDIO PORTE",
-                "O uso é admitido nesta zona nos portes pequeno ou médio. A análise ainda deve respeitar a Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos, altura máxima e as demais regras urbanísticas aplicáveis."
-            )
-
-        if z == "PE":
-            return (
-                "⚠️",
-                "PROJETO ESPECIAL",
-                "A zona indicou PE — Projeto Especial. Pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
-            )
-
-        if z == "A":
-            return (
-                "✅",
-                "PERMITE",
-                "A zona permite o uso, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
-            )
-
-        return (
-            "⚠️",
-            "SEM DADO",
-            "Não foi possível determinar o resultado por zona."
-        )
-
-    if v == "I":
+        if v == "I":
         return (
             "❌",
             "NÃO PERMITE",
-            "O tipo de via indicou I — Inadequado, mesmo que a zona permita."
+            "A classificação viária indicou I — Inadequado. Mesmo que a zona permita, a leitura pela via não admite o uso."
         )
 
-    if z == "I" and v == "A":
+    if v == "A":
         return (
-            "⚠️",
-            "POSSÍVEL PELA VIA",
-            "A zona indicou I — Inadequado, mas a classificação viária indicou A — Adequado. Pelo Art. 99 da LC 91/2023, a adequabilidade pela via arterial ou coletora, paisagística ou não, pode se sobrepor à adequabilidade da zona. Ainda assim, devem ser observados os parâmetros da zona e a confirmação no licenciamento."
+            "✅",
+            "PERMITE PELA VIA",
+            "A classificação viária indicou A — Adequado. Como o imóvel possui frente para via arterial ou coletora, paisagística ou não, a adequabilidade pela via pode se sobrepor à leitura da zona, conforme o Art. 99 da LC 91/2023. Ainda devem ser respeitados os parâmetros urbanísticos da zona, como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos, altura máxima e demais regras aplicáveis."
         )
 
-    if z == "I" and v == "AP":
+    if v == "AP":
         return (
             "⚠️",
-            "POSSÍVEL PELA VIA — PEQUENO PORTE",
-            "A zona indicou I — Inadequado, mas a classificação viária indicou AP — Adequado Pequeno Porte. Pelo Art. 99 da LC 91/2023, a adequabilidade pela via arterial ou coletora, paisagística ou não, pode se sobrepor à adequabilidade da zona, limitada ao pequeno porte e observados os parâmetros da zona."
+            "PERMITE PELA VIA SOMENTE PEQUENO PORTE",
+            "A classificação viária indicou AP — Adequado Pequeno Porte. Como o imóvel possui frente para via arterial ou coletora, paisagística ou não, a adequabilidade pela via pode se sobrepor à leitura da zona, limitada ao pequeno porte. Ainda devem ser respeitados os parâmetros urbanísticos da zona."
         )
 
-    if z == "I" and v == "AP/AM":
+    if v == "AP/AM":
         return (
             "⚠️",
-            "POSSÍVEL PELA VIA — PEQUENO OU MÉDIO PORTE",
-            "A zona indicou I — Inadequado, mas a classificação viária indicou AP/AM — Adequado Pequeno ou Médio Porte. Pelo Art. 99 da LC 91/2023, a adequabilidade pela via arterial ou coletora, paisagística ou não, pode se sobrepor à adequabilidade da zona, limitada aos portes pequeno e médio e observados os parâmetros da zona."
+            "PERMITE PELA VIA PEQUENO OU MÉDIO PORTE",
+            "A classificação viária indicou AP/AM — Adequado Pequeno ou Médio Porte. Como o imóvel possui frente para via arterial ou coletora, paisagística ou não, a adequabilidade pela via pode se sobrepor à leitura da zona, limitada aos portes pequeno e médio. Ainda devem ser respeitados os parâmetros urbanísticos da zona."
         )
 
-    if z == "I" and v == "PE":
+    if v == "PE":
         return (
             "⚠️",
-            "PROJETO ESPECIAL",
-            "A zona indicou I — Inadequado, mas a classificação viária indicou PE — Projeto Especial. Pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
+            "PROJETO ESPECIAL PELA VIA",
+            "A classificação viária indicou PE — Projeto Especial. Mesmo havendo possibilidade pela via, o caso pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
         )
 
-    if z == "AP" or v == "AP":
+    if z == "I":
         return (
-            "⚠️",
+            "❌",
+            "NÃO PERMITE",
+            "A zona indicou I — Inadequado, e não foi localizada classificação viária favorável suficiente para sobrepor essa restrição."
+        )
+
+    if z == "AP":
+        return (
+            "✅",
             "PERMITE SOMENTE PEQUENO PORTE",
-            "Existe indicação AP — Adequado Pequeno Porte. Portanto, o uso é admitido apenas dentro do limite de pequeno porte, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+            "O uso é admitido nesta zona apenas como pequeno porte. A análise ainda deve respeitar a Taxa de Ocupação, a Taxa de Permeabilidade, o Índice de Aproveitamento, os recuos, a altura máxima e as demais regras urbanísticas aplicáveis."
         )
 
-    if z == "AP/AM" or v == "AP/AM":
+    if z == "AP/AM":
         return (
-            "⚠️",
+            "✅",
             "PERMITE PEQUENO OU MÉDIO PORTE",
-            "Existe indicação AP/AM — Adequado Pequeno ou Médio Porte. Portanto, o uso é admitido dentro dos limites de pequeno e médio porte, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+            "O uso é admitido nesta zona nos portes pequeno ou médio. A análise ainda deve respeitar a Taxa de Ocupação, a Taxa de Permeabilidade, o Índice de Aproveitamento, os recuos, a altura máxima e as demais regras urbanísticas aplicáveis."
         )
 
-    if z == "PE" or v == "PE":
+    if z == "PE":
         return (
             "⚠️",
             "PROJETO ESPECIAL",
-            "Existe indicação PE — Projeto Especial. Pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
+            "A zona indicou PE — Projeto Especial. Pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
         )
 
     return (
         "✅",
         "PERMITE",
-        "Zona e/ou tipo de via permitem o uso, observados TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        "Zona e/ou tipo de via permitem o uso, observados Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos, altura máxima e demais regras aplicáveis."
     )
 
 
