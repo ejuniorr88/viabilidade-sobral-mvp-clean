@@ -7,6 +7,7 @@ from .common import md
 
 def render(ctx: dict) -> None:
     md("**Para o uso residencial unifamiliar, a permissão pode depender principalmente da zona e, em alguns casos, também do tipo da via.**")
+
     if not ctx['zone_class'] and not ctx['via_class']:
         st.warning(
             "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. "
@@ -18,7 +19,8 @@ def render(ctx: dict) -> None:
             if ctx['via_norm'] and ctx['via_class']
             else f"- **Por via:** {ctx['via_tipo'] or 'via local'}"
         )
-                 if ctx['status_curto'] == "PERMITE PELA VIA":
+
+        if ctx['status_curto'] == "PERMITE PELA VIA":
             zona_obs = ""
             if ctx.get("zone_class"):
                 zona_obs = (
@@ -40,14 +42,7 @@ def render(ctx: dict) -> None:
                 + via_line
                 + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
             )
-        else:
-            md(
-                f"- **Por zona:** {ctx['zone_class'] or 'não encontrado'}"
-                + (f" ({ctx['_mf_sigla_nome'](ctx['zone_class'])})" if ctx['zone_class'] else "")
-                + "\n"
-                + via_line
-                + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
-            )
+
         if ctx['status_curto'] in (
             "PERMITE",
             "PERMITE SOMENTE PEQUENO PORTE",
@@ -64,8 +59,8 @@ def render(ctx: dict) -> None:
             "SEM DADO",
             "POSSÍVEL PELA VIA — PEQUENO PORTE",
             "POSSÍVEL PELA VIA — PEQUENO OU MÉDIO PORTE",
+            "PROJETO ESPECIAL PELA VIA",
         ):
             st.warning(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
         else:
             st.error(f"{ctx['icon']} **Resumo final: {ctx['status_curto']}.** {ctx['explicacao']}")
-   
