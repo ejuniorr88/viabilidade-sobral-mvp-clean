@@ -85,6 +85,23 @@ def prepare_and_consume_report(
     if not debit_result.get("ok"):
         raise RuntimeError(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
 
+    ledger_tag_result = debit_result.get("ledger_tag_result") or {}
+    if not ledger_tag_result.get("ok"):
+        refund_result = refund_viability_credit_func(
+            user_id=user_id_value,
+            amount=1,
+            description="Estorno automático por débito sem vínculo com relatório",
+            reference_id=report_signature,
+            metadata={
+                "report_signature": report_signature,
+                "stage": "debit_without_report_signature",
+                "ledger_tag_result": ledger_tag_result,
+            },
+        )
+        session_state["last_report_refund_result"] = refund_result
+        session_state["last_report_storage_error"] = "Débito sem vínculo confirmado com o relatório."
+        raise RuntimeError("Falha ao vincular o débito ao relatório. O crédito foi estornado automaticamente.")
+
     save_result = None
     try:
         save_result = save_client_report_func(
