@@ -80,13 +80,16 @@ from ui.relatorio_blocks.multifamiliar_guia import (
     should_block_multifamiliar_preview,
 )
 from ui.client_area import render_client_area_page
-from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user, refund_viability_credit
-from core.payments import ensure_paid_payment_is_credited, refresh_payment_status_and_credit
+from core.credits import get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
-from core.client_reports import save_client_report, build_report_signature
 from core.state_helpers import clear_all_checkout_states
 from core import report_confirmation as report_confirmation_core
-from core import checkout_flow as checkout_flow_core
+from core.report_delivery import (
+    build_report_delivery_signature,
+    deliver_paid_report,
+    live_report_signature_coords,
+    preflight_report_delivery_credit_balance,
+)
 
 
 @st.cache_data(show_spinner=False)
@@ -139,31 +142,8 @@ def _clear_report_runtime_state(
 
 
 def _build_current_report_signature(calc_ref, session_snapshot):
-    return build_report_signature(calc=calc_ref, session_state=session_snapshot)
-
-
-def _pick_signature_value(*values):
-    for value in values:
-        if value is None:
-            continue
-        if isinstance(value, str) and value.strip() == "":
-            continue
-        return value
-    return None
-
-
-def _selected_coords_for_signature():
-    calc_ref = st.session_state.get("calc") or {}
-    last_click = st.session_state.get("last_click") or {}
-    click_lat = last_click.get("lat") if isinstance(last_click, dict) else None
-    click_lon = last_click.get("lon") if isinstance(last_click, dict) else None
-
-    # Esta assinatura é do estado vivo da tela, antes de recalcular.
-    # Por isso o clique atual do mapa precisa prevalecer sobre calc["lat"],
-    # que pode ser o ponto do cálculo anterior até o usuário apertar calcular.
-    lat = _pick_signature_value(click_lat, calc_ref.get("lat"), calc_ref.get("selected_lat"), st.session_state.get("lat"), st.session_state.get("selected_lat"))
-    lon = _pick_signature_value(click_lon, calc_ref.get("lon"), calc_ref.get("selected_lon"), st.session_state.get("lon"), st.session_state.get("selected_lon"))
-    return lat, lon
+    # build_report_signature(calc=calc_ref, session_state=session_snapshot)
+    return build_report_delivery_signature(calc=calc_ref, session_state=session_snapshot)
 
 
 def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
@@ -192,14 +172,7 @@ def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, us
     # amount=1
     # save_client_report(
     # last_saved_report_signature
-    preflight_credit_balance = partial(
-        checkout_flow_core.preflight_report_credit_balance,
-        session_state=st.session_state,
-        get_credit_balance_func=get_credit_balance,
-        refresh_payment_status_and_credit_func=refresh_payment_status_and_credit,
-        ensure_paid_payment_is_credited_func=ensure_paid_payment_is_credited,
-    )
-    debit_result, pdf_bytes = checkout_flow_core.prepare_and_consume_report(
+    debit_result, pdf_bytes = deliver_paid_report(
         calc_ref=calc_ref,
         session_snapshot=session_snapshot,
         report_signature=report_signature,
@@ -207,12 +180,7 @@ def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, us
         selected_use_label_value=selected_use_label_value,
         categoria_label_value=categoria_label_value,
         session_state=st.session_state,
-        generate_report_pdf_bytes_func=generate_report_pdf_bytes,
-        consume_viability_credit_func=consume_viability_credit,
-        refund_viability_credit_func=refund_viability_credit,
         commit_report_snapshot_func=_commit_report_snapshot,
-        save_client_report_func=save_client_report,
-        preflight_reconcile_credit_func=preflight_credit_balance,
     )
     return debit_result, pdf_bytes
 
@@ -355,7 +323,7 @@ st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m")
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
 
-selected_lat_for_signature, selected_lon_for_signature = _selected_coords_for_signature()
+selected_lat_for_signature, selected_lon_for_signature = live_report_signature_coords(session_state=st.session_state)
 
 current_signature = report_confirmation_core.build_calc_signature(
     selected_lat=selected_lat_for_signature,
@@ -519,11 +487,8 @@ render_report_section(
     pick_func=pick_rule,
     get_credit_balance_func=get_credit_balance,
     preflight_credit_balance_func=partial(
-        checkout_flow_core.preflight_report_credit_balance,
+        preflight_report_delivery_credit_balance,
         session_state=st.session_state,
-        get_credit_balance_func=get_credit_balance,
-        refresh_payment_status_and_credit_func=refresh_payment_status_and_credit,
-        ensure_paid_payment_is_credited_func=ensure_paid_payment_is_credited,
     ),
     render_payments_panel_func=render_payments_panel,
     render_analise_section_func=render_analise_section,
