@@ -448,11 +448,12 @@ def _row_with_optional_columns(
     signature: str,
     report_context: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Campos opcionais para compatibilidade com schemas antigos.
+    """Campos diretos/opcionais para persistência forte e compatibilidade.
 
-    A gravação começa pelo insert mínimo. Estes campos só são adicionados
-    quando o Supabase real exigir uma coluna NOT NULL. Assim evitamos voltar
-    ao erro de depender de colunas que não existem em outro ambiente.
+    No schema atual, estes campos são gravados junto com o ``minimal_row``
+    para evitar linhas com colunas diretas vazias em ``client_reports``.
+    Em ambientes antigos, a camada de insert adaptativo remove somente
+    colunas opcionais que o Supabase informar como inexistentes.
     """
     return {
         "user_id": user_id,
@@ -511,9 +512,18 @@ def _insert_client_report_schema_compatible(
     minimal_row: Dict[str, Any],
     optional_row: Dict[str, Any],
 ) -> Any:
-    """Insere relatório tolerando pequenas diferenças reais de schema."""
-    row = dict(minimal_row)
+    """Insere relatório preenchendo colunas diretas quando o schema permitir.
+
+    O banco atual possui colunas diretas úteis para auditoria/listagem
+    (title, project_option, zone_code, road_name, pdf_storage_path etc.).
+    Por isso começamos com o row completo. Se outro ambiente não tiver alguma
+    dessas colunas, removemos apenas a coluna opcional apontada pelo Supabase
+    e tentamos de novo. O ``minimal_row`` permanece como piso seguro para
+    garantir user_id, report_signature e report_context.
+    """
+    row = {**minimal_row, **optional_row}
     blocked_columns: set[str] = set()
+    protected_columns = {"user_id", "report_signature", "report_context"}
     max_attempts = max(8, len(optional_row) + 3)
 
     for _ in range(max_attempts):
@@ -521,7 +531,7 @@ def _insert_client_report_schema_compatible(
             return client.table("client_reports").insert(row).execute()
         except Exception as exc:
             unknown_col = _extract_unknown_column(exc)
-            if unknown_col and unknown_col in row and unknown_col not in {"user_id", "report_signature"}:
+            if unknown_col and unknown_col in row and unknown_col not in protected_columns:
                 row.pop(unknown_col, None)
                 blocked_columns.add(unknown_col)
                 continue
