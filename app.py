@@ -142,6 +142,30 @@ def _build_current_report_signature(calc_ref, session_snapshot):
     return build_report_signature(calc=calc_ref, session_state=session_snapshot)
 
 
+def _pick_signature_value(*values):
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and value.strip() == "":
+            continue
+        return value
+    return None
+
+
+def _selected_coords_for_signature():
+    calc_ref = st.session_state.get("calc") or {}
+    last_click = st.session_state.get("last_click") or {}
+    click_lat = last_click.get("lat") if isinstance(last_click, dict) else None
+    click_lon = last_click.get("lon") if isinstance(last_click, dict) else None
+
+    # Esta assinatura é do estado vivo da tela, antes de recalcular.
+    # Por isso o clique atual do mapa precisa prevalecer sobre calc["lat"],
+    # que pode ser o ponto do cálculo anterior até o usuário apertar calcular.
+    lat = _pick_signature_value(click_lat, calc_ref.get("lat"), calc_ref.get("selected_lat"), st.session_state.get("lat"), st.session_state.get("selected_lat"))
+    lon = _pick_signature_value(click_lon, calc_ref.get("lon"), calc_ref.get("selected_lon"), st.session_state.get("lon"), st.session_state.get("selected_lon"))
+    return lat, lon
+
+
 def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
     if not isinstance(calc_ref, dict):
         return False
@@ -331,12 +355,22 @@ st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m")
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
 
+selected_lat_for_signature, selected_lon_for_signature = _selected_coords_for_signature()
+
 current_signature = report_confirmation_core.build_calc_signature(
-    selected_lat=st.session_state.get("selected_lat"),
-    selected_lon=st.session_state.get("selected_lon"),
+    selected_lat=selected_lat_for_signature,
+    selected_lon=selected_lon_for_signature,
     use_type_code=st.session_state.calc.get("use_type_code"),
     project_mode=st.session_state.calc.get("project_mode"),
     categoria_label=categoria_label,
+    lot_area_m2=st.session_state.calc.get("lot_area_m2"),
+    built_ground_m2=st.session_state.calc.get("built_ground_m2") or st.session_state.calc.get("built_ground_input_m2") or built_ground,
+    permeable_area_m2=st.session_state.calc.get("area_permeavel_prevista_m2") or st.session_state.calc.get("permeable_area_m2") or permeable_area,
+    lot_front_m=st.session_state.calc.get("lot_front_m"),
+    lot_depth_m=st.session_state.calc.get("lot_depth_m"),
+    lot_is_corner=st.session_state.calc.get("lot_is_corner"),
+    lot_is_midblock=st.session_state.calc.get("lot_is_midblock"),
+    lot_is_irregular=st.session_state.calc.get("lot_is_irregular") or st.session_state.calc.get("lot_irregular"),
 )
 
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
