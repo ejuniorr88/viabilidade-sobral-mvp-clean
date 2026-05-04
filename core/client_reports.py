@@ -588,7 +588,19 @@ def save_client_report(
         )
         if inserted.data:
             return {"ok": True, "already_exists": False, "row": _normalize_report_row(inserted.data[0])}
-        return {"ok": True, "already_exists": False, "row": _normalize_report_row(row)}
+
+        confirmed = (
+            client.table("client_reports")
+            .select("id,report_signature,report_context")
+            .eq("user_id", user_id)
+            .eq("report_signature", signature)
+            .limit(1)
+            .execute()
+        )
+        if confirmed.data:
+            return {"ok": True, "already_exists": False, "row": _normalize_report_row(confirmed.data[0])}
+
+        raise RuntimeError("Relatório não confirmado no banco após tentativa de inserção.")
     except Exception as exc:
         msg = str(exc).lower()
         if "duplicate key" in msg or "already exists" in msg or "23505" in msg:
