@@ -20,12 +20,16 @@ def test_checkout_flow_keeps_credit_preflight_before_report_debit() -> None:
     )
 
 
-def test_app_and_report_section_keep_preflight_credit_hook_without_new_local_helper() -> None:
+def test_app_uses_report_delivery_preflight_facade() -> None:
     app_text = _read(ROOT / "app.py")
+    facade_text = _read(ROOT / "core" / "report_delivery.py")
     section_text = _read(ROOT / "ui" / "report" / "section.py")
 
-    assert 'checkout_flow_core.preflight_report_credit_balance' in app_text
-    assert 'preflight_reconcile_credit_func=preflight_credit_balance' in app_text
+    assert 'preflight_report_delivery_credit_balance' in app_text
     assert 'preflight_credit_balance_func=partial(' in app_text
     assert 'preflight_credit_balance_func' in section_text
     assert 'def _preflight_report_credit_balance(' not in app_text
+
+    assert 'checkout_flow_core.preflight_report_credit_balance' in facade_text
+    assert 'refresh_payment_status_and_credit_func=refresh_payment_status_and_credit' in facade_text
+    assert 'ensure_paid_payment_is_credited_func=ensure_paid_payment_is_credited' in facade_text
