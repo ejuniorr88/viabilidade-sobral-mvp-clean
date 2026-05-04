@@ -321,7 +321,13 @@ def render_report_section(
                         )
                         novo_saldo = debit_result.get("new_balance")
                         _clear_confirmation_state(clear_pending_report_func)
-                        st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+                        if debit_result.get("already_exists"):
+                            st.info(
+                                debit_result.get("message")
+                                or f"Este relatório já estava salvo na Área do Cliente. O crédito foi estornado automaticamente. Saldo atual: {novo_saldo}"
+                            )
+                        else:
+                            st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                         arm_report_initial_focus(st.session_state)
                         st.rerun()
                     except Exception as e:
@@ -414,7 +420,13 @@ def render_report_section(
                             categoria_label_value=categoria_label,
                         )
                         novo_saldo = debit_result.get("new_balance")
-                        st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
+                        if debit_result.get("already_exists"):
+                            st.info(
+                                debit_result.get("message")
+                                or f"Este relatório já estava salvo na Área do Cliente. O crédito foi estornado automaticamente. Saldo atual: {novo_saldo}"
+                            )
+                        else:
+                            st.success(f"1 crédito consumido com sucesso. Saldo atual: {novo_saldo}")
                         _clear_confirmation_state(clear_pending_report_func)
                         arm_report_initial_focus(st.session_state)
                         st.rerun()
