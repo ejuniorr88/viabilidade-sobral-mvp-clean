@@ -78,6 +78,9 @@ def prepare_and_consume_report(
         user_id=user_id_value,
         amount=1,
         description="Geração de relatório de viabilidade",
+        reference_id=report_signature,
+        idempotency_key=f"report_debit:{user_id_value}:{report_signature}",
+        metadata={"report_signature": report_signature, "stage": "report_generation_debit"},
     )
     if not debit_result.get("ok"):
         raise RuntimeError(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
