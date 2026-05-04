@@ -64,6 +64,42 @@ def _pick_bool(*values: Any) -> bool:
     return False
 
 
+def _extract_selected_coords(calc: Dict[str, Any], session_state: Dict[str, Any]) -> tuple[Any, Any]:
+    """Retorna a coordenada consolidada usada na assinatura salva do relatório.
+
+    No salvamento, ``calc["lat"]``/``calc["lon"]`` representam o cálculo já
+    executado. O ``last_click`` entra apenas como fallback para cenários legados
+    onde o snapshot ainda não levou coordenadas para o calc.
+    """
+    session_calc = session_state.get("calc") if isinstance(session_state.get("calc"), dict) else {}
+    last_click = session_state.get("last_click")
+    click_lat = click_lon = None
+    if isinstance(last_click, dict):
+        click_lat = last_click.get("lat")
+        click_lon = last_click.get("lon")
+
+    return (
+        _pick_value(
+            calc.get("lat"),
+            calc.get("selected_lat"),
+            session_calc.get("lat"),
+            session_state.get("lat"),
+            click_lat,
+            session_calc.get("selected_lat"),
+            session_state.get("selected_lat"),
+        ),
+        _pick_value(
+            calc.get("lon"),
+            calc.get("selected_lon"),
+            session_calc.get("lon"),
+            session_state.get("lon"),
+            click_lon,
+            session_calc.get("selected_lon"),
+            session_state.get("selected_lon"),
+        ),
+    )
+
+
 def _safe_local_now() -> datetime:
     return datetime.now(_TZ)
 
@@ -226,6 +262,8 @@ def _build_title(calc: Dict[str, Any], session_state: Dict[str, Any]) -> str:
 
 
 def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) -> str:
+    selected_lat, selected_lon = _extract_selected_coords(calc, session_state)
+
     payload = {
         "use_type_code": _normalize_text(calc.get("use_type_code")),
         "selected_use_label": _normalize_text(calc.get("selected_use_label")),
@@ -278,8 +316,8 @@ def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) 
             calc.get("lot_is_irregular"),
             calc.get("lot_irregular"),
         ),
-        "selected_lat": _normalize_number(_pick_value(calc.get("selected_lat"), st.session_state.get("selected_lat")), 6),
-        "selected_lon": _normalize_number(_pick_value(calc.get("selected_lon"), st.session_state.get("selected_lon")), 6),
+        "selected_lat": _normalize_number(selected_lat, 6),
+        "selected_lon": _normalize_number(selected_lon, 6),
     }
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
