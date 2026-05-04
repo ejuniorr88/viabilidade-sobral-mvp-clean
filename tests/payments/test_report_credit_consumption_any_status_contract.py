@@ -29,7 +29,7 @@ def _run_prepare_for_status(status_curto: str, *, already_exists: bool = False) 
         events.append(f"pdf:{calc.get('status_curto')}")
         return b"pdf"
 
-    def consume_viability_credit_func(*, user_id, amount, description):
+    def consume_viability_credit_func(*, user_id, amount, description, **_kwargs):
         events.append(f"consume:{user_id}:{amount}")
         return {"ok": True, "new_balance": 9}
 
