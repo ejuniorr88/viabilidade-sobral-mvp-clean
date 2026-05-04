@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from core.zone_display_labels import (
     display_label,
     format_testada_minima,
@@ -46,3 +48,12 @@ def test_special_notice_returns_none_when_missing() -> None:
 def test_special_notice_returns_text_when_present() -> None:
     labels = {"special_notice": "Não são permitidas alterações/configurações dos lotes existentes."}
     assert special_notice(labels) == "Não são permitidas alterações/configurações dos lotes existentes."
+
+
+def test_indices_section_contains_official_display_legend() -> None:
+    source = Path("ui/indices/section.py").read_text(encoding="utf-8")
+    assert "Legenda dos parâmetros" in source
+    assert "`*` = parâmetro especial" in source
+    assert "`**` = parâmetro sem valor numérico fixo" in source
+    assert "Não permitido" in source
+    assert "Não se aplica" in source
