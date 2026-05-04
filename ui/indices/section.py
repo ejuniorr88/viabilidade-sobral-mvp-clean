@@ -89,6 +89,18 @@ def _fmt_m2(v: Optional[float]) -> str:
     return f"{v:.2f} m²"
 
 
+
+
+def _render_official_display_legend() -> None:
+    """Renderiza legenda curta dos símbolos oficiais sem interferir nos cálculos."""
+    st.caption(
+        "**Legenda dos parâmetros:** `*` = parâmetro especial sujeito a análise específica/projeto especial; "
+        "`**` = parâmetro sem valor numérico fixo na tabela geral, dependente de condição especial prevista na legislação; "
+        "`—` = sem valor numérico definido para exibição; "
+        "**Não permitido** = parâmetro vedado pela legislação; "
+        "**Não se aplica** = parâmetro não aplicável à zona/subzona."
+    )
+
 def _call_card(card_func: Callable[..., Any], title: str, value: str) -> None:
     """
     Chama o card_func preservando o design existente.
@@ -279,3 +291,5 @@ def render_indices_section(
     notice = special_notice(official_labels)
     if notice:
         st.info(notice)
+
+    _render_official_display_legend()
