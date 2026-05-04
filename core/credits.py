@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import json
 from typing import Any, Dict, List, Optional, Set
+from uuid import UUID
 
 import streamlit as st
 
@@ -61,6 +62,14 @@ def _to_int(value: Any, default: int = 0) -> int:
         return int(value or default)
     except Exception:
         return default
+
+
+def _is_uuid(value: Any) -> bool:
+    try:
+        UUID(str(value))
+        return True
+    except Exception:
+        return False
 
 
 def _ledger_row_delta(row: Dict[str, Any]) -> int:
@@ -404,12 +413,19 @@ def _tag_latest_report_debit(
 
         ledger_id = target.get("id")
         update_payload = {
-            "reference_id": reference_key,
             "idempotency_key": f"{stable_prefix}:{ledger_id}",
             "metadata": metadata_payload,
         }
+        if _is_uuid(reference_key):
+            update_payload["reference_id"] = reference_key
+
         db.table("credit_ledger").update(update_payload).eq("id", ledger_id).execute()
-        return {"ok": True, "ledger_id": ledger_id, "reference_id": reference_key}
+        return {
+            "ok": True,
+            "ledger_id": ledger_id,
+            "reference_id": reference_key if _is_uuid(reference_key) else None,
+            "report_signature": reference_key,
+        }
     except Exception as e:
         return {"ok": False, "reason": "tag_failed", "message": str(e)}
 
@@ -564,15 +580,20 @@ def refund_viability_credit(
     Compensa um débito anterior mantendo o credit_ledger como fonte de verdade.
 
     Proteção crítica:
-    - quando houver reference_id, usa idempotency_key estável para evitar
+    - quando houver referência lógica, usa idempotency_key estável para evitar
       estorno duplicado em caso de retry/rerun;
+    - report_signature fica em metadata, pois credit_ledger.reference_id pode ser UUID;
     - source = refund_process para auditoria clara do tipo de lançamento.
     """
     if not user_id:
         return {"ok": False, "message": "Usuário não identificado para estorno."}
 
     server = get_supabase_server_client()
-    reference_key = str(reference_id or "").strip()
+    metadata_payload = dict(metadata or {})
+    reference_key = str(reference_id or metadata_payload.get("report_signature") or "").strip()
+    if reference_key and not _is_uuid(reference_key):
+        metadata_payload.setdefault("report_signature", reference_key)
+
     idempotency_key = f"refund_viability_credit:{user_id}:{reference_key}:{int(amount)}" if reference_key else None
 
     try:
@@ -601,9 +622,9 @@ def refund_viability_credit(
             "entry_type": "credit",
             "source": "refund_process",
             "description": description,
-            "metadata": metadata or {},
+            "metadata": metadata_payload,
         }
-        if reference_key:
+        if reference_key and _is_uuid(reference_key):
             ledger_payload["reference_id"] = reference_key
         if idempotency_key:
             ledger_payload["idempotency_key"] = idempotency_key
