@@ -350,10 +350,78 @@ def list_user_payments(user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     )
 
 
+def _tag_latest_report_debit(
+    *,
+    user_id: str,
+    amount: int,
+    description: str,
+    reference_id: Optional[str],
+    idempotency_key: Optional[str],
+    metadata: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Vincula o débito gerado pela RPC antiga à assinatura do relatório.
+
+    A RPC consume_viability_credit grava o lançamento no ledger, mas hoje não
+    recebe report_signature. Para não mexer no banco em véspera de lançamento,
+    o código marca o lançamento debitado mais recente com reference_id,
+    idempotency_key rastreável e metadata complementar.
+    """
+    reference_key = str(reference_id or "").strip()
+    if not user_id or not reference_key:
+        return {"ok": False, "reason": "missing_reference_id"}
+
+    db = get_supabase_server_client()
+    stable_prefix = str(idempotency_key or f"report_debit:{user_id}:{reference_key}").strip()
+    metadata_payload = dict(metadata or {})
+    metadata_payload.setdefault("report_signature", reference_key)
+    metadata_payload.setdefault("charged", int(amount))
+
+    try:
+        rows = _safe_data(
+            db.table("credit_ledger")
+            .select("id,metadata")
+            .eq("user_id", user_id)
+            .eq("entry_type", "debit")
+            .eq("source", "platform_usage")
+            .eq("amount", int(amount))
+            .eq("description", description)
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        ) or []
+
+        target = None
+        for row in rows:
+            row_metadata = row.get("metadata") if isinstance(row, dict) else None
+            if isinstance(row_metadata, dict) and row_metadata.get("report_signature") == reference_key:
+                return {"ok": True, "already_tagged": True, "ledger_id": row.get("id")}
+            if target is None:
+                target = row
+
+        if not target or not target.get("id"):
+            return {"ok": False, "reason": "debit_row_not_found"}
+
+        ledger_id = target.get("id")
+        update_payload = {
+            "reference_id": reference_key,
+            "idempotency_key": f"{stable_prefix}:{ledger_id}",
+            "metadata": metadata_payload,
+        }
+        db.table("credit_ledger").update(update_payload).eq("id", ledger_id).execute()
+        return {"ok": True, "ledger_id": ledger_id, "reference_id": reference_key}
+    except Exception as e:
+        return {"ok": False, "reason": "tag_failed", "message": str(e)}
+
+
 def consume_viability_credit(
     user_id: str,
     amount: int = 1,
     description: str = "Cálculo de viabilidade",
+    *,
+    reference_id: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     supabase = get_supabase_auth_client()
 
@@ -370,6 +438,18 @@ def consume_viability_credit(
         parsed = _extract_rpc_json(response)
         if parsed is not None:
             if parsed.get("ok"):
+                try:
+                    tag_result = _tag_latest_report_debit(
+                        user_id=user_id,
+                        amount=amount,
+                        description=description,
+                        reference_id=reference_id,
+                        idempotency_key=idempotency_key,
+                        metadata=metadata,
+                    )
+                    parsed["ledger_tag_result"] = tag_result
+                except Exception as e:
+                    parsed["ledger_tag_result"] = {"ok": False, "message": str(e)}
                 try:
                     sync = _sync_credit_balance_to_ledger(user_id)
                     parsed["new_balance"] = sync.get("balance", parsed.get("new_balance"))
