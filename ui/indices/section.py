@@ -92,13 +92,88 @@ def _fmt_m2(v: Optional[float]) -> str:
 
 
 def _render_official_display_legend() -> None:
-    """Renderiza legenda curta dos símbolos oficiais sem interferir nos cálculos."""
-    st.caption(
-        "**Legenda dos parâmetros:** `*` = parâmetro especial sujeito a análise específica/projeto especial; "
-        "`**` = parâmetro sem valor numérico fixo na tabela geral, dependente de condição especial prevista na legislação; "
-        "`—` = sem valor numérico definido para exibição; "
-        "**Não permitido** = parâmetro vedado pela legislação; "
-        "**Não se aplica** = parâmetro não aplicável à zona/subzona."
+    """Renderiza legenda em mini tabela legível, sem interferir nos cálculos."""
+    st.markdown(
+        """
+<div class="indices-legend-box">
+  <div class="indices-legend-title">Legenda dos parâmetros</div>
+  <table class="indices-legend-table">
+    <thead>
+      <tr>
+        <th>Símbolo / Texto</th>
+        <th>Significado</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>*</strong></td>
+        <td>Parâmetro especial sujeito a análise específica / projeto especial.</td>
+      </tr>
+      <tr>
+        <td><strong>**</strong></td>
+        <td>Parâmetro sem valor numérico fixo na tabela geral, dependente de condição especial prevista na legislação.</td>
+      </tr>
+      <tr>
+        <td><strong>—</strong></td>
+        <td>Sem valor numérico definido para exibição.</td>
+      </tr>
+      <tr>
+        <td><strong>Não permitido</strong></td>
+        <td>Parâmetro vedado pela legislação.</td>
+      </tr>
+      <tr>
+        <td><strong>Não se aplica</strong></td>
+        <td>Parâmetro não aplicável à zona/subzona.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<style>
+.indices-legend-box {
+  margin-top: 0.75rem;
+  margin-bottom: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(31, 41, 55, 0.16);
+  border-radius: 0.65rem;
+  background: rgba(248, 250, 252, 0.92);
+}
+.indices-legend-title {
+  margin-bottom: 0.45rem;
+  color: #111827;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+.indices-legend-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #1f2937;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+.indices-legend-table th {
+  padding: 0.42rem 0.55rem;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.18);
+  color: #111827;
+  text-align: left;
+  font-weight: 700;
+}
+.indices-legend-table td {
+  padding: 0.42rem 0.55rem;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.10);
+  vertical-align: top;
+}
+.indices-legend-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.indices-legend-table td:first-child {
+  width: 11rem;
+  color: #111827;
+  white-space: nowrap;
+}
+</style>
+        """,
+        unsafe_allow_html=True,
     )
 
 def _call_card(card_func: Callable[..., Any], title: str, value: str) -> None:
