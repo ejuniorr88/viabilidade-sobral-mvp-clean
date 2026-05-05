@@ -36,7 +36,7 @@ def render_consultation_form(session_state: Any) -> ConsultationFormResult:
     session_state.calc["categoria_label"] = categoria_label
 
     st.markdown("### 📐 3. Dados do Lote")
-    st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
+    st.caption("Informe as dimensões do lote. Se o terreno for irregular, marque a opção correspondente e informe a área total.")
 
     lot_area, built_ground, permeable_area = render_lot_inputs()
 
