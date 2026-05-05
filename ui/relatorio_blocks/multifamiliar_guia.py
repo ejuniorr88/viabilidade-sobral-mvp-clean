@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 import streamlit as st
 
 from .multifamiliar_items import common
+from .credit_preserved_notice import render_credit_preserved_notice
 from .multifamiliar_items import (
     render_item_00_intro,
     render_item_01,
@@ -104,4 +105,4 @@ def render_multifamiliar_inadequado_preview(*, calc: Dict[str, Any], rule: Optio
     st.markdown(
         "Por isso, o relatório completo não será continuado, já que não há viabilidade urbanística para este caso na forma analisada."
     )
-    st.info("**Seu crédito foi preservado**, para que você possa realizar um novo estudo em outra condição.")
+    render_credit_preserved_notice()
