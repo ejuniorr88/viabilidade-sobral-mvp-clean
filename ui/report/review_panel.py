@@ -218,7 +218,7 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
     area_pretendida = _pick_built_area(calc, session_snapshot)
     if area_pretendida is None:
         area_value = "Não informada"
-        area_hint = "**Caso você ainda esteja fazendo um estudo em fase inicial e não saiba a área construída no térreo, pode deixar o campo como 0. Assim, o sistema calcula o potencial máximo permitido para o terreno escolhido, ajudando você a entender até onde o lote pode chegar dentro das regras urbanísticas.**"
+        area_hint = "<strong>Caso você ainda esteja fazendo um estudo em fase inicial e não saiba a área construída no térreo, pode deixar o campo como 0. Assim, o sistema calcula o potencial máximo permitido para o terreno escolhido, ajudando você a entender até onde o lote pode chegar dentro das regras urbanísticas."
     else:
         area_value = f"{_fmt_num(area_pretendida)} m²"
         area_hint = "Valor informado pelo usuário para a área construída pretendida."
