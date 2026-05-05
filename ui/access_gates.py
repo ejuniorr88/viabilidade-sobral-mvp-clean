@@ -69,8 +69,11 @@ def resolve_calculate_access(
         elif not user_logged_in or not user_id:
             # A ação pós-login continua sendo calculate_viability; o helper
             # centraliza também o foco visual no bloco de login.
-            # session_state["post_login_action"] = "calculate_viability"
+            # O rerun é intencional: estabiliza a árvore visual com o bloco
+            # de login renderizado antes do runtime executar o scroll.
+            # Âncora contratual preservada: session_state["post_login_action"] = "calculate_viability"
             arm_login_gate_scroll(session_state, post_login_action="calculate_viability")
+            st.rerun()
         else:
             session_state["show_login_gate"] = False
             session_state["show_inline_payments"] = False
