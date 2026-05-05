@@ -6,6 +6,7 @@ import streamlit as st
 
 from ui.auth_panel import render_google_login_box
 from ui.client_area import render_client_area_page
+from ui.runtime.report_scroll.login_gate import arm_login_gate_scroll
 
 
 def _clear_client_area_checkout_state() -> None:
@@ -66,9 +67,10 @@ def resolve_calculate_access(
         if categoria_label != "Residencial":
             st.info("Essa categoria ainda está em desenvolvimento. Use Residencial por enquanto.")
         elif not user_logged_in or not user_id:
-            session_state["show_login_gate"] = True
-            session_state["scroll_to_login_gate"] = True
-            session_state["post_login_action"] = "calculate_viability"
+            # A ação pós-login continua sendo calculate_viability; o helper
+            # centraliza também o foco visual no bloco de login.
+            # session_state["post_login_action"] = "calculate_viability"
+            arm_login_gate_scroll(session_state, post_login_action="calculate_viability")
         else:
             session_state["show_login_gate"] = False
             session_state["show_inline_payments"] = False
