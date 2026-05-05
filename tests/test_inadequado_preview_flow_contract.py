@@ -61,7 +61,33 @@ def test_blocked_preview_still_requires_initial_report_context_before_message() 
         "### ✅ 2️⃣ O uso residencial unifamiliar é viável neste terreno?",
         "### 📘 3️⃣ Como funciona a leitura da adequabilidade no unifamiliar?",
         "### 🚫 Situação do estudo",
-        "Seu crédito foi preservado",
+        "render_credit_preserved_notice",
     ]
     for item in required:
         assert item in preview_py, f"inadequado_preview.py perdeu bloco textual crítico do fluxo inadequado: {item}"
+
+
+def test_credit_preserved_notice_is_conditional_by_balance() -> None:
+    notice_py = _read("ui/relatorio_blocks/credit_preserved_notice.py")
+
+    required = [
+        "should_show_credit_preserved_notice",
+        "auth_logged_in",
+        "auth_user_id",
+        "balance > 0",
+        "render_credit_preserved_notice",
+        "Seu crédito foi preservado",
+    ]
+    for item in required:
+        assert item in notice_py, f"credit_preserved_notice.py perdeu a condição de saldo positivo: {item}"
+
+    preview_py = _read("ui/relatorio_blocks/inadequado_preview.py")
+    relatorio_py = _read("ui/relatorio.py")
+    multifamiliar_py = _read("ui/relatorio_blocks/multifamiliar_guia.py")
+
+    for path, text in [
+        ("ui/relatorio_blocks/inadequado_preview.py", preview_py),
+        ("ui/relatorio.py", relatorio_py),
+        ("ui/relatorio_blocks/multifamiliar_guia.py", multifamiliar_py),
+    ]:
+        assert "render_credit_preserved_notice()" in text, f"{path} não usa aviso condicional por saldo."
