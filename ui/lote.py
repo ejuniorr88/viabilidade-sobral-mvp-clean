@@ -189,10 +189,10 @@ def render_lote_section() -> Tuple[float, float, float]:
         format="%.2f",
         key="built_ground_m2_input",
     )
-    st.markdown(
+   st.markdown(
     """
-    <div style="font-size: 12px; color: #666; line-height: 2.0; margin-top: -6px; margin-bottom: 6px;">
-        Observação: Se ainda não souber a área construída no térreo, deixe 0 para calcular o potencial máximo permitido.
+    <div style="font-size: 12px; color: #555; line-height: 1.4; margin-top: -6px; margin-bottom: 6px;">
+        Se ainda não souber a área construída no térreo, deixe 0 para calcular o potencial máximo permitido.
     </div>
     """,
     unsafe_allow_html=True,
