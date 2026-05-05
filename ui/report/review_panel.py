@@ -101,6 +101,15 @@ _CARD_CSS = """
     font-size: 0.84rem;
     color: #6b7280;
 }
+.review-item-hint.area-zero-hint {
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #374151;
+}
+.review-item-hint.area-zero-hint strong {
+    font-weight: 800;
+    color: #111827;
+}
 </style>
 """
 
@@ -150,8 +159,9 @@ def _pick_built_area(calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> 
     return None
 
 
-def _render_item(label: str, value: str, hint: str | None = None) -> None:
-    hint_html = f"<span class='review-item-hint'>{hint}</span>" if hint else ""
+def _render_item(label: str, value: str, hint: str | None = None, hint_class: str = "") -> None:
+    hint_classes = f"review-item-hint {hint_class}".strip()
+    hint_html = f"<span class='{hint_classes}'>{hint}</span>" if hint else ""
     st.markdown(
         f"""
         <div class="review-item">
@@ -219,15 +229,15 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
     if area_pretendida is None:
         area_value = "Não informada"
         area_hint = (
-    '<span style="font-size: 14px; line-height: 1.45;">'
-    '<strong>Caso você ainda esteja fazendo um estudo em fase inicial e não saiba a área construída no térreo</strong>, '
-    'pode deixar o campo como 0. Assim, o sistema calcula o potencial máximo permitido para o terreno escolhido, '
-    'ajudando você a entender até onde o lote pode chegar dentro das regras urbanísticas.'
-    '</span>'
-)
+            "<strong>Caso você ainda esteja fazendo um estudo em fase inicial e não saiba a área construída no térreo</strong>, "
+            "pode deixar o campo como 0. Assim, o sistema calcula o potencial máximo permitido para o terreno escolhido, "
+            "ajudando você a entender até onde o lote pode chegar dentro das regras urbanísticas."
+        )
+        area_hint_class = "area-zero-hint"
     else:
         area_value = f"{_fmt_num(area_pretendida)} m²"
         area_hint = "Valor informado pelo usuário para a área construída pretendida."
+        area_hint_class = ""
 
     st.markdown("<div class='review-grid-gap'></div>", unsafe_allow_html=True)
-    _render_item("Área construída pretendida", area_value, area_hint)
+    _render_item("Área construída pretendida", area_value, area_hint, area_hint_class)
