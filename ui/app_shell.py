@@ -380,18 +380,18 @@ def inject_global_styles() -> None:
         [data-testid="stSidebar"] label,
         [data-testid="stSidebar"] p,
         [data-testid="stSidebar"] span,
-        [data-testid="stSidebar"] .stMarkdown p {
+        [data-testid="stSidebar"] .stMarkdown p {{
             font-size: 13px !important;
             line-height: 1.45 !important;
-        }
+        }}
 
         [data-testid="stSidebar"] h1,
         [data-testid="stSidebar"] h2,
-        [data-testid="stSidebar"] h3 {
+        [data-testid="stSidebar"] h3 {{
             font-size: 16px !important;
             font-weight: 700 !important;
             line-height: 1.25 !important;
-        }
+        }}
 
         @media (max-width: 900px) {{
             [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
