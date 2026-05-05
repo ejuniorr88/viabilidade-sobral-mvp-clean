@@ -230,9 +230,9 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
         area_value = "Não informada"
         area_hint = """
         <strong>
-        Caso você ainda esteja fazendo um estudo em fase inicial e não saiba a área construída no térreo,
-        pode deixar o campo como "0". Assim, o sistema calcula o potencial máximo permitido para o terreno escolhido,
-        ajudando você a entender até onde o lote pode chegar dentro das regras urbanísticas.
+        Caso você ainda esteja fazendo um estudo em fase inicial e não saiba a área construída no térreo, pode deixar o campo como "0". 
+        Assim, o sistema calcula o potencial máximo permitido para o terreno escolhido, ajudando você a entender o potencial construtivo do terreno 
+        dentro das regras urbanísticas.
         </strong>
         """
         area_hint_class = "area-zero-hint"
