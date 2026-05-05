@@ -64,6 +64,42 @@ def _pick_bool(*values: Any) -> bool:
     return False
 
 
+def _extract_selected_coords(calc: Dict[str, Any], session_state: Dict[str, Any]) -> tuple[Any, Any]:
+    """Retorna a coordenada consolidada usada na assinatura salva do relatório.
+
+    No salvamento, ``calc["lat"]``/``calc["lon"]`` representam o cálculo já
+    executado. O ``last_click`` entra apenas como fallback para cenários legados
+    onde o snapshot ainda não levou coordenadas para o calc.
+    """
+    session_calc = session_state.get("calc") if isinstance(session_state.get("calc"), dict) else {}
+    last_click = session_state.get("last_click")
+    click_lat = click_lon = None
+    if isinstance(last_click, dict):
+        click_lat = last_click.get("lat")
+        click_lon = last_click.get("lon")
+
+    return (
+        _pick_value(
+            calc.get("lat"),
+            calc.get("selected_lat"),
+            session_calc.get("lat"),
+            session_state.get("lat"),
+            click_lat,
+            session_calc.get("selected_lat"),
+            session_state.get("selected_lat"),
+        ),
+        _pick_value(
+            calc.get("lon"),
+            calc.get("selected_lon"),
+            session_calc.get("lon"),
+            session_state.get("lon"),
+            click_lon,
+            session_calc.get("selected_lon"),
+            session_state.get("selected_lon"),
+        ),
+    )
+
+
 def _safe_local_now() -> datetime:
     return datetime.now(_TZ)
 
@@ -149,7 +185,16 @@ def _extract_road(calc: Dict[str, Any], session_state: Dict[str, Any] | None = N
 def _extract_road_type(calc: Dict[str, Any], session_state: Dict[str, Any] | None = None) -> str:
     session_state = session_state or {}
     session_calc = session_state.get("calc") if isinstance(session_state.get("calc"), dict) else {}
-    keys = ("road_type", "via_type", "tipo_via", "road_class", "via_classificacao")
+    keys = (
+        "road_type",
+        "via_type",
+        "via_tipo",
+        "street_type",
+        "tipo_via",
+        "road_class",
+        "via_classificacao",
+        "via_tipo_txt",
+    )
     return _normalize_text(
         _pick_value(
             *(calc.get(k) for k in keys),
@@ -217,6 +262,8 @@ def _build_title(calc: Dict[str, Any], session_state: Dict[str, Any]) -> str:
 
 
 def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) -> str:
+    selected_lat, selected_lon = _extract_selected_coords(calc, session_state)
+
     payload = {
         "use_type_code": _normalize_text(calc.get("use_type_code")),
         "selected_use_label": _normalize_text(calc.get("selected_use_label")),
@@ -269,8 +316,8 @@ def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) 
             calc.get("lot_is_irregular"),
             calc.get("lot_irregular"),
         ),
-        "selected_lat": _normalize_number(_pick_value(calc.get("selected_lat"), st.session_state.get("selected_lat")), 6),
-        "selected_lon": _normalize_number(_pick_value(calc.get("selected_lon"), st.session_state.get("selected_lon")), 6),
+        "selected_lat": _normalize_number(selected_lat, 6),
+        "selected_lon": _normalize_number(selected_lon, 6),
     }
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -401,11 +448,12 @@ def _row_with_optional_columns(
     signature: str,
     report_context: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Campos opcionais para compatibilidade com schemas antigos.
+    """Campos diretos/opcionais para persistência forte e compatibilidade.
 
-    A gravação começa pelo insert mínimo. Estes campos só são adicionados
-    quando o Supabase real exigir uma coluna NOT NULL. Assim evitamos voltar
-    ao erro de depender de colunas que não existem em outro ambiente.
+    No schema atual, estes campos são gravados junto com o ``minimal_row``
+    para evitar linhas com colunas diretas vazias em ``client_reports``.
+    Em ambientes antigos, a camada de insert adaptativo remove somente
+    colunas opcionais que o Supabase informar como inexistentes.
     """
     return {
         "user_id": user_id,
@@ -464,9 +512,18 @@ def _insert_client_report_schema_compatible(
     minimal_row: Dict[str, Any],
     optional_row: Dict[str, Any],
 ) -> Any:
-    """Insere relatório tolerando pequenas diferenças reais de schema."""
-    row = dict(minimal_row)
+    """Insere relatório preenchendo colunas diretas quando o schema permitir.
+
+    O banco atual possui colunas diretas úteis para auditoria/listagem
+    (title, project_option, zone_code, road_name, pdf_storage_path etc.).
+    Por isso começamos com o row completo. Se outro ambiente não tiver alguma
+    dessas colunas, removemos apenas a coluna opcional apontada pelo Supabase
+    e tentamos de novo. O ``minimal_row`` permanece como piso seguro para
+    garantir user_id, report_signature e report_context.
+    """
+    row = {**minimal_row, **optional_row}
     blocked_columns: set[str] = set()
+    protected_columns = {"user_id", "report_signature", "report_context"}
     max_attempts = max(8, len(optional_row) + 3)
 
     for _ in range(max_attempts):
@@ -474,7 +531,7 @@ def _insert_client_report_schema_compatible(
             return client.table("client_reports").insert(row).execute()
         except Exception as exc:
             unknown_col = _extract_unknown_column(exc)
-            if unknown_col and unknown_col in row and unknown_col not in {"user_id", "report_signature"}:
+            if unknown_col and unknown_col in row and unknown_col not in protected_columns:
                 row.pop(unknown_col, None)
                 blocked_columns.add(unknown_col)
                 continue
@@ -579,7 +636,19 @@ def save_client_report(
         )
         if inserted.data:
             return {"ok": True, "already_exists": False, "row": _normalize_report_row(inserted.data[0])}
-        return {"ok": True, "already_exists": False, "row": _normalize_report_row(row)}
+
+        confirmed = (
+            client.table("client_reports")
+            .select("id,report_signature,report_context")
+            .eq("user_id", user_id)
+            .eq("report_signature", signature)
+            .limit(1)
+            .execute()
+        )
+        if confirmed.data:
+            return {"ok": True, "already_exists": False, "row": _normalize_report_row(confirmed.data[0])}
+
+        raise RuntimeError("Relatório não confirmado no banco após tentativa de inserção.")
     except Exception as exc:
         msg = str(exc).lower()
         if "duplicate key" in msg or "already exists" in msg or "23505" in msg:

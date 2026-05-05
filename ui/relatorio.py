@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from .relatorio_blocks.credit_preserved_notice import render_credit_preserved_notice
+
 import math
 import streamlit as st
 
@@ -49,6 +51,26 @@ def _fmt_pct(v: Any, dec: int = 1) -> str:
     except Exception:
         return "—"
 
+
+
+def _is_zeia_zone_for_report(zona: Any) -> bool:
+    z = str(zona or "").strip().upper()
+    z_key = z.replace("-", "").replace("/", "").replace(" ", "")
+    return z_key in {"ZEIAAPP", "ZEIA1", "ZEIA2", "ZEIA3"}
+
+
+def _append_zeia_ambiental_observacao(*, zona: Any, status_curto: str, explicacao: str) -> str:
+    if not (_is_zeia_zone_for_report(zona) and str(status_curto or "").strip().upper() == "PERMITE PELA VIA"):
+        return explicacao
+    observacao = (
+        "\n\n**Observação ambiental e documental:** como o terreno está em área de interesse ambiental, "
+        "a viabilidade final não dispensa análise do órgão municipal competente, verificação das restrições ambientais aplicáveis, "
+        "atendimento aos parâmetros urbanísticos da zona e comprovação da regularidade documental do imóvel, "
+        "como matrícula, escritura, registro ou outro documento hábil exigido no licenciamento."
+    )
+    if observacao.strip() in str(explicacao or ""):
+        return explicacao
+    return f"{explicacao}{observacao}"
 
 def _to_pct(rule: Dict[str, Any], key_pct: str, key_frac: str) -> float | None:
     v = rule.get(key_pct, None)
@@ -228,6 +250,11 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         via_norm=via_norm,
         via_class=via_class,
     )
+    explicacao = _append_zeia_ambiental_observacao(
+        zona=zone_sigla or zone,
+        status_curto=status_curto,
+        explicacao=explicacao,
+    )
 
     recuos_resumo = f"Frontal: {_fmt_num(rec_fr)} m | Laterais: {_fmt_num(rec_lat)} m | Fundos: {_fmt_num(rec_fun)} m"
     ia_min_texto = _fmt_num(ia_min) if ia_min is not None else "não informado"
@@ -337,7 +364,7 @@ def render_unifamiliar_inadequado_preview(calc: Dict[str, Any]) -> None:
     st.markdown(
         "Por isso, o relatório completo não será continuado, já que não há viabilidade urbanística para este caso na forma analisada."
     )
-    st.info("**Seu crédito foi preservado**, para que você possa realizar um novo estudo em outra condição.")
+    render_credit_preserved_notice()
 
 
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
@@ -450,6 +477,11 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         zone_class=zone_class,
         via_norm=via_norm,
         via_class=via_class,
+    )
+    explicacao = _append_zeia_ambiental_observacao(
+        zona=zone_sigla or zone,
+        status_curto=status_curto,
+        explicacao=explicacao,
     )
 
     recuos_resumo = f"Frontal: {_fmt_num(rec_fr)} m | Laterais: {_fmt_num(rec_lat)} m | Fundos: {_fmt_num(rec_fun)} m"

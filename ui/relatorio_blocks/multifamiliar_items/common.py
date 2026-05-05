@@ -153,38 +153,226 @@ def _via_tipo_norm(v: Any) -> Optional[str]:
         return "ARTERIAL"
     if "coletora" in s:
         return "COLETORA"
+    if "troncal" in s or "rodovia federal" in s or "br-" in s or s.startswith("br "):
+        return "TRONCAL"
+    if "regional" in s or "rodovia estadual" in s or "ce-" in s or s.startswith("ce "):
+        return "REGIONAL"
     return None
+
+
+def _is_zeia_zone(zona: Any) -> bool:
+    z = _norm(zona)
+    z_key = z.replace("-", "").replace("/", "").replace(" ", "")
+    return z_key in {"ZEIAAPP", "ZEIA1", "ZEIA2", "ZEIA3"}
 
 
 def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, via_class: str | None) -> tuple[str, str, str]:
     z = _norm(zone_class)
     v = _norm(via_class)
 
+    # Quando a via NÃO é arterial/coletora/paisagística correspondente,
+    # não há sobreposição pela via. Prevalece a leitura da zona.
     if not via_norm:
         if z == "I":
-            return ("❌", "NÃO PERMITE", "A zona indicou I (Inadequado / não permitido). Em via local, normalmente vale a regra da zona.")
+            return (
+                "❌",
+                "NÃO PERMITE",
+                "A zona indicou I — Inadequado. Como a via identificada não se enquadra nas categorias arterial ou coletora previstas para sobreposição da adequabilidade viária, prevalece a regra da zona."
+            )
+
+        if z == "AP":
+            return (
+                "✅",
+                "PERMITE SOMENTE PEQUENO PORTE",
+                "O uso é admitido nesta zona apenas como pequeno porte. A análise ainda deve respeitar a Taxa de Ocupação, a Taxa de Permeabilidade, o Índice de Aproveitamento, os recuos, a altura máxima e as demais regras urbanísticas aplicáveis."
+            )
+
         if z == "AP/AM":
-            return ("⚠️", "DEPENDE DO PORTE", "A zona indicou AP/AM (depende do porte). Em via local, normalmente vale a regra da zona.")
+            return (
+                "✅",
+                "PERMITE PEQUENO OU MÉDIO PORTE",
+                "O uso é admitido nesta zona nos portes pequeno ou médio. A análise ainda deve respeitar a Taxa de Ocupação, a Taxa de Permeabilidade, o Índice de Aproveitamento, os recuos, a altura máxima e as demais regras urbanísticas aplicáveis."
+            )
+
         if z == "PE":
-            return ("⚠️", "PROJETO ESPECIAL", "A zona indicou PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
-        if z in ("A", "AP", "AM"):
-            return ("✅", "PERMITE", "A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.")
-        return ("⚠️", "SEM DADO", "Não foi possível determinar o resultado por zona.")
+            return (
+                "⚠️",
+                "PROJETO ESPECIAL",
+                "A zona indicou PE — Projeto Especial. Pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
+            )
+
+        if z == "A":
+            return (
+                "✅",
+                "PERMITE",
+                "A zona permite o uso, observados Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos, altura máxima e demais regras urbanísticas aplicáveis."
+            )
+
+        return (
+            "⚠️",
+            "SEM DADO",
+            "Não foi possível determinar o resultado por zona."
+        )
+
+    # Quando a via É arterial/coletora, paisagística ou não,
+    # a classificação viária pode se sobrepor à leitura da zona.
+    # Via troncal/regional não aparece literalmente no Art. 99, mas é tratada
+    # como leitura favorável pela hierarquia/função rodoviária, com ressalva
+    # obrigatória sobre anuência do órgão rodoviário competente.
+    if via_norm == "TRONCAL":
+        return (
+            "✅",
+            "PERMITE PELA VIA",
+            "**Análise pela via:** como o terreno tem frente para uma via troncal, a viabilidade pode ser analisada de forma mais ampla. "
+            "Por isso, a viabilidade não fica limitada apenas à classificação indicada pela zona.\n\n"
+            "**Limites urbanísticos:** mesmo com leitura favorável pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
+            "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
+            "**Atenção — rodovia federal/BR:** o projeto pode depender também de análise/autorização do DNIT, especialmente para acesso de veículos, "
+            "entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
+        )
+
+    if via_norm == "REGIONAL":
+        return (
+            "✅",
+            "PERMITE PELA VIA",
+            "**Análise pela via:** como o terreno tem frente para uma via regional, a viabilidade pode ser analisada de forma mais ampla. "
+            "Por isso, a viabilidade não fica limitada apenas à classificação indicada pela zona.\n\n"
+            "**Limites urbanísticos:** mesmo com leitura favorável pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
+            "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
+            "**Atenção — rodovia estadual/CE:** o projeto pode depender também de análise/autorização da SOP/CE, especialmente para acesso de veículos, "
+            "entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
+        )
 
     if v == "I":
-        return ("❌", "NÃO PERMITE", "O tipo de via indicou I (não permitido), mesmo que a zona permita.")
-    if z == "I" and v in ("A", "AP", "AM"):
-        return ("⚠️", "POSSÍVEL PELA VIA", "A zona deu I, mas o tipo de via permite. O licenciamento pode considerar o resultado por tipo de via.")
-    if z == "I" and v == "AP/AM":
-        return ("⚠️", "DEPENDE DO PORTE", "A zona deu I, mas o tipo de via deu AP/AM (depende do porte). Pode depender do licenciamento.")
-    if z == "I" and v == "PE":
-        return ("⚠️", "PROJETO ESPECIAL", "A zona deu I, mas o tipo de via indica PE (Projeto especial). Pode exigir análise/condições extras.")
-    if z == "AP/AM" or v == "AP/AM":
-        return ("⚠️", "DEPENDE DO PORTE", "Existe indicação AP/AM (depende do porte). Confira se o empreendimento é pequeno ou médio.")
-    if z == "PE" or v == "PE":
-        return ("⚠️", "PROJETO ESPECIAL", "Existe indicação PE (Projeto especial). Pode exigir análise/condições extras no licenciamento.")
-    return ("✅", "PERMITE", "Zona e/ou tipo de via permitem. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.")
+        return (
+            "❌",
+            "NÃO PERMITE",
+            "A classificação viária indicou I — Inadequado. Mesmo que a zona permita, a leitura pela via não admite o uso."
+        )
 
+    if v == "A":
+        if z == "A":
+            return (
+                "✅",
+                "PERMITE PELA ZONA E PELA VIA",
+                "**Análise pela zona e pela via:** o uso pretendido é permitido pela classificação da zona e também pela classificação da via de acesso. "
+                "Nesse caso, a leitura é favorável pelos dois critérios.\n\n"
+                "**Limites urbanísticos:** mesmo com leitura favorável pela zona e pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
+                "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
+                "**Base da leitura:** a zona permite o uso e a via também possui classificação favorável, mantendo a conclusão positiva da análise."
+            )
+
+        return (
+            "✅",
+            "PERMITE PELA VIA",
+            "**Análise pela via:** a zona, isoladamente, não indicou permissão plena para o uso pretendido. Porém, a classificação da via permite que a viabilidade seja analisada de forma mais ampla. "
+            "Por isso, neste caso, a leitura favorável decorre da via, e a viabilidade não fica limitada apenas à classificação indicada pela zona.\n\n"
+            "**Limites urbanísticos:** mesmo com leitura favorável pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
+            "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
+            "**Base da leitura:** essa interpretação decorre da regra de sobreposição da adequabilidade pela via prevista no Art. 99 da LC 91/2023."
+        )
+
+    if v == "AP":
+        return (
+            "✅",
+            "PERMITE PELA VIA SOMENTE PEQUENO PORTE",
+            "A classificação viária indicou AP — Adequado Pequeno Porte. Como o imóvel possui frente para via arterial ou coletora, paisagística ou não, a adequabilidade pela via pode se sobrepor à leitura da zona, limitada ao pequeno porte. Ainda devem ser respeitados os parâmetros urbanísticos da zona."
+        )
+
+    if v == "AP/AM":
+        return (
+            "✅",
+            "PERMITE PELA VIA PEQUENO OU MÉDIO PORTE",
+            "A classificação viária indicou AP/AM — Adequado Pequeno ou Médio Porte. Como o imóvel possui frente para via arterial ou coletora, paisagística ou não, a adequabilidade pela via pode se sobrepor à leitura da zona, limitada aos portes pequeno e médio. Ainda devem ser respeitados os parâmetros urbanísticos da zona."
+        )
+
+    if v == "PE":
+        return (
+            "⚠️",
+            "PROJETO ESPECIAL PELA VIA",
+            "A classificação viária indicou PE — Projeto Especial. Mesmo havendo possibilidade pela via, o caso pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
+        )
+
+    # Fallback: se a via deveria ser considerada, mas não veio classificação viária,
+    # volta para a leitura da zona.
+    if z == "I":
+        return (
+            "❌",
+            "NÃO PERMITE",
+            "A zona indicou I — Inadequado, e não foi localizada classificação viária favorável suficiente para sobrepor essa restrição."
+        )
+
+    if z == "AP":
+        return (
+            "✅",
+            "PERMITE SOMENTE PEQUENO PORTE",
+            "O uso é admitido nesta zona apenas como pequeno porte. A análise ainda deve respeitar a Taxa de Ocupação, a Taxa de Permeabilidade, o Índice de Aproveitamento, os recuos, a altura máxima e as demais regras urbanísticas aplicáveis."
+        )
+
+    if z == "AP/AM":
+        return (
+            "✅",
+            "PERMITE PEQUENO OU MÉDIO PORTE",
+            "O uso é admitido nesta zona nos portes pequeno ou médio. A análise ainda deve respeitar a Taxa de Ocupação, a Taxa de Permeabilidade, o Índice de Aproveitamento, os recuos, a altura máxima e as demais regras urbanísticas aplicáveis."
+        )
+
+    if z == "PE":
+        return (
+            "⚠️",
+            "PROJETO ESPECIAL",
+            "A zona indicou PE — Projeto Especial. Pode exigir análise específica, condições adicionais ou manifestação do órgão competente no licenciamento."
+        )
+
+    return (
+        "✅",
+        "PERMITE",
+        "Zona e/ou tipo de via permitem o uso, observados Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos, altura máxima e demais regras aplicáveis."
+    )
+
+
+
+# Fallback controlado para a leitura residencial do Item 2.
+# Motivo: em alguns ambientes, a tabela de adequabilidade por zona pode não retornar
+# a classificação da zona simples, mesmo quando a própria legislação/tabela oficial
+# permite o uso residencial. Sem esse apoio, o relatório exibe apenas "PERMITE PELA VIA"
+# mesmo quando zona e via são favoráveis.
+def _fallback_zone_class_residencial(zone_sigla: str | None) -> str | None:
+    z = str(zone_sigla or "").strip().upper()
+    z = z.replace("—", "-").replace("_", "").replace("/", "").replace(" ", "")
+    if not z:
+        return None
+
+    # Zonas/subzonas do MVP residencial que são favoráveis pela zona.
+    # Não inclui comércio/serviços e não altera regras futuras desses usos.
+    allow_a_prefixes = (
+        "ZEIP",  # ZEIP_1 a ZEIP_9 chegam muitas vezes como zone_sigla=ZEIP + subzona/setor.
+        "ZCR",
+        "ZOP",
+        "ZAP",
+        "ZAM",
+        "ZPP",   # ZPP1, ZPP2 e ZPP3.
+    )
+    allow_ap_prefixes = (
+        "ZEIS1",
+        "ZEIS2",
+        "ZEIS3",
+    )
+    deny_i_prefixes = (
+        "ZEPE",  # ZEPE1 e ZEPE2 não devem virar "zona e via" para residencial.
+        "ZEIA",  # ZEIA_APP, ZEIA1, ZEIA2 e ZEIA3 mantêm leitura especial/restritiva pela zona.
+        "ZRO",
+    )
+
+    for prefix in allow_a_prefixes:
+        if z.startswith(prefix):
+            return "A"
+    for prefix in allow_ap_prefixes:
+        if z.startswith(prefix):
+            return "AP"
+    for prefix in deny_i_prefixes:
+        if z.startswith(prefix):
+            return "I"
+    return None
 
 def _fetch_adequabilidade(*, zone_sigla: str, via_tipo_texto: Optional[str], use_type_code: str) -> Tuple[Optional[str], Optional[str], Dict[str, Any]]:
     sb = _get_supabase()
@@ -223,6 +411,20 @@ def _fetch_adequabilidade(*, zone_sigla: str, via_tipo_texto: Optional[str], use
             debug["zone_hit"] = data[0].get("zone_sigla")
     except Exception as e:
         debug["zone_error"] = str(e)
+
+    # Correção do Item 2 para uso residencial:
+    # se a zona oficial residencial é reconhecida como favorável/restritiva,
+    # garantimos que a leitura textual não dependa apenas de a tabela de
+    # adequabilidade por zona ter retornado uma linha. Isso corrige o caso
+    # ZAM/ZAP/ZCR/ZOP + via A, que deve aparecer como
+    # "PERMITE PELA ZONA E PELA VIA".
+    if use_code.startswith("RES_"):
+        fallback_zone_class = _fallback_zone_class_residencial(zona)
+        if fallback_zone_class and _norm(zone_class) != fallback_zone_class:
+            debug["zone_fallback_previous_class"] = zone_class
+            zone_class = fallback_zone_class
+            debug["zone_fallback"] = "residential_zone_class"
+            debug["zone_fallback_class"] = fallback_zone_class
 
     if via_norm:
         try:
@@ -541,6 +743,14 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
     )
     via_norm = _via_tipo_norm(via_tipo_txt)
     icon, status_curto, explicacao = _summarize_adequabilidade(zone_class=zone_class, via_norm=via_norm, via_class=via_class)
+
+    if _is_zeia_zone(zona) and status_curto == "PERMITE PELA VIA":
+        explicacao += (
+            "\n\n**Observação ambiental e documental:** como o terreno está em área de interesse ambiental, "
+            "a viabilidade final não dispensa análise do órgão municipal competente, verificação das restrições ambientais aplicáveis, "
+            "atendimento aos parâmetros urbanísticos da zona e comprovação da regularidade documental do imóvel, "
+            "como matrícula, escritura, registro ou outro documento hábil exigido no licenciamento."
+        )
 
     try:
         from core.zone_descriptions import fetch_zone_description

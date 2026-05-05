@@ -375,6 +375,34 @@ def inject_global_styles() -> None:
             color: {WHITE} !important;
         }}
 
+
+        /* Sidebar legibility: visual-only adjustment scoped to Streamlit sidebar. */
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] .stMarkdown p {{
+            font-size: 16px !important;
+            line-height: 1.55 !important;
+        }}
+
+
+
+        [data-testid="stSidebar"] input,
+        [data-testid="stSidebar"] textarea,
+        [data-testid="stSidebar"] button,
+        [data-testid="stSidebar"] [role="combobox"],
+        [data-testid="stSidebar"] [data-baseweb="select"] * {{
+            font-size: 16px !important;
+        }}
+
+        [data-testid="stSidebar"] h1,
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3 {{
+            font-size: 19px !important;
+            font-weight: 700 !important;
+            line-height: 1.3 !important;
+        }}
+
         @media (max-width: 900px) {{
             [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
                 min-height: 76px;

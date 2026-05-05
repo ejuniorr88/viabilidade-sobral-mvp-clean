@@ -14,7 +14,7 @@ def test_checkout_flow_reconciles_recent_paid_payment_before_consuming_credit() 
         events.append("pdf")
         return b"pdf"
 
-    def consume_viability_credit_func(*, user_id, amount, description):
+    def consume_viability_credit_func(*, user_id, amount, description, **_kwargs):
         events.append(f"consume:{user_id}:{amount}")
         return {"ok": True, "new_balance": 0}
 

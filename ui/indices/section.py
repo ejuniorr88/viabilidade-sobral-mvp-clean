@@ -4,6 +4,13 @@ from typing import Any, Dict, Optional, Callable, Tuple
 
 import streamlit as st
 
+from core.zone_display_labels import (
+    display_label,
+    fetch_display_labels,
+    format_testada_minima,
+    special_notice,
+)
+
 
 def _to_float(v: Any) -> Optional[float]:
     if v is None or v == "":
@@ -82,6 +89,93 @@ def _fmt_m2(v: Optional[float]) -> str:
     return f"{v:.2f} m²"
 
 
+
+
+def _render_official_display_legend() -> None:
+    """Renderiza legenda em mini tabela legível, sem interferir nos cálculos."""
+    st.markdown(
+        """
+<div class="indices-legend-box">
+  <div class="indices-legend-title">Legenda dos parâmetros</div>
+  <table class="indices-legend-table">
+    <thead>
+      <tr>
+        <th>Símbolo / Texto</th>
+        <th>Significado</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>*</strong></td>
+        <td>Parâmetro especial sujeito a análise específica / projeto especial.</td>
+      </tr>
+      <tr>
+        <td><strong>**</strong></td>
+        <td>Parâmetro sem valor numérico fixo na tabela geral, dependente de condição especial prevista na legislação.</td>
+      </tr>
+      <tr>
+        <td><strong>—</strong></td>
+        <td>Sem valor numérico definido para exibição.</td>
+      </tr>
+      <tr>
+        <td><strong>Não permitido</strong></td>
+        <td>Parâmetro vedado pela legislação.</td>
+      </tr>
+      <tr>
+        <td><strong>Não se aplica</strong></td>
+        <td>Parâmetro não aplicável à zona/subzona.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<style>
+.indices-legend-box {
+  margin-top: 0.75rem;
+  margin-bottom: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(31, 41, 55, 0.16);
+  border-radius: 0.65rem;
+  background: rgba(248, 250, 252, 0.92);
+}
+.indices-legend-title {
+  margin-bottom: 0.45rem;
+  color: #111827;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+.indices-legend-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #1f2937;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+.indices-legend-table th {
+  padding: 0.42rem 0.55rem;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.18);
+  color: #111827;
+  text-align: left;
+  font-weight: 700;
+}
+.indices-legend-table td {
+  padding: 0.42rem 0.55rem;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.10);
+  vertical-align: top;
+}
+.indices-legend-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.indices-legend-table td:first-child {
+  width: 11rem;
+  color: #111827;
+  white-space: nowrap;
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def _call_card(card_func: Callable[..., Any], title: str, value: str) -> None:
     """
     Chama o card_func preservando o design existente.
@@ -155,6 +249,24 @@ def render_indices_section(
     if card_func is None:
         card_func = lambda t, v: st.metric(t, v)
 
+    display_subzone = (
+        calc.get("subzone_code")
+        or rule.get("requested_subzone_code")
+        or rule.get("subzone_code")
+        or "PADRAO"
+    )
+
+    # Camada oficial de exibição.
+    # Não altera regra, cálculo, zone_resolution nem fonte numérica.
+    try:
+        official_labels = fetch_display_labels(
+            zone_sigla=zone,
+            subzone_code=display_subzone,
+            client=_ignored.get("supabase"),
+        )
+    except Exception:
+        official_labels = {}
+
     # Normalizações conforme seu schema
     tp_min_pct = _pct_from_rule(rule, "tp_min_pct", "tp_min")
     to_max_pct = _pct_from_rule(rule, "to_max_pct", "to_max")
@@ -173,9 +285,7 @@ def render_indices_section(
     rl = _to_float(rule.get("recuo_lateral_m"))
     rfd = _to_float(rule.get("recuo_fundos_m"))
 
-    recuo_lateral_txt = _fmt_m(rl)
-    if str(zone).strip().upper() in {"ZEPE1", "ZEPE2"}:
-        recuo_lateral_txt = "3m - Uso Industrial / 1,5m - Outros Usos"
+    recuo_lateral_txt = display_label(official_labels, "recuo_lateral_m", _fmt_m(rl))
 
     area_min = _to_float(rule.get("area_min_lote_m2"))
     area_max = _to_float(rule.get("area_max_lote_m2"))
@@ -188,12 +298,23 @@ def render_indices_section(
     gabarito_pav = rule.get("gabarito_pav")
 
     # Testada mínima (mostra as duas por enquanto)
+    meio_fallback = f"{_fmt_number(test_min_meio, 2)} m" if test_min_meio is not None else "—"
+    esq_fallback = f"{_fmt_number(test_min_esq, 2)} m" if test_min_esq is not None else "—"
     if test_min_meio is None and test_min_esq is None:
-        testada_min_txt = "—"
+        if official_labels.get("testada_min_meio_m") or official_labels.get("testada_min_esquina_m"):
+            testada_min_txt = format_testada_minima(
+                official_labels,
+                meio_fallback=meio_fallback,
+                esquina_fallback=esq_fallback,
+            )
+        else:
+            testada_min_txt = "—"
     else:
-        meio = f"Meio: {_fmt_number(test_min_meio, 2)} m" if test_min_meio is not None else "Meio: —"
-        esq = f"Esquina: {_fmt_number(test_min_esq, 2)} m" if test_min_esq is not None else "Esquina: —"
-        testada_min_txt = f"{meio} | {esq}"
+        testada_min_txt = format_testada_minima(
+            official_labels,
+            meio_fallback=meio_fallback,
+            esquina_fallback=esq_fallback,
+        )
 
     # Gabarito
     if gabarito_m is None:
@@ -201,21 +322,36 @@ def render_indices_section(
     else:
         extra = f" ({gabarito_pav} pav.)" if isinstance(gabarito_pav, int) and gabarito_pav > 0 else ""
         gabarito_txt = f"{_fmt_number(gabarito_m, 2)} m{extra}"
+    gabarito_txt = display_label(official_labels, "gabarito_m", gabarito_txt)
 
-    display_subzone = (
-        calc.get("subzone_code")
-        or rule.get("requested_subzone_code")
-        or rule.get("subzone_code")
-        or "PADRAO"
+    tp_txt = display_label(official_labels, "tp_percentual", _fmt_pct(tp_min_pct))
+    to_txt = display_label(official_labels, "to_percentual", _fmt_pct(to_max_pct))
+    to_sub_txt = display_label(official_labels, "to_subsolo_percentual", _fmt_pct(to_sub_pct))
+
+    ia_max_txt = display_label(official_labels, "ia_max", _fmt_number(ia_max, 2))
+    ia_min_txt = display_label(
+        official_labels,
+        "ia_min",
+        _fmt_number(ia_min, 2) if ia_min is not None else "—",
+    )
+
+    rf_txt = display_label(official_labels, "recuo_frontal_m", _fmt_m(rf))
+    rfd_txt = display_label(official_labels, "recuo_fundos_m", _fmt_m(rfd))
+    area_min_txt = display_label(official_labels, "area_min_lote_m2", _fmt_m2(area_min))
+    area_max_txt = display_label(official_labels, "area_max_lote_m2", _fmt_m2(area_max))
+    testada_max_txt = display_label(
+        official_labels,
+        "testada_max_m",
+        f"{_fmt_number(test_max,2)} m" if test_max is not None else "—",
     )
 
     # ===== Renderização em linhas de 3 colunas, preservando estilo do card_func =====
     rows = [
-        ("Zona", zone or "—", "Taxa de Permeabilidade (TP) mínima", _fmt_pct(tp_min_pct), "Taxa de Ocupação (TO) máxima", _fmt_pct(to_max_pct)),
-        ("TO do Subsolo máxima", _fmt_pct(to_sub_pct), "Índice de Aproveitamento (IA) máximo", _fmt_number(ia_max, 2), "Índice de Aproveitamento (IA) mínimo", _fmt_number(ia_min, 2) if ia_min is not None else "—"),
-        ("Recuo de Frente", _fmt_m(rf), "Recuo de Fundo", _fmt_m(rfd), "Recuo Lateral", recuo_lateral_txt),
-        ("Área mínima do lote", _fmt_m2(area_min), "Testada mínima", testada_min_txt, "Altura máxima (gabarito)", gabarito_txt),
-        ("Área máxima do lote", _fmt_m2(area_max), "Testada máxima", f"{_fmt_number(test_max,2)} m" if test_max is not None else "—", "Subzona", (display_subzone or "PADRAO")),
+        ("Zona", zone or "—", "Taxa de Permeabilidade (TP) mínima", tp_txt, "Taxa de Ocupação (TO) máxima", to_txt),
+        ("TO do Subsolo máxima", to_sub_txt, "Índice de Aproveitamento (IA) máximo", ia_max_txt, "Índice de Aproveitamento (IA) mínimo", ia_min_txt),
+        ("Recuo de Frente", rf_txt, "Recuo de Fundo", rfd_txt, "Recuo Lateral", recuo_lateral_txt),
+        ("Área mínima do lote", area_min_txt, "Testada mínima", testada_min_txt, "Altura máxima (gabarito)", gabarito_txt),
+        ("Área máxima do lote", area_max_txt, "Testada máxima", testada_max_txt, "Subzona", (display_subzone or "PADRAO")),
     ]
 
     for r in rows:
@@ -227,3 +363,8 @@ def render_indices_section(
         with c3:
             _call_card(card_func, r[4], r[5])
 
+    notice = special_notice(official_labels)
+    if notice:
+        st.info(notice)
+
+    _render_official_display_legend()

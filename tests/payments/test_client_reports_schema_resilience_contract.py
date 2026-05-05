@@ -59,9 +59,13 @@ def test_client_reports_has_explicit_regression_guard_functions() -> None:
     assert not missing, f"client_reports.py perdeu funções de blindagem do salvamento: {sorted(missing)}"
 
 
-def test_insert_starts_minimal_and_only_adapts_when_database_demands_it() -> None:
+def test_insert_starts_with_direct_columns_and_adapts_when_schema_demands_it() -> None:
     text = _function_source("_insert_client_report_schema_compatible")
-    assert "row = dict(minimal_row)" in text, "O insert deve começar mínimo para não depender de schema variável."
+    assert "row = {**minimal_row, **optional_row}" in text, (
+        "O insert deve começar com as colunas diretas quando o schema permitir, "
+        "mantendo minimal_row como piso seguro."
+    )
+    assert "protected_columns" in text, "user_id, report_signature e report_context devem continuar protegidos."
     assert "insert(row).execute()" in text, "A gravação deve passar pelo row adaptativo centralizado."
     assert "_extract_not_null_column" in text, "Deve tratar coluna NOT NULL exigida pelo banco real."
     assert "_extract_unknown_column" in text, "Deve remover coluna opcional inexistente no ambiente real."
@@ -79,11 +83,11 @@ def test_minimal_insert_does_not_reintroduce_unstable_direct_columns() -> None:
     assert not found, f"O insert mínimo voltou a depender de colunas instáveis: {found}"
 
 
-def test_optional_legacy_columns_are_available_only_for_required_schema_compatibility() -> None:
+def test_direct_columns_are_available_for_insert_and_schema_compatibility() -> None:
     text = _function_source("_row_with_optional_columns")
     expected_optional_columns = ['"user_email"','"title"','"report_type"','"project_category"','"project_option"','"zone_code"','"zone_label"','"road_name"','"road_type"','"lot_area_m2"','"pdf_bucket"','"pdf_storage_path"','"pdf_file_name"','"pdf_size_bytes"','"file_path"','"status"','"report_signature"','"report_context"']
     missing = [item for item in expected_optional_columns if item not in text]
-    assert not missing, f"Faltam colunas opcionais de compatibilidade com schema legado: {missing}"
+    assert not missing, f"Faltam colunas diretas/opcionais para persistência forte e compatibilidade: {missing}"
 
 
 def test_error_extractors_cover_supabase_postgrest_messages_seen_in_this_bug() -> None:

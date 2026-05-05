@@ -32,3 +32,52 @@ def test_dicas_valiosas_corner_has_extra_temp_text_contract():
         "ui/relatorio_blocks/dicas_valiosas.py precisa conter um texto temporário "
         "específico para lote de esquina, aceitando hífen normal ou travessão."
     )
+
+
+def test_terreno_irregular_ignora_dimensoes_retangulares_contract():
+    content = _read("ui/lote.py")
+    assert "disabled=terreno_irregular_pre" in content
+    assert 'testada_final = 0.0' in content
+    assert 'profundidade_final = 0.0' in content
+    assert 'tipo_lote = "Terreno irregular"' in content
+    assert 'calc["lot_front_m"] = float(testada_final)' in content
+    assert 'calc["lot_depth_m"] = float(profundidade_final)' in content
+    assert 'st.session_state["lot_front_m"] = float(testada_final)' in content
+    assert 'st.session_state["lot_depth_m"] = float(profundidade_final)' in content
+
+
+def test_terreno_irregular_relatorio_nao_mostra_meio_quadra_contract():
+    files = [
+        "ui/relatorio.py",
+        "ui/relatorio_blocks/unifamiliar_items/item_01_localizacao.py",
+        "ui/relatorio_blocks/multifamiliar_items/common.py",
+        "ui/relatorio_blocks/multifamiliar_items/item_01_localizacao.py",
+        "ui/report/review_panel.py",
+        "core/report_pdf.py",
+    ]
+    combined = "\n".join(_read(path) for path in files)
+    assert "Terreno irregular" in combined
+    assert "Terreno irregular – cálculo pela área total informada" in combined
+    assert "Por se tratar de terreno irregular, os cálculos foram feitos com base na área total informada" in combined
+
+
+def test_multifamiliar_item_01_accepts_legacy_and_multifamiliar_context_keys_contract():
+    content = _read("ui/relatorio_blocks/multifamiliar_items/item_01_localizacao.py")
+    assert '"lot_front", "W"' in content
+    assert '"lot_depth", "D"' in content
+    assert '"lot_area_f", "A"' in content
+    assert "ctx.get('zona') or ctx.get('zone')" in content
+    assert "ctx.get('via_tipo_txt') or ctx.get('via_tipo')" in content
+
+
+def test_relatorio_defines_irregular_before_multifamiliar_branch_contract():
+    content = _read("ui/relatorio.py")
+    branch = 'if str(uso).startswith("RES_MULTI_") and calc.get("project_mode") == "GUIA_FASE_1":'
+    assert branch in content
+    assert content.index('is_irregular = bool(') < content.index(branch)
+
+
+def test_consultation_form_persists_selected_use_for_report_signature_contract():
+    content = _read("ui/consultation_form.py")
+    assert 'session_state.calc["selected_use_label"] = selected_use_label' in content
+    assert 'session_state.calc["categoria_label"] = categoria_label' in content

@@ -78,6 +78,9 @@ def prepare_and_consume_report(
         user_id=user_id_value,
         amount=1,
         description="Geração de relatório de viabilidade",
+        reference_id=report_signature,
+        idempotency_key=f"report_debit:{user_id_value}:{report_signature}",
+        metadata={"report_signature": report_signature, "stage": "report_generation_debit"},
     )
     if not debit_result.get("ok"):
         raise RuntimeError(debit_result.get("message") or "Saldo insuficiente para gerar o relatório.")
@@ -115,10 +118,33 @@ def prepare_and_consume_report(
         session_state["last_report_refund_result"] = refund_result
         session_state["last_saved_report_signature"] = report_signature
         commit_report_snapshot_func(calc_ref, session_snapshot, pdf_bytes, report_signature)
-        return debit_result, pdf_bytes
+        return {
+            **debit_result,
+            "ok": True,
+            "already_exists": True,
+            "refunded": True,
+            "refund_result": refund_result,
+            "new_balance": refund_result.get("new_balance", debit_result.get("new_balance")),
+            "message": "Este relatório já estava salvo na Área do Cliente. O crédito foi estornado automaticamente.",
+        }, pdf_bytes
 
     if save_result and save_result.get("ok"):
         session_state["last_saved_report_signature"] = report_signature
+    else:
+        refund_result = refund_viability_credit_func(
+            user_id=user_id_value,
+            amount=1,
+            description="Estorno automático por relatório não confirmado na Área do Cliente",
+            reference_id=report_signature,
+            metadata={
+                "report_signature": report_signature,
+                "stage": "save_client_report_not_ok",
+                "save_result": save_result,
+            },
+        )
+        session_state["last_report_refund_result"] = refund_result
+        session_state["last_report_storage_error"] = "Relatório não confirmado na Área do Cliente."
+        raise RuntimeError("Falha ao confirmar o relatório na Área do Cliente. O crédito foi estornado automaticamente.")
 
     commit_report_snapshot_func(calc_ref, session_snapshot, pdf_bytes, report_signature)
     session_state["last_report_storage_error"] = None

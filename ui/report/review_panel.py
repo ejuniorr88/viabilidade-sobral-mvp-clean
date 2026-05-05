@@ -67,6 +67,37 @@ _CARD_CSS = """
     font-size: 0.94rem;
     font-weight: 700;
 }
+.report-type-card {
+    margin: 0.9rem 0 1rem 0;
+    background: linear-gradient(180deg, #ffffff 0%, #fffaf8 100%);
+    border: 1px solid #f2d4cb;
+    border-left: 6px solid #173b69;
+    border-radius: 18px;
+    padding: 1rem 1.05rem 0.95rem 1.05rem;
+    box-shadow: 0 8px 20px rgba(23, 59, 105, 0.06);
+}
+.report-type-eyebrow {
+    display: inline-block;
+    font-size: 0.76rem;
+    font-weight: 900;
+    color: #173b69;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.45rem;
+}
+.report-type-title {
+    margin: 0;
+    font-size: 1.12rem;
+    line-height: 1.32;
+    font-weight: 900;
+    color: #111827;
+}
+.report-type-description {
+    margin: 0.42rem 0 0 0;
+    font-size: 0.96rem;
+    line-height: 1.48;
+    color: #374151;
+}
 .review-grid-gap {
     height: 0.9rem;
 }
@@ -119,6 +150,73 @@ def _pick_zone(calc: Dict[str, Any]) -> str:
 def _pick_street(calc: Dict[str, Any]) -> str:
     street = calc.get("street_name") or calc.get("via_name") or calc.get("road_name") or calc.get("logradouro")
     return str(street or "—")
+
+
+_PROJECT_TYPE_INFO: Dict[str, Dict[str, str]] = {
+    "RES_UNI": {
+        "title": "Residência Unifamiliar",
+        "description": "É a edificação residencial destinada a uma única unidade habitacional, ou seja, uma casa para uma família no lote.",
+    },
+    "RES_MULTI_R21": {
+        "title": "R2.1",
+        "description": "É a residência multifamiliar horizontal com 2 unidades no mesmo lote, que podem ser lado a lado ou uma sobre a outra, cada uma com acesso independente para a via pública.",
+    },
+    "RES_MULTI_R22": {
+        "title": "R2.2",
+        "description": "É a residência multifamiliar horizontal em forma de condomínio horizontal, com várias unidades e acesso por circulação interna, sem que cada unidade tenha saída direta para a rua.",
+    },
+    "RES_MULTI_R3": {
+        "title": "R3",
+        "description": "É a residência multifamiliar vertical, implantada em forma de edifício, ou seja, um prédio com várias moradias no mesmo bloco.",
+    },
+}
+
+
+def _normalize_use_type_code(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _pick_use_type_code(calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> str:
+    candidates = [
+        calc.get("use_type_code"),
+        calc.get("requested_use_type_code"),
+        calc.get("resolved_use_type_code"),
+        session_snapshot.get("use_type_code"),
+        st.session_state.get("selected_use_code"),
+        st.session_state.get("use_type_code"),
+        (st.session_state.get("calc") or {}).get("use_type_code") if isinstance(st.session_state.get("calc"), dict) else None,
+    ]
+    for candidate in candidates:
+        code = _normalize_use_type_code(candidate)
+        if code:
+            return code
+    return "RES_UNI"
+
+
+def _get_project_type_info(use_type_code: Any) -> Dict[str, str]:
+    code = _normalize_use_type_code(use_type_code)
+    if code in _PROJECT_TYPE_INFO:
+        return _PROJECT_TYPE_INFO[code]
+    if code.startswith("RES_MULTI"):
+        return {
+            "title": "Residência Multifamiliar",
+            "description": "É uma tipologia residencial com mais de uma unidade habitacional no mesmo lote ou empreendimento. Confira se o subtipo selecionado corresponde ao projeto pretendido.",
+        }
+    return _PROJECT_TYPE_INFO["RES_UNI"]
+
+
+def _render_project_type_card(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any]) -> None:
+    info = _get_project_type_info(_pick_use_type_code(calc, session_snapshot))
+    st.markdown(
+        f"""
+        <div class="report-type-card">
+            <span class="report-type-eyebrow">Tipo de projeto selecionado</span>
+            <h4 class="report-type-title">{info['title']}</h4>
+            <p class="report-type-description">{info['description']}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _to_float(value: Any) -> float | None:
@@ -179,6 +277,8 @@ def render_review_panel(*, calc: Dict[str, Any], session_snapshot: Dict[str, Any
         """,
         unsafe_allow_html=True,
     )
+
+    _render_project_type_card(calc=calc, session_snapshot=session_snapshot)
 
     is_irregular = bool(
         session_snapshot.get("lot_is_irregular")

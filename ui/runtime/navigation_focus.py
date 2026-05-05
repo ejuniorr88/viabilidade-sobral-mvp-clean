@@ -9,7 +9,9 @@ from ui.runtime.report_navigation import REPORT_NAVIGATION_TARGETS
 
 
 _BASE_TARGET_CONFIG = {
-    "login_gate": {"element_id": "login-gate-start", "offset": 0, "behavior": "generic"},
+    # Login gate precisa usar scrollIntoView/alinhamento de container.
+    # Em Streamlit, window.scrollTo sozinho pode não mover a área principal.
+    "login_gate": {"element_id": "login-gate-start", "offset": 0, "behavior": "login_gate"},
     "primary_actions": {"element_id": "primary-actions-start", "offset": 0, "behavior": "generic"},
 }
 
@@ -118,8 +120,10 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
                 controller.activeToken = token;
 
                 const scrollRoot = () => rootDoc.querySelector('section.main') || rootDoc.scrollingElement || rootDoc.documentElement || rootDoc.body;
-                const tolerance = (behavior === 'generated_context' || behavior === 'inline_payments' || behavior === 'current_payment' || behavior === 'pix_generated') ? 36 : 24;
-                const maxAttempts = (behavior === 'generated_context' || behavior === 'inline_payments' || behavior === 'current_payment' || behavior === 'pix_generated') ? 24 : 18;
+                const robustBehaviors = ['generated_context', 'inline_payments', 'current_payment', 'pix_generated', 'login_gate'];
+                const usesRobustScroll = robustBehaviors.includes(behavior);
+                const tolerance = usesRobustScroll ? 36 : 24;
+                const maxAttempts = usesRobustScroll ? 24 : 18;
                 let attempts = 0;
                 let sawElement = false;
 
@@ -152,7 +156,7 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
 
                 const applyScroll = (el) => {{
                     const targetTop = computeTargetTop(el);
-                    const useElementFirst = behavior === 'confirmation' || behavior === 'initial' || behavior === 'generated_context' || behavior === 'inline_payments' || behavior === 'current_payment' || behavior === 'pix_generated';
+                    const useElementFirst = behavior === 'confirmation' || behavior === 'initial' || usesRobustScroll;
                     if (useElementFirst) {{
                         el.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
                         alignScrollableContainer(el);
