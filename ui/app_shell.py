@@ -381,16 +381,26 @@ def inject_global_styles() -> None:
         [data-testid="stSidebar"] p,
         [data-testid="stSidebar"] span,
         [data-testid="stSidebar"] .stMarkdown p {{
-            font-size: 13px !important;
-            line-height: 1.45 !important;
+            font-size: 16px !important;
+            line-height: 1.55 !important;
+        }}
+
+
+
+        [data-testid="stSidebar"] input,
+        [data-testid="stSidebar"] textarea,
+        [data-testid="stSidebar"] button,
+        [data-testid="stSidebar"] [role="combobox"],
+        [data-testid="stSidebar"] [data-baseweb="select"] * {{
+            font-size: 16px !important;
         }}
 
         [data-testid="stSidebar"] h1,
         [data-testid="stSidebar"] h2,
         [data-testid="stSidebar"] h3 {{
-            font-size: 16px !important;
+            font-size: 19px !important;
             font-weight: 700 !important;
-            line-height: 1.25 !important;
+            line-height: 1.3 !important;
         }}
 
         @media (max-width: 900px) {{
