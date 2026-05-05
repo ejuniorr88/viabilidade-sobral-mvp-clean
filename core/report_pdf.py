@@ -964,9 +964,12 @@ def _resolve_status(zone_class: str | None, via_tipo: str | None, via_class: str
     if not status:
         status = 'SEM DADO'
 
-    if status == 'PERMITE':
+    if status in {'PERMITE', 'PERMITE PELA ZONA E PELA VIA'}:
         icon = icon or 'OK'
-        if not explicacao or 'não foi possível determinar' in explicacao.lower():
+        if status == 'PERMITE PELA ZONA E PELA VIA':
+            if not explicacao or 'não foi possível determinar' in explicacao.lower():
+                explicacao = 'Resumo final: PERMITE PELA ZONA E PELA VIA. A zona e a via permitem o uso. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.'
+        elif not explicacao or 'não foi possível determinar' in explicacao.lower():
             explicacao = 'Resumo final: PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.'
     elif status == 'NÃO PERMITE':
         icon = icon or 'X'
@@ -1005,9 +1008,12 @@ def render_item_02(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     else:
         via_line = f"Por via: {ctx['via_tipo'] or '-'}"
 
-    if status == 'PERMITE':
+    if status in {'PERMITE', 'PERMITE PELA ZONA E PELA VIA'}:
         fill = (231, 245, 236)
-        resumo = "PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        if status == 'PERMITE PELA ZONA E PELA VIA':
+            resumo = "PERMITE PELA ZONA E PELA VIA. A zona e a via permitem o uso. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        else:
+            resumo = "PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
         reforco = "Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
     elif status == 'NÃO PERMITE':
         fill = (254, 242, 242)
