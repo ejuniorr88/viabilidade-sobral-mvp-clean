@@ -45,6 +45,7 @@ def render(ctx: dict) -> None:
 
         if ctx['status_curto'] in (
             "PERMITE",
+            "PERMITE PELA ZONA E PELA VIA",
             "PERMITE SOMENTE PEQUENO PORTE",
             "PERMITE PEQUENO OU MÉDIO PORTE",
             "PERMITE PELA VIA",
