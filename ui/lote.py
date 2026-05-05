@@ -192,7 +192,7 @@ def render_lote_section() -> Tuple[float, float, float]:
 
     st.markdown(
         """
-        <div style="font-size: 16px; color: #555; line-height: 1.4; margin-top: -6px; margin-bottom: 6px;">
+        <div style="font-size: 16px; color: #444; line-height: 1.55; margin-top: -4px; margin-bottom: 8px; font-weight: 700;">
             Observação: Se ainda não souber a área construída no térreo, deixe 0 para calcular o potencial máximo permitido.
         </div>
         """,
