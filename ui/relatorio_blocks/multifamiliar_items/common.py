@@ -330,6 +330,50 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
     )
 
 
+
+# Fallback controlado para a leitura residencial do Item 2.
+# Motivo: em alguns ambientes, a tabela de adequabilidade por zona pode não retornar
+# a classificação da zona simples, mesmo quando a própria legislação/tabela oficial
+# permite o uso residencial. Sem esse apoio, o relatório exibe apenas "PERMITE PELA VIA"
+# mesmo quando zona e via são favoráveis.
+def _fallback_zone_class_residencial(zone_sigla: str | None) -> str | None:
+    z = str(zone_sigla or "").strip().upper()
+    z = z.replace("—", "-").replace("_", "").replace("/", "").replace(" ", "")
+    if not z:
+        return None
+
+    # Zonas/subzonas do MVP residencial que são favoráveis pela zona.
+    # Não inclui comércio/serviços e não altera regras futuras desses usos.
+    allow_a_prefixes = (
+        "ZEIP",  # ZEIP_1 a ZEIP_9 chegam muitas vezes como zone_sigla=ZEIP + subzona/setor.
+        "ZCR",
+        "ZOP",
+        "ZAP",
+        "ZAM",
+        "ZPP",   # ZPP1, ZPP2 e ZPP3.
+    )
+    allow_ap_prefixes = (
+        "ZEIS1",
+        "ZEIS2",
+        "ZEIS3",
+    )
+    deny_i_prefixes = (
+        "ZEPE",  # ZEPE1 e ZEPE2 não devem virar "zona e via" para residencial.
+        "ZEIA",  # ZEIA_APP, ZEIA1, ZEIA2 e ZEIA3 mantêm leitura especial/restritiva pela zona.
+        "ZRO",
+    )
+
+    for prefix in allow_a_prefixes:
+        if z.startswith(prefix):
+            return "A"
+    for prefix in allow_ap_prefixes:
+        if z.startswith(prefix):
+            return "AP"
+    for prefix in deny_i_prefixes:
+        if z.startswith(prefix):
+            return "I"
+    return None
+
 def _fetch_adequabilidade(*, zone_sigla: str, via_tipo_texto: Optional[str], use_type_code: str) -> Tuple[Optional[str], Optional[str], Dict[str, Any]]:
     sb = _get_supabase()
     debug: Dict[str, Any] = {
@@ -367,6 +411,20 @@ def _fetch_adequabilidade(*, zone_sigla: str, via_tipo_texto: Optional[str], use
             debug["zone_hit"] = data[0].get("zone_sigla")
     except Exception as e:
         debug["zone_error"] = str(e)
+
+    # Correção do Item 2 para uso residencial:
+    # se a zona oficial residencial é reconhecida como favorável/restritiva,
+    # garantimos que a leitura textual não dependa apenas de a tabela de
+    # adequabilidade por zona ter retornado uma linha. Isso corrige o caso
+    # ZAM/ZAP/ZCR/ZOP + via A, que deve aparecer como
+    # "PERMITE PELA ZONA E PELA VIA".
+    if use_code.startswith("RES_"):
+        fallback_zone_class = _fallback_zone_class_residencial(zona)
+        if fallback_zone_class and _norm(zone_class) != fallback_zone_class:
+            debug["zone_fallback_previous_class"] = zone_class
+            zone_class = fallback_zone_class
+            debug["zone_fallback"] = "residential_zone_class"
+            debug["zone_fallback_class"] = fallback_zone_class
 
     if via_norm:
         try:
