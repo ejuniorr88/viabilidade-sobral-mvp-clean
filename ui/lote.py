@@ -189,6 +189,7 @@ def render_lote_section() -> Tuple[float, float, float]:
         format="%.2f",
         key="built_ground_m2_input",
     )
+    
    st.markdown(
     """
     <div style="font-size: 12px; color: #555; line-height: 1.4; margin-top: -6px; margin-bottom: 6px;">
