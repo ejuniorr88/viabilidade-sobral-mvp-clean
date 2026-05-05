@@ -182,7 +182,7 @@ def render_lote_section() -> Tuple[float, float, float]:
     # Campo final alinhado
     # ======================================================
     area_terreo_pretendida = st.number_input(
-        "Área Construída Pretendida no Térreo (m²):(Opcional)",
+        "Área Construída Pretendida no Térreo (m²): - Opcional",
         min_value=0.0,
         value=float(calc.get("built_ground_m2", 0.0) or 0.0),
         step=1.0,
@@ -193,7 +193,7 @@ def render_lote_section() -> Tuple[float, float, float]:
     st.markdown(
         """
         <div style="font-size: 16px; color: #444; line-height: 1.55; margin-top: -4px; margin-bottom: 8px; font-weight: 700;">
-            Observação: Se ainda não souber a área construída no térreo, deixe 0 para calcular o potencial máximo permitido.
+            Observação: Se ainda não souber a área construída no térreo, deixe "0" para calcular o potencial máximo permitido.
         </div>
         """,
         unsafe_allow_html=True,
