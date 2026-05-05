@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from .relatorio_blocks.credit_preserved_notice import render_credit_preserved_notice
+
 import math
 import streamlit as st
 
@@ -362,7 +364,7 @@ def render_unifamiliar_inadequado_preview(calc: Dict[str, Any]) -> None:
     st.markdown(
         "Por isso, o relatório completo não será continuado, já que não há viabilidade urbanística para este caso na forma analisada."
     )
-    st.info("**Seu crédito foi preservado**, para que você possa realizar um novo estudo em outra condição.")
+    render_credit_preserved_notice()
 
 
 def render_relatorio_section(calc: Dict[str, Any]) -> None:
