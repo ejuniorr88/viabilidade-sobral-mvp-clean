@@ -98,13 +98,6 @@ _CARD_CSS = """
     line-height: 1.48;
     color: #374151;
 }
-.report-type-warning {
-    margin: 0.65rem 0 0 0;
-    font-size: 0.86rem;
-    line-height: 1.42;
-    color: #5b3a33;
-    font-weight: 700;
-}
 .review-grid-gap {
     height: 0.9rem;
 }
@@ -220,7 +213,6 @@ def _render_project_type_card(*, calc: Dict[str, Any], session_snapshot: Dict[st
             <span class="report-type-eyebrow">Tipo de projeto selecionado</span>
             <h4 class="report-type-title">{info['title']}</h4>
             <p class="report-type-description">{info['description']}</p>
-            <p class="report-type-warning">Antes de gerar o relatório, confirme se o tipo de projeto está correto. A escolha incorreta da tipologia pode alterar a análise de adequabilidade, os parâmetros aplicáveis e as orientações apresentadas no relatório.</p>
         </div>
         """,
         unsafe_allow_html=True,
