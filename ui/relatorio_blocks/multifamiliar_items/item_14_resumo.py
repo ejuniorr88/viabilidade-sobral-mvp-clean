@@ -33,6 +33,8 @@ def _zona_resumo(ctx: dict) -> str:
 def _resultado_resumo(ctx: dict) -> str:
     if ctx.get("is_zeip9"):
         return "⚠️ EXIGE CONFIRMAÇÃO — ZEIP_9"
+    if ctx.get("r21_testada_baixa"):
+        return "⚠️ PERMITE COM RESSALVA — R2.1"
     return f"{_clean(ctx.get('icon'), '')} {_clean(ctx.get('status_curto'))}".strip()
 
 
@@ -70,6 +72,13 @@ def render(ctx):
         f"- **IA máximo:** {common._fmt_num(ctx.get('ia_max'), 2) if ctx.get('ia_max') not in (None, '') else '—'}\n"
         f"- **Altura permitida máxima:** {common._fmt_num(ctx.get('gabarito_f'))} m{resumo_extra}"
     )
+
+    if ctx.get("r21_testada_baixa"):
+        common.st.warning(
+            "⚠️ **Atenção — R2.1:** a testada informada está abaixo da referência usual de 8,00 m para R2.1 justaposto fora de ZEIS. "
+            "O caso exige análise no licenciamento municipal, com comprovação da situação do lote e conferência das condições do Art. 167 da LC 90/2023: "
+            "frente e acesso independente para cada unidade, paredes externas total ou parcialmente comuns, unidade arquitetônica homogênea, parâmetros de residência unifamiliar e limite de 2 pavimentos."
+        )
 
     if ctx.get("is_zeip9"):
         common.st.warning(

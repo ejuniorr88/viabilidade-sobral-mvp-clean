@@ -28,6 +28,9 @@ def render(ctx):
         if ctx.get("is_zeip9"):
             resumo_icon = "⚠️"
             resumo_status = "EXIGE CONFIRMAÇÃO — ZEIP_9"
+        elif ctx.get("r21_testada_baixa"):
+            resumo_icon = "⚠️"
+            resumo_status = "PERMITE COM RESSALVA — R2.1"
 
         common.st.markdown(
             f"- **Por zona:** {ctx['zone_class'] or 'não encontrado'}"
@@ -72,5 +75,5 @@ def render(ctx):
 
         if ctx.get("r21_testada_baixa"):
             common.st.warning(
-                "⚠️ **Atenção — R2.1:** a testada informada é inferior a 8,00 m. Para R2.1 justaposto fora de ZEIS, a legislação exige testada mínima de 8,00 m. O uso pode aparecer como adequado na zona, mas esta condição dimensional precisa ser corrigida ou confirmada no licenciamento."
+                "⚠️ **Atenção — R2.1 com testada inferior a 8,00 m:** o uso R2.1 aparece como adequado para esta zona, mas a testada informada é menor que a referência usual de 8,00 m para R2.1 justaposto fora de ZEIS. Esse caso não deve ser tratado como liberação automática nem como impedimento automático: exige análise no licenciamento municipal. O interessado deve comprovar a situação real do lote e das edificações vizinhas, inclusive por documentação do imóvel/escritura pública quando necessário, especialmente quando a justificativa depender da existência de vizinhos ou construções nos dois lados."
             )
