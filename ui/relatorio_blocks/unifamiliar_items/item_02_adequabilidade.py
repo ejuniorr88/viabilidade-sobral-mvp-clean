@@ -20,6 +20,8 @@ def render(ctx: dict) -> None:
             if ctx['via_norm'] and ctx['via_class']
             else f"- **Por via:** {ctx['via_tipo'] or 'via local'}"
         )
+        if (not ctx['via_norm'] or not ctx['via_class']) and "local" in str(ctx.get('via_tipo') or 'via local').lower():
+            via_line += " — neste caso, não há sobreposição por via arterial/coletora."
 
         if ctx['status_curto'] == "PERMITE PELA VIA":
             zona_obs = ""
