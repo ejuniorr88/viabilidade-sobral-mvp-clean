@@ -41,11 +41,9 @@ def test_area_zero_hint_text_is_bold_and_does_not_use_informal_phrase() -> None:
     assert "<strong>" in src
     assert "</strong>" in src
     assert "área construída no térreo" in src
-    assert "potencial máximo permitido" in src
-    assert (
-        "potencial construtivo" in src
-        or "capacidade construtiva" in src
-    ), "A frase deve explicar o potencial/capacidade construtiva."
+    assert "pode deixar o campo como 0" in src
+    assert "potencial máximo permitido para o lote selecionado" in src
+    assert "capacidade construtiva conforme os parâmetros urbanísticos aplicáveis" in src
     assert "até onde o lote pode chegar" not in src
 
 
