@@ -3,7 +3,7 @@ from . import common
 
 def render(ctx):
     common.st.markdown(
-        "**As tabelas abaixo ajudam a interpretar as siglas usadas na análise de viabilidade. Elas mostram como a legislação classifica o uso pretendido para o terreno: adequado, inadequado, adequado apenas para determinados portes ou sujeito a análise como projeto especial. Em determinados casos, também é necessário observar o porte do empreendimento, já que classificações como AP e AP/AM indicam permissões vinculadas a faixas de área específicas.**"
+        "**As tabelas abaixo ajudam a interpretar as siglas usadas na análise de viabilidade. Elas mostram como a legislação classifica o uso pretendido para o terreno: adequado, inadequado, adequado apenas para determinados portes ou sujeito a análise como projeto especial. Em determinados casos, também é necessário observar o porte do empreendimento, já que classificações como AP e AP/AM indicam permissões vinculadas a faixas de área específicas. Em resumo, estas siglas ajudam a interpretar corretamente a conclusão da análise.**"
     )
     col1, col2 = common.st.columns(2)
     with col1:

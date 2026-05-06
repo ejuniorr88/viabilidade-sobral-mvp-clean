@@ -459,11 +459,12 @@ def _render_intro_tipo(multi_tipo: str, use_type_code: str) -> None:
     if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
         st.markdown("---\n## 🏘️ O que é o residencial multifamiliar R2.1?")
         st.markdown(
-            "É o caso em que existem **2 unidades habitacionais no mesmo lote**, podendo ser:\n\n"
-            "- **justapostas** → residências lado a lado (**horizontal**)\n"
-            "- **sobrepostas** → uma unidade embaixo e outra em cima\n\n"
-            "Cada unidade deve ter **frente e acesso independente para via pública oficial**.\n\n"
-            "**R2.1 — 2 unidades no mesmo lote (justapostas ou sobrepostas), com no máximo 2 pavimentos.**"
+            "O **R2.1 é um multifamiliar, mas tem uma regra especial**. Ele é formado por **2 unidades habitacionais no mesmo lote**, podendo ser:\n\n"
+            "- **justapostas** → duas unidades lado a lado;\n"
+            "- **sobrepostas** → uma unidade embaixo e outra em cima.\n\n"
+            "Mesmo sendo classificado como multifamiliar, a **LC 90/2023** determina que cada unidade seja analisada, em alguns pontos, como uma **residência unifamiliar**.\n\n"
+            "Isso significa que cada unidade precisa ter **frente e acesso independente para via pública oficial**, **paredes externas total ou parcialmente comuns**, "
+            "aparência de **um único conjunto arquitetônico homogêneo**, **no máximo 2 pavimentos** e ambientes mínimos conforme as regras da residência unifamiliar."
         )
     elif multi_tipo in ("R22", "R2.2", "R2_2") or use_type_code.endswith("R22"):
         st.markdown("---\n## 🏘️ O que é o residencial multifamiliar R2.2?")
@@ -491,13 +492,15 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
 
     if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
         sections = [
-            ("R2.1 justaposto", [
+            ("R2.1 — regra especial", [
                 "pode ter **no máximo 2 pavimentos**;",
-                "**fora da ZEIS**, se for **justaposto**, exige **testada mínima de 8,00 m**;",
-                "quando a zona permitir, pode usar os parâmetros do **unifamiliar**, respeitando a adequabilidade;",
-                "cada unidade deve atender os mínimos do **Anexo II**, como no unifamiliar;",
-                "cada unidade deve ter acesso independente para a via pública oficial.",
-            ], "quando a zona permitir esse enquadramento, o **R2.1 justaposto** pode seguir a lógica do **unifamiliar** para parâmetros como recuos, TO, TP, IA, altura e testada mínima."),
+                "cada unidade deve ter **frente e acesso independente para via pública oficial**;",
+                "as paredes externas devem ser **total ou parcialmente comuns**;",
+                "o conjunto deve ter aparência de **unidade arquitetônica homogênea**;",
+                "cada unidade deve atender os mínimos do **Anexo II**, como na residência unifamiliar;",
+                "quando aplicável, pode ser considerada a flexibilidade do **art. 112** para recuos de frente e laterais, mantendo a **Taxa de Ocupação (TO)** máxima e a **Taxa de Permeabilidade (TP)** mínima da zona;",
+                "quando a testada ficar abaixo da referência usual de **8,00 m** fora de ZEIS, o caso exige análise no licenciamento e comprovação documental da situação do lote.",
+            ], "o **R2.1** é multifamiliar na tipologia, mas em alguns parâmetros é analisado com lógica semelhante à residência unifamiliar. A área máxima do térreo não dobra: ela continua limitada pela **Taxa de Ocupação (TO)**, pela **Taxa de Permeabilidade (TP)** e pelo que cabe fisicamente no lote."),
             ("IA e área computável", [
                 "**Art. 110 da LC 91:** a área computável para o Índice de Aproveitamento (**IA**) é calculada pela soma das áreas das unidades autônomas.",
                 "A lei também considera como **não computáveis**, entre outros:",
@@ -792,8 +795,10 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         except Exception:
             rec_fun = None
 
-        area_min = rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2")
-        testada_min = rule.get("testada_min_m")
+        area_min = rule.get("area_min_lote_m2") or rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2")
+        area_max = rule.get("area_max_lote_m2") or rule.get("lote_max_area_m2")
+        testada_min = rule.get("testada_min_m") or rule.get("testada_min_meio_m") or rule.get("testada_min_esquina_m")
+        testada_max = rule.get("testada_max_m")
 
         W = float(lot_front or 0) if lot_front not in (None, "") else 0.0
         D = float(lot_depth or 0) if lot_depth not in (None, "") else 0.0
@@ -818,6 +823,8 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         elif teto_pratico is None:
             teto_pratico = to_m2
         is_r21 = multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21")
+        is_zeip9 = str(subzona or "").strip().upper().replace("-", "_") in ("ZEIP_9", "ZEIP9")
+        r21_testada_baixa = bool(is_r21 and W > 0 and W < 8.0)
         teto_relatorio = to_m2 if (is_r21 and to_m2 is not None) else teto_pratico
         a_adotada = min(built_ground, teto_relatorio) if (built_ground is not None and built_ground > 0 and teto_relatorio is not None) else (built_ground if (built_ground is not None and built_ground > 0) else None)
         to_utilizada_pct = ((a_adotada / lot_area_f) * 100.0) if (a_adotada is not None and lot_area_f not in (None, 0)) else None
@@ -827,10 +834,12 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         ia_saldo = (ia_m2 - a_adotada) if (ia_m2 is not None and a_adotada is not None) else None
     else:
         to_max_pct = tp_min_pct = ia_max = ia_min = to_m2 = tp_m2 = ia_m2 = gabarito_f = pav_est = None
-        rec_fr = rec_lat = rec_fun = area_min = testada_min = None
+        rec_fr = rec_lat = rec_fun = area_min = area_max = testada_min = testada_max = None
         W_util = D_util = A_recuos = None
         built_ground = teto_pratico = teto_relatorio = a_adotada = to_utilizada_pct = ia_consumido_terreo = area_livre_projeto = area_impermavel_pos_tp = ia_saldo = None
         is_r21 = False
+        is_zeip9 = str(subzona or "").strip().upper().replace("-", "_") in ("ZEIP_9", "ZEIP9")
+        r21_testada_baixa = False
 
     return {
         "calc": calc,
@@ -869,7 +878,9 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         "rec_lat": rec_lat,
         "rec_fun": rec_fun,
         "area_min": area_min,
+        "area_max": area_max,
         "testada_min": testada_min,
+        "testada_max": testada_max,
         "W_util": W_util,
         "D_util": D_util,
         "A_recuos": A_recuos,
@@ -883,6 +894,8 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         "area_impermavel_pos_tp": area_impermavel_pos_tp,
         "ia_saldo": ia_saldo,
         "is_r21": is_r21,
+        "is_zeip9": is_zeip9,
+        "r21_testada_baixa": r21_testada_baixa,
     }
 
 

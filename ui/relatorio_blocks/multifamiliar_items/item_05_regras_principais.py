@@ -15,7 +15,9 @@ def render(ctx):
             f"- **Recuo lateral:** {common._fmt_num(ctx['rec_lat'])} m\n"
             f"- **Recuo de fundos:** {common._fmt_num(ctx['rec_fun'])} m\n"
             f"- **Altura permitida máxima da zona:** {common._fmt_num(ctx['gabarito_f'])} m\n"
-            f"- **Área mínima do lote:** {common._fmt_num(ctx['area_min'])} m²\n"
-            f"- **Testada mínima:** {common._fmt_num(ctx['testada_min'])} m"
+            f"- **Área mínima do lote:** {common._fmt_num(ctx.get('area_min'))} m²\n"
+            f"- **Área máxima do lote:** {common._fmt_num(ctx.get('area_max'))} m²\n"
+            f"- **Testada mínima:** {common._fmt_num(ctx.get('testada_min'))} m\n"
+            f"- **Testada máxima:** {common._fmt_num(ctx.get('testada_max'))} m"
         )
     common.st.markdown("**Esses são os parâmetros que mais influenciam o estudo inicial do projeto.**")

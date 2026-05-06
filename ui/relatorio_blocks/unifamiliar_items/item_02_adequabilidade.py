@@ -6,6 +6,7 @@ from .common import md
 
 
 def render(ctx: dict) -> None:
+    # contrato: ctx['status_curto'] == "PERMITE"
     md("**Para saber se o uso residencial unifamiliar é viável neste terreno, a análise cruza duas informações principais: as regras de uso e ocupação do solo da zona onde o lote está localizado e a classificação da via de acesso pelo sistema viário. Em alguns casos, o sistema viário pode mudar a leitura da viabilidade, por isso os dois pontos precisam ser verificados juntos.**"
 )
     if not ctx['zone_class'] and not ctx['via_class']:
@@ -19,6 +20,8 @@ def render(ctx: dict) -> None:
             if ctx['via_norm'] and ctx['via_class']
             else f"- **Por via:** {ctx['via_tipo'] or 'via local'}"
         )
+        if (not ctx['via_norm'] or not ctx['via_class']) and "local" in str(ctx.get('via_tipo') or 'via local').lower():
+            via_line += " — neste caso, não há sobreposição por via arterial/coletora."
 
         if ctx['status_curto'] == "PERMITE PELA VIA":
             zona_obs = ""
@@ -65,3 +68,8 @@ def render(ctx: dict) -> None:
             st.warning(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
         else:
             st.error(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
+
+    if ctx.get("is_zeip9"):
+        st.warning(
+            "⚠️ **Atenção especial — ZEIP_9:** embora o uso possa aparecer como adequado na tabela, este setor possui restrições específicas por valor paisagístico e ambiental. A análise não deve ser tratada como permissão simples para obra nova sem conferência no licenciamento. Também deve ser verificada a regra de não alteração da configuração dos lotes existentes."
+        )

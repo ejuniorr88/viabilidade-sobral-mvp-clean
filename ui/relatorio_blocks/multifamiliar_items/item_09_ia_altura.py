@@ -31,7 +31,11 @@ def render(ctx):
         except Exception:
             pav_ref = None
 
-        if pav_ref:
+        if ctx.get("is_r21"):
+            common.st.markdown(
+                f"A altura máxima da zona é **{common._fmt_num(ctx['gabarito_f'])} m**, mas como o uso informado é **R2.1**, a tipologia fica limitada a **no máximo 2 pavimentos**. Portanto, a altura da zona não deve ser lida como autorização para ultrapassar esse limite tipológico."
+            )
+        elif pav_ref:
             common.st.markdown(
                 f"Exemplo simples para ter uma noção de andares: adotando um pé-direito médio de **3,00 m** por pavimento, a altura máxima de **{common._fmt_num(ctx['gabarito_f'])} m** pode permitir, em média, algo próximo de **{pav_ref} pavimentos**."
             )

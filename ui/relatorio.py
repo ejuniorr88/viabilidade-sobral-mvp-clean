@@ -184,6 +184,10 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
     rec_lat = float(rule.get("recuo_lateral_m") or 0.0)
     rec_fun = float(rule.get("recuo_fundos_m") or 0.0)
     gabarito_m = _safe_float(rule.get("gabarito_m"))
+    area_min_lote = _safe_float(rule.get("area_min_lote_m2") or rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2"))
+    area_max_lote = _safe_float(rule.get("area_max_lote_m2") or rule.get("lote_max_area_m2"))
+    testada_min_lote = _safe_float(rule.get("testada_min_m") or rule.get("testada_min_meio_m") or rule.get("testada_min_esquina_m"))
+    testada_max_lote = _safe_float(rule.get("testada_max_m"))
 
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
     A_perm_min = A * (tp_min / 100.0) if (A and tp_min is not None) else None
@@ -258,6 +262,8 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
 
     recuos_resumo = f"Frontal: {_fmt_num(rec_fr)} m | Laterais: {_fmt_num(rec_lat)} m | Fundos: {_fmt_num(rec_fun)} m"
     ia_min_texto = _fmt_num(ia_min) if ia_min is not None else "não informado"
+    is_zeip9_unif = str(subzone_code or "").strip().upper().replace("-", "_") in ("ZEIP_9", "ZEIP9")
+
     pav_est = None
     if gabarito_m is not None and gabarito_m > 0:
         pav_est = max(1, int(math.floor(gabarito_m / 3.0)))
@@ -284,6 +290,10 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         "rec_lat": rec_lat,
         "rec_fun": rec_fun,
         "gabarito_m": gabarito_m,
+        "area_min_lote": area_min_lote,
+        "area_max_lote": area_max_lote,
+        "testada_min_lote": testada_min_lote,
+        "testada_max_lote": testada_max_lote,
         "A_to": A_to,
         "A_perm_min": A_perm_min,
         "A_total": A_total,
@@ -319,6 +329,7 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         "recuos_resumo": recuos_resumo,
         "ia_min_texto": ia_min_texto,
         "pav_est": pav_est,
+        "is_zeip9": is_zeip9_unif,
         "render_quadro_tecnico": render_quadro_tecnico,
         "render_figuras_anexo_v": render_figuras_anexo_v,
         "_mf_sigla_nome": _mf_sigla_nome,
@@ -412,6 +423,10 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     rec_lat = float(rule.get("recuo_lateral_m") or 0.0)
     rec_fun = float(rule.get("recuo_fundos_m") or 0.0)
     gabarito_m = _safe_float(rule.get("gabarito_m"))
+    area_min_lote = _safe_float(rule.get("area_min_lote_m2") or rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2"))
+    area_max_lote = _safe_float(rule.get("area_max_lote_m2") or rule.get("lote_max_area_m2"))
+    testada_min_lote = _safe_float(rule.get("testada_min_m") or rule.get("testada_min_meio_m") or rule.get("testada_min_esquina_m"))
+    testada_max_lote = _safe_float(rule.get("testada_max_m"))
 
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
     A_perm_min = A * (tp_min / 100.0) if (A and tp_min is not None) else None
@@ -486,6 +501,8 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
 
     recuos_resumo = f"Frontal: {_fmt_num(rec_fr)} m | Laterais: {_fmt_num(rec_lat)} m | Fundos: {_fmt_num(rec_fun)} m"
     ia_min_texto = _fmt_num(ia_min) if ia_min is not None else "não informado"
+    is_zeip9_unif = str(subzone_code or "").strip().upper().replace("-", "_") in ("ZEIP_9", "ZEIP9")
+
     pav_est = None
     if gabarito_m is not None and gabarito_m > 0:
         pav_est = max(1, int(math.floor(gabarito_m / 3.0)))
@@ -539,6 +556,10 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "rec_lat": rec_lat,
         "rec_fun": rec_fun,
         "gabarito_m": gabarito_m,
+        "area_min_lote": area_min_lote,
+        "area_max_lote": area_max_lote,
+        "testada_min_lote": testada_min_lote,
+        "testada_max_lote": testada_max_lote,
         "A_to": A_to,
         "A_perm_min": A_perm_min,
         "A_total": A_total,
@@ -574,6 +595,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "recuos_resumo": recuos_resumo,
         "ia_min_texto": ia_min_texto,
         "pav_est": pav_est,
+        "is_zeip9": is_zeip9_unif,
         "render_quadro_tecnico": render_quadro_tecnico,
         "render_figuras_anexo_v": render_figuras_anexo_v,
         "_mf_sigla_nome": _mf_sigla_nome,

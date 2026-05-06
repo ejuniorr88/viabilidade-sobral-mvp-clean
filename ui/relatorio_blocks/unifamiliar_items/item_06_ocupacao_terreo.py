@@ -116,9 +116,14 @@ def render(ctx: dict) -> None:
 
         if area_pedida is not None and area_considerada is not None:
             if excedeu_area:
-                md(
-                    f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela também não pode ser adotada nesta leitura, porque ultrapassa não apenas a TO máxima da zona, mas também o limite físico de implantação com recuos. Assim, nesta hipótese, o estudo passa a considerar {fmt_num(a_recuos)} m² como teto máximo possível de implantação.**"""
-                )
+                if area_pedida <= a_recuos:
+                    md(
+                        f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela cabe fisicamente pelos recuos, mas não pode ser adotada porque ultrapassa a Taxa de Ocupação máxima da zona. Portanto, o limite real continua sendo {fmt_num(area_considerada)} m² no térreo.**"""
+                    )
+                else:
+                    md(
+                        f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela ultrapassa a TO máxima e também não cabe fisicamente dentro da área disponível pelos recuos. Portanto, o limite real continua sendo {fmt_num(area_considerada)} m² no térreo.**"""
+                    )
             else:
                 md(
                     f"""👉 **Como a área pretendida informada foi de {fmt_num(area_pedida)} m², ela também cabe dentro desse limite físico.**"""
@@ -143,10 +148,10 @@ def render(ctx: dict) -> None:
             )
             if a_recuos is not None:
                 md(
-                    f"""Na leitura com os recuos padrão da zona, a área útil de implantação cai para **{fmt_num(a_recuos)} m²**, que passa a ser o limite físico do lote nessa hipótese."""
+                    f"""Na leitura com os recuos padrão da zona, a construção até caberia fisicamente em **{fmt_num(a_recuos)} m²**, mas esse valor não autoriza ocupar acima da TO."""
                 )
                 md(
-                    f"""👉 **Neste caso, a área pretendida de {fmt_num(area_pedida)} m² não pode ser considerada viável, porque ultrapassa a TO máxima permitida. Na prática, o projeto precisaria ser reduzido para se enquadrar nos parâmetros urbanísticos, respeitando no máximo {fmt_num(area_considerada)} m² pela TO, ou {fmt_num(a_recuos)} m² caso sejam adotados os recuos padrão da zona.**"""
+                    f"""👉 **Neste caso, a área pretendida de {fmt_num(area_pedida)} m² não pode ser considerada viável, porque ultrapassa a TO máxima permitida. Na prática, o projeto precisaria ser reduzido para respeitar no máximo {fmt_num(area_considerada)} m² no térreo.**"""
                 )
             else:
                 md(
@@ -162,7 +167,7 @@ def render(ctx: dict) -> None:
     else:
         md("""Na leitura com a flexibilidade do art. 112, o aproveitamento do térreo pode chegar ao limite máximo permitido pela zona, desde que sejam respeitadas a TO, a TP e as demais exigências aplicáveis.""")
         if a_recuos is not None:
-            md(f"""Na leitura com os recuos padrão da zona, a área útil de implantação fica em **{fmt_num(a_recuos)} m²**.""")
-            md("""👉 **Neste caso, sem uma área pretendida informada, o estudo passa a apresentar os dois referenciais principais do lote: o limite máximo pela TO e o limite físico de implantação considerando os recuos.**""")
+            md(f"""Na leitura com os recuos padrão da zona, a construção até caberia fisicamente em **{fmt_num(a_recuos)} m²**, mas esse valor não autoriza ocupar acima da TO.""")
+            md(f"""👉 **Neste caso, sem uma área pretendida informada, o estudo usa como referência o limite real de ocupação no térreo: {fmt_num(area_to)} m² pela TO.**""")
         else:
             md("""👉 **Neste caso, sem uma área pretendida informada, o estudo passa a apresentar o limite máximo pela TO como referencial principal do lote.**""")
