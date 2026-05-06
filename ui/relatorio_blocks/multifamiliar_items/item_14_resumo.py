@@ -34,7 +34,7 @@ def _resultado_resumo(ctx: dict) -> str:
     if ctx.get("is_zeip9"):
         return "⚠️ EXIGE CONFIRMAÇÃO — ZEIP_9"
     if ctx.get("r21_testada_baixa"):
-        return "⚠️ PERMITE COM RESSALVA — R2.1"
+        return "⚠️ PERMITE COM RESSALVA"
     return f"{_clean(ctx.get('icon'), '')} {_clean(ctx.get('status_curto'))}".strip()
 
 
@@ -73,15 +73,14 @@ def render(ctx):
         f"- **Altura permitida máxima:** {common._fmt_num(ctx.get('gabarito_f'))} m{resumo_extra}"
     )
 
-    if ctx.get("r21_testada_baixa"):
-        common.st.warning(
-            "⚠️ **Atenção — R2.1:** a testada informada está abaixo da referência usual de 8,00 m para R2.1 justaposto fora de ZEIS. "
-            "O caso exige análise no licenciamento municipal, com comprovação da situação do lote e conferência das condições do Art. 167 da LC 90/2023: "
-            "frente e acesso independente para cada unidade, paredes externas total ou parcialmente comuns, unidade arquitetônica homogênea, parâmetros de residência unifamiliar e limite de 2 pavimentos."
-        )
-
     if ctx.get("is_zeip9"):
         common.st.warning(
             "⚠️ **Atenção — ZEIP_9:** a tabela pode indicar adequabilidade, mas este setor possui restrição específica quanto à construção de novos edifícios. "
             "Como R3 é uma tipologia vertical, não trate este resultado como permissão simples para obra nova; confirme a possibilidade no licenciamento municipal e verifique a regra de não alteração da configuração dos lotes existentes."
+        )
+
+    if ctx.get("r21_testada_baixa"):
+        common.st.warning(
+            "⚠️ **Atenção — R2.1:** o uso R2.1 aparece como permitido para esta zona, mas a testada informada é inferior a 8,00 m para R2.1 justaposto fora de ZEIS. "
+            "Antes de seguir, revise o enquadramento do projeto ou confirme a possibilidade no licenciamento municipal."
         )
