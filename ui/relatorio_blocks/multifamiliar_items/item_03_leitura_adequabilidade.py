@@ -1,17 +1,13 @@
 from __future__ import annotations
+from . import common
 
-import streamlit as st
-
-from .common import md
-
-
-def render(ctx: dict) -> None:
-    md(
+def render(ctx):
+    common.st.markdown(
         "**As tabelas abaixo ajudam a interpretar as siglas usadas na análise de viabilidade. Elas mostram como a legislação classifica o uso pretendido para o terreno: adequado, inadequado, adequado apenas para determinados portes ou sujeito a análise como projeto especial. Em determinados casos, também é necessário observar o porte do empreendimento, já que classificações como AP e AP/AM indicam permissões vinculadas a faixas de área específicas. Em resumo, estas siglas ajudam a interpretar corretamente a conclusão da análise.**"
     )
-    col1, col2 = st.columns(2)
+    col1, col2 = common.st.columns(2)
     with col1:
-        md(
+        common.st.markdown(
             "| Sigla | O que significa | Como interpretar |\n"
             "|---|---|---|\n"
             "| **A** | Adequado / permitido | Pode seguir com o projeto, respeitando as demais regras. |\n"
@@ -22,7 +18,7 @@ def render(ctx: dict) -> None:
             "| **PE** | Projeto especial | Pode exigir análise específica e condições extras no licenciamento. |"
         )
     with col2:
-        md(
+        common.st.markdown(
             "| Porte | Faixa (área construída total) |\n"
             "|---|---|\n"
             "| **Pequeno** | até **250 m²** |\n"

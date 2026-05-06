@@ -2,35 +2,65 @@ from __future__ import annotations
 from . import common
 
 
+def _clean(value, fallback="—"):
+    s = str(value or "").strip()
+    if not s or s.lower() in {"none", "null", "nan", "—", "-"}:
+        return fallback
+    return s
+
+
+def _uso_resumo(ctx: dict) -> str:
+    multi_tipo = str(ctx.get("multi_tipo") or "").upper()
+    use_type_code = str(ctx.get("use_type_code") or "").upper()
+    if multi_tipo in ("R22", "R2.2", "R2_2") or use_type_code.endswith("R22"):
+        return "R2.2 — condomínio horizontal com via interna"
+    if multi_tipo in ("R3", "R03") or use_type_code.endswith("R3"):
+        return "R3 — residência multifamiliar vertical"
+    if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
+        return "R2.1 — 2 unidades no mesmo lote (justapostas ou sobrepostas)"
+    return _clean(ctx.get("uso_label"), "residencial multifamiliar")
+
+
+def _zona_resumo(ctx: dict) -> str:
+    zona = _clean(ctx.get("zona"), "")
+    subzona = _clean(ctx.get("subzona"), "")
+    zone_label = _clean(ctx.get("zone_label"), "")
+    if zona and subzona and subzona.upper() not in {"PADRAO", zona.upper()}:
+        return f"{zona} — {subzona.replace('_', ' ')}"
+    return zone_label or zona or "—"
+
+
 def render(ctx):
-    common.st.markdown('Se você quiser ver só o essencial deste terreno, este é o resumo principal:')
-    resumo_extra = ''
-    built = common._num(ctx.get('built_ground'))
-    limite = common.practical_ground_limit(ctx)
-    if built is not None and built > 0:
-        resumo_extra += f"\n- **Área pretendida informada:** {common._fmt_num(built)} m²"
-        adotada = limite if (limite is not None and built > limite) else built
-        resumo_extra += f"\n- **Área adotada no relatório:** {common._fmt_num(adotada)} m²"
-        resumo_extra += "\n- **TO efetiva considerada:** —"
-        resumo_extra += "\n- **Área livre remanescente:** —"
-        if limite is not None and built > limite:
-            resumo_extra += "\n- **Observação:** a área pretendida ultrapassa o limite real do térreo e precisa ser ajustada."
-    if limite is not None:
-        resumo_extra += f"\n- **Limite real de ocupação no térreo:** {common._fmt_num(limite)} m²"
-    if common.is_r21_ctx(ctx):
-        resumo_extra += "\n- **Limite tipológico R2.1:** máximo de 2 pavimentos"
-    if common.is_zeip9(ctx):
-        resumo_extra += "\n- **Atenção ZEIP_9:** não tratar como permissão simples para obra nova/novo edifício sem confirmação do órgão competente"
+    common.st.markdown("Se você quiser ver só o essencial deste terreno, este é o resumo principal:")
+    resumo_uso = _uso_resumo(ctx)
+    zona_txt = _zona_resumo(ctx)
+    tipo_lote = _clean(ctx.get("tipo_lote"), "Meio de quadra")
+    via = _clean(ctx.get("via"))
+    via_tipo = _clean(ctx.get("via_tipo_txt"))
+    resultado = f"{_clean(ctx.get('icon'), '')} {_clean(ctx.get('status_curto'))}".strip()
+
+    resumo_extra = ""
+    if ctx.get('built_ground') is not None and ctx.get('a_adotada') is not None:
+        resumo_extra += f"\n- **Área pretendida informada:** {common._fmt_num(ctx['built_ground'])} m²"
+        resumo_extra += f"\n- **Área adotada no relatório:** {common._fmt_num(ctx['a_adotada'])} m²"
+        if ctx.get('to_utilizada_pct') is not None:
+            resumo_extra += f"\n- **TO efetiva considerada:** {common._fmt_pct(ctx['to_utilizada_pct'])}"
+        if ctx.get('area_livre_projeto') is not None:
+            resumo_extra += f"\n- **Área livre remanescente:** {common._fmt_num(ctx['area_livre_projeto'])} m²"
+        if ctx.get('ia_saldo') is not None:
+            resumo_extra += f"\n- **Saldo estimado pelo IA:** {common._fmt_num(ctx['ia_saldo'])} m²"
+    elif ctx.get('teto_relatorio') is not None:
+        resumo_extra += f"\n- **Limite real de ocupação no térreo:** {common._fmt_num(ctx['teto_relatorio'])} m²"
+
     common.st.markdown(
-        f"- **Uso analisado:** {ctx.get('use_label')}\n"
-        f"- **Zona:** {ctx.get('zone') or '—'}\n"
-        f"- **Tipo de lote:** {ctx.get('lot_type_label') or '—'}\n"
-        f"- **Via:** {ctx.get('via') or '—'}\n"
-        f"- **Tipo de via:** {ctx.get('via_tipo_txt') or '—'}\n"
-        f"- **Resultado final:** {ctx.get('icon')} **{ctx.get('status_curto')}**\n"
+        f"- **Uso analisado:** {resumo_uso}\n"
+        f"- **Zona:** {zona_txt}\n"
+        f"- **Tipo de lote:** {tipo_lote}\n"
+        f"- **Via:** {via}\n"
+        f"- **Tipo de via:** {via_tipo}\n"
+        f"- **Resultado final:** {resultado}\n"
         f"- **TO máxima:** {common._fmt_pct(ctx.get('to_max_pct'))}\n"
         f"- **TP mínima:** {common._fmt_pct(ctx.get('tp_min_pct'))}\n"
-        f"- **IA máximo:** {common._fmt_num(ctx.get('ia_max'), 2)}\n"
-        f"- **Altura permitida máxima:** {common._fmt_num(ctx.get('gabarito_f'))} m"
-        f"{resumo_extra}"
+        f"- **IA máximo:** {common._fmt_num(ctx.get('ia_max'), 2) if ctx.get('ia_max') not in (None, '') else '—'}\n"
+        f"- **Altura permitida máxima:** {common._fmt_num(ctx.get('gabarito_f'))} m{resumo_extra}"
     )
