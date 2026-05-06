@@ -20,6 +20,8 @@ def render(ctx):
             if ctx["via_norm"] and ctx["via_class"]
             else f"- **Por via:** {ctx['via_tipo_txt'] or 'via local'}"
         )
+        if (not ctx["via_norm"] or not ctx["via_class"]) and "local" in str(ctx.get("via_tipo_txt") or "via local").lower():
+            via_line += " — neste caso, não há sobreposição por via arterial/coletora."
 
         common.st.markdown(
             f"- **Por zona:** {ctx['zone_class'] or 'não encontrado'}"
