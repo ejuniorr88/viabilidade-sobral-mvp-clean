@@ -23,15 +23,26 @@ def render(ctx):
         if (not ctx["via_norm"] or not ctx["via_class"]) and "local" in str(ctx.get("via_tipo_txt") or "via local").lower():
             via_line += " — neste caso, não há sobreposição por via arterial/coletora."
 
+        resumo_icon = ctx['icon']
+        resumo_status = ctx['status_curto']
+        if ctx.get("is_zeip9"):
+            resumo_icon = "⚠️"
+            resumo_status = "EXIGE CONFIRMAÇÃO — ZEIP_9"
+
         common.st.markdown(
             f"- **Por zona:** {ctx['zone_class'] or 'não encontrado'}"
             + (f" ({common._sigla_nome(ctx['zone_class'])})" if ctx["zone_class"] else "")
             + "\n"
             + via_line
-            + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
+            + f"\n- **Resumo final:** {resumo_icon} **{resumo_status}**"
         )
 
-        if ctx["status_curto"] in (
+        if ctx.get("is_zeip9"):
+            # O resumo acima já troca o selo final para "EXIGE CONFIRMAÇÃO".
+            # A orientação completa da ZEIP_9 é exibida abaixo, uma única vez,
+            # para evitar duplicidade visual no relatório.
+            pass
+        elif ctx["status_curto"] in (
             "PERMITE",
             "PERMITE PELA ZONA E PELA VIA",
             "PERMITE SOMENTE PEQUENO PORTE",
