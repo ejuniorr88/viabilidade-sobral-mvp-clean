@@ -30,6 +30,12 @@ def _zona_resumo(ctx: dict) -> str:
     return zone_label or zona or "—"
 
 
+def _resultado_resumo(ctx: dict) -> str:
+    if ctx.get("is_zeip9"):
+        return "⚠️ EXIGE CONFIRMAÇÃO — ZEIP_9"
+    return f"{_clean(ctx.get('icon'), '')} {_clean(ctx.get('status_curto'))}".strip()
+
+
 def render(ctx):
     common.st.markdown("Se você quiser ver só o essencial deste terreno, este é o resumo principal:")
     resumo_uso = _uso_resumo(ctx)
@@ -37,7 +43,7 @@ def render(ctx):
     tipo_lote = _clean(ctx.get("tipo_lote"), "Meio de quadra")
     via = _clean(ctx.get("via"))
     via_tipo = _clean(ctx.get("via_tipo_txt"))
-    resultado = f"{_clean(ctx.get('icon'), '')} {_clean(ctx.get('status_curto'))}".strip()
+    resultado = _resultado_resumo(ctx)
 
     resumo_extra = ""
     if ctx.get('built_ground') is not None and ctx.get('a_adotada') is not None:
@@ -64,3 +70,9 @@ def render(ctx):
         f"- **IA máximo:** {common._fmt_num(ctx.get('ia_max'), 2) if ctx.get('ia_max') not in (None, '') else '—'}\n"
         f"- **Altura permitida máxima:** {common._fmt_num(ctx.get('gabarito_f'))} m{resumo_extra}"
     )
+
+    if ctx.get("is_zeip9"):
+        common.st.warning(
+            "⚠️ **Atenção — ZEIP_9:** a tabela pode indicar adequabilidade, mas este setor possui restrição específica quanto à construção de novos edifícios. "
+            "Como R3 é uma tipologia vertical, não trate este resultado como permissão simples para obra nova; confirme a possibilidade no licenciamento municipal e verifique a regra de não alteração da configuração dos lotes existentes."
+        )
