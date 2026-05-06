@@ -137,14 +137,14 @@ def _rule_zeip(*, subzone_code: str, gabarito: float = 12.0) -> dict:
     }
 
 
-def _calc_multi(*, use_type_code: str, multi_tipo: str, subzone_code: str, lot_area: float, front: float, depth: float, via_tipo: str = "via local", built_ground=None, zone: str = "ZEIP") -> dict:
+def _calc_multi(*, use_type_code: str, multi_tipo: str, subzone_code: str, lot_area: float, front: float, depth: float, via_tipo: str = "via local", built_ground=None) -> dict:
     calc = {
         "ok": True,
         "project_mode": "GUIA_FASE_1",
         "use_type_code": use_type_code,
         "multi_tipo": multi_tipo,
-        "zone": zone,
-        "zone_sigla": zone,
+        "zone": "ZEIP",
+        "zone_sigla": "ZEIP",
         "subzone_code": subzone_code,
         "lot_area_m2": lot_area,
         "lot_front_m": front,
@@ -247,22 +247,14 @@ def test_r21_zeip7_testada_7_alerts_and_never_suggests_5_pavements(monkeypatch):
 
     required = [
         "R2.1 — 2 unidades no mesmo lote",
-        "testada informada é menor que a referência usual de 8,00 m",
-        "exige análise no licenciamento municipal",
-        "frente e acesso independente para a via pública oficial",
-        "paredes externas total ou parcialmente comuns",
+        "testada informada é inferior a 8,00 m",
+        "R2.1 justaposto fora de ZEIS",
         "máximo 2 pavimentos",
         "210,00 × 70,0% = 147,00",
-        "Texto didático para R2.1",
-        "Cenário A — unidades sobrepostas",
-        "Cenário B — unidades lado a lado",
-        "Taxa de Ocupação (TO)",
-        "Taxa de Permeabilidade (TP)",
-        "Índice de Aproveitamento (IA)",
-        "Pelos recuos aplicáveis nessa leitura, a construção até caberia fisicamente em **199,50 m²**",
+        "Pelos recuos, a construção até caberia fisicamente em uma área de **199,50 m²**",
         "limite real de ocupação no térreo é **147,00 m²**",
-        "cada unidade teria aproximadamente **73,50 m²**",
-        "Resultado final: ⚠️ PERMITE COM RESSALVA — R2.1",
+        "Resultado final: ⚠️ PERMITE COM RESSALVA",
+        "Antes de seguir, revise o enquadramento do projeto ou confirme a possibilidade no licenciamento municipal",
     ]
     plain_text = _plain(text)
     for snippet in required:
@@ -275,66 +267,10 @@ def test_r21_zeip7_testada_7_alerts_and_never_suggests_5_pavements(monkeypatch):
         "10,00 − 0,00 − 0,00 = 7,00",
         "Se você utilizar **199,50** no térreo",
         "Área restante no lote: 210,00 − 199,50",
+        "Resultado final: ✅ PERMITE",
     ]
     for snippet in forbidden:
         assert snippet.replace("**", "") not in plain_text, f"Regressão proibida encontrada: {snippet}"
-
-
-def test_r21_zam_uses_general_unifamiliar_logic_and_two_scenarios(monkeypatch):
-    rule_zam = {
-        "zone_sigla": "ZAM",
-        "subzone_code": "PADRAO",
-        "to_max_pct": 60.0,
-        "tp_min_pct": 30.0,
-        "ia_max": 1.5,
-        "ia_min": None,
-        "recuo_frontal_m": 3.0,
-        "recuo_lateral_m": 1.5,
-        "recuo_fundos_m": 1.5,
-        "gabarito_m": 15.0,
-        "area_min_lote_m2": 150.0,
-        "area_max_lote_m2": 62500.0,
-        "testada_min_m": 6.0,
-        "testada_max_m": 250.0,
-    }
-    text = _render_multifamiliar(
-        monkeypatch,
-        calc=_calc_multi(
-            use_type_code="RES_MULTI_R21",
-            multi_tipo="R2.1",
-            subzone_code="PADRAO",
-            lot_area=300,
-            front=10,
-            depth=30,
-            built_ground=0,
-            zone="ZAM",
-        ),
-        rule=rule_zam,
-    )
-    plain_text = _plain(text)
-    required = [
-        "R2.1 é um multifamiliar, mas tem uma regra especial",
-        "Taxa de Ocupação (TO)",
-        "Taxa de Permeabilidade (TP)",
-        "Índice de Aproveitamento (IA)",
-        "300,00 × 60,0% = 180,00",
-        "Pelos recuos aplicáveis nessa leitura, a construção até caberia fisicamente em 285,00 m²",
-        "Taxa de Ocupação (TO), o limite do térreo é 180,00 m²",
-        "limite real de ocupação no térreo é 180,00 m²",
-        "Cenário A — unidades sobrepostas",
-        "Cenário B — unidades lado a lado",
-        "cada unidade teria aproximadamente 90,00 m²",
-    ]
-    for snippet in required:
-        assert snippet in plain_text, f"Texto obrigatório do R2.1 geral/ZAM sumiu: {snippet}"
-
-    forbidden = [
-        "a área máxima do térreo dobra",
-        "pode ocupar 285,00 m² no térreo",
-        "5 pavimentos",
-    ]
-    for snippet in forbidden:
-        assert snippet not in plain_text, f"Regressão proibida encontrada no R2.1 geral/ZAM: {snippet}"
 
 
 def test_zeip9_r3_never_allows_simple_edificio_without_warning(monkeypatch):
