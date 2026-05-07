@@ -31,6 +31,12 @@ def _zona_resumo(ctx: dict) -> str:
 
 
 def _resultado_resumo(ctx: dict) -> str:
+    if ctx.get("is_irregular"):
+        common.st.markdown(
+            "👉 **Observação:** por se tratar de terreno irregular, esse valor é uma referência máxima pela Taxa de Ocupação. "
+            "A implantação real depende da geometria do lote e deve ser confirmada em projeto e no licenciamento."
+        )
+
     if ctx.get("is_zeip9"):
         return "⚠️ EXIGE CONFIRMAÇÃO — ZEIP_9"
     if ctx.get("r21_testada_baixa"):
@@ -42,12 +48,13 @@ def render(ctx):
     common.st.markdown("Se você quiser ver só o essencial deste terreno, este é o resumo principal:")
     resumo_uso = _uso_resumo(ctx)
     zona_txt = _zona_resumo(ctx)
-    tipo_lote = _clean(ctx.get("tipo_lote"), "Meio de quadra")
+    tipo_lote = "Terreno irregular" if ctx.get("is_irregular") else _clean(ctx.get("tipo_lote"), "Meio de quadra")
     via = _clean(ctx.get("via"))
     via_tipo = _clean(ctx.get("via_tipo_txt"))
     resultado = _resultado_resumo(ctx)
 
     resumo_extra = ""
+    limite_label = "Limite máximo pela Taxa de Ocupação" if ctx.get("is_irregular") else "Limite real de ocupação no térreo"
     if ctx.get('built_ground') is not None and ctx.get('a_adotada') is not None:
         resumo_extra += f"\n- **Área pretendida informada:** {common._fmt_num(ctx['built_ground'])} m²"
         resumo_extra += f"\n- **Área adotada no relatório:** {common._fmt_num(ctx['a_adotada'])} m²"

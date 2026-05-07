@@ -62,7 +62,7 @@ ITEM_HEADINGS = [
 ]
 
 
-def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, **_: Any) -> None:
+def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
     # Garante que monkeypatch em multifamiliar_guia.st reflita nos itens/common.
     common.st = st
 
@@ -70,6 +70,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         calc=calc,
         rule=rule,
         fetch_adequabilidade_fn=_fetch_adequabilidade,
+        is_irregular=kwargs.get("is_irregular"),
     )
 
     render_item_00_intro(ctx)
@@ -87,13 +88,13 @@ def should_block_multifamiliar_preview(calc: Dict[str, Any], rule: Optional[Dict
         return False
     if not calc.get("ok") or not (rule or calc.get("rule")) or not (calc.get("zone") or calc.get("zone_sigla")) or calc.get("err"):
         return False
-    ctx = common.build_context(calc=calc, rule=rule, fetch_adequabilidade_fn=_fetch_adequabilidade)
+    ctx = common.build_context(calc=calc, rule=rule, fetch_adequabilidade_fn=_fetch_adequabilidade, is_irregular=kwargs.get("is_irregular"))
     return str(ctx.get("status_curto") or "").strip().upper() == "NÃO PERMITE"
 
 
-def render_multifamiliar_inadequado_preview(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, **_: Any) -> None:
+def render_multifamiliar_inadequado_preview(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
     common.st = st
-    ctx = common.build_context(calc=calc, rule=rule, fetch_adequabilidade_fn=_fetch_adequabilidade)
+    ctx = common.build_context(calc=calc, rule=rule, fetch_adequabilidade_fn=_fetch_adequabilidade, is_irregular=kwargs.get("is_irregular"))
     render_item_00_intro(ctx)
     for item_key, heading, renderer in ITEM_HEADINGS:
         if item_key not in ("item_01", "item_02"):

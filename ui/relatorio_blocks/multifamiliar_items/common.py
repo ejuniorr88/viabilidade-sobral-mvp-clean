@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional, Tuple, List
 import math
 import streamlit as st
 
+from ui.relatorio_blocks.terreno_irregular import is_irregular_context
+
 
 def md(text: str) -> None:
     st.markdown(text)
@@ -717,7 +719,7 @@ def _render_alvara_section() -> None:
 
 
 
-def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, fetch_adequabilidade_fn=None) -> Dict[str, Any]:
+def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, fetch_adequabilidade_fn=None, is_irregular: Any = None) -> Dict[str, Any]:
     """Monta e devolve o contexto compartilhado do relatório multifamiliar."""
     multi_tipo = _norm(calc.get("multi_tipo"))
     use_type_code = _norm(calc.get("use_type_code"))
@@ -727,10 +729,20 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
     subzona = calc.get("subzone_code") or (rule or {}).get("subzone_code") or "PADRAO"
     zone_label = calc.get("zone") or calc.get("zone_label_raw") or zona
     lot_area = calc.get("lot_area_m2")
-    lot_front = calc.get("lot_front_m") or calc.get("front_m") or 0
-    lot_depth = calc.get("lot_depth_m") or calc.get("depth_m") or 0
-    is_corner = bool(st.session_state.get("lot_is_corner") or False)
-    tipo_lote = "Esquina" if is_corner else "Meio de quadra"
+    is_irregular_lot = is_irregular_context({"is_irregular": is_irregular}, calc) or bool(
+        st.session_state.get("lot_is_irregular")
+        or st.session_state.get("lot_irregular")
+    )
+    if is_irregular_lot:
+        lot_front = 0
+        lot_depth = 0
+        is_corner = False
+        tipo_lote = "Terreno irregular"
+    else:
+        lot_front = calc.get("lot_front_m") or calc.get("front_m") or 0
+        lot_depth = calc.get("lot_depth_m") or calc.get("depth_m") or 0
+        is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
+        tipo_lote = "Esquina" if is_corner else "Meio de quadra"
     uso_label = _tipo_multifamiliar_label(multi_tipo, use_type_code)
 
     try:
@@ -805,7 +817,7 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         W_util = None
         D_util = None
         A_recuos = None
-        if rec_lat is not None and rec_fr is not None and rec_fun is not None and W > 0 and D > 0:
+        if (not is_irregular_lot) and rec_lat is not None and rec_fr is not None and rec_fun is not None and W > 0 and D > 0:
             W_util = W - 2 * rec_lat
             D_util = D - rec_fr - rec_fun
             if W_util > 0 and D_util > 0:
@@ -855,6 +867,7 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         "lot_front": lot_front,
         "lot_depth": lot_depth,
         "is_corner": is_corner,
+        "is_irregular": is_irregular_lot,
         "tipo_lote": tipo_lote,
         "uso_label": uso_label,
         "zone_class": zone_class,

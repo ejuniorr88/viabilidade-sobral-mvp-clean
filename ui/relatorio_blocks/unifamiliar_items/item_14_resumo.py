@@ -83,6 +83,7 @@ def render(ctx: dict) -> None:
         limite_real = a_to
 
     resumo_extra = ""
+    limite_label = "Limite máximo pela Taxa de Ocupação" if bool(ctx.get("is_irregular")) else "Limite real de ocupação no térreo"
     if area_pedida is not None and area_considerada is not None:
         resumo_extra += f"\n- **Área pretendida informada:** {fmt_num(area_pedida)} m²"
         resumo_extra += f"\n- **Área adotada no relatório:** {fmt_num(area_considerada)} m²"
@@ -107,7 +108,7 @@ def render(ctx: dict) -> None:
         f"- **Área permeável mínima:** {fmt_num(a_perm_min)} m²\n"
         f"- **Área total máxima estimada:** {fmt_num(a_total)} m²"
         f"{resumo_extra}\n"
-        f"- **Limite real de ocupação no térreo:** {fmt_num(limite_real)} m²"
+        f"- **{limite_label}:** {fmt_num(limite_real)} m²"
     )
 
     if area_pedida is not None and area_considerada is not None:
@@ -122,7 +123,14 @@ def render(ctx: dict) -> None:
                 f"Com isso, a TO efetiva considerada ficou em **{_fmt_pct_br(to_projeto_pct)}**, a área livre remanescente em **{fmt_num(a_livre)} m²** e o saldo estimado pelo IA em **{fmt_num(a_ia_saldo)} m²**."
             )
     else:
-        md(
-            f"👉 **Em resumo:** você pode ocupar até **{fmt_num(limite_real)} m²** no térreo, "
-            f"precisa manter pelo menos **{fmt_num(a_perm_min)} m²** permeáveis e respeitar os demais parâmetros urbanísticos."
-        )
+        if bool(ctx.get("is_irregular")):
+            md(
+                f"👉 **Em resumo:** pela Taxa de Ocupação, o limite máximo de referência é **{fmt_num(limite_real)} m²** no térreo. "
+                f"Ainda assim, a implantação real depende da geometria do terreno e deve ser confirmada em projeto e no licenciamento. "
+                f"Também é preciso manter pelo menos **{fmt_num(a_perm_min)} m²** permeáveis."
+            )
+        else:
+            md(
+                f"👉 **Em resumo:** você pode ocupar até **{fmt_num(limite_real)} m²** no térreo, "
+                f"precisa manter pelo menos **{fmt_num(a_perm_min)} m²** permeáveis e respeitar os demais parâmetros urbanísticos."
+            )

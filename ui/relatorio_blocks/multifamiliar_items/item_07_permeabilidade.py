@@ -61,6 +61,30 @@ def render(ctx: dict) -> None:
         "Isso quer dizer que parte do terreno precisa continuar permitindo a infiltração da água da chuva no solo."
     )
 
+    if ctx.get("is_irregular"):
+        base_ocupacao = area_pedida if area_pedida_dentro_to else area_to
+        if base_ocupacao is None:
+            st.info("Não foi possível montar o cenário básico de permeabilidade para este terreno irregular.")
+            return
+        area_restante = area_lote - base_ocupacao
+        area_impermeavel_livre = area_restante - area_permeavel_min
+        md("**Cenário básico pela área total informada**")
+        if area_pedida_valida and not area_pedida_dentro_to:
+            md(f"Como a área pretendida de **{fmt_num(area_pedida)} m²** ultrapassa a Taxa de Ocupação máxima, este item considera **{fmt_num(base_ocupacao)} m²** como limite pela TO.")
+        elif area_pedida_dentro_to:
+            md(f"Como a área pretendida de **{fmt_num(area_pedida)} m²** está dentro da Taxa de Ocupação, este item considera essa área para a leitura da permeabilidade.")
+        else:
+            md(f"Sem área pretendida informada, este item considera o limite máximo pela Taxa de Ocupação: **{fmt_num(base_ocupacao)} m²**.")
+        md(f"👉 **Área restante no lote: {fmt_num(area_lote)} − {fmt_num(base_ocupacao)} = {fmt_num(area_restante)} m²**")
+        md("Desses:")
+        md(f"- **{fmt_num(area_permeavel_min)} m²** devem permitir infiltração no solo")
+        md(f"- **{fmt_num(max(area_impermeavel_livre, 0.0))} m²** podem receber piso impermeável")
+        md(
+            "👉 **Leitura prática:** no terreno irregular, a permeabilidade é calculada pela área total informada. "
+            "A posição exata da área permeável e da edificação depende da geometria do lote e deve ser conferida em projeto/licenciamento."
+        )
+        return
+
     # Regra pedida pelo usuário:
     # - vazio, 0, inválido ou acima da TO => mantém o comportamento atual
     # - maior que 0 e dentro da TO => calcula em cima do valor digitado

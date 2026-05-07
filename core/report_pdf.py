@@ -619,9 +619,17 @@ def extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict
     a_to = area * (to_max / 100.0) if (area is not None and to_max is not None) else None
     a_perm_min = area * (tp_min / 100.0) if (area is not None and tp_min is not None) else None
     a_total = area * ia_max if (area is not None and ia_max is not None) else None
-    w_util = (front - 2 * rec_lat) if front is not None else None
-    d_util = (depth - rec_fr - rec_fun) if depth is not None else None
-    a_recuos = (w_util * d_util) if (w_util is not None and d_util is not None and w_util > 0 and d_util > 0) else None
+    if is_irregular:
+        front = 0.0
+        depth = 0.0
+        is_corner = False
+        w_util = None
+        d_util = None
+        a_recuos = None
+    else:
+        w_util = (front - 2 * rec_lat) if front is not None else None
+        d_util = (depth - rec_fr - rec_fun) if depth is not None else None
+        a_recuos = (w_util * d_util) if (w_util is not None and d_util is not None and w_util > 0 and d_util > 0) else None
     a_op1_max = min(a_to, a_recuos) if (a_to is not None and a_recuos is not None) else None
     a_fundo = (front * (depth - rec_fun)) if (front is not None and depth is not None and front > 0 and depth > rec_fun) else None
     a_op2_max = min(a_to, a_fundo) if (a_to is not None and a_fundo is not None) else a_to
@@ -649,7 +657,7 @@ def extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict
             a_ia_saldo = a_total - a_considerada
         if a_livre is not None:
             tp_user = (a_livre / area) * 100.0
-    tipo_lote = "Esquina" if is_corner else "Meio de quadra"
+    tipo_lote = "Terreno irregular" if is_irregular else ("Esquina" if is_corner else "Meio de quadra")
     zone = pick_text(calc.get("zone"), calc.get("zone_sigla"), calc.get("zone_lookup"), rule.get("zone_sigla"))
     via = pick_text(calc.get("via_nome"), calc.get("street_name"), default="-")
     via_tipo = pick_text(calc.get("via_tipo"), calc.get("street_type"), default="-")
@@ -694,7 +702,8 @@ def extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict
 
 def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
     rule = calc.get("rule") or {}
-    is_corner = bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner"))
+    is_irregular = safe_bool(session_state.get("lot_is_irregular", session_state.get("lot_irregular", calc.get("lot_irregular", False))))
+    is_corner = False if is_irregular else bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner"))
     figs = filter_figuras_by_lot_type(extract_figures_from_rule(rule), is_corner=is_corner)
     return {
         "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),

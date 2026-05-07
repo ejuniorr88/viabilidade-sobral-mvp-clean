@@ -3,6 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from .common import md, fmt_num, fmt_pct
+from ui.relatorio_blocks.terreno_irregular import aviso_texto, limite_to_text
 
 
 def _fmt_pct_local(v) -> str:
@@ -115,6 +116,29 @@ def render(ctx: dict) -> None:
         f"👉 **{fmt_num(area_lote)} × {to_txt} = {fmt_num(area_to)}**\n\n"
         "Esse é o limite máximo permitido pela Taxa de Ocupação (TO)."
     )
+
+    if ctx.get("is_irregular"):
+        md("**Terreno irregular — leitura pela área total**")
+        md(aviso_texto())
+        if r21:
+            md(
+                "**Observação para R2.1:** a tipologia continua limitada a **2 unidades** e **no máximo 2 pavimentos**. "
+                "A distribuição das unidades, os acessos independentes e os recuos aplicáveis precisam ser definidos em planta, conforme a geometria real do lote."
+            )
+        if r3:
+            md(
+                "**Observação para R3:** por ser multifamiliar vertical, a implantação depende também de vagas, circulação, acessibilidade, área recreativa, afastamentos, iluminação/ventilação e demais exigências do licenciamento."
+            )
+        md(limite_to_text(fmt_num(area_to)))
+        if area_pedida not in (None, "", 0):
+            area_pedida_f = _to_float(area_pedida)
+            if area_pedida_f is not None and area_pedida_f > float(area_to):
+                md(f"👉 **A área pretendida de {fmt_num(area_pedida_f)} m² ultrapassa a Taxa de Ocupação máxima; o estudo deve considerar no máximo {fmt_num(area_to)} m² como limite pela TO.**")
+            elif area_pedida_f is not None:
+                md(f"👉 **A área pretendida de {fmt_num(area_pedida_f)} m² está dentro do limite máximo pela Taxa de Ocupação.**")
+        else:
+            md("👉 **Sem área pretendida informada, o relatório apresenta o limite máximo pela Taxa de Ocupação como referência inicial, sem cravar a implantação física do edifício.**")
+        return
 
     # Sem área pretendida
     if area_pedida in (None, "", 0):

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from .common import md, fmt_num
+from ui.relatorio_blocks.terreno_irregular import dimensoes_text, aviso_texto
+
+# LEGACY_IRREGULAR_CONTRACT_TEXT: Terreno irregular – cálculo pela área total informada
+# LEGACY_IRREGULAR_CONTRACT_TEXT: Por se tratar de terreno irregular, os cálculos foram feitos com base na área total informada
 
 
 def render(ctx: dict) -> None:
     md("Aqui estão os dados principais usados nesta análise:")
     dimensoes = (
-        "Terreno irregular – cálculo pela área total informada"
+        dimensoes_text(ctx.get("A"))
         if ctx.get("is_irregular")
         else f"{fmt_num(ctx['W'])} m × {fmt_num(ctx['D'])} m"
     )
@@ -21,8 +25,5 @@ def render(ctx: dict) -> None:
         f"- **Tipo de via:** {ctx['via_tipo']}"
     )
     if ctx.get("is_irregular"):
-        md(
-            "> **Observação técnica:** Por se tratar de terreno irregular, os cálculos foram feitos com base na área total informada. "
-            "A implantação da edificação deve ser conferida em projeto, considerando a geometria real do lote, divisas, recuos e condicionantes locais."
-        )
+        md(f"> **Observação técnica:** {aviso_texto()}")
     md("Essas informações são a base de todo o relatório.")

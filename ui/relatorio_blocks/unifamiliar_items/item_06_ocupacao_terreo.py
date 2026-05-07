@@ -3,6 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from .common import md, fmt_num
+from ui.relatorio_blocks.terreno_irregular import aviso_texto, limite_to_text
 
 
 def _fmt_pct_local(v) -> str:
@@ -65,6 +66,19 @@ def render(ctx: dict) -> None:
                     f"""👉 **TO correspondente à área pretendida: {fmt_num(area_pedida)} m² ÷ {fmt_num(area_lote)} m² = {_fmt_pct_local(to_efetiva)}**\n\n"""
                     f"""Isso significa que, para esta proposta, a ocupação no térreo ficaria em **{_fmt_pct_local(to_efetiva)}** do lote, portanto abaixo da TO máxima permitida de **{pct_txt}**."""
                 )
+
+    if ctx.get("is_irregular"):
+        md("**Terreno irregular — leitura pela área total**")
+        md(aviso_texto())
+        md(limite_to_text(fmt_num(area_to)))
+        if area_pedida is not None and area_considerada is not None:
+            if excedeu_area:
+                md(f"👉 **Neste caso, a área pretendida precisa ser reduzida para respeitar o limite máximo de {fmt_num(area_considerada)} m² pela Taxa de Ocupação.**")
+            else:
+                md(f"👉 **Neste caso, a área pretendida de {fmt_num(area_pedida)} m² está dentro do limite máximo pela Taxa de Ocupação.**")
+        else:
+            md("👉 **Sem área pretendida informada, o estudo apresenta o limite máximo pela Taxa de Ocupação como referência inicial.**")
+        return
 
     md(
         """Como complemento a essa verificação, também é importante analisar a área que efetivamente cabe no lote, considerando os recuos aplicáveis.\n\n"""
