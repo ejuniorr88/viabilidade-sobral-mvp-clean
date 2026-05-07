@@ -79,7 +79,7 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
         renderer(ctx)
 
 
-def should_block_multifamiliar_preview(calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None) -> bool:
+def should_block_multifamiliar_preview(calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, **kwargs: Any) -> bool:
     if not isinstance(calc, dict):
         return False
     if not str(calc.get("use_type_code") or "").startswith("RES_MULTI_"):
