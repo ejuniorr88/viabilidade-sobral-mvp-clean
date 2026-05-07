@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any, MutableMapping, Optional
 
+from ui.runtime.mobile_scroll_guard import (
+    MOBILE_SCROLL_COOLDOWN_MS,
+    MOBILE_SCROLL_GUARD_KEY,
+    MOBILE_SCROLL_SETTLE_DELAY_MS,
+)
+
 
 def apply_post_login_runtime_flags(
     session_state: MutableMapping[str, Any],
@@ -33,11 +39,44 @@ def render_item3_scroll_if_needed(*, session_state: MutableMapping[str, Any], co
         components_module.html(
             """
             <script>
-                const rootDoc = window.parent.document;
-                const el = rootDoc.getElementById("item-3-start");
-                if (el) {
-                    el.scrollIntoView({ behavior: "smooth", block: "start" });
-                }
+                (() => {
+                    const rootWin = window.parent;
+                    const rootDoc = rootWin.document;
+                    const mobileGuardKey = "__viabilidade_mobile_scroll_guard__";
+                    const mobileCooldownMs = 1800;
+                    const mobileSettleDelayMs = 760;
+                    const isMobileViewport = () => {
+                        try {
+                            return rootWin.matchMedia('(max-width: 768px), (pointer: coarse)').matches
+                                || rootWin.innerWidth <= 768;
+                        } catch (err) {
+                            return rootWin.innerWidth <= 768;
+                        }
+                    };
+                    const runScroll = () => {
+                        const el = rootDoc.getElementById("item-3-start");
+                        if (el) {
+                            el.scrollIntoView({ behavior: isMobileViewport() ? "auto" : "smooth", block: "start" });
+                        }
+                    };
+                    if (!isMobileViewport()) {
+                        runScroll();
+                        return;
+                    }
+                    const guard = rootWin[mobileGuardKey] || (rootWin[mobileGuardKey] = { lockedUntil: 0, lastTargetKey: null, timeoutIds: [] });
+                    const now = Date.now();
+                    const targetKey = "item-3-start:item3";
+                    if (guard.lastTargetKey === targetKey && Number(guard.lockedUntil || 0) > now) {
+                        return;
+                    }
+                    (guard.timeoutIds || []).forEach((timeoutId) => rootWin.clearTimeout(timeoutId));
+                    guard.timeoutIds = [];
+                    guard.lockedUntil = now + mobileCooldownMs;
+                    guard.lastTargetKey = targetKey;
+                    const scrollTimeoutId = rootWin.setTimeout(runScroll, mobileSettleDelayMs);
+                    const releaseTimeoutId = rootWin.setTimeout(() => { guard.lockedUntil = 0; }, mobileCooldownMs);
+                    guard.timeoutIds.push(scrollTimeoutId, releaseTimeoutId);
+                })();
             </script>
             """,
             height=0,
