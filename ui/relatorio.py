@@ -200,18 +200,28 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         or calc.get("built_ground_input_m2")
     )
 
-    W_util = W - 2 * rec_lat
-    D_util = D - rec_fr - rec_fun
-    A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
-    A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
-
-    A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
-    if A_to is not None and A_fundo is not None:
-        A_op2_max = min(A_to, A_fundo)
-    elif A_to is not None:
+    if is_irregular:
+        # Terreno irregular não possui testada/profundidade retangulares confiáveis.
+        # Portanto, não calculamos largura útil, profundidade útil nem área física por recuos.
+        W_util = None
+        D_util = None
+        A_recuos = None
+        A_op1_max = None
+        A_fundo = None
         A_op2_max = A_to
     else:
-        A_op2_max = None
+        W_util = W - 2 * rec_lat
+        D_util = D - rec_fr - rec_fun
+        A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
+        A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
+
+        A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
+        if A_to is not None and A_fundo is not None:
+            A_op2_max = min(A_to, A_fundo)
+        elif A_to is not None:
+            A_op2_max = A_to
+        else:
+            A_op2_max = None
 
     def _tp_scenario(a_terreo: float | None):
         if a_terreo is None or A_perm_min is None:
@@ -439,18 +449,28 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         or calc.get("built_ground_input_m2")
     )
 
-    W_util = W - 2 * rec_lat
-    D_util = D - rec_fr - rec_fun
-    A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
-    A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
-
-    A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
-    if A_to is not None and A_fundo is not None:
-        A_op2_max = min(A_to, A_fundo)
-    elif A_to is not None:
+    if is_irregular:
+        # Terreno irregular não possui testada/profundidade retangulares confiáveis.
+        # Portanto, não calculamos largura útil, profundidade útil nem área física por recuos.
+        W_util = None
+        D_util = None
+        A_recuos = None
+        A_op1_max = None
+        A_fundo = None
         A_op2_max = A_to
     else:
-        A_op2_max = None
+        W_util = W - 2 * rec_lat
+        D_util = D - rec_fr - rec_fun
+        A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
+        A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
+
+        A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
+        if A_to is not None and A_fundo is not None:
+            A_op2_max = min(A_to, A_fundo)
+        elif A_to is not None:
+            A_op2_max = A_to
+        else:
+            A_op2_max = None
 
     def _tp_scenario(a_terreo: float | None):
         if a_terreo is None or A_perm_min is None:
@@ -547,6 +567,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "W": W,
         "D": D,
         "is_corner": is_corner,
+        "is_irregular": is_irregular,
         "tipo_lote": tipo_lote,
         "to_max": to_max,
         "tp_min": tp_min,
