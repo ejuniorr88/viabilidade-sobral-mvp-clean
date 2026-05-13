@@ -91,7 +91,7 @@ def apply_zone_result_policy(
     is_r3 = use_code.endswith("R3")
 
     if is_zeia(zona, subzona):
-        if strong and status_u != "NÃO PERMITE" and (via_a or "PERMITE PELA VIA" in status_u or "POSSÍVEL PELA VIA" in status_u):
+        if strong and status_u != "NÃO PERMITE" and (via_a or "PERMITE PELA VIA" in status_u or "POSSÍVEL PELA VIA" in status_u or "PERMITE PELA ZONA E PELA VIA" in status_u):
             zeia_extra = ""
             original_explanation = str(explanation or "")
             if "DNIT" in original_explanation:
@@ -121,7 +121,7 @@ def apply_zone_result_policy(
                 "NÃO PERMITE",
                 "A ZEPE é uma zona pensada principalmente para atividades econômicas. Como a via informada não permite uma leitura favorável para o uso residencial, prevalece a restrição da zona.",
             )
-        if strong and status_u in {"PERMITE PELA VIA", "POSSÍVEL PELA VIA", "PERMITE PELA ZONA E PELA VIA"}:
+        if strong and (status_u.startswith("PERMITE PELA VIA") or status_u.startswith("POSSÍVEL PELA VIA") or status_u.startswith("PERMITE PELA ZONA E PELA VIA")):
             return ResultPolicy(
                 "⚠️",
                 "PERMITE PELA VIA, COM RESSALVA DA ZEPE",
