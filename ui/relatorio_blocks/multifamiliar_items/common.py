@@ -816,10 +816,17 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
 
         area_min = rule.get("area_min_lote_m2") or rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2")
         area_max = rule.get("area_max_lote_m2") or rule.get("lote_max_area_m2")
-        testada_min = rule.get("testada_min_m") or rule.get("testada_min_meio_m") or rule.get("testada_min_esquina_m")
+        
+        if is_corner:
+            testada_min = rule.get("testada_min_esquina_m") or rule.get("testada_min_m") or rule.get("testada_min_meio_m")
+        else:
+            testada_min = rule.get("testada_min_meio_m") or rule.get("testada_min_m") or rule.get("testada_min_esquina_m")
         testada_max = rule.get("testada_max_m")
 
         W = float(lot_front or 0) if lot_front not in (None, "") else 0.0
+        testada_min_f = _num(testada_min)
+        zone_testada_baixa = bool(W > 0 and testada_min_f is not None and W < testada_min_f)
+        zone_testada_baixa_label = "lote de esquina" if is_corner else "lote de meio de quadra"
         D = float(lot_depth or 0) if lot_depth not in (None, "") else 0.0
         W_util = None
         D_util = None
@@ -861,6 +868,8 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         is_r21 = False
         is_zeip9 = str(subzona or "").strip().upper().replace("-", "_") in ("ZEIP_9", "ZEIP9")
         r21_testada_baixa = False
+        zone_testada_baixa = False
+        zone_testada_baixa_label = "lote"
 
     policy = apply_zone_result_policy(
         zona=zona,
@@ -935,6 +944,8 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         "is_r21": is_r21,
         "is_zeip9": is_zeip9,
         "r21_testada_baixa": r21_testada_baixa,
+        "zone_testada_baixa": zone_testada_baixa,
+        "zone_testada_baixa_label": zone_testada_baixa_label,
     }
     ctx_out["zone_warnings"] = zone_context_warnings(ctx_out)
     return ctx_out
