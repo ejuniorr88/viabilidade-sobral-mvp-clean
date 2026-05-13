@@ -152,39 +152,33 @@ def render(ctx: dict) -> None:
             area_por_unidade = (limite_real / 2.0) if limite_real is not None else None
 
             md(
-                "**Texto didático para R2.1**\n\n"
-                "O **R2.1 é um multifamiliar, mas tem uma regra especial**. Ele é formado por **2 unidades no mesmo lote**, lado a lado ou uma sobre a outra. "
-                "Mesmo sendo classificado como multifamiliar, a **LC 90/2023** determina que cada unidade seja analisada, em alguns pontos, como uma **residência unifamiliar**.\n\n"
-                "Isso significa que cada unidade precisa ter:\n\n"
-                "- **frente e acesso independente para a via pública oficial**;\n"
-                "- **paredes externas total ou parcialmente comuns**;\n"
-                "- **aparência de um único conjunto arquitetônico**;\n"
-                "- **no máximo 2 pavimentos**;\n"
-                "- **ambientes mínimos conforme as regras da residência unifamiliar**.\n\n"
-                "**Na prática:** para os recuos, o R2.1 pode seguir a lógica aplicada ao unifamiliar. Por isso, quando couber, pode ser considerada a flexibilidade do **art. 112**, que permite zerar recuos de frente e laterais, desde que o projeto continue respeitando a **Taxa de Ocupação (TO)** máxima e a **Taxa de Permeabilidade (TP)** mínima da zona."
+                "**Como o R2.1 é analisado neste lote**\n\n"
+                "O **R2.1** corresponde à residência multifamiliar horizontal formada por **2 unidades habitacionais no mesmo lote**. "
+                "Essas unidades podem ser implantadas de forma **sobreposta**, quando uma unidade fica acima da outra, ou de forma **justaposta**, quando ficam lado a lado.\n\n"
+                "Mesmo sendo classificado como multifamiliar, o R2.1 possui regras próprias. Cada unidade deve ter **acesso independente para a via pública oficial**, e o conjunto deve manter **unidade arquitetônica**. Além disso, a tipologia fica limitada a **até 2 pavimentos**.\n\n"
+                "Na prática, o sistema calcula primeiro os limites da zona, como **Taxa de Ocupação (TO)**, **Taxa de Permeabilidade (TP)**, **Índice de Aproveitamento (IA)**, altura e recuos. Depois, mostra como esses limites se aplicam às formas mais comuns de implantação do R2.1."
             )
-            md("**Como o sistema calcula neste caso**")
             md(
-                "O sistema calcula em etapas: primeiro verifica os limites da zona, como **Taxa de Ocupação (TO)**, **Taxa de Permeabilidade (TP)**, **Índice de Aproveitamento (IA)**, altura e recuo de fundos. Depois, por ser R2.1, apresenta a leitura das duas formas possíveis: **unidades sobrepostas** e **unidades lado a lado**. Em qualquer cenário, vale sempre o limite mais restritivo."
+                "Em alguns casos, a legislação permite uma leitura mais flexível dos recuos para esse tipo de moradia, desde que o projeto respeite a **ocupação máxima do terreno** e mantenha a **área permeável mínima**. Isso não significa aprovação automática: a implantação final ainda precisa ser conferida no licenciamento."
             )
-            md("**Conferência física com a lógica do unifamiliar / art. 112**")
+            md("**Conferência inicial da implantação**")
             md(f"Largura considerada: **{fmt_num(lot_front_original)} m**")
             md(f"Profundidade considerada: **{fmt_num(lot_depth_original)} m**")
             md(f"Recuo de fundos: **{fmt_num(rec_fun)} m**")
             if area_fisica_r21 is not None:
-                md(f"👉 Pelos recuos aplicáveis nessa leitura, a construção até caberia fisicamente em **{fmt_num(area_fisica_r21)} m²** (**{fmt_num(lot_front_original)} × {fmt_num(profundidade_art112)}**).")
+                md(f"👉 Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(area_fisica_r21)} m²** (**{fmt_num(lot_front_original)} × {fmt_num(profundidade_art112)}**).")
             if limite_tp is not None:
                 md(f"👉 Pela **Taxa de Permeabilidade (TP)**, o lote precisa manter **{fmt_num(tp_m2)} m²** permeáveis. Assim, a ocupação no térreo também não deve passar de **{fmt_num(limite_tp)} m²** para preservar essa área livre mínima.")
             md(f"👉 Pela **Taxa de Ocupação (TO)**, o limite do térreo é **{fmt_num(area_to)} m²**. Portanto, para este lote, o **limite real de ocupação no térreo** é **{fmt_num(limite_real)} m²**.")
             md("**Cenário A — unidades sobrepostas**")
-            md("Nesse cenário, uma unidade fica no térreo e a outra no pavimento superior. A projeção no chão pode usar o limite real permitido para o térreo, respeitando a **Taxa de Ocupação (TO)**, a **Taxa de Permeabilidade (TP)**, os recuos aplicáveis e o limite de **2 pavimentos**.")
+            md("Nesse cenário, uma unidade fica no térreo e a outra no pavimento superior. A área ocupada no térreo corresponde à projeção da edificação sobre o lote. Por isso, ela deve respeitar a **Taxa de Ocupação (TO)**, a **Taxa de Permeabilidade (TP)**, os recuos aplicáveis e o limite de **até 2 pavimentos**.")
             md(f"👉 Projeção máxima de referência no térreo: **{fmt_num(limite_real)} m²**.")
             md("**Cenário B — unidades lado a lado**")
             md("Nesse cenário, as duas unidades ficam no térreo e dividem a área permitida. A área máxima do térreo **não dobra** por existir mais de uma unidade; ela precisa ser distribuída entre as duas casas, seus acessos e as áreas necessárias.")
             if area_por_unidade is not None:
                 md(f"👉 Se a divisão fosse igual apenas como referência inicial, cada unidade teria aproximadamente **{fmt_num(area_por_unidade)} m²** de projeção no térreo. O projeto real pode distribuir de outra forma, desde que cada unidade tenha frente e acesso independente para a via pública oficial e cumpra os ambientes mínimos.")
             md("**Resumo final**")
-            md(f"Em resumo: o R2.1 pode ser sobreposto ou lado a lado, mas a ocupação do térreo continua limitada pela **Taxa de Ocupação (TO)**, pela **Taxa de Permeabilidade (TP)** e pelo que cabe fisicamente no lote pelos recuos aplicáveis. Neste caso, o limite real do térreo é **{fmt_num(limite_real)} m²**.")
+            md(f"Em resumo: o R2.1 pode ser implantado com unidades sobrepostas ou justapostas. Em qualquer caso, a ocupação do térreo continua limitada pela **Taxa de Ocupação (TO)**, pela **Taxa de Permeabilidade (TP)**, pelos recuos aplicáveis e pelo limite de **até 2 pavimentos**. Para este lote, a referência de ocupação no térreo é de **{fmt_num(limite_real)} m²**.")
             return
 
         # R2.2 e R3 sem área pretendida
@@ -244,15 +238,20 @@ def render(ctx: dict) -> None:
                 md(f"Isso significa que a proposta ocupa **{_fmt_pct_local(to_utilizada)}** do lote no térreo, ficando dentro do limite máximo da zona, que é de **{to_txt}**.")
             else:
                 md(f"Isso significa que a proposta ocupa **{_fmt_pct_local(to_utilizada)}** do lote no térreo, ultrapassando o limite máximo da zona, que é de **{to_txt}**.")
-        md("**Como o sistema calcula o R2.1:** primeiro são considerados os limites da zona — **Taxa de Ocupação (TO)**, **Taxa de Permeabilidade (TP)**, **Índice de Aproveitamento (IA)**, altura e recuo de fundos. Depois, por ser R2.1, o relatório mostra as duas formas possíveis de implantação: **unidades sobrepostas** e **unidades lado a lado**.")
+        md(
+            "**Como o R2.1 é analisado neste lote**\n\n"
+            "O **R2.1** corresponde à residência multifamiliar horizontal formada por **2 unidades habitacionais no mesmo lote**. "
+            "Essas unidades podem ser implantadas de forma **sobreposta**, quando uma unidade fica acima da outra, ou de forma **justaposta**, quando ficam lado a lado.\n\n"
+            "O sistema considera os limites da zona — **Taxa de Ocupação (TO)**, **Taxa de Permeabilidade (TP)**, **Índice de Aproveitamento (IA)**, altura e recuos — e mostra como esses limites se aplicam às duas formas de implantação."
+        )
         if area_fisica_r21 is not None:
-            md(f"Pelos recuos aplicáveis à leitura do unifamiliar/art. 112, a construção até caberia fisicamente em **{fmt_num(area_fisica_r21)} m²**. Porém, isso não significa que seja permitido ocupar tudo isso.")
+            md(f"Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(area_fisica_r21)} m²**. Porém, isso não significa que seja permitido ocupar tudo isso.")
         md(f"Pela **Taxa de Ocupação (TO)**, o limite do térreo é **{fmt_num(area_to)} m²**.")
         if limite_tp is not None:
             md(f"Pela **Taxa de Permeabilidade (TP)**, também é necessário manter área livre permeável, deixando como referência máxima de ocupação **{fmt_num(limite_tp)} m²**.")
         md(f"Portanto, o **limite real de ocupação no térreo** para esta análise é **{fmt_num(limite_real)} m²**.")
         md("**Cenário A — unidades sobrepostas**")
-        md(f"Uma unidade fica no térreo e a outra no pavimento superior. A projeção no chão pode usar até **{fmt_num(limite_real)} m²**, desde que sejam respeitados a **Taxa de Ocupação (TO)**, a **Taxa de Permeabilidade (TP)**, os recuos aplicáveis, o **Índice de Aproveitamento (IA)** e o limite de **2 pavimentos**.")
+        md(f"Uma unidade fica no térreo e a outra no pavimento superior. A área ocupada no térreo corresponde à projeção da edificação sobre o lote. Para esta leitura, a referência de ocupação no térreo é de até **{fmt_num(limite_real)} m²**, respeitando a **Taxa de Ocupação (TO)**, a **Taxa de Permeabilidade (TP)**, os recuos aplicáveis, o **Índice de Aproveitamento (IA)** e o limite de **até 2 pavimentos**.")
         md("**Cenário B — unidades lado a lado**")
         md("As duas unidades dividem a área permitida no térreo. A área máxima do térreo não dobra; ela precisa ser distribuída entre as duas casas, seus acessos e as áreas necessárias.")
         if area_por_unidade is not None:
