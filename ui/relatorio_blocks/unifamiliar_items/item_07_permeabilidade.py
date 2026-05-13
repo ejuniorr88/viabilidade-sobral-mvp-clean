@@ -37,6 +37,25 @@ def render(ctx: dict) -> None:
             f"dos quais **{fmt_num(ctx['A_perm_min'])} m²** devem permanecer permeáveis para atender à exigência mínima da zona."
         )
     else:
+        if ctx.get('is_irregular'):
+            a_ref = ctx.get('A_op2_max') or ctx.get('A_to')
+            tp_ref = ctx.get('tp2')
+            md("**Permeabilidade em terreno irregular**")
+            if tp_ref is not None and a_ref is not None:
+                a_rest, a_imperm = tp_ref
+                md(
+                    f"Este cálculo usa a **área total informada** e o limite máximo pela Taxa de Ocupação como referência inicial.\n\n"
+                    f"👉 Área restante no lote: **{fmt_num(ctx['A'])} m² − {fmt_num(a_ref)} m² = {fmt_num(a_rest)} m²**\n\n"
+                    f"Desses:\n\n"
+                    f"- **{fmt_num(ctx['A_perm_min'])} m²** devem permitir infiltração no solo\n"
+                    f"- **{fmt_num(a_imperm)} m²** podem receber piso impermeável"
+                )
+            md(
+                "**Leitura prática:** em terreno irregular, a permeabilidade é calculada pela área total informada. "
+                "A posição real da área permeável e da edificação depende da forma do lote, da planta/topografia e da confirmação no licenciamento."
+            )
+            return
+
         md("**Ver cenários usando os limites de referência**")
         if ctx['tp2'] is not None and ctx['A_op2_max'] is not None:
             a_rest, a_imperm = ctx['tp2']
