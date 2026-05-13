@@ -162,6 +162,11 @@ def render(ctx: dict) -> None:
                 "Em alguns casos, a legislação permite uma leitura mais flexível dos recuos para esse tipo de moradia, desde que o projeto respeite a **ocupação máxima do terreno** e mantenha a **área permeável mínima**. Isso não significa aprovação automática: a implantação final ainda precisa ser conferida no licenciamento."
             )
             md("**Conferência inicial da implantação**")
+            md(
+                "Esta é a leitura principal do R2.1 para este relatório. Ela considera a lógica própria dessa tipologia, "
+                "com até 2 unidades habitacionais e limite de até 2 pavimentos. Quando cabível, essa leitura pode ser mais flexível "
+                "nos recuos de frente e laterais, mas sempre mantendo a TO máxima, a TP mínima, o recuo de fundos e a confirmação no licenciamento."
+            )
             md(f"Largura considerada: **{fmt_num(lot_front_original)} m**")
             md(f"Profundidade considerada: **{fmt_num(lot_depth_original)} m**")
             md(f"Recuo de fundos: **{fmt_num(rec_fun)} m**")
