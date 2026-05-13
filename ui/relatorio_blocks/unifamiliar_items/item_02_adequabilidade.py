@@ -21,7 +21,7 @@ def render(ctx: dict) -> None:
             else f"- **Por via:** {ctx['via_tipo'] or 'via local'}"
         )
         if (not ctx['via_norm'] or not ctx['via_class']) and "local" in str(ctx.get('via_tipo') or 'via local').lower():
-            via_line += " — neste caso, não há sobreposição por via arterial/coletora."
+            via_line += " — neste caso, não há sobreposição por via arterial/coletora. Também não há sobreposição por via paisagística, troncal ou regional."
 
         if ctx['status_curto'] == "PERMITE PELA VIA":
             zona_obs = ""
@@ -46,7 +46,9 @@ def render(ctx: dict) -> None:
                 + f"\n- **Resumo final:** {ctx['icon']} **{ctx['status_curto']}**"
             )
 
-        if ctx['status_curto'] in (
+        if ("RESSALVA" in str(ctx.get('status_curto') or '').upper()) or ("CONFIRMAÇÃO" in str(ctx.get('status_curto') or '').upper()):
+            st.warning(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
+        elif ctx['status_curto'] in (
             "PERMITE",
             "PERMITE PELA ZONA E PELA VIA",
             "PERMITE SOMENTE PEQUENO PORTE",
@@ -69,7 +71,10 @@ def render(ctx: dict) -> None:
         else:
             st.error(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
 
+        for warning in ctx.get("zone_warnings") or []:
+            st.warning(warning)
+
     if ctx.get("is_zeip9"):
         st.warning(
-            "⚠️ **Atenção especial — ZEIP_9:** embora o uso possa aparecer como adequado na tabela, este setor possui restrições específicas por valor paisagístico e ambiental. A análise não deve ser tratada como permissão simples para obra nova sem conferência no licenciamento. Também deve ser verificada a regra de não alteração da configuração dos lotes existentes."
+            "⚠️ **Atenção especial — ZEIP_9:** este setor possui restrições específicas por valor paisagístico e ambiental. O resultado não deve ser tratado como permissão simples para obra nova sem conferência no licenciamento. Também deve ser verificada a regra de não alteração da configuração dos lotes existentes."
         )
