@@ -875,6 +875,10 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
     )
     icon, status_curto, explicacao = policy.icon, policy.status, policy.explanation
 
+    if r21_testada_baixa and str(status_curto or "").strip().upper() != "NÃO PERMITE":
+        icon = "⚠️"
+        status_curto = "PERMITE COM RESSALVA — R2.1"
+
     ctx_out = {
         "calc": calc,
         "rule": rule or {},
