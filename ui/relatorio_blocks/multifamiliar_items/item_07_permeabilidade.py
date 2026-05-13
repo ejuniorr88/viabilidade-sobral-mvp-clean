@@ -116,6 +116,11 @@ def render(ctx: dict) -> None:
     area_impermeavel_livre = area_restante - area_permeavel_min
 
     if ctx.get("is_r21"):
+        md("**Permeabilidade no R2.1**")
+        md(
+            "A área permeável é a parte do terreno que precisa permitir a infiltração da água da chuva no solo. "
+            "No R2.1, mesmo existindo duas unidades habitacionais, a regra de permeabilidade continua sendo calculada sobre a **área total do lote**, e não separadamente para cada unidade."
+        )
         md("**Cálculo usando o limite adotado para o R2.1**")
         if area_pedida_valida and area_pedida <= base_ocupacao:
             md(f"Como o usuário informou **{fmt_num(area_pedida)} m²** no térreo e essa área está dentro do limite adotado, a análise da permeabilidade considera essa área.")
@@ -123,8 +128,8 @@ def render(ctx: dict) -> None:
             md(f"Este item considera **{fmt_num(base_ocupacao)} m²** como ocupação de referência, acompanhando a leitura do R2.1 apresentada no item anterior.")
         if area_recuos is not None:
             md(
-                f"Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(area_recuos)} m²**. "
-                "Essa é uma conferência conservadora; a leitura adotada para o R2.1 deve ser confirmada no licenciamento."
+                f"A área física calculada pelos recuos é de **{fmt_num(area_recuos)} m²**. "
+                "Esse valor funciona como uma conferência adicional da implantação, mas não deve ser confundido automaticamente com a área adotada para o R2.1. A leitura final deve ser confirmada no licenciamento."
             )
     elif area_pedida_valida:
         if decision.area_pretendida_acima_to or decision.area_pretendida_acima_recuos:
