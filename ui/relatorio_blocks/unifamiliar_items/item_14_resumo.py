@@ -52,8 +52,27 @@ def _zone_title(ctx: dict) -> str:
     return str(zone)
 
 
+def _render_pontos_atencao(ctx: dict) -> None:
+    warnings = [str(w).strip() for w in (ctx.get("zone_warnings") or []) if str(w).strip()]
+    if not warnings:
+        return
+
+    bullets = "\n".join(f"- {w}" for w in warnings[:3])
+    md(
+        "**Pontos de atenção para guardar:**\n"
+        f"{bullets}"
+    )
+
+
+def _is_irregular(ctx: dict) -> bool:
+    calc = ctx.get("calc") or {}
+    return bool(ctx.get("is_irregular") or calc.get("lot_is_irregular"))
+
+
 def render(ctx: dict) -> None:
     md("**Se você quiser ver só o essencial deste terreno, este é o resumo principal:**")
+
+    irregular = _is_irregular(ctx)
 
     area_lote = _num(_pick(ctx, "A", "area_lote", "lot_area_m2"))
     area_pedida = _num(_pick(ctx, "area_pedida", "built_ground"))
@@ -83,7 +102,7 @@ def render(ctx: dict) -> None:
         limite_real = a_to
 
     resumo_extra = ""
-    limite_label = "Limite máximo pela Taxa de Ocupação" if bool(ctx.get("is_irregular")) else "Limite real de ocupação no térreo"
+    limite_label = "Limite máximo pela Taxa de Ocupação" if irregular else "Limite real de ocupação no térreo"
     if area_pedida is not None and area_considerada is not None:
         resumo_extra += f"\n- **Área pretendida informada:** {fmt_num(area_pedida)} m²"
         resumo_extra += f"\n- **Área adotada no relatório:** {fmt_num(area_considerada)} m²"
@@ -99,7 +118,8 @@ def render(ctx: dict) -> None:
         f"- **Zona:** {_zone_title(ctx)}\n"
         f"- **Tipo de lote:** {_tipo_lote(ctx)}\n"
         f"- **Via:** {_pick(ctx, 'via', default='—')}\n"
-        f"- **Tipo de via:** {_pick(ctx, 'via_tipo', default='—')}\n\n"
+        f"- **Tipo de via:** {_pick(ctx, 'via_tipo', default='—')}\n"
+        f"- **Resultado final:** {_pick(ctx, 'icon', default='')} {_pick(ctx, 'status_curto', default='—')}\n\n"
         f"- **TO máxima:** {fmt_pct(_pick(ctx, 'to_max'))}\n"
         f"- **TP mínima:** {fmt_pct(_pick(ctx, 'tp_min'))}\n"
         f"- **IA máximo:** {fmt_num(ia_max) if ia_max is not None else '—'}\n"
@@ -110,6 +130,8 @@ def render(ctx: dict) -> None:
         f"{resumo_extra}\n"
         f"- **{limite_label}:** {fmt_num(limite_real)} m²"
     )
+
+    _render_pontos_atencao(ctx)
 
     if area_pedida is not None and area_considerada is not None:
         if bool(ctx.get('excedeu_area')):
@@ -123,7 +145,7 @@ def render(ctx: dict) -> None:
                 f"Com isso, a TO efetiva considerada ficou em **{_fmt_pct_br(to_projeto_pct)}**, a área livre remanescente em **{fmt_num(a_livre)} m²** e o saldo estimado pelo IA em **{fmt_num(a_ia_saldo)} m²**."
             )
     else:
-        if bool(ctx.get("is_irregular")):
+        if irregular:
             md(
                 f"👉 **Em resumo:** pela Taxa de Ocupação, o limite máximo de referência é **{fmt_num(limite_real)} m²** no térreo. "
                 f"Ainda assim, a implantação real depende da geometria do terreno e deve ser confirmada em projeto e no licenciamento. "
