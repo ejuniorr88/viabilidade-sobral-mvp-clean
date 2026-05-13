@@ -15,10 +15,4 @@ _FECHAMENTO_FINAL = (
 
 
 def render(ctx: dict) -> None:
-    # Mantém as frases históricas protegidas por contrato e deixa o fechamento
-    # mais claro para o usuário leigo, sem alterar cálculo ou adequabilidade.
-    md(
-        "Este relatório foi pensado para ajudar a entender o terreno de forma mais simples.\n\n"
-        "Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no setor de licenciamento de obras da prefeitura.\n\n"
-        f"{_FECHAMENTO_FINAL}"
-    )
+    md(_FECHAMENTO_FINAL)
