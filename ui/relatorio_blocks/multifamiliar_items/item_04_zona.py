@@ -93,10 +93,11 @@ def _special_zone_note(ctx: dict, desc: dict | None = None) -> str:
 
 def render(ctx):
     common.st.markdown(
-        "Todo terreno está inserido em uma zona. Essa zona ajuda a entender, de forma prática, "
-        "o que pode ser feito no lote, quanto pode ocupar no térreo, quanto precisa ficar livre e quais cuidados "
-        "devem ser observados no projeto. Em zonas especiais, ambientais, patrimoniais ou de proteção da paisagem, "
-        "a análise pode exigir mais confirmação no licenciamento antes de qualquer aprovação."
+        "Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação. "
+        "Essa zona ajuda a entender, de forma prática, o que pode ser feito no lote, quanto pode ocupar no térreo, quanto precisa ficar livre e quais cuidados devem ser observados no projeto. "
+        "Nas áreas urbanas, essas informações normalmente ajudam a definir o que pode ser construído, quanto pode ocupar no térreo, quanto precisa ficar livre e o porte da edificação. "
+        "Já em áreas rurais ou em zonas com tratamento especial, nem sempre existem parâmetros urbanísticos numéricos definidos da mesma forma; nesses casos, a análise fica vinculada ao Código de Ordenamento Urbano e às regras específicas aplicáveis. "
+        "Em zonas especiais, ambientais, patrimoniais ou de proteção da paisagem, a análise pode exigir mais confirmação no licenciamento antes de qualquer aprovação."
     )
     desc = ctx.get("desc")
     if desc and desc.get("description_text"):
