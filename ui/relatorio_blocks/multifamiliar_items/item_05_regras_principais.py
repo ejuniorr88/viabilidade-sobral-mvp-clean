@@ -20,4 +20,17 @@ def render(ctx):
             f"- **Testada mínima:** {common._fmt_num(ctx.get('testada_min'))} m\n"
             f"- **Testada máxima:** {common._fmt_num(ctx.get('testada_max'))} m"
         )
+    try:
+        area_min = float(ctx.get('area_min')) if ctx.get('area_min') is not None else None
+        area_max = float(ctx.get('area_max')) if ctx.get('area_max') is not None else None
+    except Exception:
+        area_min = area_max = None
+
+    if area_min is not None and area_max is not None and area_max < area_min:
+        common.st.markdown(
+            "**Observação sobre as dimensões do lote:** nesta zona, a área máxima cadastrada aparece menor que a área mínima. "
+            "Isso pode ocorrer em regra especial de preservação da configuração dos lotes existentes, especialmente em área patrimonial. "
+            "Na prática, não trate essa informação como erro automático nem como liberação para alterar o lote: confirme a situação cadastral, a documentação do imóvel e a validade do lote existente no licenciamento."
+        )
+
     common.st.markdown("**Esses são os parâmetros que mais influenciam o estudo inicial do projeto.**")
