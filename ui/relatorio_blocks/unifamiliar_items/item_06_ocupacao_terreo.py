@@ -88,10 +88,10 @@ def render(ctx: dict) -> None:
     )
 
     md(
-        f"""✅ **Opção principal — aproveitando a flexibilidade da lei**\n\n"""
+        f"""✅ **Cenário A — leitura com flexibilidade do Art. 112**\n\n"""
         """Para este caso, a legislação admite zerar o recuo frontal e os recuos laterais.\n\n"""
         """Assim, o térreo pode aproveitar melhor a área do lote, desde que continue respeitando a TO e a TP.\n\n"""
-        f"""👉 **Térreo máximo nesta opção: {fmt_num(area_to)} m²**"""
+        f"""👉 **Térreo máximo neste cenário: {fmt_num(area_to)} m²**"""
     )
 
     if area_pedida is not None and area_considerada is not None:
@@ -106,7 +106,7 @@ def render(ctx: dict) -> None:
 
     md("""⚠️ **O recuo de fundo e as demais exigências urbanísticas aplicáveis continuam precisando ser respeitados.**""")
 
-    md("""✅ **Opção alternativa — adotando os recuos da zona**\n\nCaso se opte por seguir os recuos padrão da zona, a implantação prática fica assim:""")
+    md("""✅ **Cenário B — leitura com recuos padrão da zona**\n\nCaso se opte por seguir os recuos padrão da zona, a implantação prática fica assim:""")
 
     if rec_fr is not None:
         md(f"""Frontal: **{fmt_num(rec_fr)} m**""")
