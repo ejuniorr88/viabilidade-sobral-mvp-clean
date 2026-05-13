@@ -37,10 +37,10 @@ def render(ctx: dict) -> None:
             f"dos quais **{fmt_num(ctx['A_perm_min'])} m²** devem permanecer permeáveis para atender à exigência mínima da zona."
         )
     else:
-        md("**Ver cenários usando os máximos das opções**")
+        md("**Ver cenários usando os limites de referência**")
         if ctx['tp2'] is not None and ctx['A_op2_max'] is not None:
             a_rest, a_imperm = ctx['tp2']
-            md("✅ **Cenário pela Opção 2 (Art. 112)**")
+            md("✅ **Cenário A — leitura com flexibilidade do Art. 112**")
             md(
                 f"Se você utilizar **{fmt_num(ctx['A_op2_max'])} m²** no térreo:\n\n"
                 f"👉 Área restante no lote: **{fmt_num(ctx['A'])} m² − {fmt_num(ctx['A_op2_max'])} m² = {fmt_num(a_rest)} m²**\n\n"
@@ -50,7 +50,7 @@ def render(ctx: dict) -> None:
             )
         if ctx['tp1'] is not None and ctx['A_op1_max'] is not None:
             a_rest, a_imperm = ctx['tp1']
-            md("✅ **Cenário pela Opção 1 (recuos padrão)**")
+            md("✅ **Cenário B — leitura com recuos padrão da zona**")
             md(
                 f"Se você utilizar **{fmt_num(ctx['A_op1_max'])} m²** no térreo:\n\n"
                 f"👉 Área restante no lote: **{fmt_num(ctx['A'])} m² − {fmt_num(ctx['A_op1_max'])} m² = {fmt_num(a_rest)} m²**\n\n"
