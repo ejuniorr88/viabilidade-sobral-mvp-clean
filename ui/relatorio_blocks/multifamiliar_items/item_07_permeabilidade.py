@@ -86,20 +86,47 @@ def render(ctx: dict) -> None:
         )
         return
 
-    decision = choose_regular_occupancy(
-        area_to=area_to,
-        area_recuos=area_recuos,
-        area_pretendida=area_pedida,
-    )
-    base_ocupacao = decision.area_adotada
-    if base_ocupacao is None:
-        st.info("Sem dados suficientes para montar os cenários de permeabilidade.")
-        return
+    if ctx.get("is_r21"):
+        # O item 6 do R2.1 já trabalha com uma leitura própria da tipologia
+        # (2 unidades, até 2 pavimentos e lógica semelhante ao unifamiliar
+        # quando cabível). Para não criar contradição, a permeabilidade deve
+        # acompanhar a área adotada nessa leitura, e não recalcular novamente
+        # pelo cenário conservador dos recuos padrão.
+        base_ocupacao = ctx.get("a_adotada") or ctx.get("teto_relatorio") or area_to
+        try:
+            base_ocupacao = float(base_ocupacao) if base_ocupacao is not None else None
+        except Exception:
+            base_ocupacao = None
+        if base_ocupacao is None:
+            st.info("Sem dados suficientes para montar a leitura de permeabilidade do R2.1.")
+            return
+        decision = None
+    else:
+        decision = choose_regular_occupancy(
+            area_to=area_to,
+            area_recuos=area_recuos,
+            area_pretendida=area_pedida,
+        )
+        base_ocupacao = decision.area_adotada
+        if base_ocupacao is None:
+            st.info("Sem dados suficientes para montar os cenários de permeabilidade.")
+            return
 
     area_restante = area_lote - base_ocupacao
     area_impermeavel_livre = area_restante - area_permeavel_min
 
-    if area_pedida_valida:
+    if ctx.get("is_r21"):
+        md("**Cálculo usando o limite adotado para o R2.1**")
+        if area_pedida_valida and area_pedida <= base_ocupacao:
+            md(f"Como o usuário informou **{fmt_num(area_pedida)} m²** no térreo e essa área está dentro do limite adotado, a análise da permeabilidade considera essa área.")
+        else:
+            md(f"Este item considera **{fmt_num(base_ocupacao)} m²** como ocupação de referência, acompanhando a leitura do R2.1 apresentada no item anterior.")
+        if area_recuos is not None:
+            md(
+                f"Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(area_recuos)} m²**. "
+                "Essa é uma conferência conservadora; a leitura adotada para o R2.1 deve ser confirmada no licenciamento."
+            )
+    elif area_pedida_valida:
         if decision.area_pretendida_acima_to or decision.area_pretendida_acima_recuos:
             md("**Cenário 1 — usando o máximo da TO e o limite físico aplicável**")
             md("**Cálculo usando a área adotada no relatório**")
@@ -121,7 +148,7 @@ def render(ctx: dict) -> None:
         else:
             md(f"Este item considera **{fmt_num(base_ocupacao)} m²** como ocupação de referência no térreo.")
 
-    if area_recuos is not None:
+    if area_recuos is not None and not ctx.get("is_r21"):
         md(f"Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(area_recuos)} m²**. Porém, isso **não significa que seja permitido ocupar tudo isso**.")
 
     md(f"👉 **Área restante no lote: {fmt_num(area_lote)} − {fmt_num(base_ocupacao)} = {fmt_num(area_restante)}**")
