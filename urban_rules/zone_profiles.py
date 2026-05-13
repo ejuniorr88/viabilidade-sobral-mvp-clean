@@ -92,24 +92,26 @@ def apply_zone_result_policy(
 
     if is_zeia(zona, subzona):
         if strong and status_u != "NÃO PERMITE" and (via_a or "PERMITE PELA VIA" in status_u or "POSSÍVEL PELA VIA" in status_u):
-            extra = (
-                "\n\n**Resultado condicionado — ZEIA:** a via possui classificação favorável, mas o imóvel está em ZEIA. "
-                "A via não anula a restrição ambiental; a análise permanece condicionada ao licenciamento ambiental, "
-                "à análise do órgão municipal competente, à verificação das restrições ambientais aplicáveis, "
-                "ao atendimento dos parâmetros urbanísticos da zona e à comprovação da regularidade documental do imóvel, "
-                "como matrícula, escritura, registro ou outro documento hábil exigido no licenciamento. "
-                "A aprovação final depende dos órgãos competentes."
-            )
+            zeia_extra = ""
+            original_explanation = str(explanation or "")
+            if "DNIT" in original_explanation:
+                zeia_extra += " Quando o acesso envolver rodovia federal/BR, também pode ser necessária análise ou autorização do DNIT."
+            if "SOP/CE" in original_explanation:
+                zeia_extra += " Quando o acesso envolver rodovia estadual/CE, também pode ser necessária análise ou autorização da SOP/CE."
             return ResultPolicy(
                 "⚠️",
-                "PERMITE PELA VIA, CONDICIONADO",
-                f"{str(explanation or '').rstrip()}{extra}",
+                "PERMITE PELA VIA, COM CONFIRMAÇÃO AMBIENTAL E DOCUMENTAL",
+                "A via permite uma leitura favorável para o uso, mas o terreno está em ZEIA, uma zona com prioridade ambiental. "
+                "Por isso, este resultado não é uma liberação automática para construir. Antes da aprovação, será necessário confirmar a documentação do imóvel, "
+                "como matrícula, escritura, registro ou documento equivalente, e verificar se existem restrições ambientais, APP, necessidade de licença ou análise de órgão competente. "
+                "Na prática: a via ajuda, mas o projeto só poderá avançar se o terreno estiver regular e se a Prefeitura confirmar que a construção respeita as regras ambientais e urbanísticas."
+                f"{zeia_extra}",
             )
         if not strong:
             return ResultPolicy(
                 "❌",
                 "NÃO PERMITE",
-                "O imóvel está em ZEIA, zona ambiental restritiva. Como a via identificada não ativa sobreposição favorável, prevalece a restrição da zona, sem prejuízo de consulta específica em caso de situação existente ou regularização.",
+                "O terreno está em ZEIA, uma zona com prioridade ambiental. Como a via informada não permite uma leitura favorável para este uso, prevalece a restrição da zona. Em caso de imóvel existente ou regularização, a situação deve ser conferida diretamente no licenciamento.",
             )
 
     if is_zepe(zona, subzona):
@@ -117,13 +119,13 @@ def apply_zone_result_policy(
             return ResultPolicy(
                 "❌",
                 "NÃO PERMITE",
-                "A ZEPE possui vocação prioritariamente econômica e a via local não ativa sobreposição favorável para o uso residencial. Prevalece a classificação restritiva da zona.",
+                "A ZEPE é uma zona pensada principalmente para atividades econômicas. Como a via informada não permite uma leitura favorável para o uso residencial, prevalece a restrição da zona.",
             )
         if strong and status_u in {"PERMITE PELA VIA", "POSSÍVEL PELA VIA", "PERMITE PELA ZONA E PELA VIA"}:
             return ResultPolicy(
                 "⚠️",
                 "PERMITE PELA VIA, COM RESSALVA DA ZEPE",
-                "A zona, isoladamente, classifica o uso residencial como inadequado ou restrito. A via permite leitura favorável pela sobreposição viária, mas por se tratar de ZEPE, zona voltada prioritariamente a atividades econômicas, a implantação residencial deve ser confirmada no licenciamento municipal.",
+                "A ZEPE é uma zona pensada principalmente para atividades econômicas, como comércio, serviços ou indústria. Neste caso, a via permite uma leitura favorável para o uso residencial, mas isso ainda precisa ser confirmado no licenciamento. A via ajuda na análise, mas não muda os índices da zona: o projeto continua tendo que respeitar TO, TP, IA, recuos, altura, área mínima e testada exigida.",
             )
 
     if is_zeip(zona, subzona):
@@ -186,12 +188,12 @@ def zone_context_warnings(ctx: dict[str, Any]) -> list[str]:
 
     if is_zeia(zona, subzona):
         warnings.append(
-            "**Atenção ambiental — ZEIA:** a classificação da via não representa autorização automática para construir. A implantação depende de licenciamento ambiental, análise técnica específica, parâmetros aplicáveis e aprovação dos órgãos competentes."
+            "**Atenção ambiental — ZEIA:** o terreno está em uma zona com prioridade ambiental. Mesmo quando a via ajuda na análise, o projeto só deve avançar depois da conferência da documentação do imóvel, das possíveis restrições ambientais, APP, licenças necessárias e confirmação no licenciamento."
         )
 
     if is_zepe(zona, subzona) and is_strong_via(ctx.get("via_norm")):
         warnings.append(
-            "**Atenção — ZEPE:** a via pode permitir leitura favorável para uso residencial, mas a zona possui vocação prioritariamente econômica. A conclusão deve ser confirmada no licenciamento municipal."
+            "**Atenção — ZEPE:** a via pode ajudar na análise do uso residencial, mas a ZEPE é uma zona pensada principalmente para atividades econômicas. Por isso, a conclusão precisa ser confirmada no licenciamento municipal."
         )
 
     # Alertas dimensionais/cadastrais gerais.
@@ -228,7 +230,7 @@ def zone_context_warnings(ctx: dict[str, Any]) -> list[str]:
 
     if ctx.get("is_irregular"):
         warnings.append(
-            "**Terreno irregular:** os valores de TO, TP e IA são calculados pela área total informada. A implantação real depende da geometria do lote, definição de frente, laterais, fundos, topografia e licenciamento."
+            "**Terreno irregular:** os cálculos de TO, TP e IA usam a área total informada como referência inicial. A implantação real da construção, dos acessos, da frente, dos fundos e das áreas livres depende da forma do lote, da planta/topografia e da análise no licenciamento."
         )
     elif ctx.get("is_corner"):
         warnings.append(
