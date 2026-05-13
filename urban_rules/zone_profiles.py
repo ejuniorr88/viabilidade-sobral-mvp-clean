@@ -166,7 +166,7 @@ def zone_context_warnings(ctx: dict[str, Any]) -> list[str]:
     if is_zeip(zona, subzona):
         if sub_label in {"ZEIP_9", "ZEIP9"}:
             warnings.append(
-                "**Atenção especial — ZEIP_9:** embora a tabela de adequabilidade possa indicar o uso como adequado, este setor possui restrição específica quanto à construção de novos edifícios. Para R3 ou obra nova, não trate esta conclusão como permissão simples; confirme se o caso é obra nova, reforma, regularização, ampliação ou intervenção em edificação existente junto ao órgão competente. Também deve ser verificada a regra de não alteração da configuração dos lotes existentes."
+                "**Atenção especial — ZEIP_9:** embora a tabela de adequabilidade possa indicar o uso como adequado, este setor possui restrição específica quanto à construção de novos edifícios. Para obra nova, reforma, regularização, ampliação ou intervenção em edificação existente, não trate esta conclusão como permissão simples; confirme o caso junto ao órgão competente. Também deve ser verificada a regra de não alteração da configuração dos lotes existentes."
             )
         else:
             warnings.append(
