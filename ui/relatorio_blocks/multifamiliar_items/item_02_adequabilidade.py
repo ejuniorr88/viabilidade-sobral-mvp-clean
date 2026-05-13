@@ -63,6 +63,14 @@ def render(ctx):
         for warning in ctx.get("zone_warnings") or []:
             common.st.warning(warning)
 
+        if ctx.get("zone_testada_baixa"):
+            common.st.warning(
+                f"⚠️ **Atenção dimensional — testada abaixo do mínimo da zona:** o lote foi informado como {ctx.get('zone_testada_baixa_label', 'lote')}, "
+                f"com testada de {common._fmt_num(ctx.get('lot_front'))} m. Esse valor está abaixo da testada mínima exibida para este caso, "
+                f"que é de {common._fmt_num(ctx.get('testada_min'))} m. A adequabilidade do uso não substitui a conferência "
+                "da regularidade dimensional do lote no licenciamento municipal."
+            )
+
         if ctx.get("r21_testada_baixa"):
             common.st.warning(
                 "⚠️ **Atenção — R2.1 com testada inferior a 8,00 m:** o uso R2.1 aparece como adequado para esta zona, mas a testada informada é menor que a referência usual de 8,00 m para R2.1 justaposto fora de ZEIS. Esse caso não deve ser tratado como liberação automática nem como impedimento automático: exige análise no licenciamento municipal. O interessado deve comprovar a situação real do lote e das edificações vizinhas, inclusive por documentação do imóvel/escritura pública quando necessário, especialmente quando a justificativa depender da existência de vizinhos ou construções nos dois lados."
