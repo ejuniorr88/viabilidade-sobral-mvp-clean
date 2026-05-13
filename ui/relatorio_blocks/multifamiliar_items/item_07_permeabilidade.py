@@ -128,8 +128,9 @@ def render(ctx: dict) -> None:
             md(f"Este item considera **{fmt_num(base_ocupacao)} m²** como ocupação de referência, acompanhando a leitura do R2.1 apresentada no item anterior.")
         if area_recuos is not None:
             md(
-                f"A área física calculada pelos recuos é de **{fmt_num(area_recuos)} m²**. "
-                "Esse valor funciona como uma conferência adicional da implantação, mas não deve ser confundido automaticamente com a área adotada para o R2.1. A leitura final deve ser confirmada no licenciamento."
+                f"Como conferência conservadora, os recuos padrão da zona indicam uma área física de **{fmt_num(area_recuos)} m²**. "
+                "Esse número serve apenas para comparação com a leitura principal do R2.1 apresentada no item anterior. "
+                "No R2.1, pode haver uma leitura mais flexível dos recuos de frente e laterais quando cabível, mas a ocupação adotada continua limitada pela TO, pela TP, pelo recuo de fundos, pelo limite de até 2 pavimentos e pela confirmação no licenciamento."
             )
     elif area_pedida_valida:
         if decision.area_pretendida_acima_to or decision.area_pretendida_acima_recuos:
