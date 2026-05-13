@@ -44,6 +44,18 @@ def _resultado_resumo(ctx: dict) -> str:
     return f"{_clean(ctx.get('icon'), '')} {_clean(ctx.get('status_curto'))}".strip()
 
 
+def _render_pontos_atencao(ctx: dict) -> None:
+    warnings = [str(w).strip() for w in (ctx.get("zone_warnings") or []) if str(w).strip()]
+    if not warnings:
+        return
+
+    bullets = "\n".join(f"- {w}" for w in warnings[:3])
+    common.st.markdown(
+        "**Pontos de atenção para guardar:**\n"
+        f"{bullets}"
+    )
+
+
 def render(ctx):
     common.st.markdown("Se você quiser ver só o essencial deste terreno, este é o resumo principal:")
     resumo_uso = _uso_resumo(ctx)
@@ -65,7 +77,7 @@ def render(ctx):
         if ctx.get('ia_saldo') is not None:
             resumo_extra += f"\n- **Saldo estimado pelo IA:** {common._fmt_num(ctx['ia_saldo'])} m²"
     elif ctx.get('teto_relatorio') is not None:
-        resumo_extra += f"\n- **Limite real de ocupação no térreo:** {common._fmt_num(ctx['teto_relatorio'])} m²"
+        resumo_extra += f"\n- **{limite_label}:** {common._fmt_num(ctx['teto_relatorio'])} m²"
 
     common.st.markdown(
         f"- **Uso analisado:** {resumo_uso}\n"
@@ -79,6 +91,8 @@ def render(ctx):
         f"- **IA máximo:** {common._fmt_num(ctx.get('ia_max'), 2) if ctx.get('ia_max') not in (None, '') else '—'}\n"
         f"- **Altura permitida máxima:** {common._fmt_num(ctx.get('gabarito_f'))} m{resumo_extra}"
     )
+
+    _render_pontos_atencao(ctx)
 
     if ctx.get("is_zeip9"):
         common.st.warning(
