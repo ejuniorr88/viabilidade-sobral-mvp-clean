@@ -74,7 +74,3 @@ def render(ctx: dict) -> None:
         for warning in ctx.get("zone_warnings") or []:
             st.warning(warning)
 
-    if ctx.get("is_zeip9"):
-        st.warning(
-            "⚠️ **Atenção especial — ZEIP_9:** este setor possui restrições específicas por valor paisagístico e ambiental. O resultado não deve ser tratado como permissão simples para obra nova sem conferência no licenciamento. Também deve ser verificada a regra de não alteração da configuração dos lotes existentes."
-        )
