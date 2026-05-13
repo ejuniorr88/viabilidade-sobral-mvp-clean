@@ -21,7 +21,7 @@ def render(ctx):
             else f"- **Por via:** {ctx['via_tipo_txt'] or 'via local'}"
         )
         if (not ctx["via_norm"] or not ctx["via_class"]) and "local" in str(ctx.get("via_tipo_txt") or "via local").lower():
-            via_line += " — neste caso, não há sobreposição por via arterial/coletora."
+            via_line += " — neste caso, não há sobreposição por via arterial/coletora. Também não há sobreposição por via paisagística, troncal ou regional."
 
         resumo_icon = ctx['icon']
         resumo_status = ctx['status_curto']
@@ -42,9 +42,10 @@ def render(ctx):
 
         if ctx.get("is_zeip9"):
             # O resumo acima já troca o selo final para "EXIGE CONFIRMAÇÃO".
-            # A orientação completa da ZEIP_9 é exibida abaixo, uma única vez,
-            # para evitar duplicidade visual no relatório.
+            # A orientação completa da ZEIP_9 é exibida abaixo por zone_warnings.
             pass
+        elif ("RESSALVA" in str(ctx.get("status_curto") or "").upper()) or ("CONDICIONADO" in str(ctx.get("status_curto") or "").upper()):
+            common.st.warning(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
         elif ctx["status_curto"] in (
             "PERMITE",
             "PERMITE PELA ZONA E PELA VIA",
@@ -68,10 +69,8 @@ def render(ctx):
         else:
             common.st.error(f"{ctx['icon']} **{ctx['status_curto']}.** {ctx['explicacao']}")
 
-        if ctx.get("is_zeip9"):
-            common.st.warning(
-                "⚠️ **Atenção especial — ZEIP_9:** embora a tabela de adequabilidade possa indicar o uso como adequado, este setor possui restrição específica quanto à construção de novos edifícios. Para R3 ou obra nova, não trate esta conclusão como permissão simples; confirme se o caso é obra nova, reforma, regularização, ampliação ou intervenção em edificação existente junto ao órgão competente. Também deve ser verificada a regra de não alteração da configuração dos lotes existentes."
-            )
+        for warning in ctx.get("zone_warnings") or []:
+            common.st.warning(warning)
 
         if ctx.get("r21_testada_baixa"):
             common.st.warning(
