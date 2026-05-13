@@ -20,6 +20,7 @@ from .relatorio_blocks.multifamiliar_guia import (
     _via_tipo_norm as _mf_via_tipo_norm,
 )
 from core.zone_descriptions import fetch_zone_description
+from urban_rules.zone_profiles import apply_zone_result_policy, zone_context_warnings
 from .relatorio_blocks.unifamiliar_items import UNIFAMILIAR_ITEM_RENDERERS
 
 
@@ -264,11 +265,18 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         via_norm=via_norm,
         via_class=via_class,
     )
-    explicacao = _append_zeia_ambiental_observacao(
+    policy = apply_zone_result_policy(
         zona=zone_sigla or zone,
-        status_curto=status_curto,
-        explicacao=explicacao,
+        subzona=subzone_code,
+        via_norm=via_norm,
+        via_class=via_class,
+        zone_class=zone_class,
+        status=status_curto,
+        icon=icon,
+        explanation=explicacao,
+        use_type_code=uso,
     )
+    icon, status_curto, explicacao = policy.icon, policy.status, policy.explanation
 
     recuos_resumo = f"Frontal: {_fmt_num(rec_fr)} m | Laterais: {_fmt_num(rec_lat)} m | Fundos: {_fmt_num(rec_fun)} m"
     ia_min_texto = _fmt_num(ia_min) if ia_min is not None else "não informado"
@@ -340,6 +348,12 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         "ia_min_texto": ia_min_texto,
         "pav_est": pav_est,
         "is_zeip9": is_zeip9_unif,
+        "lot_area_f": A,
+        "lot_front": W,
+        "area_min": area_min_lote,
+        "area_max": area_max_lote,
+        "testada_min": testada_min_lote,
+        "testada_max": testada_max_lote,
         "render_quadro_tecnico": render_quadro_tecnico,
         "render_figuras_anexo_v": render_figuras_anexo_v,
         "_mf_sigla_nome": _mf_sigla_nome,
@@ -513,11 +527,18 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         via_norm=via_norm,
         via_class=via_class,
     )
-    explicacao = _append_zeia_ambiental_observacao(
+    policy = apply_zone_result_policy(
         zona=zone_sigla or zone,
-        status_curto=status_curto,
-        explicacao=explicacao,
+        subzona=subzone_code,
+        via_norm=via_norm,
+        via_class=via_class,
+        zone_class=zone_class,
+        status=status_curto,
+        icon=icon,
+        explanation=explicacao,
+        use_type_code=uso,
     )
+    icon, status_curto, explicacao = policy.icon, policy.status, policy.explanation
 
     recuos_resumo = f"Frontal: {_fmt_num(rec_fr)} m | Laterais: {_fmt_num(rec_lat)} m | Fundos: {_fmt_num(rec_fun)} m"
     ia_min_texto = _fmt_num(ia_min) if ia_min is not None else "não informado"
@@ -617,10 +638,17 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "ia_min_texto": ia_min_texto,
         "pav_est": pav_est,
         "is_zeip9": is_zeip9_unif,
+        "lot_area_f": A,
+        "lot_front": W,
+        "area_min": area_min_lote,
+        "area_max": area_max_lote,
+        "testada_min": testada_min_lote,
+        "testada_max": testada_max_lote,
         "render_quadro_tecnico": render_quadro_tecnico,
         "render_figuras_anexo_v": render_figuras_anexo_v,
         "_mf_sigla_nome": _mf_sigla_nome,
     }
+    ctx["zone_warnings"] = zone_context_warnings(ctx)
 
     for item_key in [
         "item_01", "item_02", "item_03", "item_04", "item_05", "item_06", "item_07", "item_08",
