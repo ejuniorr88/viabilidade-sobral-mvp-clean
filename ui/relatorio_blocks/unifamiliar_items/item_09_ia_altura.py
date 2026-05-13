@@ -28,8 +28,8 @@ def render(ctx: dict) -> None:
         md(f"**Altura máxima da zona:** {fmt_num(ctx['gabarito_m'])} m")
         if ctx['pav_est'] is not None:
             md(
-                f"**Exemplo simples para ter uma noção de andares:** adotando um pé-direito médio de **3,00 m por pavimento**, "
-                f"a altura máxima de **{fmt_num(ctx['gabarito_m'])} m** pode permitir, em média, algo próximo de **{ctx['pav_est']} pavimentos**.\n\n"
-                "👉 Isso é apenas uma referência inicial. Na prática, a quantidade real de andares depende também da laje, cobertura, "
-                "platibanda, caixa d’água e da forma como o projeto será desenvolvido."
+                f"**Altura da zona — leitura com cautela:** a altura máxima de **{fmt_num(ctx['gabarito_m'])} m** é um parâmetro geral da zona. "
+                f"Como referência matemática, isso poderia equivaler a algo próximo de **{ctx['pav_est']} pavimentos**, considerando pé-direito médio de 3,00 m.\n\n"
+                "👉 Para residência unifamiliar, esse número não deve ser entendido como autorização automática para construir muitos pavimentos. "
+                "A quantidade real de andares depende da tipologia, do projeto, da implantação, do IA, da TO, dos recuos, das normas técnicas e da confirmação no licenciamento."
             )
