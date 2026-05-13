@@ -4,6 +4,7 @@ import streamlit as st
 
 from .common import md, fmt_num, fmt_pct
 from ui.relatorio_blocks.terreno_irregular import aviso_texto, limite_to_text
+from urban_rules.common import choose_regular_occupancy
 
 
 def _fmt_pct_local(v) -> str:
@@ -209,11 +210,16 @@ def render(ctx: dict) -> None:
         md(f"👉 **{fmt_num(w_util)} × {fmt_num(d_util)} = {fmt_num(a_recuos)}**")
 
         md("**Leitura prática**")
-        md(f"👉 Pela Taxa de Ocupação, o lote poderia ocupar até **{fmt_num(area_to)}** no térreo.")
+        decision = choose_regular_occupancy(area_to=area_to, area_recuos=a_recuos)
+        limite_real = decision.area_adotada if decision.area_adotada is not None else area_to
+        md(f"👉 Pela Taxa de Ocupação, o lote poderia ocupar até **{fmt_num(area_to)} m²** no térreo.")
         md(f"👉 Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(a_recuos)} m²**.")
         md("Porém, isso **não significa que seja permitido ocupar tudo isso**.")
-        md(f"Neste caso, a Taxa de Ocupação é mais restritiva e limita a ocupação do térreo a **{fmt_num(area_to)} m²**.")
-        md(f"Portanto, para este lote, o limite real de ocupação no térreo é **{fmt_num(area_to)} m²**.")
+        if decision.recuos_mais_restritivos:
+            md(f"Neste caso, os recuos são mais restritivos que a TO, porque **{fmt_num(a_recuos)} m²** é menor que **{fmt_num(area_to)} m²**.")
+        elif decision.to_mais_restritiva:
+            md(f"Neste caso, a Taxa de Ocupação é mais restritiva e limita a ocupação do térreo a **{fmt_num(area_to)} m²**.")
+        md(f"Portanto, para este lote, o limite real de ocupação no térreo é **{fmt_num(limite_real)} m²**.")
         return
 
     # Com área pretendida
@@ -297,36 +303,25 @@ def render(ctx: dict) -> None:
     md(f"👉 **{fmt_num(w_util)} × {fmt_num(d_util)} = {fmt_num(a_recuos)}**")
 
     md("**Leitura prática**")
-    if area_pedida <= area_to:
+    decision = choose_regular_occupancy(area_to=area_to, area_recuos=a_recuos, area_pretendida=area_pedida)
+    area_adotada = decision.area_adotada if decision.area_adotada is not None else area_to
+    md(f"👉 Pela Taxa de Ocupação, o lote poderia ocupar até **{fmt_num(area_to)} m²** no térreo.")
+    md(f"👉 Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(a_recuos)} m²**.")
+
+    if not decision.area_pretendida_acima_to and not decision.area_pretendida_acima_recuos:
         md(
-            f"👉 Pela Taxa de Ocupação, a proposta informada pelo usuário utiliza **{_fmt_pct_local(to_utilizada)}** do lote, equivalente a **{fmt_num(area_pedida)} m²** no térreo, ficando dentro do limite máximo permitido pela zona."
+            f"👉 Como a área pretendida informada foi de **{fmt_num(area_pedida)} m²**, ela fica dentro da TO e também cabe no envelope físico estimado pelos recuos."
         )
-        md(
-            f"👉 Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(a_recuos)} m²**."
-        )
-        md(
-            f"👉 Como a área pretendida informada foi de **{fmt_num(area_pedida)} m²**, ela cabe dentro desse espaço físico e também fica abaixo da TO."
-        )
-        md("Ou seja:")
-        md("- a TO mostra que a proposta está dentro do limite urbanístico da zona;")
-        md("- os recuos mostram que a área pretendida também cabe fisicamente no lote.")
-        md(
-            f"👉 Neste caso, os **{fmt_num(area_pedida)} m²** informados são viáveis pela Taxa de Ocupação e pelos recuos."
-        )
+        md(f"👉 Neste caso, os **{fmt_num(area_pedida)} m²** informados podem ser adotados como referência inicial do térreo.")
     else:
+        if decision.area_pretendida_acima_to:
+            md(
+                f"👉 A área digitada pelo usuário foi de **{fmt_num(area_pedida)} m²**, acima do limite máximo da TO de **{fmt_num(area_to)} m²**."
+            )
+        if decision.area_pretendida_acima_recuos:
+            md(
+                f"👉 A área digitada também ultrapassa a área física estimada pelos recuos, que é de **{fmt_num(a_recuos)} m²**."
+            )
         md(
-            f"👉 Pela Taxa de Ocupação, o lote poderia ocupar até **{fmt_num(area_to)} m²** no térreo, mas a área digitada pelo usuário foi de **{fmt_num(area_pedida)} m²**, o que não é permitido, porque ultrapassa a TO máxima da zona."
-        )
-        md(
-            f"👉 Por isso, para continuidade do estudo, a análise passa a considerar **{fmt_num(area_to)} m²** como limite urbanístico máximo pela TO."
-        )
-        md(
-            f"👉 Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(a_recuos)} m²**."
-        )
-        md("Porém, isso **não significa que seja permitido ocupar tudo isso**.")
-        md("Ou seja:")
-        md(f"- a TO mostra que os **{fmt_num(area_pedida)} m²** informados são inviáveis, pois excedem o limite máximo da zona;")
-        md(f"- os recuos mostram apenas o espaço físico disponível, mas o limite real continua sendo **{fmt_num(area_to)} m²** pela TO.")
-        md(
-            f"👉 Neste caso, os **{fmt_num(area_pedida)} m²** informados não podem ser adotados. Como essa área ultrapassa a TO máxima permitida, o estudo continua com o máximo permitido pela zona, que é de **{fmt_num(area_to)} m²**."
+            f"👉 Para esta análise preliminar, o relatório deve adotar **{fmt_num(area_adotada)} m²** como limite de referência no térreo, usando o menor limite aplicável entre área pretendida, TO e recuos."
         )
