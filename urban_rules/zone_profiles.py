@@ -208,9 +208,14 @@ def zone_context_warnings(ctx: dict[str, Any]) -> list[str]:
             f"**Atenção dimensional:** a área informada do lote ({_fmt_num(area)} m²) está abaixo da área mínima cadastrada ({_fmt_num(area_min)} m²). Isso não invalida automaticamente o estudo, mas exige conferência da matrícula, cadastro municipal, situação existente do lote e licenciamento."
         )
     if area is not None and area_max is not None and area > area_max:
-        warnings.append(
-            f"**Atenção dimensional:** a área informada do lote ({_fmt_num(area)} m²) está acima da área máxima cadastrada ({_fmt_num(area_max)} m²). Conferir situação cadastral, lote existente e eventual restrição para parcelamento, desmembramento ou remembramento."
-        )
+        if area_min is not None and area_max < area_min:
+            warnings.append(
+                f"**Atenção dimensional — regra especial do lote:** a área informada ({_fmt_num(area)} m²) está acima da área máxima cadastrada ({_fmt_num(area_max)} m²), e esta zona apresenta área máxima menor que a área mínima cadastrada. Isso pode indicar regra especial ligada à preservação da configuração dos lotes existentes, especialmente em áreas patrimoniais. Confirme a situação cadastral, a matrícula/documentação do imóvel e a validade do lote existente no licenciamento municipal antes de tratar este resultado como autorização para parcelar, remembrar, desmembrar ou ampliar."
+            )
+        else:
+            warnings.append(
+                f"**Atenção dimensional:** a área informada do lote ({_fmt_num(area)} m²) está acima da área máxima cadastrada ({_fmt_num(area_max)} m²). Conferir situação cadastral, lote existente e eventual restrição para parcelamento, desmembramento ou remembramento."
+            )
     if front is not None and front > 0 and testada_min is not None and front < testada_min:
         warnings.append(
             f"**Atenção dimensional:** a testada informada ({_fmt_num(front)} m) está abaixo da testada mínima cadastrada ({_fmt_num(testada_min)} m). Conferir regularidade cadastral e validação pelo órgão licenciador."
