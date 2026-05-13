@@ -7,6 +7,11 @@ import math
 import streamlit as st
 
 from ui.relatorio_blocks.terreno_irregular import is_irregular_context
+from urban_rules.zone_profiles import (
+    apply_zone_result_policy,
+    is_zeis as _profile_is_zeis,
+    zone_context_warnings,
+)
 
 
 def md(text: str) -> None:
@@ -155,6 +160,8 @@ def _via_tipo_norm(v: Any) -> Optional[str]:
         return "ARTERIAL"
     if "coletora" in s:
         return "COLETORA"
+    if "pais" in s:
+        return "PAISAGISTICA"
     if "troncal" in s or "rodovia federal" in s or "br-" in s or s.startswith("br "):
         return "TRONCAL"
     if "regional" in s or "rodovia estadual" in s or "ce-" in s or s.startswith("ce "):
@@ -836,7 +843,9 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
             teto_pratico = to_m2
         is_r21 = multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21")
         is_zeip9 = str(subzona or "").strip().upper().replace("-", "_") in ("ZEIP_9", "ZEIP9")
-        r21_testada_baixa = bool(is_r21 and W > 0 and W < 8.0)
+        # A ressalva de testada inferior a 8 m para R2.1 vale fora de ZEIS.
+        # Em ZEIS, a regra específica da zona prevalece e não deve gerar este alerta.
+        r21_testada_baixa = bool(is_r21 and W > 0 and W < 8.0 and not _profile_is_zeis(zona, subzona))
         teto_relatorio = to_m2 if (is_r21 and to_m2 is not None) else teto_pratico
         a_adotada = min(built_ground, teto_relatorio) if (built_ground is not None and built_ground > 0 and teto_relatorio is not None) else (built_ground if (built_ground is not None and built_ground > 0) else None)
         to_utilizada_pct = ((a_adotada / lot_area_f) * 100.0) if (a_adotada is not None and lot_area_f not in (None, 0)) else None
@@ -853,7 +862,20 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         is_zeip9 = str(subzona or "").strip().upper().replace("-", "_") in ("ZEIP_9", "ZEIP9")
         r21_testada_baixa = False
 
-    return {
+    policy = apply_zone_result_policy(
+        zona=zona,
+        subzona=subzona,
+        via_norm=via_norm,
+        via_class=via_class,
+        zone_class=zone_class,
+        status=status_curto,
+        icon=icon,
+        explanation=explicacao,
+        use_type_code=use_type_code,
+    )
+    icon, status_curto, explicacao = policy.icon, policy.status, policy.explanation
+
+    ctx_out = {
         "calc": calc,
         "rule": rule or {},
         "multi_tipo": multi_tipo,
@@ -910,6 +932,8 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         "is_zeip9": is_zeip9,
         "r21_testada_baixa": r21_testada_baixa,
     }
+    ctx_out["zone_warnings"] = zone_context_warnings(ctx_out)
+    return ctx_out
 
 
 # Aliases de compatibilidade para a arquitetura modular
