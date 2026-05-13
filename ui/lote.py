@@ -17,9 +17,9 @@ def _ensure_calc() -> Dict[str, Any]:
 
 
 def _default_midblock(calc: Dict[str, Any]) -> bool:
-    if "lot_is_midblock" in calc:
-        return bool(calc.get("lot_is_midblock"))
-    return not bool(calc.get("lot_is_corner", False))
+    # Regra de segurança: o formulário deve nascer sempre em "Meio de quadra".
+    # Esquina só deve ser usada quando o usuário marcar explicitamente nesta sessão.
+    return True
 
 
 def _activate_midblock() -> None:
@@ -94,7 +94,7 @@ def render_lote_section() -> Tuple[float, float, float]:
     if "lot_midblock_checkbox" not in st.session_state:
         st.session_state["lot_midblock_checkbox"] = _default_midblock(calc)
     if "lot_corner_checkbox" not in st.session_state:
-        st.session_state["lot_corner_checkbox"] = bool(calc.get("lot_is_corner", False))
+        st.session_state["lot_corner_checkbox"] = False
 
     f1, f2 = st.columns(2, gap="small")
 
@@ -152,8 +152,9 @@ def render_lote_section() -> Tuple[float, float, float]:
         # Se algum estado antigo vier inconsistente, a regra local corrige o cálculo,
         # mas não tenta modificar a chave do checkbox no mesmo ciclo do Streamlit.
         if lote_meio_quadra and lote_esquina:
-            lote_meio_quadra = False
-            lote_esquina = True
+            # Estado antigo/inconsistente: preservar o padrão seguro de meio de quadra.
+            lote_meio_quadra = True
+            lote_esquina = False
         elif not lote_meio_quadra and not lote_esquina:
             lote_meio_quadra = True
             lote_esquina = False
