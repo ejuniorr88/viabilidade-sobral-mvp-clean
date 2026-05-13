@@ -53,15 +53,44 @@ def dimensoes_text(area_m2: Any = None) -> str:
 
 def aviso_texto() -> str:
     return (
-        "Como o lote foi informado como irregular, a implantação física da edificação não deve ser calculada automaticamente como um retângulo. "
-        "A Taxa de Ocupação, a Taxa de Permeabilidade e o Índice de Aproveitamento são calculados pela área total informada, "
-        "mas a posição real da construção depende da geometria do lote, da definição da frente, laterais e fundos, "
-        "da planta/topografia e da conferência no licenciamento."
+        "Como o terreno foi informado como **irregular**, os cálculos de TO, TP e IA usam a **área total informada** "
+        "como referência inicial. A implantação real da construção, dos acessos, da frente, dos fundos e das áreas livres "
+        "depende da forma do lote, da planta/topografia e da análise no licenciamento."
     )
 
 
 def limite_to_text(area_to_fmt: str) -> str:
     return (
         f"Limite máximo pela Taxa de Ocupação: **{area_to_fmt} m²**. "
-        "A implantação real depende da geometria do terreno e deve ser confirmada em projeto e no licenciamento."
+        "A implantação real depende da forma do terreno e deve ser confirmada em projeto e no licenciamento."
     )
+
+
+def calcada_context_text(*, is_corner: bool = False, is_irregular: bool = False) -> str:
+    base = (
+        "A análise do terreno não termina dentro do lote. Também existem regras para calçada, acesso ao imóvel, "
+        "rebaixo de meio-fio e relação do lote com a rua."
+    )
+
+    if is_irregular and is_corner:
+        return (
+            f"{base} Como este lote foi informado como **irregular** e de **esquina**, as figuras abaixo devem ser lidas "
+            "como referências gerais. A implantação precisa considerar a forma real do terreno, as duas frentes, a frente principal, "
+            "a outra frente, os acessos de veículos e pedestres, as calçadas nas duas faces, o rebaixo de meio-fio, o sutamento e a confirmação no licenciamento."
+        )
+
+    if is_irregular:
+        return (
+            f"{base} Como o terreno foi informado como **irregular**, as figuras abaixo são referências gerais. A posição real "
+            "dos acessos, da calçada, do rebaixo de meio-fio, das áreas livres e da edificação depende da forma do lote, "
+            "da planta/topografia e da análise no licenciamento."
+        )
+
+    if is_corner:
+        return (
+            f"{base} Como este lote é de **esquina**, ele possui duas frentes voltadas para vias públicas. O projeto deve considerar "
+            "a frente principal, a outra frente, os acessos de veículos e pedestres, as calçadas nas duas faces, o rebaixo de meio-fio, "
+            "o sutamento, a visibilidade da esquina e a confirmação no licenciamento."
+        )
+
+    return f"{base} As figuras abaixo ajudam a visualizar esse padrão."
