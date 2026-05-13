@@ -31,4 +31,18 @@ def render(ctx: dict) -> None:
         linhas.append(f"- **Testada máxima:** {fmt_num(ctx['testada_max_lote'])} m")
 
     md("**Resumo das regras**\n\n" + "\n".join(linhas))
+
+    try:
+        area_min = float(ctx.get('area_min_lote')) if ctx.get('area_min_lote') is not None else None
+        area_max = float(ctx.get('area_max_lote')) if ctx.get('area_max_lote') is not None else None
+    except Exception:
+        area_min = area_max = None
+
+    if area_min is not None and area_max is not None and area_max < area_min:
+        md(
+            "**Observação sobre as dimensões do lote:** nesta zona, a área máxima cadastrada aparece menor que a área mínima. "
+            "Isso pode ocorrer em regra especial de preservação da configuração dos lotes existentes, especialmente em área patrimonial. "
+            "Na prática, não trate essa informação como erro automático nem como liberação para alterar o lote: confirme a situação cadastral, a documentação do imóvel e a validade do lote existente no licenciamento."
+        )
+
     md("Essas são as regras que mais impactam o projeto.")
