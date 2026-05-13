@@ -100,6 +100,13 @@ def render(ctx):
             "Como R3 é uma tipologia vertical, não trate este resultado como permissão simples para obra nova; confirme a possibilidade no licenciamento municipal e verifique a regra de não alteração da configuração dos lotes existentes."
         )
 
+    if ctx.get("zone_testada_baixa"):
+        common.st.warning(
+            f"⚠️ **Atenção dimensional:** a testada informada ({common._fmt_num(ctx.get('lot_front'))} m) "
+            f"está abaixo da testada mínima exibida para este caso ({common._fmt_num(ctx.get('testada_min'))} m). "
+            "Confirme a regularidade dimensional do lote no licenciamento municipal."
+        )
+
     if ctx.get("r21_testada_baixa"):
         common.st.warning(
             "⚠️ **Atenção — R2.1:** o uso R2.1 aparece como permitido para esta zona, mas a testada informada é inferior a 8,00 m para R2.1 justaposto fora de ZEIS. "
