@@ -187,7 +187,11 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
     gabarito_m = _safe_float(rule.get("gabarito_m"))
     area_min_lote = _safe_float(rule.get("area_min_lote_m2") or rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2"))
     area_max_lote = _safe_float(rule.get("area_max_lote_m2") or rule.get("lote_max_area_m2"))
-    testada_min_lote = _safe_float(rule.get("testada_min_m") or rule.get("testada_min_meio_m") or rule.get("testada_min_esquina_m"))
+    
+    if is_corner:
+        testada_min_lote = _safe_float(rule.get("testada_min_esquina_m") or rule.get("testada_min_m") or rule.get("testada_min_meio_m"))
+    else:
+        testada_min_lote = _safe_float(rule.get("testada_min_meio_m") or rule.get("testada_min_m") or rule.get("testada_min_esquina_m"))
     testada_max_lote = _safe_float(rule.get("testada_max_m"))
 
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
@@ -449,7 +453,11 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     gabarito_m = _safe_float(rule.get("gabarito_m"))
     area_min_lote = _safe_float(rule.get("area_min_lote_m2") or rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2"))
     area_max_lote = _safe_float(rule.get("area_max_lote_m2") or rule.get("lote_max_area_m2"))
-    testada_min_lote = _safe_float(rule.get("testada_min_m") or rule.get("testada_min_meio_m") or rule.get("testada_min_esquina_m"))
+    
+    if is_corner:
+        testada_min_lote = _safe_float(rule.get("testada_min_esquina_m") or rule.get("testada_min_m") or rule.get("testada_min_meio_m"))
+    else:
+        testada_min_lote = _safe_float(rule.get("testada_min_meio_m") or rule.get("testada_min_m") or rule.get("testada_min_esquina_m"))
     testada_max_lote = _safe_float(rule.get("testada_max_m"))
 
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
