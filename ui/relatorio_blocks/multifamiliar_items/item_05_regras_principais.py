@@ -28,9 +28,10 @@ def render(ctx):
 
     if area_min is not None and area_max is not None and area_max < area_min:
         common.st.markdown(
-            "**Observação sobre as dimensões do lote:** nesta zona, a área máxima cadastrada aparece menor que a área mínima. "
-            "Isso pode ocorrer em regra especial de preservação da configuração dos lotes existentes, especialmente em área patrimonial. "
-            "Na prática, não trate essa informação como erro automático nem como liberação para alterar o lote: confirme a situação cadastral, a documentação do imóvel e a validade do lote existente no licenciamento."
+            "**Observação especial sobre as dimensões do lote:** nesta zona, a área máxima cadastrada aparece menor que a área mínima. "
+            "Em ZEIP ou área patrimonial, isso pode indicar uma regra especial ligada à preservação da configuração dos lotes existentes. "
+            "Na prática, não trate essa informação como erro automático nem como autorização para alterar o lote. "
+            "Confirme a situação cadastral, a matrícula/documentação do imóvel e a validade do lote existente no licenciamento, principalmente se o imóvel já existir regularmente."
         )
 
     common.st.markdown("**Esses são os parâmetros que mais influenciam o estudo inicial do projeto.**")
