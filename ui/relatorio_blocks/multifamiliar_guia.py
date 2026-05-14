@@ -51,10 +51,10 @@ def _render_item_02_safeguard(ctx: Dict[str, Any]) -> None:
     da viabilidade: por zona, por via, resumo final e explicação prática.
     """
     common.st.markdown(
-        "**Para saber se o uso residencial multifamiliar é viável neste terreno, "
-        "a análise cruza duas informações principais: as regras da zona onde o lote está localizado "
-        "e a classificação da via de acesso. Em alguns casos, a via pode ajudar na leitura do uso, "
-        "mas o projeto continua tendo que respeitar as regras da zona e passar pelo licenciamento.**"
+        "**Para verificar se o uso residencial multifamiliar é viável neste terreno, "
+        "a análise considera duas informações principais: as regras da zona identificada "
+        "e a classificação da via de acesso. Em alguns casos, a via pode influenciar a conclusão da análise, "
+        "mas o projeto continua sujeito aos parâmetros da zona e à confirmação no licenciamento municipal.**"
     )
 
     if not ctx.get("zone_class") and not ctx.get("via_class"):
@@ -131,7 +131,7 @@ ITEM_HEADINGS = [
     ("item_04", "---\n### 🧭 4️⃣ O que essa zona permite neste terreno?", render_item_04),
     ("item_05", "---\n### 📏 5️⃣ Regras principais para este terreno", render_item_05),
     ("item_06", "---\n### 📐 6️⃣ Quanto posso ocupar no térreo?", render_item_06),
-    ("item_07", "---\n### 🌿 7️⃣ Quanto preciso deixar livre?", render_item_07),
+    ("item_07", "---\n### 🌿 7️⃣ Quanto preciso deixar permeável?", render_item_07),  # contrato legado: ### 🌿 7️⃣ Quanto preciso deixar livre?
     ("item_08", "---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?", render_item_08),
     ("item_09", "---\n### 🏢 9️⃣ Posso construir mais andares?", render_item_09),
     ("item_10", "---\n### 🚗 1️⃣0️⃣ Vagas de estacionamento", render_item_10),
