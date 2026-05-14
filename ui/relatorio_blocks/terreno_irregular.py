@@ -53,8 +53,8 @@ def dimensoes_text(area_m2: Any = None) -> str:
 
 def aviso_texto() -> str:
     return (
-        "Como o terreno foi informado como **irregular**, os cálculos de TO, TP e IA usam a **área total informada** "
-        "como referência inicial. A implantação real da construção, dos acessos, da frente, dos fundos e das áreas livres "
+        "Como o terreno foi informado como **irregular**, os cálculos de Taxa de Ocupação (TO), Taxa de Permeabilidade (TP) e Índice de Aproveitamento (IA) usam a **área total informada** "
+        "como referência inicial. A implantação real da construção, dos acessos, da frente, dos fundos, das áreas sem ocupação no térreo e das áreas permeáveis "
         "depende da forma do lote, da planta/topografia e da análise no licenciamento."
     )
 
@@ -82,7 +82,7 @@ def calcada_context_text(*, is_corner: bool = False, is_irregular: bool = False)
     if is_irregular:
         return (
             f"{base} Como o terreno foi informado como **irregular**, as figuras abaixo são referências gerais. A posição real "
-            "dos acessos, da calçada, do rebaixo de meio-fio, das áreas livres e da edificação depende da forma do lote, "
+            "dos acessos, da calçada, do rebaixo de meio-fio, das áreas sem ocupação no térreo, das áreas permeáveis e da edificação depende da forma do lote, "
             "da planta/topografia e da análise no licenciamento."
         )
 

@@ -51,7 +51,7 @@ def render_tabela_resultado_viabilidade(resultado: Dict[str, Any], titulo_uso: s
 def render_descricao_zona(dados_zona: Dict[str, Any]) -> None:
     st.markdown("### 🧭 3️⃣ O que essa zona quer dizer?")
     st.markdown(
-        "Todo terreno fica dentro de uma zona, e cada zona tem suas próprias regras. É isso que ajuda a definir o que pode ser construído, quanto pode ocupar no térreo e quanto precisa ficar livre."
+        "A zona identificada para o terreno ajuda a entender quais regras urbanísticas se aplicam ao lote. Ela orienta o uso permitido, a ocupação máxima no térreo, a área permeável mínima, os recuos, a altura e outros cuidados do projeto."
     )
     rows = [
         ("Zona", str(dados_zona.get("zona_nome_completo") or dados_zona.get("zona") or "—")),
@@ -65,5 +65,5 @@ def render_descricao_zona(dados_zona: Dict[str, Any]) -> None:
 
 def render_fechamento_final(tipo_relatorio: str) -> None:
     st.markdown("### ✅ Encerramento")
-    st.markdown("Este relatório foi pensado para ajudar você a entender o terreno de forma mais simples.")
-    st.caption("Na etapa de projeto e aprovação, ainda será preciso conferir os detalhes completos no licenciamento.")
+    st.markdown("Este relatório é uma análise inicial para ajudar a entender o potencial urbanístico do terreno.")
+    st.caption("Ele não representa aprovação automática da Prefeitura e não substitui alvará, licença, certidão, parecer técnico ou análise oficial do órgão competente.")

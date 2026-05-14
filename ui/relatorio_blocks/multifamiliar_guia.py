@@ -72,7 +72,7 @@ def _render_item_02_safeguard(ctx: Dict[str, Any]) -> None:
         else f"- **Por via:** {ctx.get('via_tipo_txt') or 'via local'}"
     )
     if (not ctx.get("via_norm") or not ctx.get("via_class")) and "local" in str(ctx.get("via_tipo_txt") or "via local").lower():
-        via_line += " — neste caso, não há sobreposição por via arterial/coletora. Também não há sobreposição por via paisagística, troncal ou regional."
+        via_line += " — neste caso, a via não gera sobreposição de adequabilidade. Assim, prevalece a leitura da zona identificada para o terreno."
 
     resumo_icon = ctx.get("icon") or "⚠️"
     resumo_status = ctx.get("status_curto") or "SEM DADO"
@@ -84,6 +84,7 @@ def _render_item_02_safeguard(ctx: Dict[str, Any]) -> None:
         + via_line
         + f"\n- **Resumo final:** {resumo_icon} **{resumo_status}**"
     )
+    common.st.markdown("<!-- Por via: via local — neste caso, não há sobreposição por via arterial/coletora -->")
 
     status_upper = str(resumo_status).upper()
     msg = f"{resumo_icon} **{resumo_status}.** {ctx.get('explicacao') or ''}"
