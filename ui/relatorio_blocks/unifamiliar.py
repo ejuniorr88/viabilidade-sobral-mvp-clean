@@ -67,7 +67,7 @@ def render_tabela_ocupacao_terreo_unifamiliar(dados: Dict[str, Any]) -> None:
 
 
 def render_tabela_permeabilidade_unifamiliar(dados: Dict[str, Any]) -> None:
-    st.markdown("### 🌿 6️⃣ Quanto preciso deixar livre?")
+    st.markdown("### 🌿 6️⃣ Quanto preciso deixar permeável?")
     st.markdown("A zona exige uma parte do terreno com área permeável. Isso ajuda na absorção da água da chuva e influencia diretamente a ocupação possível.")
     _table([
         ("Área do terreno", str(dados.get("area_terreno", "—"))),
