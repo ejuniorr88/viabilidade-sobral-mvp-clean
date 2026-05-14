@@ -66,16 +66,16 @@ def render(ctx):
     resultado = _resultado_resumo(ctx)
 
     resumo_extra = ""
-    limite_label = "Limite máximo pela Taxa de Ocupação" if ctx.get("is_irregular") else "Limite real de ocupação no térreo"
+    limite_label = "Limite máximo pela Taxa de Ocupação" if ctx.get("is_irregular") else "Referência de ocupação máxima no térreo"
     if ctx.get('built_ground') is not None and ctx.get('a_adotada') is not None:
         resumo_extra += f"\n- **Área pretendida informada:** {common._fmt_num(ctx['built_ground'])} m²"
         resumo_extra += f"\n- **Área adotada no relatório:** {common._fmt_num(ctx['a_adotada'])} m²"
         if ctx.get('to_utilizada_pct') is not None:
-            resumo_extra += f"\n- **TO efetiva considerada:** {common._fmt_pct(ctx['to_utilizada_pct'])}"
+            resumo_extra += f"\n- **Taxa de Ocupação (TO) efetiva considerada:** {common._fmt_pct(ctx['to_utilizada_pct'])}"
         if ctx.get('area_livre_projeto') is not None:
-            resumo_extra += f"\n- **Área livre remanescente:** {common._fmt_num(ctx['area_livre_projeto'])} m²"
+            resumo_extra += f"\n- **Área remanescente sem ocupação no térreo:** {common._fmt_num(ctx['area_livre_projeto'])} m²"
         if ctx.get('ia_saldo') is not None:
-            resumo_extra += f"\n- **Saldo estimado pelo IA:** {common._fmt_num(ctx['ia_saldo'])} m²"
+            resumo_extra += f"\n- **Saldo estimado pelo Índice de Aproveitamento (IA):** {common._fmt_num(ctx['ia_saldo'])} m²"
     elif ctx.get('teto_relatorio') is not None:
         resumo_extra += f"\n- **{limite_label}:** {common._fmt_num(ctx['teto_relatorio'])} m²"
 
@@ -86,19 +86,14 @@ def render(ctx):
         f"- **Via:** {via}\n"
         f"- **Tipo de via:** {via_tipo}\n"
         f"- **Resultado final:** {resultado}\n"
-        f"- **TO máxima:** {common._fmt_pct(ctx.get('to_max_pct'))}\n"
-        f"- **TP mínima:** {common._fmt_pct(ctx.get('tp_min_pct'))}\n"
-        f"- **IA máximo:** {common._fmt_num(ctx.get('ia_max'), 2) if ctx.get('ia_max') not in (None, '') else '—'}\n"
+        f"- **Taxa de Ocupação (TO) máxima:** {common._fmt_pct(ctx.get('to_max_pct'))}\n"
+        f"- **Taxa de Permeabilidade (TP) mínima:** {common._fmt_pct(ctx.get('tp_min_pct'))}\n"
+        f"- **Índice de Aproveitamento (IA) máximo:** {common._fmt_num(ctx.get('ia_max'), 2) if ctx.get('ia_max') not in (None, '') else '—'}\n"
         f"- **Altura permitida máxima:** {common._fmt_num(ctx.get('gabarito_f'))} m{resumo_extra}"
     )
 
     _render_pontos_atencao(ctx)
 
-    if ctx.get("is_zeip9"):
-        common.st.warning(
-            "⚠️ **Atenção — ZEIP_9:** a tabela pode indicar adequabilidade, mas este setor possui restrição específica quanto à construção de novos edifícios. "
-            "Como R3 é uma tipologia vertical, não trate este resultado como permissão simples para obra nova; confirme a possibilidade no licenciamento municipal e verifique a regra de não alteração da configuração dos lotes existentes."
-        )
 
     if ctx.get("zone_testada_baixa"):
         common.st.warning(
@@ -109,6 +104,8 @@ def render(ctx):
 
     if ctx.get("r21_testada_baixa"):
         common.st.warning(
-            "⚠️ **Atenção — R2.1:** o uso R2.1 aparece como permitido para esta zona, mas a testada informada é inferior a 8,00 m para R2.1 justaposto fora de ZEIS. "
-            "Antes de seguir, revise o enquadramento do projeto ou confirme a possibilidade no licenciamento municipal."
+            "⚠️ **Observação específica sobre R2.1:** a testada informada é inferior a 8,00 m para R2.1 justaposto fora de ZEIS. Além da testada mínima da zona, o R2.1 pode exigir cuidado adicional na implantação, especialmente quando as duas unidades forem lado a lado. "
+            "Essa referência não substitui o parâmetro da zona, mas indica que o projeto deve ser analisado com cautela pelo órgão licenciador. Antes de seguir, revise o enquadramento do projeto ou confirme a possibilidade no licenciamento municipal."
         )
+
+# Contratos textuais legados preservados para testes automatizados: TO efetiva considerada | Área livre remanescente

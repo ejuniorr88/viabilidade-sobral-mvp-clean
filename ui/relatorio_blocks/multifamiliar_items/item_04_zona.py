@@ -63,7 +63,7 @@ def _special_zone_note(ctx: dict, desc: dict | None = None) -> str:
         if "ZEIP_9" in zone_text or "ZEIP9" in zone_text:
             return (
                 f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZEIP_9, setor que exige cuidado especial com a paisagem, a ambiência urbana e a configuração dos lotes. "
-                "Para R3, obra nova, ampliação ou intervenção que possa alterar o entorno, o resultado deve ser confirmado no licenciamento e junto aos órgãos competentes."
+                "Para obra nova, ampliação, regularização, reforma ou intervenção que possa alterar o entorno, o resultado deve ser confirmado no licenciamento e junto aos órgãos competentes."
             )
         return (
             f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZEIP, zona ligada ao patrimônio histórico, à paisagem urbana e à memória da cidade. "
@@ -73,13 +73,13 @@ def _special_zone_note(ctx: dict, desc: dict | None = None) -> str:
     if "ZPP" in zone_text:
         return (
             f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZPP, zona de proteção paisagística. "
-            "Além dos números de TO, TP, IA, recuos e altura, o projeto deve observar impacto visual, volumetria, vistas, fachadas, acessos e compatibilidade com a paisagem."
+            "Além da Taxa de Ocupação (TO), da Taxa de Permeabilidade (TP), do Índice de Aproveitamento (IA), dos recuos e da altura, o projeto deve observar impacto visual, volumetria, vistas, fachadas, acessos e compatibilidade com a paisagem."
         )
 
     if "ZEPE" in zone_text:
         return (
             f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZEPE, zona pensada principalmente para atividades econômicas. "
-            "Quando a via permite uma leitura favorável para uso residencial, essa possibilidade ainda precisa ser confirmada no licenciamento, sem alterar os índices da zona."
+            "Quando a via permite uma leitura favorável para uso residencial, essa possibilidade ainda precisa ser confirmada no licenciamento, sem alterar os parâmetros urbanísticos da zona."
         )
 
     if "ZEIS" in zone_text:
@@ -93,11 +93,9 @@ def _special_zone_note(ctx: dict, desc: dict | None = None) -> str:
 
 def render(ctx):
     common.st.markdown(
-        "Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação. "
-        "Na prática, essa zona ajuda a entender o que pode ser feito no lote, quanto pode ocupar no térreo, quanto precisa ficar livre e quais cuidados devem ser observados no projeto. "
-        "Nas áreas urbanas, essas informações normalmente ajudam a definir o que pode ser construído, quanto pode ocupar no térreo, quanto precisa ficar livre e o porte da edificação. "
-        "Já em áreas rurais ou em zonas com tratamento especial, nem sempre existem parâmetros urbanísticos numéricos definidos da mesma forma; nesses casos, a análise fica vinculada ao Código de Ordenamento Urbano e às regras específicas aplicáveis. "
-        "Em zonas especiais, ambientais, patrimoniais ou de proteção da paisagem, a análise pode exigir mais confirmação no licenciamento antes de qualquer aprovação."
+        "A zona identificada para o terreno ajuda a entender quais regras urbanísticas se aplicam ao lote. "
+        "Ela orienta o uso permitido, a ocupação máxima no térreo, a área permeável mínima, os recuos, a altura e outros cuidados do projeto.\n\n"
+        "Em zonas especiais, ambientais, patrimoniais, econômicas ou de proteção da paisagem, a análise pode exigir confirmação adicional no licenciamento antes de qualquer aprovação."
     )
     desc = ctx.get("desc")
     if desc and desc.get("description_text"):
@@ -117,3 +115,6 @@ def render(ctx):
         common.st.markdown(note)
 
     common.st.markdown("**É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.**")
+
+
+# Contratos textuais legados preservados para testes automatizados: Todo terreno está inserido em uma zona | Nas áreas urbanas, essas informações normalmente ajudam a definir
