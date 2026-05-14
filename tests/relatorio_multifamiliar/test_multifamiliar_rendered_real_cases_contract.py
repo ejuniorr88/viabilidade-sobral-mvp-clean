@@ -202,14 +202,13 @@ def test_r3_zeip5_area_zero_render_blocks_forbidden_regressions(monkeypatch):
         "Área máxima do lote: 40.000,00 m²",
         "Testada mínima: 5,00 m",
         "Testada máxima: 200,00 m",
-        "300,00 × 70,0% = 210,00",
-        "Pelos recuos, a construção até caberia fisicamente em uma área de **285,00 m²**",
-        "Porém, isso não significa que seja permitido ocupar tudo isso",
-        "Taxa de Ocupação é mais restritiva e limita a ocupação do térreo a **210,00 m²**",
-        "limite real de ocupação no térreo é **210,00 m²**",
-        "300,00 − 210,00 = 90,00",
-        "45,00 podem receber piso impermeável",
-        "Por via:** via local — neste caso, não há sobreposição por via arterial/coletora",
+        "300,00 m² × 70,0% = 210,00 m²",
+        "área física estimada pelos recuos: **10,00 m × 28,50 m = 285,00 m²**",
+        "ocupação no térreo não pode ultrapassar o limite da Taxa de Ocupação (TO)",
+        "referência de ocupação máxima no térreo é de **210,00 m²**",
+        "300,00 m² − 210,00 m² = 90,00 m²",
+        "45,00 m² podem receber piso impermeável",
+        "Por via: via local — neste caso, a via não gera sobreposição de adequabilidade",
     ]
     plain_text = _plain(text)
     for snippet in required:
@@ -250,9 +249,9 @@ def test_r21_zeip7_testada_7_alerts_and_never_suggests_5_pavements(monkeypatch):
         "testada informada é inferior a 8,00 m",
         "R2.1 justaposto fora de ZEIS",
         "máximo 2 pavimentos",
-        "210,00 × 70,0% = 147,00",
-        "Pelos recuos, a construção até caberia fisicamente em uma área de **199,50 m²**",
-        "limite real de ocupação no térreo é **147,00 m²**",
+        "210,00 m² × 70,0% = 147,00 m²",
+        "Projeção máxima de referência no térreo: 147,00 m²",
+        "limite de referência de ocupação no térreo é de **147,00 m²**",
         "Resultado final: ⚠️ PERMITE COM RESSALVA",
         "Antes de seguir, revise o enquadramento do projeto ou confirme a possibilidade no licenciamento municipal",
     ]
@@ -295,11 +294,11 @@ def test_zeip9_r3_never_allows_simple_edificio_without_warning(monkeypatch):
         "EXIGE CONFIRMAÇÃO — ZEIP_9",
         "restrição específica quanto à construção de novos edifícios",
         "não alteração da configuração dos lotes existentes",
-        "200,00 × 70,0% = 140,00",
-        "20,00 − recuo frontal − recuo de fundo = 18,50",
-        "Pelos recuos, a construção até caberia fisicamente em uma área de **185,00 m²**",
-        "limite real de ocupação no térreo é **140,00 m²**",
-        "200,00 − 140,00 = 60,00",
+        "200,00 m² × 70,0% = 140,00 m²",
+        "profundidade útil: **18,50 m**",
+        "área física estimada pelos recuos: **10,00 m × 18,50 m = 185,00 m²**",
+        "referência de ocupação máxima no térreo é de **140,00 m²**",
+        "200,00 m² − 140,00 m² = 60,00 m²",
     ]
     plain_text = _plain(text)
     for snippet in required:

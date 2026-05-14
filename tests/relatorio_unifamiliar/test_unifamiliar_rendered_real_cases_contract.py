@@ -207,12 +207,12 @@ def test_unifamiliar_area_230_exceeds_to_but_not_recuos(monkeypatch):
 
     required = [
         "Área pretendida informada: **230,00 m²**",
-        "ultrapassa o limite máximo permitido pela TO",
-        "TO correspondente à área pretendida",
+        "ultrapassa o limite máximo permitido pela Taxa de Ocupação (TO)",
+        "Taxa de Ocupação (TO) correspondente à área pretendida",
         "76,7%",
-        "cabe fisicamente pelos recuos, mas não pode ser adotada porque ultrapassa a Taxa de Ocupação máxima",
-        "limite real continua sendo **210,00 m²** no térreo",
-        "projeto precisaria ser reduzido para respeitar no máximo **210,00 m²** no térreo",
+        "cabe fisicamente pelos recuos, mas não pode ser adotada porque ultrapassa a Taxa de Ocupação (TO) máxima",
+        "referência de ocupação máxima no térreo continua sendo **210,00 m²**",
+        "o projeto precisaria ser reduzido para respeitar esse limite",
     ]
     plain_text = _plain(text)
     for snippet in required:
@@ -234,13 +234,13 @@ def test_unifamiliar_area_150_normal_case_keeps_expected_summary(monkeypatch):
     required = [
         "Área pretendida informada: **150,00 m²**",
         "abaixo do limite máximo permitido",
-        "TO correspondente à área pretendida",
+        "Taxa de Ocupação (TO) correspondente à área pretendida",
         "50,0%",
         "área pretendida de **150,00 m²** é viável",
-        "área livre remanescente",
+        "área remanescente sem ocupação no térreo",
         "150,00 m²",
         "105,00 m²",
-        "Saldo estimado pelo IA",
+        "saldo estimado pelo **Índice de Aproveitamento (IA)**",
         "450,00 m²",
     ]
     plain_text = _plain(text)
@@ -248,7 +248,7 @@ def test_unifamiliar_area_150_normal_case_keeps_expected_summary(monkeypatch):
         assert snippet.replace("**", "") in plain_text, f"Texto obrigatório sumiu ou foi alterado: {snippet}"
 
     forbidden = [
-        "ultrapassa o limite máximo permitido pela TO",
+        "ultrapassa o limite máximo permitido pela Taxa de Ocupação (TO)",
         "não é urbanisticamente possível",
         "Área pretendida informada: **230,00 m²**",
     ]
