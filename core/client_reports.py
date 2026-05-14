@@ -311,11 +311,13 @@ def build_report_signature(calc: Dict[str, Any], session_state: Dict[str, Any]) 
             )
         ),
         "lot_is_corner": _pick_bool(session_state.get("lot_is_corner"), calc.get("lot_is_corner")),
+        "lot_is_midblock": _pick_bool(session_state.get("lot_is_midblock"), calc.get("lot_is_midblock")),
         "lot_is_irregular": _pick_bool(
             session_state.get("lot_is_irregular"),
             calc.get("lot_is_irregular"),
             calc.get("lot_irregular"),
         ),
+        "lot_type_label": _normalize_text(_pick_value(session_state.get("lot_type_label"), calc.get("lot_type_label"))),
         "selected_lat": _normalize_number(selected_lat, 6),
         "selected_lon": _normalize_number(selected_lon, 6),
     }
@@ -580,6 +582,30 @@ def _normalize_report_row(row: Dict[str, Any]) -> Dict[str, Any]:
     normalized["pdf_bucket"] = row.get("pdf_bucket") or ctx.get("pdf_bucket") or _DEFAULT_BUCKET
     normalized["pdf_file_name"] = row.get("pdf_file_name") or ctx.get("pdf_file_name") or "relatorio.pdf"
     return normalized
+
+
+def get_client_report_by_signature(user_id: str, report_signature: str) -> Dict[str, Any] | None:
+    """Retorna relatório já salvo para a mesma assinatura, sem tocar em crédito.
+
+    Usado pelo fluxo financeiro antes de debitar para evitar consumo/estorno
+    desnecessário quando o usuário volta para um cenário já gerado.
+    """
+    if not user_id or not report_signature:
+        return None
+
+    client = get_supabase_service_client()
+    result = (
+        client.table("client_reports")
+        .select("id,report_signature,report_context")
+        .eq("user_id", user_id)
+        .eq("report_signature", report_signature)
+        .limit(1)
+        .execute()
+    )
+    data = getattr(result, "data", None) or []
+    if not data:
+        return None
+    return _normalize_report_row(data[0])
 
 
 def save_client_report(
