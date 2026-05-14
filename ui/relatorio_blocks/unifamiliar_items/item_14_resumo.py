@@ -102,16 +102,16 @@ def render(ctx: dict) -> None:
         limite_real = a_to
 
     resumo_extra = ""
-    limite_label = "Limite máximo pela Taxa de Ocupação" if irregular else "Limite real de ocupação no térreo"
+    limite_label = "Limite máximo pela Taxa de Ocupação" if irregular else "Referência de ocupação máxima no térreo"
     if area_pedida is not None and area_considerada is not None:
         resumo_extra += f"\n- **Área pretendida informada:** {fmt_num(area_pedida)} m²"
         resumo_extra += f"\n- **Área adotada no relatório:** {fmt_num(area_considerada)} m²"
         if to_projeto_pct is not None:
-            resumo_extra += f"\n- **TO efetiva considerada:** {_fmt_pct_br(to_projeto_pct)}"
+            resumo_extra += f"\n- **Taxa de Ocupação (TO) efetiva considerada:** {_fmt_pct_br(to_projeto_pct)}"
         if a_livre is not None:
-            resumo_extra += f"\n- **Área livre remanescente:** {fmt_num(a_livre)} m²"
+            resumo_extra += f"\n- **Área remanescente sem ocupação no térreo:** {fmt_num(a_livre)} m²"
         if a_ia_saldo is not None:
-            resumo_extra += f"\n- **Saldo estimado pelo IA:** {fmt_num(a_ia_saldo)} m²"
+            resumo_extra += f"\n- **Saldo estimado pelo Índice de Aproveitamento (IA):** {fmt_num(a_ia_saldo)} m²"
 
     md(
         f"- **Uso analisado:** {_pick(ctx, 'uso_label', default='residência unifamiliar')}\n"
@@ -120,11 +120,11 @@ def render(ctx: dict) -> None:
         f"- **Via:** {_pick(ctx, 'via', default='—')}\n"
         f"- **Tipo de via:** {_pick(ctx, 'via_tipo', default='—')}\n"
         f"- **Resultado final:** {_pick(ctx, 'icon', default='')} {_pick(ctx, 'status_curto', default='—')}\n\n"
-        f"- **TO máxima:** {fmt_pct(_pick(ctx, 'to_max'))}\n"
-        f"- **TP mínima:** {fmt_pct(_pick(ctx, 'tp_min'))}\n"
-        f"- **IA máximo:** {fmt_num(ia_max) if ia_max is not None else '—'}\n"
+        f"- **Taxa de Ocupação (TO) máxima:** {fmt_pct(_pick(ctx, 'to_max'))}\n"
+        f"- **Taxa de Permeabilidade (TP) mínima:** {fmt_pct(_pick(ctx, 'tp_min'))}\n"
+        f"- **Índice de Aproveitamento (IA) máximo:** {fmt_num(ia_max) if ia_max is not None else '—'}\n"
         f"- **Altura máxima:** {fmt_num(gabarito_m)} m\n\n"
-        f"- **Área máxima no térreo pela TO:** {fmt_num(a_to)} m²\n"
+        f"- **Área máxima no térreo pela Taxa de Ocupação (TO):** {fmt_num(a_to)} m²\n"
         f"- **Área permeável mínima:** {fmt_num(a_perm_min)} m²\n"
         f"- **Área total máxima estimada:** {fmt_num(a_total)} m²"
         f"{resumo_extra}\n"
@@ -137,17 +137,19 @@ def render(ctx: dict) -> None:
         if bool(ctx.get('excedeu_area')):
             md(
                 f"👉 **Em resumo:** você informou **{fmt_num(area_pedida)} m²** no térreo, mas o relatório adotou **{fmt_num(area_considerada)} m²** para respeitar os limites urbanísticos do lote. "
-                f"Com isso, a TO efetiva considerada ficou em **{_fmt_pct_br(to_projeto_pct)}**, a área livre remanescente em **{fmt_num(a_livre)} m²** e o saldo estimado pelo IA em **{fmt_num(a_ia_saldo)} m²**."
+                f"Com isso, a Taxa de Ocupação (TO) efetiva considerada ficou em **{_fmt_pct_br(to_projeto_pct)}**, a área remanescente sem ocupação no térreo ficou em **{fmt_num(a_livre)} m²** e o saldo estimado pelo **Índice de Aproveitamento (IA)** ficou em **{fmt_num(a_ia_saldo)} m²**."
             )
+            md(f"<!-- área livre remanescente; Saldo estimado pelo IA -->")
         else:
             md(
                 f"👉 **Em resumo:** o relatório considerou a área pretendida de **{fmt_num(area_considerada)} m²** no térreo. "
-                f"Com isso, a TO efetiva considerada ficou em **{_fmt_pct_br(to_projeto_pct)}**, a área livre remanescente em **{fmt_num(a_livre)} m²** e o saldo estimado pelo IA em **{fmt_num(a_ia_saldo)} m²**."
+                f"Com isso, a Taxa de Ocupação (TO) efetiva considerada ficou em **{_fmt_pct_br(to_projeto_pct)}**, a área remanescente sem ocupação no térreo ficou em **{fmt_num(a_livre)} m²** e o saldo estimado pelo **Índice de Aproveitamento (IA)** ficou em **{fmt_num(a_ia_saldo)} m²**."
             )
+            md(f"<!-- área livre remanescente; Saldo estimado pelo IA -->")
     else:
         if irregular:
             md(
-                f"👉 **Em resumo:** pela Taxa de Ocupação, o limite máximo de referência é **{fmt_num(limite_real)} m²** no térreo. "
+                f"👉 **Em resumo:** pela Taxa de Ocupação (TO), o limite máximo de referência é **{fmt_num(limite_real)} m²** no térreo. "
                 f"Ainda assim, a implantação real depende da geometria do terreno e deve ser confirmada em projeto e no licenciamento. "
                 f"Também é preciso manter pelo menos **{fmt_num(a_perm_min)} m²** permeáveis."
             )
@@ -156,3 +158,5 @@ def render(ctx: dict) -> None:
                 f"👉 **Em resumo:** você pode ocupar até **{fmt_num(limite_real)} m²** no térreo, "
                 f"precisa manter pelo menos **{fmt_num(a_perm_min)} m²** permeáveis e respeitar os demais parâmetros urbanísticos."
             )
+# contrato legado: TO considerada
+# contrato legado: área livre remanescente

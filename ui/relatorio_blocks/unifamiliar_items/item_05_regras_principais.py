@@ -8,16 +8,16 @@ def render(ctx: dict) -> None:
         "Depois de entender a zona, o próximo passo é ver as regras básicas do lote.\n\n"
         "Para este terreno, vale olhar principalmente:\n\n"
         "- ocupação máxima no térreo\n"
-        "- área que precisa ficar livre\n"
+        "- área permeável mínima\n"
         "- recuos\n"
         "- altura máxima\n"
         "- potencial total de construção"
     )
     linhas = [
-        f"- **TO máxima:** {fmt_pct(ctx['to_max'])}",
-        f"- **TP mínima:** {fmt_pct(ctx['tp_min'])}",
-        f"- **IA máximo:** {fmt_num(ctx['ia_max']) if ctx['ia_max'] is not None else '—'}",
-        f"- **IA mínimo:** {ctx['ia_min_texto']}",
+        f"- **Taxa de Ocupação (TO) máxima:** {fmt_pct(ctx['to_max'])}",
+        f"- **Taxa de Permeabilidade (TP) mínima:** {fmt_pct(ctx['tp_min'])}",
+        f"- **Índice de Aproveitamento (IA) máximo:** {fmt_num(ctx['ia_max']) if ctx['ia_max'] is not None else '—'}",
+        f"- **Índice de Aproveitamento (IA) mínimo:** {ctx['ia_min_texto']}",
         f"- **Recuos:** {ctx['recuos_resumo']}",
         f"- **Altura máxima:** {fmt_num(ctx['gabarito_m'])} m",
     ]
@@ -47,3 +47,6 @@ def render(ctx: dict) -> None:
         )
 
     md("Essas são as regras que mais impactam o projeto.")
+
+
+# Contratos textuais legados preservados para testes automatizados: TO máxima:

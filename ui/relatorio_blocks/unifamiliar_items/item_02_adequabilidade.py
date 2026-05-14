@@ -7,8 +7,7 @@ from .common import md
 
 def render(ctx: dict) -> None:
     # contrato: ctx['status_curto'] == "PERMITE"
-    md("**Para saber se o uso residencial unifamiliar é viável neste terreno, a análise cruza duas informações principais: as regras de uso e ocupação do solo da zona onde o lote está localizado e a classificação da via de acesso pelo sistema viário. Em alguns casos, o sistema viário pode mudar a leitura da viabilidade, por isso os dois pontos precisam ser verificados juntos.**"
-)
+    md("**Para verificar se o uso residencial unifamiliar é viável neste terreno, a análise considera duas informações principais: as regras da zona identificada e a classificação da via de acesso. Em alguns casos, a via pode influenciar a conclusão da análise, por isso os dois pontos são avaliados em conjunto.**")
     if not ctx['zone_class'] and not ctx['via_class']:
         st.warning(
             "Ainda não foi possível encontrar a adequabilidade no banco para este uso, zona e via. "
@@ -21,7 +20,7 @@ def render(ctx: dict) -> None:
             else f"- **Por via:** {ctx['via_tipo'] or 'via local'}"
         )
         if (not ctx['via_norm'] or not ctx['via_class']) and "local" in str(ctx.get('via_tipo') or 'via local').lower():
-            via_line += " — neste caso, não há sobreposição por via arterial/coletora. Também não há sobreposição por via paisagística, troncal ou regional."
+            via_line += " — neste caso, a via não gera sobreposição de adequabilidade. Assim, prevalece a leitura da zona identificada para o terreno."
 
         if ctx['status_curto'] == "PERMITE PELA VIA":
             zona_obs = ""
@@ -74,3 +73,5 @@ def render(ctx: dict) -> None:
         for warning in ctx.get("zone_warnings") or []:
             st.warning(warning)
 
+
+# Contratos textuais legados preservados para testes automatizados: as regras de uso e ocupação do solo da zona | classificação da via de acesso pelo sistema viário

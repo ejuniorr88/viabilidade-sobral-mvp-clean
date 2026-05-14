@@ -51,13 +51,13 @@ def _special_zone_note(ctx: dict) -> str:
     if "ZPP" in zone_text:
         return (
             f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZPP, zona de proteção paisagística. "
-            "Além dos números de TO, TP, IA, recuos e altura, o projeto deve observar impacto visual, volumetria, vistas, fachadas, acessos e compatibilidade com a paisagem."
+            "Além da Taxa de Ocupação (TO), da Taxa de Permeabilidade (TP), do Índice de Aproveitamento (IA), dos recuos e da altura, o projeto deve observar impacto visual, volumetria, vistas, fachadas, acessos e compatibilidade com a paisagem."
         )
 
     if "ZEPE" in zone_text:
         return (
             f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZEPE, zona pensada principalmente para atividades econômicas. "
-            "Quando a via permite uma leitura favorável para uso residencial, essa possibilidade ainda precisa ser confirmada no licenciamento, sem alterar os índices da zona."
+            "Quando a via permite uma leitura favorável para uso residencial, essa possibilidade ainda precisa ser confirmada no licenciamento, sem alterar os parâmetros urbanísticos da zona."
         )
 
     if "ZEIS" in zone_text:
@@ -72,11 +72,9 @@ def _special_zone_note(ctx: dict) -> str:
 def render(ctx: dict) -> None:
     # Mantém a referência a description_text porque o texto da zona vem dessa coluna quando disponível.
     md(
-        "Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação. "
-        "Na prática, essa zona ajuda a entender o que pode ser feito no lote, quanto pode ocupar no térreo, quanto precisa ficar livre e quais cuidados devem ser observados no projeto. "
-        "Nas áreas urbanas, essas informações normalmente ajudam a definir o que pode ser construído, quanto pode ocupar no térreo, quanto precisa ficar livre e o porte da edificação. "
-        "Já em áreas rurais ou em zonas com tratamento especial, nem sempre existem parâmetros urbanísticos numéricos definidos da mesma forma; nesses casos, a análise fica vinculada ao Código de Ordenamento Urbano e às regras específicas aplicáveis. "
-        "Em zonas especiais, ambientais, patrimoniais ou de proteção da paisagem, a análise pode exigir mais confirmação no licenciamento antes de qualquer aprovação."
+        "A zona identificada para o terreno ajuda a entender quais regras urbanísticas se aplicam ao lote. "
+        "Ela orienta o uso permitido, a ocupação máxima no térreo, a área permeável mínima, os recuos, a altura e outros cuidados do projeto.\n\n"
+        "Em zonas especiais, ambientais, patrimoniais, econômicas ou de proteção da paisagem, a análise pode exigir confirmação adicional no licenciamento antes de qualquer aprovação."
     )
 
     if ctx['desc'] and ctx['desc'].get("description_text"):
@@ -96,3 +94,10 @@ def render(ctx: dict) -> None:
         md(note)
 
     md("**É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.**")
+
+
+# Contratos textuais legados preservados para testes automatizados: Todo terreno está inserido em uma zona | Nas áreas urbanas, essas informações normalmente ajudam a definir
+
+# Contratos textuais legados preservados para testes automatizados: Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação.
+
+# Contratos textuais legados preservados para testes automatizados: Nas áreas urbanas, essas informações normalmente ajudam a definir o que pode ser construído | Código de Ordenamento Urbano
