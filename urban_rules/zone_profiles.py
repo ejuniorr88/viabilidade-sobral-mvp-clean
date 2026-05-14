@@ -239,8 +239,10 @@ def zone_context_warnings(ctx: dict[str, Any]) -> list[str]:
                 f"**Atenção dimensional:** a área informada do lote ({_fmt_num(area)} m²) está acima da área máxima cadastrada ({_fmt_num(area_max)} m²). Conferir situação cadastral, lote existente e eventual restrição para parcelamento, desmembramento ou remembramento."
             )
     if front is not None and front > 0 and testada_min is not None and front < testada_min:
+        zona_label = sub_label or str(zona or "esta zona").strip().upper() or "esta zona"
+        tipo_lote = "lote de esquina" if ctx.get("is_corner") else "este tipo de lote"
         warnings.append(
-            f"**Atenção dimensional:** a testada informada ({_fmt_num(front)} m) está abaixo da testada mínima cadastrada ({_fmt_num(testada_min)} m). Conferir regularidade cadastral e validação pelo órgão licenciador."
+            f"**Atenção dimensional — testada do lote:** o lote informado tem {_fmt_num(front)} m de testada. Para {tipo_lote} na {zona_label}, a testada mínima aplicável é de {_fmt_num(testada_min)} m. Essa situação deve ser conferida na matrícula/documentação do imóvel e no licenciamento municipal, especialmente para confirmar se o lote já existe regularmente e se pode receber o projeto pretendido."
         )
     if front is not None and front > 0 and testada_max is not None and front > testada_max:
         warnings.append(
