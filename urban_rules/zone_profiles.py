@@ -197,20 +197,42 @@ def zone_context_warnings(ctx: dict[str, Any]) -> list[str]:
         )
 
     # Alertas dimensionais/cadastrais gerais.
-    area = _to_float(ctx.get("lot_area_f"))
-    front = _to_float(ctx.get("lot_front"))
-    area_min = _to_float(ctx.get("area_min"))
-    area_max = _to_float(ctx.get("area_max"))
-    testada_min = _to_float(ctx.get("testada_min"))
-    testada_max = _to_float(ctx.get("testada_max"))
+    area = _to_float(ctx.get("lot_area_f") or ctx.get("area_lote") or ctx.get("area_total") or ctx.get("A"))
+    front = _to_float(ctx.get("lot_front") or ctx.get("testada") or ctx.get("testada_lote"))
+
+    # Alguns fluxos do relatório montam o contexto com nomes diferentes.
+    # A Fase 4.1 V2 usa uma leitura mais defensiva para garantir que o alerta
+    # especial de ZEIP apareça tanto no item 2/resumo quanto no item 5.
+    area_min = _to_float(
+        ctx.get("area_min")
+        or ctx.get("area_min_lote")
+        or ctx.get("area_min_lote_m2")
+        or ctx.get("area_lote_min_m2")
+        or ctx.get("lote_min_area_m2")
+    )
+    area_max = _to_float(
+        ctx.get("area_max")
+        or ctx.get("area_max_lote")
+        or ctx.get("area_max_lote_m2")
+        or ctx.get("lote_max_area_m2")
+    )
+    testada_min = _to_float(ctx.get("testada_min") or ctx.get("testada_min_lote") or ctx.get("testada_min_m"))
+    testada_max = _to_float(ctx.get("testada_max") or ctx.get("testada_max_lote") or ctx.get("testada_max_m"))
     if area is not None and area_min is not None and area < area_min:
         warnings.append(
             f"**Atenção dimensional:** a área informada do lote ({_fmt_num(area)} m²) está abaixo da área mínima cadastrada ({_fmt_num(area_min)} m²). Isso não invalida automaticamente o estudo, mas exige conferência da matrícula, cadastro municipal, situação existente do lote e licenciamento."
         )
     if area is not None and area_max is not None and area > area_max:
-        if area_min is not None and area_max < area_min:
+        max_menor_que_min = area_min is not None and area_max < area_min
+        zona_patrimonial = is_zeip(zona, subzona)
+        if max_menor_que_min or zona_patrimonial:
+            complemento_min = (
+                f", e a área máxima cadastrada ({_fmt_num(area_max)} m²) aparece menor que a área mínima ({_fmt_num(area_min)} m²)"
+                if max_menor_que_min
+                else ""
+            )
             warnings.append(
-                f"**Atenção dimensional — regra especial do lote:** a área informada ({_fmt_num(area)} m²) está acima da área máxima cadastrada ({_fmt_num(area_max)} m²), e esta zona apresenta área máxima menor que a área mínima cadastrada. Isso pode indicar regra especial ligada à preservação da configuração dos lotes existentes, especialmente em áreas patrimoniais. Confirme a situação cadastral, a matrícula/documentação do imóvel e a validade do lote existente no licenciamento municipal antes de tratar este resultado como autorização para parcelar, remembrar, desmembrar ou ampliar."
+                f"**Atenção dimensional — regra especial do lote:** a área informada ({_fmt_num(area)} m²) está acima da área máxima cadastrada ({_fmt_num(area_max)} m²){complemento_min}. Em ZEIP ou área patrimonial, isso pode estar ligado à preservação da configuração dos lotes existentes. Confirme a situação cadastral, a matrícula/documentação do imóvel e a validade do lote existente no licenciamento municipal, especialmente se o lote já existir regularmente. Não trate este alerta como autorização para parcelar, remembrar, desmembrar ou ampliar."
             )
         else:
             warnings.append(
