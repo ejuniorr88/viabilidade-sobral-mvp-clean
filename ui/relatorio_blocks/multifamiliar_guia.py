@@ -84,7 +84,6 @@ def _render_item_02_safeguard(ctx: Dict[str, Any]) -> None:
         + via_line
         + f"\n- **Resumo final:** {resumo_icon} **{resumo_status}**"
     )
-    common.st.markdown("<!-- Por via: via local — neste caso, não há sobreposição por via arterial/coletora -->")
 
     status_upper = str(resumo_status).upper()
     msg = f"{resumo_icon} **{resumo_status}.** {ctx.get('explicacao') or ''}"
