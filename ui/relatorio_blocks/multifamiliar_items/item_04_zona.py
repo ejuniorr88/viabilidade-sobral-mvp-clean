@@ -51,12 +51,12 @@ def _special_zone_note(ctx: dict, desc: dict | None = None) -> str:
                 f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZEIA-APP, uma condição com prioridade ambiental ainda mais sensível. "
                 "Mesmo que a via ajude na análise do uso, o relatório não deve ser entendido como autorização automática para construir. "
                 "Antes de qualquer aprovação, é necessário confirmar a documentação do imóvel, como matrícula, escritura, registro ou documento equivalente, "
-                "e verificar APP, restrições ambientais, necessidade de licença e análise do órgão competente."
+                "e verificar Área de Preservação Permanente (APP), restrições ambientais, necessidade de licença e análise do órgão competente."
             )
         return (
             f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZEIA, uma zona com prioridade ambiental. "
             "Mesmo que a via ajude na análise do uso, o projeto só deve avançar depois da conferência da documentação do imóvel, "
-            "das possíveis restrições ambientais, APP, licenças necessárias e confirmação no licenciamento."
+            "das possíveis restrições ambientais, Área de Preservação Permanente (APP), licenças necessárias e confirmação no licenciamento."
         )
 
     if "ZEIP" in zone_text:
