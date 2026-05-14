@@ -48,7 +48,7 @@ def _fmt_pct(v: Any, dec: int = 1) -> str:
         if v is None:
             return "—"
         f = float(v)
-        return f"{f:.{dec}f}%"
+        return f"{f:.{dec}f}%".replace(".", ",")
     except Exception:
         return "—"
 
@@ -572,7 +572,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "item_04": "---\n### 🧭 4️⃣ O que essa zona permite neste terreno?",
         "item_05": "---\n### 📏 5️⃣ Regras principais para este terreno",
         "item_06": "---\n### 📐 6️⃣ Quanto posso ocupar no térreo?",
-        "item_07": "---\n### 🌿 7️⃣ Quanto preciso deixar livre?",
+        "item_07": "---\n### 🌿 7️⃣ Quanto preciso deixar permeável?",  # contrato legado: ### 🌿 7️⃣ Quanto preciso deixar livre?
         "item_08": "---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?",
         "item_09": "---\n### 🏢 9️⃣ Posso construir mais andares?",
         "item_10": "---\n### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?",
