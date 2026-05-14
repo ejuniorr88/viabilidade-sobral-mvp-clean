@@ -215,7 +215,7 @@ def fmt_pct(v: Any, dec: int = 1) -> str:
     n = safe_float(v)
     if n is None:
         return "-"
-    return f"{n:.{dec}f}%"
+    return f"{n:.{dec}f}%".replace(".", ",")
 
 
 def fmt_area(v: Any) -> str:
@@ -1158,7 +1158,7 @@ def render_item_06(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
 
 
 def render_item_07(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
-    section_title(pdf, "07", "Quanto preciso deixar livre?")
+    section_title(pdf, "07", "Quanto preciso deixar permeável?")
     if ctx['tp_min'] is None or ctx['a_perm_min'] is None:
         card_box(pdf, "Sem dado", ["Sem Taxa de Permeabilidade (TP) mínima cadastrada para esta zona/uso."], fill=(255,247,237))
         return
