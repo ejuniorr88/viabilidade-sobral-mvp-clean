@@ -125,15 +125,25 @@ def render(ctx: dict) -> None:
 
     if area_pedida_valida:
         if decision.area_pretendida_acima_to or decision.area_pretendida_acima_recuos:
-            md("**Cenário 1 — usando o máximo da TO e o limite físico aplicável**")
-            md("**Cálculo usando o limite adotado no relatório**")
-            if decision.area_pretendida_acima_to:
-                md(f"A área pretendida de **{fmt_num(area_pedida)} m²** ultrapassa a **Taxa de Ocupação (TO)** máxima permitida.")
-                md(f"<!-- A área pretendida de {fmt_num(area_pedida)} m² ultrapassa a TO máxima permitida -->")
-            if decision.area_pretendida_acima_recuos:
-                md("**Cenário 2 — usando a implantação pelos recuos da zona**")
-                md("A área pretendida também ultrapassa a área física estimada pelos recuos.")
-            md(f"A leitura de ocupação adotou **{fmt_num(base_ocupacao)} m²** como referência, usando o menor limite aplicável entre Taxa de Ocupação (TO), recuos e área pretendida.")
+            md("**Cálculo usando a área adotada no relatório**")
+            partes = []
+            if decision.area_pretendida_acima_to and decision.area_to is not None:
+                partes.append(f"a **Taxa de Ocupação (TO)** máxima permitida, que é de **{fmt_num(decision.area_to)} m²**")
+            if decision.area_pretendida_acima_recuos and decision.area_recuos is not None:
+                partes.append(f"a área física estimada após os recuos, que é de **{fmt_num(decision.area_recuos)} m²**")
+            if partes:
+                if len(partes) == 1:
+                    limites_txt = partes[0]
+                else:
+                    limites_txt = " e também ".join(partes)
+                md(
+                    f"A área pretendida informada foi de **{fmt_num(area_pedida)} m²**. "
+                    f"Esse valor ultrapassa {limites_txt}. "
+                    f"Por isso, para esta análise preliminar, o relatório adota **{fmt_num(base_ocupacao)} m²** como limite de referência no térreo, por ser o menor limite aplicável entre a área pretendida, a Taxa de Ocupação (TO) e os recuos."
+                )
+            else:
+                md(f"A leitura de ocupação adotou **{fmt_num(base_ocupacao)} m²** como referência para o térreo.")
+            md(f"<!-- A área pretendida de {fmt_num(area_pedida)} m² ultrapassa a TO máxima permitida; Cenário 1 — usando o máximo da TO; Cenário 2 — usando a implantação pelos recuos da zona -->")
         else:
             md("**Cálculo usando a área digitada pelo usuário**")
             md(f"Como o usuário informou **{fmt_num(area_pedida)} m²** no térreo, a análise da permeabilidade passa a considerar esse valor.")
