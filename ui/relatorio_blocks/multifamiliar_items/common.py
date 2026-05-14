@@ -94,7 +94,7 @@ def _fmt_pct(v: Any, dec: int = 1) -> str:
     try:
         if v is None:
             return "—"
-        return f"{float(v):.{dec}f}%"
+        return f"{float(v):.{dec}f}%".replace(".", ",")
     except Exception:
         return "—"
 
@@ -525,7 +525,7 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ], "mesmo no **R2.1**, o **Índice de Aproveitamento (IA)** da zona continua importando, e a forma de calcular a área computável também precisa ser observada."),
             ("Subsolo", [
                 "Quando a zona permitir subsolo, ele deve respeitar:",
-                "- a **Taxa de Ocupação do subsolo**;",
+                "- a **Taxa de Ocupação (TO) do subsolo**;",
                 "- a **Taxa de Permeabilidade (TP)**;",
                 "- os **recuos mínimos da zona**;",
                 "E, se houver subsolo, deve haver **recuo mínimo de 1,50 m em todas as divisas**.",
@@ -556,7 +556,7 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ("Área recreativa", [
                 "Se o empreendimento tiver **mais de 10 unidades**, deve prever **área recreativa mínima de 5% da área total do terreno**."
             ], "conjuntos maiores precisam reservar espaço de lazer e convivência."),
-            ("IA e área computável", [
+            ("Índice de Aproveitamento (IA) e área computável", [
                 "**Art. 110 da LC 91:** a área computável para o **Índice de Aproveitamento (IA)** é calculada pela soma das áreas das unidades autônomas.",
                 "A lei também considera como **não computáveis**, entre outros:",
                 "- obras complementares;",
@@ -601,7 +601,7 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
                 "No multifamiliar vertical, a área recreativa mínima é de:",
                 "- **5% da área total construída das unidades**",
             ], "no prédio residencial, a área recreativa é calculada de forma diferente do condomínio horizontal."),
-            ("IA e área computável", [
+            ("Índice de Aproveitamento (IA) e área computável", [
                 "**Art. 110 da LC 91:** a área computável para o **Índice de Aproveitamento (IA)** é a soma das áreas das unidades autônomas.",
                 "A lei também considera como **não computáveis**, entre outros:",
                 "- obras complementares;",
