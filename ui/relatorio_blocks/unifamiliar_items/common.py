@@ -24,7 +24,7 @@ def fmt_pct(v: Any, dec: int = 1) -> str:
         if v is None:
             return "—"
         f = float(v)
-        return f"{f:.{dec}f}%"
+        return f"{f:.{dec}f}%".replace(".", ",")
     except Exception:
         return "—"
 
