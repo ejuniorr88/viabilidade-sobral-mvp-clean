@@ -173,7 +173,7 @@ def render_lote_section() -> Tuple[float, float, float]:
             help="Use a área total da matrícula ou do levantamento. Testada e profundidade não serão usadas no cálculo.",
         )
         st.info(
-            "Por se tratar de terreno irregular, os cálculos de TO, TP e IA usarão somente a área total informada. "
+            "Por se tratar de terreno irregular, os cálculos de Taxa de Ocupação (TO), Taxa de Permeabilidade (TP) e Índice de Aproveitamento (IA) usarão somente a área total informada. "
             "A implantação deve ser conferida em projeto conforme a geometria real do lote."
         )
     else:
