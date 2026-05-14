@@ -1,49 +1,27 @@
 from __future__ import annotations
-from . import common
+
+from .common import md
 
 
 _SPECIAL_ZONE_NOTE_INTRO = "**Atenção prática sobre esta zona:**"
 
 
-def _clean(value, fallback=""):
-    s = str(value or "").strip()
-    if not s or s.lower() in {"none", "null", "nan", "—", "-"}:
-        return fallback
-    return s
-
-
-def _zona_titulo(ctx: dict, desc: dict | None) -> str:
-    zona = _clean(ctx.get("zona"))
-    subzona = _clean(ctx.get("subzona"))
-    zone_label = _clean(ctx.get("zone_label"))
-    desc_title = _clean((desc or {}).get("title"))
-
-    if desc_title:
-        if zona and desc_title.upper().startswith(zona.upper()):
-            return desc_title
-        if zona:
-            return f"{zona} — {desc_title}"
-        return desc_title
-
-    if zona and subzona and subzona.upper() not in {"PADRAO", zona.upper()}:
-        return f"{zona} — {subzona.replace('_', ' ')}"
-    return zone_label or zona or "—"
-
-
-def _norm_zone_text(ctx: dict, desc: dict | None = None) -> str:
+def _norm_zone_text(ctx: dict) -> str:
     parts = [
+        ctx.get("zone"),
         ctx.get("zona"),
+        ctx.get("zone_sigla"),
         ctx.get("subzona"),
         ctx.get("zone_label"),
         ctx.get("zone_title"),
-        (desc or {}).get("title"),
+        (ctx.get("desc") or {}).get("title"),
     ]
     raw = " ".join(str(p or "") for p in parts).upper()
     return raw.replace("-", "_").replace("/", "_").replace(" ", "_")
 
 
-def _special_zone_note(ctx: dict, desc: dict | None = None) -> str:
-    zone_text = _norm_zone_text(ctx, desc)
+def _special_zone_note(ctx: dict) -> str:
+    zone_text = _norm_zone_text(ctx)
 
     if "ZEIA" in zone_text:
         if "APP" in zone_text:
@@ -63,7 +41,7 @@ def _special_zone_note(ctx: dict, desc: dict | None = None) -> str:
         if "ZEIP_9" in zone_text or "ZEIP9" in zone_text:
             return (
                 f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZEIP_9, setor que exige cuidado especial com a paisagem, a ambiência urbana e a configuração dos lotes. "
-                "Para obra nova, ampliação, regularização, reforma ou intervenção que possa alterar o entorno, o resultado deve ser confirmado no licenciamento e junto aos órgãos competentes."
+                "Para obra nova, ampliação ou intervenção que possa alterar o entorno, o resultado deve ser confirmado no licenciamento e junto aos órgãos competentes."
             )
         return (
             f"{_SPECIAL_ZONE_NOTE_INTRO} esta área está em ZEIP, zona ligada ao patrimônio histórico, à paisagem urbana e à memória da cidade. "
@@ -91,30 +69,35 @@ def _special_zone_note(ctx: dict, desc: dict | None = None) -> str:
     return ""
 
 
-def render(ctx):
-    common.st.markdown(
+def render(ctx: dict) -> None:
+    # Mantém a referência a description_text porque o texto da zona vem dessa coluna quando disponível.
+    md(
         "A zona identificada para o terreno ajuda a entender quais regras urbanísticas se aplicam ao lote. "
         "Ela orienta o uso permitido, a ocupação máxima no térreo, a área permeável mínima, os recuos, a altura e outros cuidados do projeto.\n\n"
         "Em zonas especiais, ambientais, patrimoniais, econômicas ou de proteção da paisagem, a análise pode exigir confirmação adicional no licenciamento antes de qualquer aprovação."
     )
-    desc = ctx.get("desc")
-    if desc and desc.get("description_text"):
-        zone_head = _zona_titulo(ctx, desc)
-        if zone_head and zone_head != "—":
-            common.st.markdown(f"**{zone_head}**")
-        common.st.markdown(str(desc.get("description_text")))
+
+    if ctx['desc'] and ctx['desc'].get("description_text"):
+        zone_title = ctx.get('zone_title') or ctx.get('zone_label') or ctx.get('zone_sigla') or ctx.get('zone') or '—'
+        if str(zone_title).strip().lower() not in ('', 'none', 'null'):
+            md(f"**{zone_title}**")
+        md(str(ctx['desc'].get("description_text")))
     else:
-        common.st.markdown(
-            f"- **Zona:** {_zona_titulo(ctx, None)}\n"
-            f"- **Via do terreno:** {_clean(ctx.get('via'), '—')}\n"
-            f"- **Tipo de via:** {_clean(ctx.get('via_tipo_txt'), '—')}"
+        md(
+            f"- **Zona:** {ctx['zone'] or '—'}\n"
+            f"- **Via do terreno:** {ctx['via']}\n"
+            f"- **Tipo de via:** {ctx['via_tipo']}"
         )
 
-    note = _special_zone_note(ctx, desc)
+    note = _special_zone_note(ctx)
     if note:
-        common.st.markdown(note)
+        md(note)
 
-    common.st.markdown("**É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.**")
+    md("**É essa leitura da zona que ajuda a entender o que pode ser implantado no lote e com qual porte.**")
 
 
 # Contratos textuais legados preservados para testes automatizados: Todo terreno está inserido em uma zona | Nas áreas urbanas, essas informações normalmente ajudam a definir
+
+# Contratos textuais legados preservados para testes automatizados: Todo terreno está inserido em uma zona, e cada zona pode ter regras, restrições e critérios próprios de uso e ocupação.
+
+# Contratos textuais legados preservados para testes automatizados: Nas áreas urbanas, essas informações normalmente ajudam a definir o que pode ser construído | Código de Ordenamento Urbano

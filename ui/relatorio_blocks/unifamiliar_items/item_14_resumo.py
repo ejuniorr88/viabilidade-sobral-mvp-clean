@@ -139,13 +139,11 @@ def render(ctx: dict) -> None:
                 f"👉 **Em resumo:** você informou **{fmt_num(area_pedida)} m²** no térreo, mas o relatório adotou **{fmt_num(area_considerada)} m²** para respeitar os limites urbanísticos do lote. "
                 f"Com isso, a Taxa de Ocupação (TO) efetiva considerada ficou em **{_fmt_pct_br(to_projeto_pct)}**, a área remanescente sem ocupação no térreo ficou em **{fmt_num(a_livre)} m²** e o saldo estimado pelo **Índice de Aproveitamento (IA)** ficou em **{fmt_num(a_ia_saldo)} m²**."
             )
-            md(f"<!-- área livre remanescente; Saldo estimado pelo IA -->")
         else:
             md(
                 f"👉 **Em resumo:** o relatório considerou a área pretendida de **{fmt_num(area_considerada)} m²** no térreo. "
                 f"Com isso, a Taxa de Ocupação (TO) efetiva considerada ficou em **{_fmt_pct_br(to_projeto_pct)}**, a área remanescente sem ocupação no térreo ficou em **{fmt_num(a_livre)} m²** e o saldo estimado pelo **Índice de Aproveitamento (IA)** ficou em **{fmt_num(a_ia_saldo)} m²**."
             )
-            md(f"<!-- área livre remanescente; Saldo estimado pelo IA -->")
     else:
         if irregular:
             md(

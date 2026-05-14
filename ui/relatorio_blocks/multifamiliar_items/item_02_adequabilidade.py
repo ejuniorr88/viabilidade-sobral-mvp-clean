@@ -33,7 +33,6 @@ def render(ctx):
             + via_line
             + f"\n- **Resumo final:** {resumo_icon} **{resumo_status}**"
         )
-        common.st.markdown("<!-- Por via: via local — neste caso, não há sobreposição por via arterial/coletora -->")
 
         status_upper = str(ctx.get("status_curto") or "").upper()
         if ("RESSALVA" in status_upper) or ("CONDICIONADO" in status_upper) or ("CONFIRMAÇÃO" in status_upper):

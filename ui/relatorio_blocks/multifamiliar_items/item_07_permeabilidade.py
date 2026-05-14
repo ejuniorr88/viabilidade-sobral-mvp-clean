@@ -31,7 +31,6 @@ def _scenario(area_lote, ocupacao, area_perm_min):
         f"- **{fmt_num(area_impermeavel_livre)} m²** podem receber piso impermeável, desde que a área permeável mínima seja preservada."
     )
     # Compatibilidade com contratos textuais antigos: comentário HTML não aparece no relatório visual.
-    md(f"<!-- {fmt_num(area_lote)} − {fmt_num(ocupacao)} = {fmt_num(area_restante)}; {fmt_num(area_impermeavel_livre)} podem receber piso impermeável -->")
     return area_restante, area_impermeavel_livre
 
 
@@ -143,7 +142,6 @@ def render(ctx: dict) -> None:
                 )
             else:
                 md(f"A leitura de ocupação adotou **{fmt_num(base_ocupacao)} m²** como referência para o térreo.")
-            md(f"<!-- A área pretendida de {fmt_num(area_pedida)} m² ultrapassa a TO máxima permitida; Cenário 1 — usando o máximo da TO; Cenário 2 — usando a implantação pelos recuos da zona -->")
         else:
             md("**Cálculo usando a área digitada pelo usuário**")
             md(f"Como o usuário informou **{fmt_num(area_pedida)} m²** no térreo, a análise da permeabilidade passa a considerar esse valor.")
