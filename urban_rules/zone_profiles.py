@@ -103,7 +103,7 @@ def apply_zone_result_policy(
                 "PERMITE PELA VIA, COM CONFIRMAÇÃO AMBIENTAL E DOCUMENTAL",
                 "A via permite uma leitura favorável para o uso, mas o terreno está em ZEIA, uma zona com prioridade ambiental. "
                 "Por isso, este resultado não é uma liberação automática para construir. Antes da aprovação, será necessário confirmar a documentação do imóvel, "
-                "como matrícula, escritura, registro ou documento equivalente, e verificar se existem restrições ambientais, APP, necessidade de licença ou análise de órgão competente. "
+                "como matrícula, escritura, registro ou documento equivalente, e verificar se existem restrições ambientais, Área de Preservação Permanente (APP), necessidade de licença ou análise de órgão competente. "
                 "Na prática: a via ajuda, mas o projeto só poderá avançar se o terreno estiver regular e se a Prefeitura confirmar que a construção respeita as regras ambientais e urbanísticas."
                 f"{zeia_extra}",
             )
@@ -183,12 +183,12 @@ def zone_context_warnings(ctx: dict[str, Any]) -> list[str]:
         else:
             detail = "com cuidados específicos de paisagem, volumetria, vistas e impacto visual"
         warnings.append(
-            f"**Atenção — Zona de Proteção Paisagística:** a ZPP é {detail}. Mesmo quando o uso for permitido, o projeto deve observar impacto paisagístico, volumetria, ambiência urbana, acessos e confirmação no licenciamento."
+            f"**Atenção — Zona de Proteção Paisagística:** a ZPP é {detail}. Mesmo quando o uso for permitido, o projeto deve observar impacto paisagístico, volumetria, ambiência urbana, acessos e confirmação no licenciamento. A via reforça a compatibilidade do uso, mas não altera os parâmetros urbanísticos da ZPP."
         )
 
     if is_zeia(zona, subzona):
         warnings.append(
-            "**Atenção ambiental — ZEIA:** o terreno está em uma zona com prioridade ambiental. Mesmo quando a via ajuda na análise, o projeto só deve avançar depois da conferência da documentação do imóvel, das possíveis restrições ambientais, APP, licenças necessárias e confirmação no licenciamento."
+            "**Atenção ambiental — ZEIA:** o terreno está em uma zona com prioridade ambiental. Mesmo quando a via ajuda na análise, o projeto só deve avançar depois da conferência da documentação do imóvel, das possíveis restrições ambientais, Área de Preservação Permanente (APP), licenças necessárias e confirmação no licenciamento."
         )
 
     if is_zepe(zona, subzona) and is_strong_via(ctx.get("via_norm")):
