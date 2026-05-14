@@ -291,11 +291,11 @@
       map = new google.maps.Map(mapEl, {
         center: center,
         zoom: zoom,
-        mapTypeId: google.maps.MapTypeId.SATELLITE,
+        mapTypeId: google.maps.MapTypeId.HYBRID,
         mapTypeControl: true,
         mapTypeControlOptions: {
           style: google.maps.MapTypeControlStyle.DEFAULT,
-          mapTypeIds: ["roadmap", "satellite"],
+          mapTypeIds: ["roadmap", "hybrid", "satellite"],
         },
         streetViewControl: false,
         fullscreenControl: true,
@@ -306,7 +306,7 @@
         keyboardShortcuts: true,
       });
     } else {
-      map.setMapTypeId(google.maps.MapTypeId.SATELLITE);
+      map.setMapTypeId(google.maps.MapTypeId.HYBRID);
       map.setCenter(center);
       map.setZoom(zoom);
     }
