@@ -15,7 +15,7 @@ em checkout_flow, credits, client_reports, payments e report_pdf.
 from typing import Any, Dict, MutableMapping
 
 from core import checkout_flow as checkout_flow_core
-from core.client_reports import build_report_signature, save_client_report
+from core.client_reports import build_report_signature, get_client_report_by_signature, save_client_report
 from core.credits import consume_viability_credit, get_credit_balance, refund_viability_credit
 from core.payments import ensure_paid_payment_is_credited, refresh_payment_status_and_credit
 from core.report_pdf import generate_report_pdf_bytes
@@ -119,5 +119,6 @@ def deliver_paid_report(
         refund_viability_credit_func=refund_viability_credit,
         commit_report_snapshot_func=commit_report_snapshot_func,
         save_client_report_func=save_client_report,
+        get_existing_client_report_func=get_client_report_by_signature,
         preflight_reconcile_credit_func=preflight_credit_balance,
     )
