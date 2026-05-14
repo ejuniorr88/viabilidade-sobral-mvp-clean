@@ -125,7 +125,7 @@ def apply_zone_result_policy(
             return ResultPolicy(
                 "⚠️",
                 "PERMITE PELA VIA, COM RESSALVA DA ZEPE",
-                "A ZEPE é uma zona pensada principalmente para atividades econômicas, como comércio, serviços ou indústria. Neste caso, a via permite uma leitura favorável para o uso residencial, mas isso ainda precisa ser confirmado no licenciamento. A via ajuda na análise, mas não muda os índices da zona: o projeto continua tendo que respeitar TO, TP, IA, recuos, altura, área mínima e testada exigida.",
+                "A ZEPE é uma zona pensada principalmente para atividades econômicas, como comércio, serviços ou indústria. Neste caso, a via permite uma leitura favorável para o uso residencial, mas isso ainda precisa ser confirmado no licenciamento. A via ajuda na análise, mas não altera os parâmetros urbanísticos da zona: o projeto continua sujeito à Taxa de Ocupação (TO), à Taxa de Permeabilidade (TP), ao Índice de Aproveitamento (IA), aos recuos, à altura, à área mínima, à testada e às demais regras aplicáveis.",
             )
 
     if is_zeip(zona, subzona):
@@ -257,11 +257,11 @@ def zone_context_warnings(ctx: dict[str, Any]) -> list[str]:
 
     if ctx.get("is_irregular"):
         warnings.append(
-            "**Terreno irregular:** os cálculos de TO, TP e IA usam a área total informada como referência inicial. A implantação real da construção, dos acessos, da frente, dos fundos e das áreas livres depende da forma do lote, da planta/topografia e da análise no licenciamento."
+            "**Terreno irregular:** os cálculos de Taxa de Ocupação (TO), Taxa de Permeabilidade (TP) e Índice de Aproveitamento (IA) usam a área total informada como referência inicial. A implantação real da construção, dos acessos, da frente, dos fundos, das áreas sem ocupação no térreo e das áreas permeáveis depende da forma do lote, da planta/topografia e da análise no licenciamento."
         )
     elif ctx.get("is_corner"):
         warnings.append(
-            "**Lote de esquina:** a implantação deve considerar duas frentes, frente principal, outra frente, acessos, calçadas, rebaixos de meio-fio, sutamento e confirmação no licenciamento."
+            "**Lote de esquina:** a implantação deve ser analisada considerando a existência de duas frentes para vias públicas. O projeto precisa definir a frente principal, avaliar os acessos de veículos e pedestres, observar as calçadas nas duas faces do lote, os rebaixos de meio-fio, o sutamento, a visibilidade da esquina e a confirmação no licenciamento."
         )
 
     return warnings
