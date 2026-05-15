@@ -166,15 +166,14 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         or calc.get("lot_irregular")
         or calc.get("lot_is_irregular")
     )
+    is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
     if is_irregular:
         W = 0.0
         D = 0.0
-        is_corner = False
         tipo_lote = "Terreno irregular"
     else:
         W = float(st.session_state.get("lot_front_m") or calc.get("lot_front_m") or 0.0)
         D = float(st.session_state.get("lot_depth_m") or calc.get("lot_depth_m") or 0.0)
-        is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
         tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
@@ -432,15 +431,14 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         return
 
     A = float(calc.get("lot_area_m2") or 0.0)
+    is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
     if is_irregular:
         W = 0.0
         D = 0.0
-        is_corner = False
         tipo_lote = "Terreno irregular"
     else:
         W = float(st.session_state.get("lot_front_m") or calc.get("lot_front_m") or 0.0)
         D = float(st.session_state.get("lot_depth_m") or calc.get("lot_depth_m") or 0.0)
-        is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
         tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
