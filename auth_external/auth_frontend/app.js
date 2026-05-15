@@ -80,6 +80,93 @@
     return raw.replace(/\/+$/, "");
   }
 
+  function getOrigin(value) {
+    try {
+      return value ? new URL(value).origin : "";
+    } catch (_err) {
+      return "";
+    }
+  }
+
+  function normalizeAllowedOrigins(value) {
+    const rawList = Array.isArray(value) ? value : String(value || "").split(",");
+    const origins = [];
+    rawList.forEach((item) => {
+      const origin = getOrigin(String(item || "").trim());
+      if (origin && !origins.includes(origin)) origins.push(origin);
+    });
+    return origins;
+  }
+
+  function configuredAllowedStreamlitOrigins() {
+    const explicitAllowed = normalizeAllowedOrigins(baseCfg.ALLOWED_STREAMLIT_ORIGINS || "");
+    if (explicitAllowed.length) return explicitAllowed;
+    return normalizeAllowedOrigins(baseCfg.STREAMLIT_APP_URL || "");
+  }
+
+  function configuredAllowedGatewayOrigins() {
+    const explicitAllowed = normalizeAllowedOrigins(baseCfg.ALLOWED_GATEWAY_ORIGINS || "");
+    if (explicitAllowed.length) return explicitAllowed;
+    return normalizeAllowedOrigins(baseCfg.GATEWAY_BASE_URL || "");
+  }
+
+  function configuredAllowedLoginRedirectOrigins() {
+    const explicitAllowed = normalizeAllowedOrigins(baseCfg.ALLOWED_LOGIN_REDIRECT_ORIGINS || "");
+    if (explicitAllowed.length) return explicitAllowed;
+    return normalizeAllowedOrigins([
+      baseCfg.LOGIN_REDIRECT_URL || "",
+      window.location.origin,
+    ]);
+  }
+
+  function assertAllowedOrigin(urlValue, allowedOrigins, emptyAllowlistMessage, deniedMessage) {
+    const origin = getOrigin(urlValue);
+
+    if (!origin) {
+      throw new Error(deniedMessage);
+    }
+    if (!allowedOrigins.length) {
+      throw new Error(emptyAllowlistMessage);
+    }
+    if (!allowedOrigins.includes(origin)) {
+      throw new Error(deniedMessage);
+    }
+    return true;
+  }
+
+  function assertAllowedStreamlitUrl(urlValue) {
+    // A origem autorizada deve vir do config.js implantado no Vercel.
+    // Não é seguro aceitar streamlit_app_url só por query string sem uma allowlist/baseCfg.
+    return assertAllowedOrigin(
+      urlValue,
+      configuredAllowedStreamlitOrigins(),
+      "Configuração de segurança incompleta: ALLOWED_STREAMLIT_ORIGINS ou STREAMLIT_APP_URL deve estar definido no login externo.",
+      "Origem do sistema principal não autorizada para receber login."
+    );
+  }
+
+  function assertAllowedGatewayUrl(urlValue) {
+    // O gateway recebe o access_token para validação. Por isso, ele também deve
+    // estar em allowlist/baseCfg do config.js, nunca apenas em query string.
+    return assertAllowedOrigin(
+      urlValue,
+      configuredAllowedGatewayOrigins(),
+      "Configuração de segurança incompleta: ALLOWED_GATEWAY_ORIGINS ou GATEWAY_BASE_URL deve estar definido no login externo.",
+      "Gateway de autenticação não autorizado."
+    );
+  }
+
+  function assertAllowedLoginRedirectUrl(urlValue) {
+    // O callback OAuth deve voltar para a origem do próprio frontend de login ou
+    // para origem explicitamente permitida no config.js.
+    return assertAllowedOrigin(
+      urlValue,
+      configuredAllowedLoginRedirectOrigins(),
+      "Configuração de segurança incompleta: ALLOWED_LOGIN_REDIRECT_ORIGINS ou LOGIN_REDIRECT_URL deve estar definido no login externo.",
+      "URL de retorno do login não autorizada."
+    );
+  }
+
   function persistRuntimeConfig(cfg) {
     if (cfg.SUPABASE_URL) writeStorage(STORAGE_KEYS.supabaseUrl, cfg.SUPABASE_URL);
     if (cfg.SUPABASE_ANON_KEY) writeStorage(STORAGE_KEYS.supabaseAnonKey, cfg.SUPABASE_ANON_KEY);
@@ -119,7 +206,6 @@
       ),
     };
 
-    persistRuntimeConfig(cfg);
     return cfg;
   }
 
@@ -129,6 +215,16 @@
     if (!cfg.SUPABASE_ANON_KEY) missing.push("SUPABASE_ANON_KEY");
     if (!cfg.GATEWAY_BASE_URL) missing.push("GATEWAY_BASE_URL");
     if (!cfg.STREAMLIT_APP_URL) missing.push("STREAMLIT_APP_URL");
+
+    if (cfg.STREAMLIT_APP_URL) {
+      assertAllowedStreamlitUrl(cfg.STREAMLIT_APP_URL);
+    }
+    if (cfg.GATEWAY_BASE_URL) {
+      assertAllowedGatewayUrl(cfg.GATEWAY_BASE_URL);
+    }
+    if (cfg.LOGIN_REDIRECT_URL) {
+      assertAllowedLoginRedirectUrl(cfg.LOGIN_REDIRECT_URL);
+    }
 
     if (missing.length) {
       throw new Error(`AUTH_CONFIG incompleto: ${missing.join(", ")}`);
@@ -158,6 +254,7 @@
     const targetUrl = preferredUrl || fallbackUrl;
 
     try {
+      if (targetUrl) assertAllowedStreamlitUrl(targetUrl);
       return targetUrl ? new URL(targetUrl).origin : "";
     } catch (_err) {
       return "";
@@ -220,6 +317,7 @@
     const preferredAppUrl = persistPreferredStreamlitAppUrl();
 
     if (preferredAppUrl) {
+      assertAllowedStreamlitUrl(preferredAppUrl);
       callbackUrl.searchParams.set("streamlit_app_url", preferredAppUrl);
     }
     if (runtimeCfg.GATEWAY_BASE_URL) {
@@ -365,6 +463,7 @@
   try {
     runtimeCfg = buildRuntimeConfig();
     validateRuntimeConfig(runtimeCfg);
+    persistRuntimeConfig(runtimeCfg);
     supabaseClient = window.supabase.createClient(runtimeCfg.SUPABASE_URL, runtimeCfg.SUPABASE_ANON_KEY);
   } catch (err) {
     setLoggedOutView();
@@ -432,6 +531,7 @@
           throw new Error("URL do sistema principal não informada.");
         }
 
+        assertAllowedStreamlitUrl(targetUrl);
         const streamlitUrl = new URL(targetUrl);
         streamlitUrl.searchParams.set("ext_access_token", data.session.access_token);
         window.location.href = streamlitUrl.toString();
