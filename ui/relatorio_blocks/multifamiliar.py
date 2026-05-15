@@ -47,9 +47,9 @@ def render_tabela_portes_multifamiliar() -> None:
 def render_tabela_parametros_inicio_multifamiliar(parametros: Dict[str, Any]) -> None:
     st.markdown("### Parâmetros iniciais")
     _table([
-        ("TO máxima", str(parametros.get("to_max", "—"))),
-        ("TP mínima", str(parametros.get("tp_min", "—"))),
-        ("IA máximo", str(parametros.get("ia_max", "—"))),
+        ("Taxa de Ocupação (TO) máxima", str(parametros.get("to_max", "—"))),
+        ("Taxa de Permeabilidade (TP) mínima", str(parametros.get("tp_min", "—"))),
+        ("Índice de Aproveitamento (IA) máximo", str(parametros.get("ia_max", "—"))),
         ("Altura máxima", str(parametros.get("altura_max", "—"))),
         ("Observação", "Demais recuos, altura e testadas seguem a regra carregada para a zona analisada."),
     ], "Parâmetro", "Valor")

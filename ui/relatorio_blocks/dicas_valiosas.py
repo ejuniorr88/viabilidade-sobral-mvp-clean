@@ -13,8 +13,8 @@ def get_dicas_valiosas(is_corner: bool = False) -> List[str]:
         "sendo a análise do licenciamento voltada a confirmar que a proposta não avança sobre a área pública.",
         "**Atenção:** para a Taxa de Ocupação (TO), a piscina não é contada como área construída do lote.",
         "**Art. 144.** As piscinas, espelhos d’água, caixas d’água, cisternas e tanques deverão observar um afastamento mínimo de 0,50 m "
-        "de todas as divisas do terreno e devem ser computados como área impermeável para o cálculo da Taxa de Permeabilidade.",
-        "👉 **Na prática:** além de respeitar esse afastamento mínimo de 50 cm, esses elementos também entram no cálculo da TP como área impermeável.",
+        "de todas as divisas do terreno e devem ser computados como área impermeável para o cálculo da **Taxa de Permeabilidade (TP)**.",
+        "👉 **Na prática:** além de respeitar esse afastamento mínimo de 50 cm, esses elementos também entram no cálculo da Taxa de Permeabilidade (TP) como área impermeável.",
     ]
     if is_corner:
         dicas.append("**Texto temporário – lote de esquina**")
@@ -33,7 +33,7 @@ def render_dicas_valiosas(is_corner: bool = False) -> None:
     )
     st.markdown(
         "👉 **Na prática:** para residência unifamiliar, a legislação admite zerar recuos frontal e laterais, "
-        "desde que a proposta continue respeitando a TP mínima e a TO máxima da zona."
+        "desde que a proposta continue respeitando a Taxa de Permeabilidade (TP) mínima e a Taxa de Ocupação (TO) máxima da zona."
     )
 
     st.markdown("**Passeios (calçadas)**")
@@ -43,6 +43,6 @@ def render_dicas_valiosas(is_corner: bool = False) -> None:
         "como referência o passeio já implantado no logradouro."
     )
 
-    st.markdown("**Piscina, caixa d’água, cisterna e tanques**")
+    st.markdown("**Piscinas, espelhos d’água, caixas d’água, cisternas e tanques**")
     for dica in get_dicas_valiosas(is_corner=is_corner):
         st.markdown(dica)

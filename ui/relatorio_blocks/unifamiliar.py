@@ -21,19 +21,19 @@ def render_tabela_resumo_rapido_unifamiliar(parametros: Dict[str, Any]) -> None:
     st.markdown("### 📏 4️⃣ Regras principais para este terreno")
     st.markdown("Depois de entender a zona, o próximo passo é ver as regras básicas do lote. Essas são as regras que mais impactam o projeto.")
     _table([
-        ("TO máxima", str(parametros.get("to_max", "—"))),
-        ("TP mínima", str(parametros.get("tp_min", "—"))),
-        ("IA máximo", str(parametros.get("ia_max", "—"))),
+        ("Taxa de Ocupação (TO) máxima", str(parametros.get("to_max", "—"))),
+        ("Taxa de Permeabilidade (TP) mínima", str(parametros.get("tp_min", "—"))),
+        ("Índice de Aproveitamento (IA) máximo", str(parametros.get("ia_max", "—"))),
         ("Altura máxima", str(parametros.get("altura_max", "—"))),
     ])
 
 
 def render_tabela_regras_principais_unifamiliar(parametros: Dict[str, Any]) -> None:
     rows = [
-        ("TO máxima", str(parametros.get("to_max", "—"))),
-        ("TP mínima", str(parametros.get("tp_min", "—"))),
-        ("IA máximo", str(parametros.get("ia_max", "—"))),
-        ("IA mínimo", str(parametros.get("ia_min_texto", "—"))),
+        ("Taxa de Ocupação (TO) máxima", str(parametros.get("to_max", "—"))),
+        ("Taxa de Permeabilidade (TP) mínima", str(parametros.get("tp_min", "—"))),
+        ("Índice de Aproveitamento (IA) máximo", str(parametros.get("ia_max", "—"))),
+        ("Índice de Aproveitamento (IA) mínimo", str(parametros.get("ia_min_texto", "—"))),
         ("Recuo frontal", str(parametros.get("recuo_frontal", "—"))),
         ("Recuo lateral", str(parametros.get("recuo_lateral_texto", "—"))),
         ("Recuo de fundos", str(parametros.get("recuo_fundos", "—"))),
@@ -47,8 +47,8 @@ def render_tabela_ocupacao_terreo_unifamiliar(dados: Dict[str, Any]) -> None:
     st.markdown("A zona permite um limite de ocupação no térreo. Além da regra da zona, também vale olhar o que realmente cabe no lote depois de respeitar os recuos.")
     _table([
         ("Área do terreno", str(dados.get("area_terreno", "—"))),
-        ("TO máxima", str(dados.get("to_max", "—"))),
-        ("Área máxima pela TO", str(dados.get("area_to_max", "—"))),
+        ("Taxa de Ocupação (TO) máxima", str(dados.get("to_max", "—"))),
+        ("Área máxima pela Taxa de Ocupação (TO)", str(dados.get("area_to_max", "—"))),
     ], "Item", "Valor")
     st.markdown("**Opção 1 — Respeitando os recuos padrão**")
     _table([
@@ -67,11 +67,11 @@ def render_tabela_ocupacao_terreo_unifamiliar(dados: Dict[str, Any]) -> None:
 
 
 def render_tabela_permeabilidade_unifamiliar(dados: Dict[str, Any]) -> None:
-    st.markdown("### 🌿 6️⃣ Quanto preciso deixar livre?")
+    st.markdown("### 🌿 6️⃣ Quanto preciso deixar permeável?")
     st.markdown("A zona exige uma parte do terreno com área permeável. Isso ajuda na absorção da água da chuva e influencia diretamente a ocupação possível.")
     _table([
         ("Área do terreno", str(dados.get("area_terreno", "—"))),
-        ("TP mínima", str(dados.get("tp_min", "—"))),
+        ("Taxa de Permeabilidade (TP) mínima", str(dados.get("tp_min", "—"))),
         ("Área permeável mínima", str(dados.get("area_permeavel_min", "—"))),
     ], "Item", "Valor")
     st.table(pd.DataFrame([
@@ -82,7 +82,7 @@ def render_tabela_permeabilidade_unifamiliar(dados: Dict[str, Any]) -> None:
 
 def render_tabela_tipos_piso() -> None:
     st.markdown("### 🧱 7️⃣ Tipos de piso: o que conta como permeável?")
-    st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Isso ajuda a entender que nem toda área livre conta 100% como permeável.")
+    st.markdown("Nem todo piso externo conta do mesmo jeito na permeabilidade. Isso ajuda a entender que nem toda área sem ocupação no térreo conta 100% como permeável.")
     st.table(pd.DataFrame([
         ["Grama", "100%"],
         ["Brita solta / terra batida", "100%"],
@@ -97,7 +97,7 @@ def render_tabela_ia_unifamiliar(dados: Dict[str, Any]) -> None:
     st.markdown("Além do limite no térreo, existe o limite total permitido. Isso ajuda a entender o porte máximo da construção.")
     _table([
         ("Área do terreno", str(dados.get("area_terreno", "—"))),
-        ("IA", str(dados.get("ia_max", "—"))),
+        ("Índice de Aproveitamento (IA)", str(dados.get("ia_max", "—"))),
         ("Área total máxima", str(dados.get("area_total_max", "—"))),
         ("Altura máxima", str(dados.get("altura_max", "—"))),
     ], "Item", "Valor")

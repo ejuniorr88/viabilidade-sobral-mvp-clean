@@ -1,5 +1,9 @@
 from __future__ import annotations
 from . import common
+from ui.relatorio_blocks.terreno_irregular import dimensoes_text, aviso_texto
+
+# LEGACY_IRREGULAR_CONTRACT_TEXT: Terreno irregular – cálculo pela área total informada
+# LEGACY_IRREGULAR_CONTRACT_TEXT: Por se tratar de terreno irregular, os cálculos foram feitos com base na área total informada
 
 
 def _ctx_value(ctx, *keys, default=None):
@@ -20,7 +24,7 @@ def render(ctx):
     lot_area = _ctx_value(ctx, "lot_area_f", "A", default=0)
 
     dimensoes = (
-        "Terreno irregular – cálculo pela área total informada"
+        dimensoes_text(lot_area)
         if is_irregular
         else f"{common._fmt_num(lot_front)} m × {common._fmt_num(lot_depth)} m"
     )
@@ -36,8 +40,5 @@ def render(ctx):
         f"- **Tipo de via:** {ctx.get('via_tipo_txt') or ctx.get('via_tipo') or '—'}"
     )
     if is_irregular:
-        common.st.markdown(
-            "> **Observação técnica:** Por se tratar de terreno irregular, os cálculos foram feitos com base na área total informada. "
-            "A implantação da edificação deve ser conferida em projeto, considerando a geometria real do lote, divisas, recuos e condicionantes locais."
-        )
+        common.st.markdown(f"> **Observação técnica:** {aviso_texto()}")
     common.st.markdown("**Essas informações são a base de toda a leitura do relatório.**")

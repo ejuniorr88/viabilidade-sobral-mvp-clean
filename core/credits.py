@@ -401,20 +401,28 @@ def _tag_latest_report_debit(
         ) or []
 
         target = None
+        already_tagged = None
         for row in rows:
             row_metadata = row.get("metadata") if isinstance(row, dict) else None
-            if isinstance(row_metadata, dict) and row_metadata.get("report_signature") == reference_key:
-                return {"ok": True, "already_tagged": True, "ledger_id": row.get("id")}
+            is_same_signature = isinstance(row_metadata, dict) and row_metadata.get("report_signature") == reference_key
+            if is_same_signature:
+                already_tagged = already_tagged or row
+                continue
             if target is None:
                 target = row
+                break
 
         if not target or not target.get("id"):
+            if already_tagged and already_tagged.get("id"):
+                return {"ok": True, "already_tagged": True, "ledger_id": already_tagged.get("id")}
             return {"ok": False, "reason": "debit_row_not_found"}
 
         ledger_id = target.get("id")
+        existing_metadata = target.get("metadata") if isinstance(target.get("metadata"), dict) else {}
+        merged_metadata = {**existing_metadata, **metadata_payload}
         update_payload = {
-            "idempotency_key": f"{stable_prefix}:{ledger_id}",
-            "metadata": metadata_payload,
+            "idempotency_key": stable_prefix,
+            "metadata": merged_metadata,
         }
         if _is_uuid(reference_key):
             update_payload["reference_id"] = reference_key
@@ -441,6 +449,11 @@ def consume_viability_credit(
 ) -> Dict[str, Any]:
     supabase = get_supabase_auth_client()
 
+    # Importante: não pulamos o débito apenas porque já existe lançamento antigo
+    # no ledger com a mesma assinatura. Um débito antigo pode ter sido estornado
+    # após falha de salvamento. A deduplicação financeira segura acontece no
+    # checkout_flow, consultando primeiro client_reports; se o relatório ainda
+    # não está salvo, esta chamada deve efetivamente consumir 1 crédito.
     try:
         response = supabase.rpc(
             "consume_viability_credit",
@@ -594,7 +607,17 @@ def refund_viability_credit(
     if reference_key and not _is_uuid(reference_key):
         metadata_payload.setdefault("report_signature", reference_key)
 
-    idempotency_key = f"refund_viability_credit:{user_id}:{reference_key}:{int(amount)}" if reference_key else None
+    # Para relatório pago, o mesmo report_signature pode ter várias tentativas reais:
+    # tentativa 1 debita, falha ao salvar e estorna; tentativa 2 debita novamente
+    # e também pode precisar de novo estorno. Por isso a idempotência do estorno
+    # deve preferir o ledger_id do débito específico, não apenas a assinatura do relatório.
+    refund_scope = str(
+        metadata_payload.get("debit_ledger_id")
+        or metadata_payload.get("refund_scope")
+        or reference_key
+        or ""
+    ).strip()
+    idempotency_key = f"refund_viability_credit:{user_id}:{refund_scope}:{int(amount)}" if refund_scope else None
 
     try:
         if idempotency_key:

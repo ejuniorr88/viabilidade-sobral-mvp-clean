@@ -6,6 +6,12 @@ from ui.runtime.inline_payments_focus import INLINE_PAYMENTS_FOCUS_TARGETS
 from ui.runtime.pix_generated_focus import PIX_GENERATED_FOCUS_TARGETS
 from ui.runtime.pix_payment_focus import PIX_PAYMENT_FOCUS_TARGETS
 from ui.runtime.report_navigation import REPORT_NAVIGATION_TARGETS
+from ui.runtime.mobile_scroll_guard import (
+    MOBILE_SCROLL_COOLDOWN_MS,
+    MOBILE_SCROLL_GUARD_KEY,
+    MOBILE_SCROLL_RETRY_DELAY_MS,
+    MOBILE_SCROLL_SETTLE_DELAY_MS,
+)
 
 
 _BASE_TARGET_CONFIG = {
@@ -84,6 +90,10 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
                 const requestId = {request_id};
                 const runId = {current_run_id};
                 const controllerKey = "__viabilidade_nav_focus_controller__";
+                const mobileGuardKey = {MOBILE_SCROLL_GUARD_KEY!r};
+                const mobileCooldownMs = {int(MOBILE_SCROLL_COOLDOWN_MS)};
+                const mobileSettleDelayMs = {int(MOBILE_SCROLL_SETTLE_DELAY_MS)};
+                const mobileRetryDelayMs = {int(MOBILE_SCROLL_RETRY_DELAY_MS)};
 
                 const controller = rootWin[controllerKey] || (rootWin[controllerKey] = {{
                     activeToken: null,
@@ -91,7 +101,14 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
                     observer: null,
                     rafId: null,
                     finalTimeoutId: null,
+                    timeoutIds: [],
                 }});
+                controller.timeoutIds = Array.isArray(controller.timeoutIds) ? controller.timeoutIds : [];
+
+                const clearScheduledTimeouts = () => {{
+                    (controller.timeoutIds || []).forEach((timeoutId) => rootWin.clearTimeout(timeoutId));
+                    controller.timeoutIds = [];
+                }};
 
                 const cleanup = () => {{
                     if (controller.intervalId) {{
@@ -110,14 +127,40 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
                         rootWin.clearTimeout(controller.finalTimeoutId);
                         controller.finalTimeoutId = null;
                     }}
+                    clearScheduledTimeouts();
                 }};
-
-                cleanup();
 
                 const token = requestId
                     ? `req-${{requestId}}-run-${{runId}}-${{behavior}}`
                     : `run-${{runId}}-${{behavior}}`;
-                controller.activeToken = token;
+
+                const isMobileViewport = () => {{
+                    try {{
+                        return rootWin.matchMedia('(max-width: 768px), (pointer: coarse)').matches
+                            || rootWin.innerWidth <= 768;
+                    }} catch (err) {{
+                        return rootWin.innerWidth <= 768;
+                    }}
+                }};
+
+                const getMobileGuard = () => rootWin[mobileGuardKey] || (rootWin[mobileGuardKey] = {{
+                    lockedUntil: 0,
+                    lastTargetKey: null,
+                    timeoutIds: [],
+                }});
+
+                const clearMobileGuardTimeouts = (guard) => {{
+                    (guard.timeoutIds || []).forEach((timeoutId) => rootWin.clearTimeout(timeoutId));
+                    guard.timeoutIds = [];
+                }};
+
+                const releaseMobileLockLater = () => {{
+                    const guard = getMobileGuard();
+                    const timeoutId = rootWin.setTimeout(() => {{
+                        guard.lockedUntil = 0;
+                    }}, mobileCooldownMs);
+                    guard.timeoutIds.push(timeoutId);
+                }};
 
                 const scrollRoot = () => rootDoc.querySelector('section.main') || rootDoc.scrollingElement || rootDoc.documentElement || rootDoc.body;
                 const robustBehaviors = ['generated_context', 'inline_payments', 'current_payment', 'pix_generated', 'login_gate'];
@@ -143,7 +186,7 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
 
                 const computeTargetTop = (el) => Math.max((el.getBoundingClientRect().top || 0) + rootWin.scrollY - offset, 0);
 
-                const alignScrollableContainer = (el) => {{
+                const alignScrollableContainer = (el, scrollBehavior = 'smooth') => {{
                     const container = findScrollableContainer(el);
                     if (!container) {{
                         return;
@@ -151,19 +194,64 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
                     const containerRect = container.getBoundingClientRect();
                     const elementRect = el.getBoundingClientRect();
                     const nextTop = Math.max(container.scrollTop + (elementRect.top - containerRect.top) - offset, 0);
-                    container.scrollTo({{ top: nextTop, behavior: 'smooth' }});
+                    container.scrollTo({{ top: nextTop, behavior: scrollBehavior }});
                 }};
 
                 const applyScroll = (el) => {{
                     const targetTop = computeTargetTop(el);
                     const useElementFirst = behavior === 'confirmation' || behavior === 'initial' || usesRobustScroll;
+                    const scrollBehavior = isMobileViewport() ? 'auto' : 'smooth';
                     if (useElementFirst) {{
-                        el.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                        alignScrollableContainer(el);
+                        el.scrollIntoView({{ behavior: scrollBehavior, block: 'start' }});
+                        alignScrollableContainer(el, scrollBehavior);
                     }}
-                    rootWin.scrollTo({{ top: targetTop, behavior: 'smooth' }});
+                    rootWin.scrollTo({{ top: targetTop, behavior: scrollBehavior }});
                     return targetTop;
                 }};
+
+                const mobileTargetKey = `${{elementId}}:${{requestId || behavior}}`;
+                if (isMobileViewport()) {{
+                    const guard = getMobileGuard();
+                    const now = Date.now();
+                    if (guard.lastTargetKey === mobileTargetKey && Number(guard.lockedUntil || 0) > now) {{
+                        // Mesmo alvo ainda em andamento: preserva o timeout já agendado
+                        // e evita rearmar scroll repetido no mobile.
+                        return;
+                    }}
+
+                    cleanup();
+                    clearMobileGuardTimeouts(guard);
+                    controller.activeToken = token;
+                    guard.lastTargetKey = mobileTargetKey;
+                    guard.lockedUntil = now + mobileCooldownMs;
+
+                    const runMobileTick = () => {{
+                        if (controller.activeToken !== token) {{
+                            return;
+                        }}
+                        const el = rootDoc.getElementById(elementId);
+                        if (!el) {{
+                            return;
+                        }}
+                        applyScroll(el);
+                        releaseMobileLockLater();
+                        cleanup();
+                    }};
+
+                    const cleanupTimeoutId = rootWin.setTimeout(() => {{
+                        releaseMobileLockLater();
+                        cleanup();
+                    }}, mobileRetryDelayMs + 420);
+                    const firstTimeoutId = rootWin.setTimeout(runMobileTick, mobileSettleDelayMs);
+                    const retryTimeoutId = rootWin.setTimeout(runMobileTick, mobileRetryDelayMs);
+                    const scheduledMobileTimeouts = [firstTimeoutId, retryTimeoutId, cleanupTimeoutId];
+                    controller.timeoutIds.push(...scheduledMobileTimeouts);
+                    guard.timeoutIds.push(...scheduledMobileTimeouts);
+                    return;
+                }}
+
+                cleanup();
+                controller.activeToken = token;
 
                 const isAligned = (el) => Math.abs((el.getBoundingClientRect().top || 0) - offset) <= tolerance;
 

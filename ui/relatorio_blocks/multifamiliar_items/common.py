@@ -6,6 +6,13 @@ from typing import Any, Dict, Optional, Tuple, List
 import math
 import streamlit as st
 
+from ui.relatorio_blocks.terreno_irregular import is_irregular_context
+from urban_rules.zone_profiles import (
+    apply_zone_result_policy,
+    is_zeis as _profile_is_zeis,
+    zone_context_warnings,
+)
+
 
 def md(text: str) -> None:
     st.markdown(text)
@@ -87,7 +94,7 @@ def _fmt_pct(v: Any, dec: int = 1) -> str:
     try:
         if v is None:
             return "—"
-        return f"{float(v):.{dec}f}%"
+        return f"{float(v):.{dec}f}%".replace(".", ",")
     except Exception:
         return "—"
 
@@ -153,6 +160,8 @@ def _via_tipo_norm(v: Any) -> Optional[str]:
         return "ARTERIAL"
     if "coletora" in s:
         return "COLETORA"
+    if "pais" in s:
+        return "PAISAGISTICA"
     if "troncal" in s or "rodovia federal" in s or "br-" in s or s.startswith("br "):
         return "TRONCAL"
     if "regional" in s or "rodovia estadual" in s or "ce-" in s or s.startswith("ce "):
@@ -205,7 +214,7 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
             return (
                 "✅",
                 "PERMITE",
-                "A zona permite o uso, observados Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos, altura máxima e demais regras urbanísticas aplicáveis."
+                "A zona permite o uso, observados Taxa de Ocupação (TO), Taxa de Permeabilidade (TP), Índice de Aproveitamento (IA), recuos, altura máxima e demais regras urbanísticas aplicáveis."
             )
 
         return (
@@ -226,7 +235,7 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
             "**Análise pela via:** como o terreno tem frente para uma via troncal, a viabilidade pode ser analisada de forma mais ampla. "
             "Por isso, a viabilidade não fica limitada apenas à classificação indicada pela zona.\n\n"
             "**Limites urbanísticos:** mesmo com leitura favorável pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
-            "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
+            "como Taxa de Ocupação (TO), Taxa de Permeabilidade (TP), Índice de Aproveitamento (IA), recuos e altura máxima.\n\n"
             "**Atenção — rodovia federal/BR:** o projeto pode depender também de análise/autorização do DNIT, especialmente para acesso de veículos, "
             "entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
         )
@@ -238,7 +247,7 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
             "**Análise pela via:** como o terreno tem frente para uma via regional, a viabilidade pode ser analisada de forma mais ampla. "
             "Por isso, a viabilidade não fica limitada apenas à classificação indicada pela zona.\n\n"
             "**Limites urbanísticos:** mesmo com leitura favorável pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
-            "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
+            "como Taxa de Ocupação (TO), Taxa de Permeabilidade (TP), Índice de Aproveitamento (IA), recuos e altura máxima.\n\n"
             "**Atenção — rodovia estadual/CE:** o projeto pode depender também de análise/autorização da SOP/CE, especialmente para acesso de veículos, "
             "entrada e saída do imóvel, intervenção no acostamento, calçada, canteiro ou faixa de domínio, salvo se o trecho estiver formalmente sob responsabilidade municipal."
         )
@@ -258,7 +267,7 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
                 "**Análise pela zona e pela via:** o uso pretendido é permitido pela classificação da zona e também pela classificação da via de acesso. "
                 "Nesse caso, a leitura é favorável pelos dois critérios.\n\n"
                 "**Limites urbanísticos:** mesmo com leitura favorável pela zona e pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
-                "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
+                "como Taxa de Ocupação (TO), Taxa de Permeabilidade (TP), Índice de Aproveitamento (IA), recuos e altura máxima.\n\n"
                 "**Base da leitura:** a zona permite o uso e a via também possui classificação favorável, mantendo a conclusão positiva da análise."
             )
 
@@ -268,7 +277,7 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
             "**Análise pela via:** a zona, isoladamente, não indicou permissão plena para o uso pretendido. Porém, a classificação da via permite que a viabilidade seja analisada de forma mais ampla. "
             "Por isso, neste caso, a leitura favorável decorre da via, e a viabilidade não fica limitada apenas à classificação indicada pela zona.\n\n"
             "**Limites urbanísticos:** mesmo com leitura favorável pela via, o projeto ainda precisa respeitar os limites urbanísticos do terreno, "
-            "como Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos e altura máxima.\n\n"
+            "como Taxa de Ocupação (TO), Taxa de Permeabilidade (TP), Índice de Aproveitamento (IA), recuos e altura máxima.\n\n"
             "**Base da leitura:** essa interpretação decorre da regra de sobreposição da adequabilidade pela via prevista no Art. 99 da LC 91/2023."
         )
 
@@ -326,7 +335,7 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
     return (
         "✅",
         "PERMITE",
-        "Zona e/ou tipo de via permitem o uso, observados Taxa de Ocupação, Taxa de Permeabilidade, Índice de Aproveitamento, recuos, altura máxima e demais regras aplicáveis."
+        "Zona e/ou tipo de via permitem o uso, observados Taxa de Ocupação (TO), Taxa de Permeabilidade (TP), Índice de Aproveitamento (IA), recuos, altura máxima e demais regras aplicáveis."
     )
 
 
@@ -492,27 +501,32 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
 
     if multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21"):
         sections = [
-            ("R2.1 — regra especial", [
-                "pode ter **no máximo 2 pavimentos**;",
-                "cada unidade deve ter **frente e acesso independente para via pública oficial**;",
-                "as paredes externas devem ser **total ou parcialmente comuns**;",
-                "o conjunto deve ter aparência de **unidade arquitetônica homogênea**;",
-                "cada unidade deve atender os mínimos do **Anexo II**, como na residência unifamiliar;",
-                "quando aplicável, pode ser considerada a flexibilidade do **art. 112** para recuos de frente e laterais, mantendo a **Taxa de Ocupação (TO)** máxima e a **Taxa de Permeabilidade (TP)** mínima da zona;",
-                "quando a testada ficar abaixo da referência usual de **8,00 m** fora de ZEIS, o caso exige análise no licenciamento e comprovação documental da situação do lote.",
-            ], "o **R2.1** é multifamiliar na tipologia, mas em alguns parâmetros é analisado com lógica semelhante à residência unifamiliar. A área máxima do térreo não dobra: ela continua limitada pela **Taxa de Ocupação (TO)**, pela **Taxa de Permeabilidade (TP)** e pelo que cabe fisicamente no lote."),
-            ("IA e área computável", [
-                "**Art. 110 da LC 91:** a área computável para o Índice de Aproveitamento (**IA**) é calculada pela soma das áreas das unidades autônomas.",
+            ("R2.1 — o que a lei exige", [
+                "Pela **LC 90/2023, art. 167**, a residência multifamiliar horizontal pode aparecer em duas situações principais.",
+                "No caso do **R2.1**, trata-se de **2 unidades habitacionais no mesmo lote**, que podem ser **justapostas** (lado a lado) ou **sobrepostas** (uma unidade embaixo e outra em cima).",
+                "Cada unidade deve ter **frente e acesso independente para uma via pública oficial**.",
+                "Cada unidade deve atender, em alguns pontos, às regras aplicáveis às **residências unifamiliares**, como recuos mínimos, compartimentos mínimos, iluminação e ventilação conforme o Anexo II.",
+                "As paredes externas devem ser **total ou parcialmente comuns**.",
+                "Cada unidade deve ter acesso individualizado pelo logradouro.",
+                "O conjunto deve ter aparência de uma única unidade arquitetônica homogênea.",
+                "A edificação deve ter no máximo **2 pavimentos**.",
+            ], "o **R2.1** é multifamiliar na classificação, mas não funciona como um prédio ou condomínio horizontal. Ele é uma solução de **duas moradias no mesmo lote**, com acessos independentes e limite de até **2 pavimentos**. Por isso, precisa ser analisado com cuidado, respeitando a **Taxa de Ocupação (TO)**, a **Taxa de Permeabilidade (TP)**, os recuos aplicáveis, os ambientes mínimos e a confirmação no licenciamento."),
+            ("Diferença para o R2.2", [
+                "O **R2.2** é o residencial horizontal em condomínio, com unidades autônomas acessadas por **via interna particular** de circulação de veículos ou pedestres.",
+                "No R2.2, a unidade não tem acesso direto individual pela via pública oficial.",
+            ], "se cada unidade sai diretamente para a rua oficial, a leitura tende a ser R2.1. Se as unidades acessam por circulação interna do conjunto, a leitura tende a ser R2.2."),
+            ("Índice de Aproveitamento (IA) e área computável", [
+                "**Art. 110 da LC 91:** a área computável para o **Índice de Aproveitamento (IA)** é calculada pela soma das áreas das unidades autônomas.",
                 "A lei também considera como **não computáveis**, entre outros:",
                 "- obras complementares;",
                 "- garagens sob pilotis e subsolos usados para estacionamento;",
                 "- halls, escadas, elevadores e salões de festas em multifamiliar;",
                 "- áreas comerciais e de serviços no térreo de uso misto.",
-            ], "mesmo no **R2.1**, o **IA da zona continua importando**, e a forma de calcular a área computável também precisa ser observada."),
+            ], "mesmo no **R2.1**, o **Índice de Aproveitamento (IA)** da zona continua importando, e a forma de calcular a área computável também precisa ser observada."),
             ("Subsolo", [
                 "Quando a zona permitir subsolo, ele deve respeitar:",
-                "- a **Taxa de Ocupação do subsolo**;",
-                "- a **Taxa de Permeabilidade**;",
+                "- a **Taxa de Ocupação (TO) do subsolo**;",
+                "- a **Taxa de Permeabilidade (TP)**;",
                 "- os **recuos mínimos da zona**;",
                 "E, se houver subsolo, deve haver **recuo mínimo de 1,50 m em todas as divisas**.",
             ], "essa verificação só passa a ser relevante se o estudo realmente considerar subsolo no lote."),
@@ -542,18 +556,18 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
             ("Área recreativa", [
                 "Se o empreendimento tiver **mais de 10 unidades**, deve prever **área recreativa mínima de 5% da área total do terreno**."
             ], "conjuntos maiores precisam reservar espaço de lazer e convivência."),
-            ("IA e área computável", [
-                "**Art. 110 da LC 91:** a área computável para o Índice de Aproveitamento (**IA**) é calculada pela soma das áreas das unidades autônomas.",
+            ("Índice de Aproveitamento (IA) e área computável", [
+                "**Art. 110 da LC 91:** a área computável para o **Índice de Aproveitamento (IA)** é calculada pela soma das áreas das unidades autônomas.",
                 "A lei também considera como **não computáveis**, entre outros:",
                 "- obras complementares;",
                 "- garagens sob pilotis e subsolos para estacionamento;",
                 "- halls, escadas, elevadores e salões de festas;",
                 "- áreas comerciais e de serviços no térreo em uso misto, com acessos individualizados.",
-            ], "no **R2.2**, a conta do IA precisa observar não só as unidades, mas também o que entra ou não entra como área computável."),
+            ], "no **R2.2**, a conta do **Índice de Aproveitamento (IA)** precisa observar não só as unidades, mas também o que entra ou não entra como área computável."),
             ("Subsolo", [
                 "Se a zona permitir subsolo, ele deve respeitar:",
-                "- a **TO do subsolo**;",
-                "- a **TP**;",
+                "- a **Taxa de Ocupação (TO) do subsolo**;",
+                "- a **Taxa de Permeabilidade (TP)**;",
                 "- os **recuos mínimos da zona**;",
                 "E, se houver subsolo, deve haver **recuo mínimo de 1,50 m em todas as divisas**.",
             ], "essa regra passa a ser relevante quando o estudo considerar subsolo no condomínio."),
@@ -587,18 +601,18 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
                 "No multifamiliar vertical, a área recreativa mínima é de:",
                 "- **5% da área total construída das unidades**",
             ], "no prédio residencial, a área recreativa é calculada de forma diferente do condomínio horizontal."),
-            ("IA e área computável", [
-                "**Art. 110 da LC 91:** a área computável para o Índice de Aproveitamento (**IA**) é a soma das áreas das unidades autônomas.",
+            ("Índice de Aproveitamento (IA) e área computável", [
+                "**Art. 110 da LC 91:** a área computável para o **Índice de Aproveitamento (IA)** é a soma das áreas das unidades autônomas.",
                 "A lei também considera como **não computáveis**, entre outros:",
                 "- obras complementares;",
                 "- garagens sob pilotis e subsolos para estacionamento;",
                 "- áreas comuns como halls, escadas, elevadores e salões de festas em multifamiliar;",
                 "- áreas comerciais e de serviços no térreo em uso misto, com acessos individualizados.",
-            ], "no **R3**, esse ponto é muito importante porque o edifício costuma ter várias áreas comuns, e nem tudo entra na conta do IA."),
+            ], "no **R3**, esse ponto é muito importante porque o edifício costuma ter várias áreas comuns, e nem tudo entra na conta do **Índice de Aproveitamento (IA)**."),
             ("Subsolo", [
                 "Se a zona permitir subsolo:",
-                "- deve respeitar a **TO do subsolo**;",
-                "- a **TP**;",
+                "- deve respeitar a **Taxa de Ocupação (TO) do subsolo**;",
+                "- a **Taxa de Permeabilidade (TP)**;",
                 "- os **recuos mínimos da zona**;",
                 "- e, havendo subsolo, deve existir **recuo mínimo de 1,50 m em todas as divisas**.",
             ], "no **R3**, essa regra é muito relevante, especialmente quando o projeto depender de garagem em subsolo."),
@@ -621,14 +635,14 @@ def _render_dicas_valiosas(multi_tipo: str, use_type_code: str) -> None:
         "na ausência dessa previsão, utiliza-se como referência o passeio já implantado no logradouro."
     )
 
-    st.markdown("#### Piscina, caixa d’água, cisterna e tanques")
+    st.markdown("#### Piscinas, espelhos d’água, caixas d’água, cisternas e tanques")
     st.markdown("**Atenção:** para a Taxa de Ocupação (TO), a piscina não é contada como área construída do lote.")
     st.markdown(
         "**Art. 144.** As piscinas, espelhos d’água, caixas d’água, cisternas e tanques deverão observar um afastamento mínimo de **0,50 m** "
-        "de todas as divisas do terreno e devem ser computados como área impermeável para o cálculo da Taxa de Permeabilidade."
+        "de todas as divisas do terreno e devem ser computados como área impermeável para o cálculo da **Taxa de Permeabilidade (TP)**."
     )
     st.markdown(
-        "👉 **Na prática:** além de respeitar esse afastamento mínimo de **50 cm**, esses elementos também entram no cálculo da **TP** como área impermeável."
+        "👉 **Na prática:** além de respeitar esse afastamento mínimo de **50 cm**, esses elementos também entram no cálculo da **Taxa de Permeabilidade (TP)** como área impermeável."
     )
 
 
@@ -717,7 +731,7 @@ def _render_alvara_section() -> None:
 
 
 
-def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, fetch_adequabilidade_fn=None) -> Dict[str, Any]:
+def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None, fetch_adequabilidade_fn=None, is_irregular: Any = None) -> Dict[str, Any]:
     """Monta e devolve o contexto compartilhado do relatório multifamiliar."""
     multi_tipo = _norm(calc.get("multi_tipo"))
     use_type_code = _norm(calc.get("use_type_code"))
@@ -727,10 +741,20 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
     subzona = calc.get("subzone_code") or (rule or {}).get("subzone_code") or "PADRAO"
     zone_label = calc.get("zone") or calc.get("zone_label_raw") or zona
     lot_area = calc.get("lot_area_m2")
-    lot_front = calc.get("lot_front_m") or calc.get("front_m") or 0
-    lot_depth = calc.get("lot_depth_m") or calc.get("depth_m") or 0
-    is_corner = bool(st.session_state.get("lot_is_corner") or False)
-    tipo_lote = "Esquina" if is_corner else "Meio de quadra"
+    is_irregular_lot = is_irregular_context({"is_irregular": is_irregular}, calc) or bool(
+        st.session_state.get("lot_is_irregular")
+        or st.session_state.get("lot_irregular")
+    )
+    if is_irregular_lot:
+        lot_front = 0
+        lot_depth = 0
+        is_corner = False
+        tipo_lote = "Terreno irregular"
+    else:
+        lot_front = calc.get("lot_front_m") or calc.get("front_m") or 0
+        lot_depth = calc.get("lot_depth_m") or calc.get("depth_m") or 0
+        is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
+        tipo_lote = "Esquina" if is_corner else "Meio de quadra"
     uso_label = _tipo_multifamiliar_label(multi_tipo, use_type_code)
 
     try:
@@ -797,15 +821,22 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
 
         area_min = rule.get("area_min_lote_m2") or rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2")
         area_max = rule.get("area_max_lote_m2") or rule.get("lote_max_area_m2")
-        testada_min = rule.get("testada_min_m") or rule.get("testada_min_meio_m") or rule.get("testada_min_esquina_m")
+        
+        if is_corner:
+            testada_min = rule.get("testada_min_esquina_m") or rule.get("testada_min_m") or rule.get("testada_min_meio_m")
+        else:
+            testada_min = rule.get("testada_min_meio_m") or rule.get("testada_min_m") or rule.get("testada_min_esquina_m")
         testada_max = rule.get("testada_max_m")
 
         W = float(lot_front or 0) if lot_front not in (None, "") else 0.0
+        testada_min_f = _num(testada_min)
+        zone_testada_baixa = bool(W > 0 and testada_min_f is not None and W < testada_min_f)
+        zone_testada_baixa_label = "lote de esquina" if is_corner else "lote de meio de quadra"
         D = float(lot_depth or 0) if lot_depth not in (None, "") else 0.0
         W_util = None
         D_util = None
         A_recuos = None
-        if rec_lat is not None and rec_fr is not None and rec_fun is not None and W > 0 and D > 0:
+        if (not is_irregular_lot) and rec_lat is not None and rec_fr is not None and rec_fun is not None and W > 0 and D > 0:
             W_util = W - 2 * rec_lat
             D_util = D - rec_fr - rec_fun
             if W_util > 0 and D_util > 0:
@@ -824,7 +855,9 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
             teto_pratico = to_m2
         is_r21 = multi_tipo in ("R21", "R2.1", "R2_1") or use_type_code.endswith("R21")
         is_zeip9 = str(subzona or "").strip().upper().replace("-", "_") in ("ZEIP_9", "ZEIP9")
-        r21_testada_baixa = bool(is_r21 and W > 0 and W < 8.0)
+        # A ressalva de testada inferior a 8 m para R2.1 vale fora de ZEIS.
+        # Em ZEIS, a regra específica da zona prevalece e não deve gerar este alerta.
+        r21_testada_baixa = bool(is_r21 and W > 0 and W < 8.0 and not _profile_is_zeis(zona, subzona))
         teto_relatorio = to_m2 if (is_r21 and to_m2 is not None) else teto_pratico
         a_adotada = min(built_ground, teto_relatorio) if (built_ground is not None and built_ground > 0 and teto_relatorio is not None) else (built_ground if (built_ground is not None and built_ground > 0) else None)
         to_utilizada_pct = ((a_adotada / lot_area_f) * 100.0) if (a_adotada is not None and lot_area_f not in (None, 0)) else None
@@ -840,8 +873,27 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         is_r21 = False
         is_zeip9 = str(subzona or "").strip().upper().replace("-", "_") in ("ZEIP_9", "ZEIP9")
         r21_testada_baixa = False
+        zone_testada_baixa = False
+        zone_testada_baixa_label = "lote"
 
-    return {
+    policy = apply_zone_result_policy(
+        zona=zona,
+        subzona=subzona,
+        via_norm=via_norm,
+        via_class=via_class,
+        zone_class=zone_class,
+        status=status_curto,
+        icon=icon,
+        explanation=explicacao,
+        use_type_code=use_type_code,
+    )
+    icon, status_curto, explicacao = policy.icon, policy.status, policy.explanation
+
+    if r21_testada_baixa and str(status_curto or "").strip().upper() != "NÃO PERMITE":
+        icon = "⚠️"
+        status_curto = "PERMITE COM RESSALVA — R2.1"
+
+    ctx_out = {
         "calc": calc,
         "rule": rule or {},
         "multi_tipo": multi_tipo,
@@ -855,6 +907,7 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         "lot_front": lot_front,
         "lot_depth": lot_depth,
         "is_corner": is_corner,
+        "is_irregular": is_irregular_lot,
         "tipo_lote": tipo_lote,
         "uso_label": uso_label,
         "zone_class": zone_class,
@@ -896,7 +949,11 @@ def build_context(*, calc: Dict[str, Any], rule: Optional[Dict[str, Any]] = None
         "is_r21": is_r21,
         "is_zeip9": is_zeip9,
         "r21_testada_baixa": r21_testada_baixa,
+        "zone_testada_baixa": zone_testada_baixa,
+        "zone_testada_baixa_label": zone_testada_baixa_label,
     }
+    ctx_out["zone_warnings"] = zone_context_warnings(ctx_out)
+    return ctx_out
 
 
 # Aliases de compatibilidade para a arquitetura modular

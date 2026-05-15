@@ -20,6 +20,7 @@ from .relatorio_blocks.multifamiliar_guia import (
     _via_tipo_norm as _mf_via_tipo_norm,
 )
 from core.zone_descriptions import fetch_zone_description
+from urban_rules.zone_profiles import apply_zone_result_policy, zone_context_warnings
 from .relatorio_blocks.unifamiliar_items import UNIFAMILIAR_ITEM_RENDERERS
 
 
@@ -47,7 +48,7 @@ def _fmt_pct(v: Any, dec: int = 1) -> str:
         if v is None:
             return "—"
         f = float(v)
-        return f"{f:.{dec}f}%"
+        return f"{f:.{dec}f}%".replace(".", ",")
     except Exception:
         return "—"
 
@@ -165,15 +166,14 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         or calc.get("lot_irregular")
         or calc.get("lot_is_irregular")
     )
+    is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
     if is_irregular:
         W = 0.0
         D = 0.0
-        is_corner = False
         tipo_lote = "Terreno irregular"
     else:
         W = float(st.session_state.get("lot_front_m") or calc.get("lot_front_m") or 0.0)
         D = float(st.session_state.get("lot_depth_m") or calc.get("lot_depth_m") or 0.0)
-        is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
         tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
@@ -186,7 +186,11 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
     gabarito_m = _safe_float(rule.get("gabarito_m"))
     area_min_lote = _safe_float(rule.get("area_min_lote_m2") or rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2"))
     area_max_lote = _safe_float(rule.get("area_max_lote_m2") or rule.get("lote_max_area_m2"))
-    testada_min_lote = _safe_float(rule.get("testada_min_m") or rule.get("testada_min_meio_m") or rule.get("testada_min_esquina_m"))
+    
+    if is_corner:
+        testada_min_lote = _safe_float(rule.get("testada_min_esquina_m") or rule.get("testada_min_m") or rule.get("testada_min_meio_m"))
+    else:
+        testada_min_lote = _safe_float(rule.get("testada_min_meio_m") or rule.get("testada_min_m") or rule.get("testada_min_esquina_m"))
     testada_max_lote = _safe_float(rule.get("testada_max_m"))
 
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
@@ -200,18 +204,28 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         or calc.get("built_ground_input_m2")
     )
 
-    W_util = W - 2 * rec_lat
-    D_util = D - rec_fr - rec_fun
-    A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
-    A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
-
-    A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
-    if A_to is not None and A_fundo is not None:
-        A_op2_max = min(A_to, A_fundo)
-    elif A_to is not None:
+    if is_irregular:
+        # Terreno irregular não possui testada/profundidade retangulares confiáveis.
+        # Portanto, não calculamos largura útil, profundidade útil nem área física por recuos.
+        W_util = None
+        D_util = None
+        A_recuos = None
+        A_op1_max = None
+        A_fundo = None
         A_op2_max = A_to
     else:
-        A_op2_max = None
+        W_util = W - 2 * rec_lat
+        D_util = D - rec_fr - rec_fun
+        A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
+        A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
+
+        A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
+        if A_to is not None and A_fundo is not None:
+            A_op2_max = min(A_to, A_fundo)
+        elif A_to is not None:
+            A_op2_max = A_to
+        else:
+            A_op2_max = None
 
     def _tp_scenario(a_terreo: float | None):
         if a_terreo is None or A_perm_min is None:
@@ -254,11 +268,18 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         via_norm=via_norm,
         via_class=via_class,
     )
-    explicacao = _append_zeia_ambiental_observacao(
+    policy = apply_zone_result_policy(
         zona=zone_sigla or zone,
-        status_curto=status_curto,
-        explicacao=explicacao,
+        subzona=subzone_code,
+        via_norm=via_norm,
+        via_class=via_class,
+        zone_class=zone_class,
+        status=status_curto,
+        icon=icon,
+        explanation=explicacao,
+        use_type_code=uso,
     )
+    icon, status_curto, explicacao = policy.icon, policy.status, policy.explanation
 
     recuos_resumo = f"Frontal: {_fmt_num(rec_fr)} m | Laterais: {_fmt_num(rec_lat)} m | Fundos: {_fmt_num(rec_fun)} m"
     ia_min_texto = _fmt_num(ia_min) if ia_min is not None else "não informado"
@@ -330,6 +351,12 @@ def _build_unifamiliar_preview_context(calc: Dict[str, Any]) -> Dict[str, Any] |
         "ia_min_texto": ia_min_texto,
         "pav_est": pav_est,
         "is_zeip9": is_zeip9_unif,
+        "lot_area_f": A,
+        "lot_front": W,
+        "area_min": area_min_lote,
+        "area_max": area_max_lote,
+        "testada_min": testada_min_lote,
+        "testada_max": testada_max_lote,
         "render_quadro_tecnico": render_quadro_tecnico,
         "render_figuras_anexo_v": render_figuras_anexo_v,
         "_mf_sigla_nome": _mf_sigla_nome,
@@ -358,8 +385,8 @@ def render_unifamiliar_inadequado_preview(calc: Dict[str, Any]) -> None:
     st.markdown(
         "Este relatório mostra, de forma simples, o que pode ou não pode ser feito no terreno informado, "
         "com base na zona, na via e nas regras urbanísticas do município.\n\n"
-        "A ideia aqui é facilitar a leitura: primeiro mostramos onde o terreno está, depois se o uso é viável.\n\n"
-        "**Importante:** este relatório é uma análise inicial. A aprovação final depende da conferência completa no licenciamento."
+        "A ideia aqui é facilitar a leitura: primeiro apresentamos a localização do terreno, depois verificamos se o uso é viável.\n\n"
+        "**Importante:** este relatório é uma análise inicial. A aprovação final depende da conferência completa no licenciamento municipal."
     )
 
     item_headings = {
@@ -404,15 +431,14 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         return
 
     A = float(calc.get("lot_area_m2") or 0.0)
+    is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
     if is_irregular:
         W = 0.0
         D = 0.0
-        is_corner = False
         tipo_lote = "Terreno irregular"
     else:
         W = float(st.session_state.get("lot_front_m") or calc.get("lot_front_m") or 0.0)
         D = float(st.session_state.get("lot_depth_m") or calc.get("lot_depth_m") or 0.0)
-        is_corner = bool(st.session_state.get("lot_is_corner") or calc.get("lot_is_corner") or False)
         tipo_lote = "Esquina" if is_corner else "Meio de quadra"
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
@@ -425,7 +451,11 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     gabarito_m = _safe_float(rule.get("gabarito_m"))
     area_min_lote = _safe_float(rule.get("area_min_lote_m2") or rule.get("area_lote_min_m2") or rule.get("lote_min_area_m2"))
     area_max_lote = _safe_float(rule.get("area_max_lote_m2") or rule.get("lote_max_area_m2"))
-    testada_min_lote = _safe_float(rule.get("testada_min_m") or rule.get("testada_min_meio_m") or rule.get("testada_min_esquina_m"))
+    
+    if is_corner:
+        testada_min_lote = _safe_float(rule.get("testada_min_esquina_m") or rule.get("testada_min_m") or rule.get("testada_min_meio_m"))
+    else:
+        testada_min_lote = _safe_float(rule.get("testada_min_meio_m") or rule.get("testada_min_m") or rule.get("testada_min_esquina_m"))
     testada_max_lote = _safe_float(rule.get("testada_max_m"))
 
     A_to = A * (to_max / 100.0) if (A and to_max is not None) else None
@@ -439,18 +469,28 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         or calc.get("built_ground_input_m2")
     )
 
-    W_util = W - 2 * rec_lat
-    D_util = D - rec_fr - rec_fun
-    A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
-    A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
-
-    A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
-    if A_to is not None and A_fundo is not None:
-        A_op2_max = min(A_to, A_fundo)
-    elif A_to is not None:
+    if is_irregular:
+        # Terreno irregular não possui testada/profundidade retangulares confiáveis.
+        # Portanto, não calculamos largura útil, profundidade útil nem área física por recuos.
+        W_util = None
+        D_util = None
+        A_recuos = None
+        A_op1_max = None
+        A_fundo = None
         A_op2_max = A_to
     else:
-        A_op2_max = None
+        W_util = W - 2 * rec_lat
+        D_util = D - rec_fr - rec_fun
+        A_recuos = (W_util * D_util) if (W_util > 0 and D_util > 0) else None
+        A_op1_max = min(A_to, A_recuos) if (A_to is not None and A_recuos is not None) else None
+
+        A_fundo = (W * (D - rec_fun)) if (W > 0 and D > rec_fun) else None
+        if A_to is not None and A_fundo is not None:
+            A_op2_max = min(A_to, A_fundo)
+        elif A_to is not None:
+            A_op2_max = A_to
+        else:
+            A_op2_max = None
 
     def _tp_scenario(a_terreo: float | None):
         if a_terreo is None or A_perm_min is None:
@@ -493,11 +533,18 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         via_norm=via_norm,
         via_class=via_class,
     )
-    explicacao = _append_zeia_ambiental_observacao(
+    policy = apply_zone_result_policy(
         zona=zone_sigla or zone,
-        status_curto=status_curto,
-        explicacao=explicacao,
+        subzona=subzone_code,
+        via_norm=via_norm,
+        via_class=via_class,
+        zone_class=zone_class,
+        status=status_curto,
+        icon=icon,
+        explanation=explicacao,
+        use_type_code=uso,
     )
+    icon, status_curto, explicacao = policy.icon, policy.status, policy.explanation
 
     recuos_resumo = f"Frontal: {_fmt_num(rec_fr)} m | Laterais: {_fmt_num(rec_lat)} m | Fundos: {_fmt_num(rec_fun)} m"
     ia_min_texto = _fmt_num(ia_min) if ia_min is not None else "não informado"
@@ -511,9 +558,9 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
     st.markdown(
         "Este relatório mostra, de forma simples, o que pode ou não pode ser feito no terreno informado, "
         "com base na zona, na via e nas regras urbanísticas do município.\n\n"
-        "A ideia aqui é facilitar a leitura: primeiro mostramos onde o terreno está, depois se o uso é viável, "
-        "e em seguida explicamos os principais limites do lote, como ocupação, área livre, altura, vagas, ambientes mínimos e calçada.\n\n"
-        "**Importante:** este relatório é uma análise inicial. A aprovação final depende da conferência completa no licenciamento."
+        "A ideia aqui é facilitar a leitura: primeiro apresentamos a localização do terreno, depois verificamos se o uso é viável "
+        "e, em seguida, explicamos os principais limites do lote, como ocupação, área permeável, altura, vagas, ambientes mínimos e calçada.\n\n"
+        "**Importante:** este relatório é uma análise inicial. A aprovação final depende da conferência completa no licenciamento municipal."
     )
 
     item_headings = {
@@ -523,7 +570,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "item_04": "---\n### 🧭 4️⃣ O que essa zona permite neste terreno?",
         "item_05": "---\n### 📏 5️⃣ Regras principais para este terreno",
         "item_06": "---\n### 📐 6️⃣ Quanto posso ocupar no térreo?",
-        "item_07": "---\n### 🌿 7️⃣ Quanto preciso deixar livre?",
+        "item_07": "---\n### 🌿 7️⃣ Quanto preciso deixar permeável?",  # contrato legado: ### 🌿 7️⃣ Quanto preciso deixar livre?
         "item_08": "---\n### 🧱 8️⃣ Tipos de piso: o que conta como permeável?",
         "item_09": "---\n### 🏢 9️⃣ Posso construir mais andares?",
         "item_10": "---\n### 🚗 1️⃣0️⃣ Preciso de vagas de estacionamento?",
@@ -547,6 +594,7 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "W": W,
         "D": D,
         "is_corner": is_corner,
+        "is_irregular": is_irregular,
         "tipo_lote": tipo_lote,
         "to_max": to_max,
         "tp_min": tp_min,
@@ -596,10 +644,17 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "ia_min_texto": ia_min_texto,
         "pav_est": pav_est,
         "is_zeip9": is_zeip9_unif,
+        "lot_area_f": A,
+        "lot_front": W,
+        "area_min": area_min_lote,
+        "area_max": area_max_lote,
+        "testada_min": testada_min_lote,
+        "testada_max": testada_max_lote,
         "render_quadro_tecnico": render_quadro_tecnico,
         "render_figuras_anexo_v": render_figuras_anexo_v,
         "_mf_sigla_nome": _mf_sigla_nome,
     }
+    ctx["zone_warnings"] = zone_context_warnings(ctx)
 
     for item_key in [
         "item_01", "item_02", "item_03", "item_04", "item_05", "item_06", "item_07", "item_08",
