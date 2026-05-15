@@ -116,6 +116,7 @@ def test_generated_scenario_focus_arms_block3_and_keeps_heading_anchor_order() -
         can_offer_report=True,
         pick_func=lambda *a, **k: None,
         get_credit_balance_func=lambda uid: 10,
+        preflight_credit_balance_func=lambda uid: 10,
         render_payments_panel_func=lambda: None,
         render_analise_section_func=lambda *a, **k: None,
         render_zone_description_section_func=lambda *a, **k: None,

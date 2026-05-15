@@ -8,6 +8,7 @@ import streamlit as st
 from core.zone_descriptions import fetch_zone_description
 from ui.relatorio_blocks.unifamiliar_items import UNIFAMILIAR_ITEM_RENDERERS
 from ui.relatorio_blocks.multifamiliar_items import common as mf_common
+from ui.relatorio_blocks.credit_preserved_notice import render_credit_preserved_notice
 
 DEBUG_SESSION_KEY = "_debug_inadequado_flow"
 
@@ -331,7 +332,7 @@ def render_block_message() -> None:
     st.markdown(
         "Por isso, o relatório completo não será continuado, já que não há viabilidade urbanística para este caso na forma analisada."
     )
-    st.info("**Seu crédito foi preservado**, para que você possa realizar um novo estudo em outra condição.")
+    render_credit_preserved_notice()
 
 
 def render_inadequado_preview(calc: Dict[str, Any]) -> None:
@@ -361,8 +362,8 @@ def render_inadequado_preview(calc: Dict[str, Any]) -> None:
     st.markdown(
         "Este relatório mostra, de forma simples, o que pode ou não pode ser feito no terreno informado, "
         "com base na zona, na via e nas regras urbanísticas do município.\n\n"
-        "A ideia aqui é facilitar a leitura: primeiro mostramos onde o terreno está, depois se o uso é viável, "
-        "e em seguida explicamos os principais limites do lote, como ocupação, área livre, altura, vagas, ambientes mínimos e calçada.\n\n"
+        "A ideia aqui é facilitar a leitura: primeiro apresentamos a localização do terreno, depois verificamos se o uso é viável, "
+        "e em seguida explicamos os principais limites do lote, como ocupação, área permeável, altura, vagas, ambientes mínimos e calçada.\n\n"
         "**Importante:** este relatório é uma análise inicial. A aprovação final depende da conferência completa no licenciamento."
     )
     headings = {

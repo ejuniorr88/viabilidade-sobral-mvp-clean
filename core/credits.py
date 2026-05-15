@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import json
 from typing import Any, Dict, List, Optional, Set
+from uuid import UUID
 
 import streamlit as st
 
@@ -54,6 +55,139 @@ def _safe_table_select(
     if data is None and isinstance(response, dict):
         data = response.get("data")
     return data or []
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value or default)
+    except Exception:
+        return default
+
+
+def _is_uuid(value: Any) -> bool:
+    try:
+        UUID(str(value))
+        return True
+    except Exception:
+        return False
+
+
+def _ledger_row_delta(row: Dict[str, Any]) -> int:
+    entry_type = str(row.get("entry_type") or "").strip().lower()
+    amount = _to_int(row.get("amount"))
+
+    if entry_type == "credit":
+        return amount
+    if entry_type == "debit":
+        return -amount
+    return 0
+
+
+def _read_credit_balance_value(user_id: str, *, client: Optional[Client] = None) -> int:
+    if not user_id:
+        return 0
+
+    db = client or get_supabase_server_client()
+    rows = _safe_data(db.table("credit_balance").select("balance").eq("user_id", user_id).limit(1).execute()) or []
+    if not rows:
+        return 0
+    return _to_int(rows[0].get("balance"))
+
+
+def _write_credit_balance_value(user_id: str, balance: int, *, client: Optional[Client] = None) -> None:
+    if not user_id:
+        return
+
+    db = client or get_supabase_server_client()
+    payload = {"user_id": user_id, "balance": int(balance)}
+
+    try:
+        db.table("credit_balance").upsert(payload, on_conflict="user_id").execute()
+        return
+    except Exception:
+        pass
+
+    existing = _safe_data(db.table("credit_balance").select("user_id").eq("user_id", user_id).limit(1).execute()) or []
+    if existing:
+        db.table("credit_balance").update({"balance": int(balance)}).eq("user_id", user_id).execute()
+    else:
+        db.table("credit_balance").insert(payload).execute()
+
+
+def _calculate_credit_ledger_balance(user_id: str, *, client: Optional[Client] = None) -> tuple[int, bool]:
+    """
+    Calcula o saldo pelo histórico de lançamentos.
+
+    Regra consolidada:
+    - credit_ledger é a fonte de verdade financeira;
+    - credit_balance é apenas saldo materializado/cache.
+    """
+    if not user_id:
+        return 0, False
+
+    db = client or get_supabase_server_client()
+    total = 0
+    found_any = False
+    page_size = 1000
+    start = 0
+
+    while True:
+        query = (
+            db.table("credit_ledger")
+            .select("entry_type,amount")
+            .eq("user_id", user_id)
+            .range(start, start + page_size - 1)
+        )
+        rows = _safe_data(query.execute()) or []
+
+        for row in rows:
+            found_any = True
+            total += _ledger_row_delta(row)
+
+        if len(rows) < page_size:
+            break
+
+        start += page_size
+        if start > 100000:
+            # Proteção contra loop infinito em cliente Supabase inesperado.
+            break
+
+    return int(total), found_any
+
+
+def _sync_credit_balance_to_ledger(user_id: str, *, client: Optional[Client] = None) -> Dict[str, Any]:
+    """
+    Sincroniza o saldo materializado com o ledger quando houver lançamentos.
+
+    Se não houver nenhum lançamento no ledger, preserva o saldo materializado
+    para evitar apagar crédito legado sem histórico durante migração.
+    """
+    if not user_id:
+        return {"ok": False, "reason": "missing_user_id", "balance": 0}
+
+    db = client or get_supabase_server_client()
+    ledger_balance, ledger_has_rows = _calculate_credit_ledger_balance(user_id, client=db)
+    table_balance = _read_credit_balance_value(user_id, client=db)
+
+    if not ledger_has_rows:
+        return {
+            "ok": True,
+            "balance": table_balance,
+            "ledger_has_rows": False,
+            "table_balance": table_balance,
+            "synced": False,
+        }
+
+    if table_balance != ledger_balance:
+        _write_credit_balance_value(user_id, ledger_balance, client=db)
+
+    return {
+        "ok": True,
+        "balance": ledger_balance,
+        "ledger_has_rows": True,
+        "table_balance": table_balance,
+        "synced": table_balance != ledger_balance,
+    }
 
 
 def _parse_rpc_payload(value: Any) -> Optional[Dict[str, Any]]:
@@ -142,10 +276,25 @@ def _extract_rpc_json(response: Any) -> Optional[Dict[str, Any]]:
 
 
 def get_credit_balance(user_id: str) -> int:
-    rows = _safe_table_select("credit_balance", filters={"user_id": user_id}, limit=1)
-    if not rows:
+    """
+    Retorna o saldo do usuário com o ledger como fonte de verdade.
+
+    Se houver divergência, corrige credit_balance automaticamente para
+    manter a carteira consistente antes de exibir ou validar saldo.
+    """
+    if not user_id:
         return 0
-    return int(rows[0].get("balance") or 0)
+
+    try:
+        sync = _sync_credit_balance_to_ledger(str(user_id))
+        return int(sync.get("balance") or 0)
+    except Exception:
+        # Fallback conservador: se a sincronização falhar por instabilidade externa,
+        # mantém o comportamento antigo para não derrubar a tela.
+        rows = _safe_table_select("credit_balance", filters={"user_id": user_id}, limit=1)
+        if not rows:
+            return 0
+        return int(rows[0].get("balance") or 0)
 
 
 def list_credit_packages(active_only: bool = True, limit: int = 20) -> List[Dict[str, Any]]:
@@ -210,13 +359,101 @@ def list_user_payments(user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     )
 
 
+def _tag_latest_report_debit(
+    *,
+    user_id: str,
+    amount: int,
+    description: str,
+    reference_id: Optional[str],
+    idempotency_key: Optional[str],
+    metadata: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Vincula o débito gerado pela RPC antiga à assinatura do relatório.
+
+    A RPC consume_viability_credit grava o lançamento no ledger, mas hoje não
+    recebe report_signature. Para não mexer no banco em véspera de lançamento,
+    o código marca o lançamento debitado mais recente com reference_id,
+    idempotency_key rastreável e metadata complementar.
+    """
+    reference_key = str(reference_id or "").strip()
+    if not user_id or not reference_key:
+        return {"ok": False, "reason": "missing_reference_id"}
+
+    db = get_supabase_server_client()
+    stable_prefix = str(idempotency_key or f"report_debit:{user_id}:{reference_key}").strip()
+    metadata_payload = dict(metadata or {})
+    metadata_payload.setdefault("report_signature", reference_key)
+    metadata_payload.setdefault("charged", int(amount))
+
+    try:
+        rows = _safe_data(
+            db.table("credit_ledger")
+            .select("id,metadata")
+            .eq("user_id", user_id)
+            .eq("entry_type", "debit")
+            .eq("source", "platform_usage")
+            .eq("amount", int(amount))
+            .eq("description", description)
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        ) or []
+
+        target = None
+        already_tagged = None
+        for row in rows:
+            row_metadata = row.get("metadata") if isinstance(row, dict) else None
+            is_same_signature = isinstance(row_metadata, dict) and row_metadata.get("report_signature") == reference_key
+            if is_same_signature:
+                already_tagged = already_tagged or row
+                continue
+            if target is None:
+                target = row
+                break
+
+        if not target or not target.get("id"):
+            if already_tagged and already_tagged.get("id"):
+                return {"ok": True, "already_tagged": True, "ledger_id": already_tagged.get("id")}
+            return {"ok": False, "reason": "debit_row_not_found"}
+
+        ledger_id = target.get("id")
+        existing_metadata = target.get("metadata") if isinstance(target.get("metadata"), dict) else {}
+        merged_metadata = {**existing_metadata, **metadata_payload}
+        update_payload = {
+            "idempotency_key": stable_prefix,
+            "metadata": merged_metadata,
+        }
+        if _is_uuid(reference_key):
+            update_payload["reference_id"] = reference_key
+
+        db.table("credit_ledger").update(update_payload).eq("id", ledger_id).execute()
+        return {
+            "ok": True,
+            "ledger_id": ledger_id,
+            "reference_id": reference_key if _is_uuid(reference_key) else None,
+            "report_signature": reference_key,
+        }
+    except Exception as e:
+        return {"ok": False, "reason": "tag_failed", "message": str(e)}
+
+
 def consume_viability_credit(
     user_id: str,
     amount: int = 1,
     description: str = "Cálculo de viabilidade",
+    *,
+    reference_id: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     supabase = get_supabase_auth_client()
 
+    # Importante: não pulamos o débito apenas porque já existe lançamento antigo
+    # no ledger com a mesma assinatura. Um débito antigo pode ter sido estornado
+    # após falha de salvamento. A deduplicação financeira segura acontece no
+    # checkout_flow, consultando primeiro client_reports; se o relatório ainda
+    # não está salvo, esta chamada deve efetivamente consumir 1 crédito.
     try:
         response = supabase.rpc(
             "consume_viability_credit",
@@ -229,6 +466,25 @@ def consume_viability_credit(
 
         parsed = _extract_rpc_json(response)
         if parsed is not None:
+            if parsed.get("ok"):
+                try:
+                    tag_result = _tag_latest_report_debit(
+                        user_id=user_id,
+                        amount=amount,
+                        description=description,
+                        reference_id=reference_id,
+                        idempotency_key=idempotency_key,
+                        metadata=metadata,
+                    )
+                    parsed["ledger_tag_result"] = tag_result
+                except Exception as e:
+                    parsed["ledger_tag_result"] = {"ok": False, "message": str(e)}
+                try:
+                    sync = _sync_credit_balance_to_ledger(user_id)
+                    parsed["new_balance"] = sync.get("balance", parsed.get("new_balance"))
+                    parsed["balance_source"] = "credit_ledger"
+                except Exception:
+                    pass
             return parsed
 
         return {
@@ -269,6 +525,14 @@ def _list_auth_user_ids_by_email(email: Optional[str]) -> List[str]:
 
 
 def reconcile_wallet_to_current_user(current_user_id: Optional[str], current_email: Optional[str]) -> Dict[str, Any]:
+    """
+    Consolida carteira em caso de troca/duplicidade de user_id para o mesmo e-mail.
+
+    Regra crítica:
+    - não somar credit_balance antigo como fonte da verdade;
+    - mover o ledger para o usuário atual;
+    - recalcular credit_balance a partir do credit_ledger.
+    """
     current_user_id = str(current_user_id or "").strip()
     current_email = str(current_email or "").strip().lower()
     if not current_user_id or not current_email:
@@ -279,50 +543,41 @@ def reconcile_wallet_to_current_user(current_user_id: Optional[str], current_ema
     candidate_ids.add(current_user_id)
 
     if len(candidate_ids) <= 1:
-        return {"ok": True, "moved": 0, "balance": get_credit_balance(current_user_id)}
+        sync = _sync_credit_balance_to_ledger(current_user_id, client=server)
+        return {"ok": True, "moved": 0, "balance": int(sync.get("balance") or 0)}
 
     moved_from: List[str] = []
-    total_balance = 0
-    for uid in candidate_ids:
-        rows = _safe_data(server.table("credit_balance").select("balance").eq("user_id", uid).limit(1).execute()) or []
-        bal = int((rows[0].get("balance") or 0) if rows else 0)
-        total_balance += bal
-        if uid != current_user_id:
-            try:
-                server.table("credit_ledger").update({"user_id": current_user_id}).eq("user_id", uid).execute()
-            except Exception:
-                pass
-            try:
-                server.table("payments").update({"user_id": current_user_id}).eq("user_id", uid).execute()
-            except Exception:
-                pass
-            try:
-                server.table("credit_balance").upsert({"user_id": uid, "balance": 0}, on_conflict="user_id").execute()
-            except Exception:
-                try:
-                    existing = _safe_data(server.table("credit_balance").select("user_id").eq("user_id", uid).limit(1).execute()) or []
-                    if existing:
-                        server.table("credit_balance").update({"balance": 0}).eq("user_id", uid).execute()
-                    else:
-                        server.table("credit_balance").insert({"user_id": uid, "balance": 0}).execute()
-                except Exception:
-                    pass
-            moved_from.append(uid)
 
-    try:
-        server.table("credit_balance").upsert({"user_id": current_user_id, "balance": total_balance}, on_conflict="user_id").execute()
-    except Exception:
-        existing = _safe_data(server.table("credit_balance").select("user_id").eq("user_id", current_user_id).limit(1).execute()) or []
-        if existing:
-            server.table("credit_balance").update({"balance": total_balance}).eq("user_id", current_user_id).execute()
-        else:
-            server.table("credit_balance").insert({"user_id": current_user_id, "balance": total_balance}).execute()
+    for uid in candidate_ids:
+        if uid == current_user_id:
+            continue
+
+        try:
+            server.table("credit_ledger").update({"user_id": current_user_id}).eq("user_id", uid).execute()
+        except Exception:
+            pass
+
+        try:
+            server.table("payments").update({"user_id": current_user_id}).eq("user_id", uid).execute()
+        except Exception:
+            pass
+
+        try:
+            _write_credit_balance_value(uid, 0, client=server)
+        except Exception:
+            pass
+
+        moved_from.append(uid)
+
+    sync = _sync_credit_balance_to_ledger(current_user_id, client=server)
+    final_balance = int(sync.get("balance") or 0)
 
     return {
         "ok": True,
         "moved": len(moved_from),
         "moved_from": moved_from,
-        "balance": total_balance,
+        "balance": final_balance,
+        "balance_source": "credit_ledger",
     }
 
 
@@ -334,35 +589,78 @@ def refund_viability_credit(
     reference_id: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Compensa um débito anterior de crédito quando a persistência do relatório falha."""
+    """
+    Compensa um débito anterior mantendo o credit_ledger como fonte de verdade.
+
+    Proteção crítica:
+    - quando houver referência lógica, usa idempotency_key estável para evitar
+      estorno duplicado em caso de retry/rerun;
+    - report_signature fica em metadata, pois credit_ledger.reference_id pode ser UUID;
+    - source = refund_process para auditoria clara do tipo de lançamento.
+    """
     if not user_id:
         return {"ok": False, "message": "Usuário não identificado para estorno."}
 
     server = get_supabase_server_client()
-    current_balance = get_credit_balance(user_id)
-    new_balance = int(current_balance) + int(amount)
+    metadata_payload = dict(metadata or {})
+    reference_key = str(reference_id or metadata_payload.get("report_signature") or "").strip()
+    if reference_key and not _is_uuid(reference_key):
+        metadata_payload.setdefault("report_signature", reference_key)
+
+    # Para relatório pago, o mesmo report_signature pode ter várias tentativas reais:
+    # tentativa 1 debita, falha ao salvar e estorna; tentativa 2 debita novamente
+    # e também pode precisar de novo estorno. Por isso a idempotência do estorno
+    # deve preferir o ledger_id do débito específico, não apenas a assinatura do relatório.
+    refund_scope = str(
+        metadata_payload.get("debit_ledger_id")
+        or metadata_payload.get("refund_scope")
+        or reference_key
+        or ""
+    ).strip()
+    idempotency_key = f"refund_viability_credit:{user_id}:{refund_scope}:{int(amount)}" if refund_scope else None
 
     try:
-        existing = _safe_data(server.table("credit_balance").select("user_id").eq("user_id", user_id).limit(1).execute()) or []
-        if existing:
-            server.table("credit_balance").update({"balance": new_balance}).eq("user_id", user_id).execute()
-        else:
-            server.table("credit_balance").insert({"user_id": user_id, "balance": new_balance}).execute()
+        if idempotency_key:
+            existing_refund = _safe_data(
+                server.table("credit_ledger")
+                .select("id")
+                .eq("user_id", user_id)
+                .eq("idempotency_key", idempotency_key)
+                .limit(1)
+                .execute()
+            ) or []
+            if existing_refund:
+                sync = _sync_credit_balance_to_ledger(user_id, client=server)
+                return {
+                    "ok": True,
+                    "already_refunded": True,
+                    "new_balance": int(sync.get("balance") or 0),
+                    "amount": int(amount),
+                    "balance_source": "credit_ledger",
+                }
 
         ledger_payload = {
             "user_id": user_id,
             "amount": int(amount),
             "entry_type": "credit",
-            "source": "platform_usage",
-            "reference_id": reference_id or "report_storage_refund",
+            "source": "refund_process",
             "description": description,
-            "metadata": metadata or {},
+            "metadata": metadata_payload,
         }
-        try:
-            server.table("credit_ledger").insert(ledger_payload).execute()
-        except Exception:
-            pass
+        if reference_key and _is_uuid(reference_key):
+            ledger_payload["reference_id"] = reference_key
+        if idempotency_key:
+            ledger_payload["idempotency_key"] = idempotency_key
 
-        return {"ok": True, "new_balance": new_balance, "amount": int(amount)}
+        server.table("credit_ledger").insert(ledger_payload).execute()
+        sync = _sync_credit_balance_to_ledger(user_id, client=server)
+        new_balance = int(sync.get("balance") or 0)
+        return {
+            "ok": True,
+            "already_refunded": False,
+            "new_balance": new_balance,
+            "amount": int(amount),
+            "balance_source": "credit_ledger",
+        }
     except Exception as e:
         return {"ok": False, "message": f"Erro ao estornar crédito: {e}"}

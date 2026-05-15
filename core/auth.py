@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, Optional
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 from urllib.request import Request, urlopen
 
 import streamlit as st
@@ -273,6 +273,21 @@ def _get_external_token() -> Optional[str]:
     return st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
 
 
+def _reject_external_token_for_browser_cleanup(token: Optional[str]) -> None:
+    """Mark a browser-persisted token as rejected and ask the component to clear it.
+
+    A stale token stored in the browser can be returned by the Streamlit
+    component on every render. If validation fails, keep the rejected-token
+    marker until the component returns a clean value; otherwise the same token
+    can be reprocessed in a rerun loop.
+    """
+    cleaned = (token or "").strip()
+    if cleaned:
+        st.session_state["auth_rejected_external_token"] = cleaned
+    st.session_state.pop("auth_external_access_token", None)
+    st.session_state["auth_clear_browser_token"] = True
+
+
 def _try_restore_from_external_token(force_verify: bool = False) -> bool:
     token = _get_external_token()
     if not token:
@@ -305,7 +320,9 @@ def sync_auth_state(force: bool = False) -> bool:
         st.session_state["auth_sync_done"] = True
         return restored
     except Exception as e:
+        failed_token = st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
         clear_user_in_state()
+        _reject_external_token_for_browser_cleanup(failed_token)
         st.session_state["auth_last_error"] = f"Falha ao restaurar login: {e}"
         return False
 
@@ -347,6 +364,7 @@ def handle_oauth_callback() -> None:
             return
         except Exception as e:
             clear_user_in_state()
+            _reject_external_token_for_browser_cleanup(external_access_token)
             st.session_state["auth_last_error"] = f"Falha ao concluir login: {e}"
             st.session_state.pop("oauth_url", None)
             # Se o token falhar, limpamos para evitar travar em estado intermediário.
@@ -357,20 +375,51 @@ def handle_oauth_callback() -> None:
     sync_auth_state(force=False)
 
 
-def get_auth_url(force_select_account: bool = False) -> Optional[str]:
+def _build_streamlit_return_url(extra_query_params: Optional[Dict[str, Any]] = None) -> str:
+    """Monta a URL de retorno do app preservando intenção pós-login.
+
+    O login externo sempre recebe uma `streamlit_app_url`. Quando o navegador
+    cai no fluxo de redirecionamento completo, e não apenas no popup, qualquer
+    intenção guardada somente em `st.session_state` pode se perder. Por isso,
+    fluxos críticos como compra de planos precisam carregar a intenção também
+    na URL de retorno.
+    """
+
+    app_url = get_app_url()
+    params_to_add = {
+        key: value
+        for key, value in (extra_query_params or {}).items()
+        if value is not None and str(value).strip() != ""
+    }
+    if not params_to_add:
+        return app_url
+
+    parsed = urlparse(app_url)
+    query_items = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    for key, value in params_to_add.items():
+        query_items[str(key)] = str(value)
+
+    return urlunparse(parsed._replace(query=urlencode(query_items)))
+
+
+def get_auth_url(
+    force_select_account: bool = False,
+    *,
+    return_query_params: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
     base = get_external_login_url()
     supabase_url = _normalized_env_url("SUPABASE_URL", required=True)
     supabase_anon_key = get_secret_str("SUPABASE_ANON_KEY", required=True).strip()
     gateway_url = get_gateway_url()
-    app_url = get_app_url()
+    streamlit_return_url = _build_streamlit_return_url(return_query_params)
 
     params: Dict[str, Any] = {
-        "streamlit_app_url": app_url,
+        "streamlit_app_url": streamlit_return_url,
         "gateway_base_url": gateway_url,
         "supabase_url": supabase_url,
         "supabase_anon_key": supabase_anon_key,
         "login_redirect_url": base,
-        "env_key": f"{supabase_url}|{base}|{app_url}",
+        "env_key": f"{supabase_url}|{base}|{get_app_url()}",
     }
     if force_select_account:
         params["switch_account"] = "1"
@@ -379,6 +428,7 @@ def get_auth_url(force_select_account: bool = False) -> Optional[str]:
 
 
 def logout_limpo() -> None:
+    st.session_state["auth_clear_browser_token"] = True
     keep = {
         "_supabase_auth_client": st.session_state.get("_supabase_auth_client"),
     }
@@ -395,8 +445,15 @@ def logout_limpo() -> None:
 
 
 # Compat wrappers for existing ui/auth_panel.py
-def start_google_login(force_select_account: bool = False) -> Optional[str]:
-    return get_auth_url(force_select_account=force_select_account)
+def start_google_login(
+    force_select_account: bool = False,
+    *,
+    return_query_params: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    return get_auth_url(
+        force_select_account=force_select_account,
+        return_query_params=return_query_params,
+    )
 
 
 def sign_out_current_user() -> None:

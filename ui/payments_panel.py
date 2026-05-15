@@ -7,12 +7,29 @@ from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
+try:
+    import streamlit.components.v1 as components
+except Exception:  # pragma: no cover - fallback usado só em testes/stubs
+    class _StreamlitComponentsFallback:
+        @staticmethod
+        def html(*args, **kwargs):
+            return None
+
+    components = _StreamlitComponentsFallback()
+
 from core.env_secrets import get_secret, get_secret_str
 
 from core.auth import get_supabase_auth_client
 from core.payments import create_pending_payment_and_pix, refresh_payment_status_and_credit, ensure_paid_payment_is_credited, inspect_payment_credit_status
 from core.coupons import validate_coupon_for_checkout
 from core.state_helpers import clear_all_checkout_states
+from ui.runtime.pix_generated_focus import (
+    arm_pix_generated_focus,
+    clear_pix_generated_focus_state,
+    render_pending_resume_runtime,
+    should_schedule_pending_resume_once,
+    should_skip_pending_auto_refresh_once,
+)
 
 
 # =========================================================
@@ -399,6 +416,7 @@ def _render_recent_payments(payments_rows: List[Dict[str, Any]]) -> None:
 
 
 def _render_pix_block(payment_row: Dict[str, Any]) -> None:
+    st.markdown('<div id="pix-generated-start"></div>', unsafe_allow_html=True)
     st.markdown("### Pix gerado")
 
     amount_brl = _fmt_brl(_safe_get(payment_row, "amount_brl", 0))
@@ -453,6 +471,8 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
             st.warning(f"Não foi possível atualizar o pagamento agora: {e}")
             return _fetch_payment_by_id(supabase, payment_id)
 
+    st.markdown(f'<div id="pending-payment-refresh-marker-{payment_id}"></div>', unsafe_allow_html=True)
+
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col1:
@@ -478,7 +498,17 @@ def _render_pending_payment_status(supabase, payment_id: str, current_user_id: O
     payment = _fetch_payment_by_id(supabase, payment_id)
     status = (payment or {}).get("status")
 
-    if auto_refresh and status == "pending":
+    skip_auto_refresh_once = should_skip_pending_auto_refresh_once(st.session_state, payment_id)
+
+    if auto_refresh and status == "pending" and skip_auto_refresh_once:
+        if should_schedule_pending_resume_once(st.session_state, payment_id):
+            render_pending_resume_runtime(
+                components_module=components,
+                payment_id=payment_id,
+                delay_ms=int(refresh_seconds) * 1000,
+            )
+
+    if auto_refresh and status == "pending" and not skip_auto_refresh_once:
         time.sleep(int(refresh_seconds))
         refreshed = _do_refresh()
         refreshed_status = (refreshed or {}).get("status")
@@ -614,7 +644,7 @@ def _render_buy_section(
                 if payment:
                     st.session_state["current_payment_id"] = _safe_get(payment, "id")
                     st.session_state["current_payment_snapshot"] = payment
-                    st.session_state["pix_created_success"] = True
+                    arm_pix_generated_focus(st.session_state, payment_id=_safe_get(payment, "id"))
                     st.rerun()
 
 def _resolve_current_payment(supabase) -> Optional[Dict[str, Any]]:
@@ -689,6 +719,7 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
         )
 
     st.markdown("---")
+    st.markdown('<div id="current-payment-start"></div>', unsafe_allow_html=True)
     status = str(_safe_get(current_payment, "status") or "").strip().lower()
     title_col, action_col = st.columns([0.72, 0.28])
     with title_col:
@@ -697,10 +728,14 @@ def _render_current_payment_area(supabase, current_user_id: str) -> None:
         close_label = "Cancelar / fechar Pix atual" if status == "pending" else "Fechar pagamento atual"
         if st.button(close_label, key=f"close_current_payment_{payment_id}", use_container_width=True):
             st.session_state.pop(f"paid_credit_sync_{payment_id}", None)
+            clear_pix_generated_focus_state(st.session_state, payment_id)
             clear_all_checkout_states()
             st.rerun()
 
     _render_pix_block(current_payment)
+
+    if status != "pending":
+        clear_pix_generated_focus_state(st.session_state, payment_id)
 
     if status == "pending":
         _render_pending_payment_status(supabase, str(_safe_get(current_payment, "id")), current_user_id=current_user_id)

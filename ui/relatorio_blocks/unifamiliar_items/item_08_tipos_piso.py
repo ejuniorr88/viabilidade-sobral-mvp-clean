@@ -16,4 +16,4 @@ def render(ctx: dict) -> None:
             ]
         )
     )
-    md("Isso ajuda a entender que nem toda área “livre” do lote conta 100% como permeável.")
+    md("Isso ajuda a entender que nem toda área sem ocupação no térreo conta 100% como área permeável.")

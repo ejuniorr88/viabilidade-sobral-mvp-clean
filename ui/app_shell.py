@@ -1,20 +1,95 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from core.auth import get_app_url, safe_get_query_param
 from core.credits import get_credit_balance
+from core.env_secrets import get_secret_str
+from core.state_helpers import clear_all_checkout_states
 from ui.auth_panel import render_google_login_box
+from ui.mobile_header import inject_mobile_header_styles, render_mobile_top_nav
 
 
 BLUE = "#071847"
 ORANGE = "#d68910"
 WHITE = "#ffffff"
 TEXT = "#1f2a44"
-HOW_IT_WORKS_URL = "https://www.viabilidadefacil.com.br/entenda-o-sistema.html"
-PLANS_PAGE_URL = "https://www.viabilidadefacil.com.br/planos.html"
+DEFAULT_LANDING_BASE_URLS = {
+    "production": "https://www.viabilidadefacil.com.br",
+    "homolog": "https://homolog.viabilidadefacil.com.br",
+    "staging": "https://homolog.viabilidadefacil.com.br",
+}
+
+
+def _extract_host_from_header_value(raw: str) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return ""
+
+    parsed = urlparse(value if "://" in value else f"https://{value}")
+    return (parsed.hostname or "").lower()
+
+
+def _get_request_host() -> str:
+    candidates: list[str] = []
+
+    try:
+        ctx_headers = st.context.headers if hasattr(st, "context") else None
+        if ctx_headers:
+            for key in ("X-Forwarded-Host", "Host", "Origin", "Referer"):
+                raw = ctx_headers.get(key) or ctx_headers.get(key.lower())
+                host = _extract_host_from_header_value(raw)
+                if host:
+                    candidates.append(host)
+    except Exception:
+        pass
+
+    for host in candidates:
+        if host:
+            return host
+
+    return ""
+
+
+def _detect_landing_environment(app_url: str) -> str:
+    host = _get_request_host() or (urlparse((app_url or "").strip()).hostname or "").lower()
+
+    if host in {"app.viabilidadefacil.com.br", "www.app.viabilidadefacil.com.br"}:
+        return "production"
+
+    if "stable" in host or "homolog" in host or "staging" in host:
+        return "homolog"
+
+    if host.endswith(".up.railway.app") or host.endswith(".streamlit.app") or host.endswith(".vercel.app"):
+        return "homolog"
+
+    if host in {"localhost", "127.0.0.1"}:
+        return "homolog"
+
+    return "production"
+
+
+def _get_landing_base_url() -> str:
+    app_url = (get_app_url() or "").strip()
+    environment = _detect_landing_environment(app_url)
+
+    runtime_urls = {
+        "production": get_secret_str("LANDING_URL_PRODUCTION", "").strip(),
+        "homolog": get_secret_str("LANDING_URL_HOMOLOG", "").strip(),
+        "staging": get_secret_str("LANDING_URL_STAGING", "").strip(),
+    }
+    legacy_fallback = get_secret_str("LANDING_BASE_URL", "").strip()
+
+    base_url = runtime_urls.get(environment) or legacy_fallback or DEFAULT_LANDING_BASE_URLS[environment]
+    return base_url.rstrip("/")
+
+
+def _build_landing_url(path: str) -> str:
+    return f"{_get_landing_base_url()}/{path.lstrip('/')}"
 
 
 def card(title: str, value: Any, suffix: str = "") -> None:
@@ -28,6 +103,17 @@ def card(title: str, value: Any, suffix: str = "") -> None:
         ''',
         unsafe_allow_html=True,
     )
+
+
+def _return_to_study_from_header() -> None:
+    """Return to the study with the same reset used by the working back action.
+
+    This intentionally does not touch authentication/session keys.
+    """
+    st.session_state["show_client_area"] = False
+    st.session_state["show_plans_page"] = False
+    st.session_state["post_login_action"] = None
+    clear_all_checkout_states()
 
 
 def inject_global_styles() -> None:
@@ -103,19 +189,50 @@ def inject_global_styles() -> None:
             min-height: 92px !important;
         }}
 
-        .vf-brand-home {{
-            text-decoration: none !important;
-            color: #ffffff !important;
+        .vf-brand-anchor {{
+            display: none !important;
         }}
 
-        .vf-brand-home:hover,
-        .vf-brand-home:focus,
-        .vf-brand-home:focus-visible,
-        .vf-brand-home:active,
-        .vf-brand-home:visited {{
-            text-decoration: none !important;
-            color: #ffffff !important;
-            outline: none !important;
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child {{
+            position: relative !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton {{
+            justify-content: flex-start !important;
+            position: static !important;
+            z-index: 30 !important;
+            width: auto !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] {{
+            opacity: 1 !important;
+            width: auto !important;
+            min-width: 0 !important;
+            height: 92px !important;
+            min-height: 92px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: {WHITE} !important;
+            font-size: 30px !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.02em !important;
+            justify-content: flex-start !important;
+            text-align: left !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] p,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] span,
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] div {{
+            color: {WHITE} !important;
+            font-size: 30px !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.02em !important;
+            line-height: 1 !important;
         }}
 
         .vf-brand {{
@@ -145,6 +262,21 @@ def inject_global_styles() -> None:
             align-items: center !important;
             justify-content: center !important;
             min-height: 92px !important;
+        }}
+
+        /* Keep the real Streamlit logo button anchored to the left.
+           The generic nav button rule above centers menu buttons; this scoped
+           override preserves the working click behavior and restores the
+           original brand position. */
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton {{
+            width: auto !important;
+            justify-content: flex-start !important;
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.vf-brand) > div:first-child .stButton > button[kind="tertiary"] {{
+            width: auto !important;
+            justify-content: flex-start !important;
+            text-align: left !important;
         }}
 
         [data-testid="stHorizontalBlock"]:has(.vf-brand) .vf-nav-link-wrap,
@@ -243,6 +375,34 @@ def inject_global_styles() -> None:
             color: {WHITE} !important;
         }}
 
+
+        /* Sidebar legibility: visual-only adjustment scoped to Streamlit sidebar. */
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] .stMarkdown p {{
+            font-size: 16px !important;
+            line-height: 1.55 !important;
+        }}
+
+
+
+        [data-testid="stSidebar"] input,
+        [data-testid="stSidebar"] textarea,
+        [data-testid="stSidebar"] button,
+        [data-testid="stSidebar"] [role="combobox"],
+        [data-testid="stSidebar"] [data-baseweb="select"] * {{
+            font-size: 16px !important;
+        }}
+
+        [data-testid="stSidebar"] h1,
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3 {{
+            font-size: 19px !important;
+            font-weight: 700 !important;
+            line-height: 1.3 !important;
+        }}
+
         @media (max-width: 900px) {{
             [data-testid="stHorizontalBlock"]:has(.vf-brand) {{
                 min-height: 76px;
@@ -276,18 +436,19 @@ def inject_global_styles() -> None:
 
 
 def render_top_nav() -> None:
-    cols = st.columns([3.8, 1.1, 1.35, 1.55, 0.95, 1.6], gap="small")
+    cols = st.columns([2.35, 2.55, 1.35, 1.55, 0.95, 1.6], gap="small")
 
     with cols[0]:
-        home_url = f"{get_app_url()}?nav=home"
-        st.markdown(
-            f'<a class="vf-brand vf-brand-home" href="{home_url}" target="_self" aria-label="Ir para a página inicial do sistema">Viabilidade-Fácil<span class="vf-brand-dot">.</span></a>',
-            unsafe_allow_html=True,
-        )
+        # Hidden marker only to keep the scoped header CSS active.
+        # The visible logo is the real Streamlit button below.
+        st.markdown('<span class="vf-brand vf-brand-anchor" aria-hidden="true"></span>', unsafe_allow_html=True)
+        if st.button("Viabilidade-Fácil.", key="vf_nav_home", type="tertiary", use_container_width=False):
+            _return_to_study_from_header()
+            st.rerun()
 
     with cols[2]:
         st.markdown(
-            f'<div class="vf-nav-link-wrap"><a id="vf_nav_how" class="vf-nav-link-button" href="{HOW_IT_WORKS_URL}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página Como funciona em nova aba">Como funciona</a></div>',
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_how" class="vf-nav-link-button" href="{_build_landing_url("entenda-o-sistema.html")}" target="_self" aria-label="Abrir página Como funciona na mesma aba">Como funciona</a></div>',
             unsafe_allow_html=True,
         )
 
@@ -301,13 +462,42 @@ def render_top_nav() -> None:
 
     with cols[4]:
         st.markdown(
-            f'<div class="vf-nav-link-wrap"><a id="vf_nav_plans" class="vf-nav-link-button" href="{PLANS_PAGE_URL}" target="_blank" rel="noopener noreferrer" aria-label="Abrir página de planos em nova aba">Planos</a></div>',
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_plans" class="vf-nav-link-button" href="{_build_landing_url("planos.html")}" target="_self" aria-label="Abrir página de planos na mesma aba">Planos</a></div>',
             unsafe_allow_html=True,
         )
 
     with cols[5]:
-        st.button("Dúvidas/Suporte", key="vf_nav_support", type="tertiary", use_container_width=True)
+        st.markdown(
+            f'<div class="vf-nav-link-wrap"><a id="vf_nav_support" class="vf-nav-link-button" href="{_build_landing_url("duvidas-suporte.html")}" target="_self" aria-label="Abrir página de dúvidas e suporte na mesma aba">Dúvidas/Suporte</a></div>',
+            unsafe_allow_html=True,
+        )
 
+    # ---------------------------------------------------------------------
+    # Mobile header
+    # Inject scoped styles and render a separate navigation bar on small screens.
+    # ---------------------------------------------------------------------
+    inject_mobile_header_styles()
+
+    def _on_open_client_area() -> None:
+        st.session_state["show_client_area"] = True
+        st.session_state["show_plans_page"] = False
+        if not st.session_state.get("auth_logged_in"):
+            st.session_state["post_login_action"] = "open_client_area"
+        st.rerun()
+
+    _brand_home_url = "?nav=home"
+    _how_url = _build_landing_url("entenda-o-sistema.html")
+    _plans_url = _build_landing_url("planos.html")
+    _support_url = _build_landing_url("duvidas-suporte.html")
+
+    render_mobile_top_nav(
+        brand="Viabilidade-Fácil",
+        home_url=_brand_home_url,
+        how_url=_how_url,
+        plans_url=_plans_url,
+        support_url=_support_url,
+        on_open_client_area=_on_open_client_area,
+    )
 
 def render_wallet_summary() -> None:
     user_name = st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "—"

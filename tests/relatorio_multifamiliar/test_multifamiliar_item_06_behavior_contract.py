@@ -73,4 +73,4 @@ def test_item_06_falls_back_when_area_digitada_exceeds_to(monkeypatch):
     mod.render(ctx)
     joined = '\n'.join(outputs)
     assert 'ultrapassando o limite máximo da zona' in joined
-    assert 'a análise passa a continuar considerando o limite máximo permitido pela zona' in joined
+    assert 'relatório adota **178,50 m²** como limite de referência no térreo' in joined

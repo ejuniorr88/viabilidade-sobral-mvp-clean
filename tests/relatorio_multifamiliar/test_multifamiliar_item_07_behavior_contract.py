@@ -58,6 +58,7 @@ def test_item_07_keeps_fallback_when_area_digitada_exceeds_to(monkeypatch):
 
     mod.render(ctx)
     joined = '\n'.join(outputs)
-    assert 'ultrapassa a TO máxima permitida' in joined
-    assert 'Cenário 1 — usando o máximo da TO' in joined
-    assert 'Cenário 2 — usando a implantação pelos recuos da zona' in joined
+    assert 'ultrapassa a **Taxa de Ocupação (TO)** máxima permitida' in joined
+    assert 'relatório adota **178,50 m²** como limite de referência no térreo' in joined
+    assert 'Cenário 1 — usando o máximo da TO' not in joined
+    assert 'Cenário 2 — usando a implantação pelos recuos da zona' not in joined

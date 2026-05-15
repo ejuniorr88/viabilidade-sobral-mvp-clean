@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from ui.runtime.mobile_scroll_guard import (
+    MOBILE_SCROLL_COOLDOWN_MS,
+    MOBILE_SCROLL_GUARD_KEY,
+    MOBILE_SCROLL_RETRY_DELAY_MS,
+    MOBILE_SCROLL_SETTLE_DELAY_MS,
+)
+
 
 _CONTROLLER_KEY = "__viabilidade_nav_focus_controller__"
 
@@ -24,6 +31,10 @@ def render_scroll_runtime(*, components_module: Any, element_id: str, offset: in
                 const requestId = {int(request_id)};
                 const runId = {int(run_id)};
                 const controllerKey = {_CONTROLLER_KEY!r};
+                const mobileGuardKey = {MOBILE_SCROLL_GUARD_KEY!r};
+                const mobileCooldownMs = {int(MOBILE_SCROLL_COOLDOWN_MS)};
+                const mobileSettleDelayMs = {int(MOBILE_SCROLL_SETTLE_DELAY_MS)};
+                const mobileRetryDelayMs = {int(MOBILE_SCROLL_RETRY_DELAY_MS)};
 
                 const controller = rootWin[controllerKey] || (rootWin[controllerKey] = {{
                     activeToken: null,
@@ -36,8 +47,37 @@ def render_scroll_runtime(*, components_module: Any, element_id: str, offset: in
                     missingAttempts: 0,
                     cycleAttempts: 0,
                 }});
+                controller.timeoutIds = Array.isArray(controller.timeoutIds) ? controller.timeoutIds : [];
 
                 const activeToken = requestId ? `request-${{requestId}}` : `run-${{runId}}`;
+
+                const isMobileViewport = () => {{
+                    try {{
+                        return rootWin.matchMedia('(max-width: 768px), (pointer: coarse)').matches
+                            || rootWin.innerWidth <= 768;
+                    }} catch (err) {{
+                        return rootWin.innerWidth <= 768;
+                    }}
+                }};
+
+                const getMobileGuard = () => rootWin[mobileGuardKey] || (rootWin[mobileGuardKey] = {{
+                    lockedUntil: 0,
+                    lastTargetKey: null,
+                    timeoutIds: [],
+                }});
+
+                const clearMobileGuardTimeouts = (guard) => {{
+                    (guard.timeoutIds || []).forEach((timeoutId) => rootWin.clearTimeout(timeoutId));
+                    guard.timeoutIds = [];
+                }};
+
+                const releaseMobileLockLater = () => {{
+                    const guard = getMobileGuard();
+                    const timeoutId = rootWin.setTimeout(() => {{
+                        guard.lockedUntil = 0;
+                    }}, mobileCooldownMs);
+                    guard.timeoutIds.push(timeoutId);
+                }};
 
                 const clearScheduledTimeouts = () => {{
                     (controller.timeoutIds || []).forEach((timeoutId) => rootWin.clearTimeout(timeoutId));
@@ -73,10 +113,29 @@ def render_scroll_runtime(*, components_module: Any, element_id: str, offset: in
                     controller.cycleInFlight = false;
                 }};
 
-                cleanup();
-                controller.activeToken = activeToken;
-                controller.missingAttempts = 0;
-                controller.cycleAttempts = 0;
+                const mobileTargetKey = `${{elementId}}:${{requestId || runId}}`;
+                if (isMobileViewport()) {{
+                    const guard = getMobileGuard();
+                    const now = Date.now();
+                    if (guard.lastTargetKey === mobileTargetKey && Number(guard.lockedUntil || 0) > now) {{
+                        // Mesmo alvo ainda em andamento: preserva o timeout já agendado
+                        // e evita rearmar scroll repetido no mobile.
+                        return;
+                    }}
+
+                    cleanup();
+                    clearMobileGuardTimeouts(guard);
+                    controller.activeToken = activeToken;
+                    controller.missingAttempts = 0;
+                    controller.cycleAttempts = 0;
+                    guard.lastTargetKey = mobileTargetKey;
+                    guard.lockedUntil = now + mobileCooldownMs;
+                }} else {{
+                    cleanup();
+                    controller.activeToken = activeToken;
+                    controller.missingAttempts = 0;
+                    controller.cycleAttempts = 0;
+                }}
 
                 const isActive = () => controller.activeToken === activeToken;
                 const getTargetElement = () => rootDoc.getElementById(elementId);
@@ -197,6 +256,27 @@ def render_scroll_runtime(*, components_module: Any, element_id: str, offset: in
                         startCycle();
                     }}, retryDelays[retryDelays.length - 1] + 140);
                 }};
+
+                if (isMobileViewport()) {{
+                    const runMobileCycle = () => {{
+                        if (!isActive()) return;
+                        const el = getTargetElement();
+                        if (!el) return;
+                        applyScroll(el);
+                        releaseMobileLockLater();
+                        cleanup();
+                    }};
+                    const cleanupTimeoutId = rootWin.setTimeout(() => {{
+                        releaseMobileLockLater();
+                        cleanup();
+                    }}, mobileRetryDelayMs + 420);
+                    const firstTimeoutId = rootWin.setTimeout(runMobileCycle, mobileSettleDelayMs);
+                    const retryTimeoutId = rootWin.setTimeout(runMobileCycle, mobileRetryDelayMs);
+                    const scheduledMobileTimeouts = [firstTimeoutId, retryTimeoutId, cleanupTimeoutId];
+                    controller.timeoutIds.push(...scheduledMobileTimeouts);
+                    getMobileGuard().timeoutIds.push(...scheduledMobileTimeouts);
+                    return;
+                }}
 
                 if (observerRoot) {{
                     controller.observer = new rootWin.MutationObserver(() => {{

@@ -21,13 +21,11 @@ def test_unifamiliar_render_order_stable_at_end() -> None:
     assert positions == sorted(positions), "A ordem final dos blocos do unifamiliar foi alterada."
 
 
-def test_unifamiliar_json_block_stays_after_fechamento_header_only() -> None:
+def test_unifamiliar_json_block_is_hidden_from_final_ui() -> None:
     txt = read_relatorio()
     fechamento = ITEM_HEADINGS['item_16']
     idx = txt.find(fechamento)
     assert idx != -1, "Fechamento final não encontrado."
 
-    after = txt[idx:]
-    assert 'with st.expander("Ver regra completa (JSON)")' in after, (
-        "O expander de JSON pode existir no fluxo do unifamiliar, mas o fechamento final precisa continuar presente."
-    )
+    assert 'with st.expander("Ver regra completa (JSON)")' not in txt
+    assert 'st.json(rule)' not in txt
