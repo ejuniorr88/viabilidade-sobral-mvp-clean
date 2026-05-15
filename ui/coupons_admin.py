@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, time
+from html import escape
 from typing import Any, Dict, List, Optional
 
 import streamlit as st
@@ -317,7 +318,7 @@ def _render_coupon_list(rows: List[Dict[str, Any]]) -> None:
 
     for row in visible_rows:
         with st.container(border=True):
-            st.markdown(f"**{row.get('code') or '—'}**", unsafe_allow_html=True)
+            st.markdown(f"**{escape(str(row.get('code') or '—'), quote=True)}**", unsafe_allow_html=True)
             st.markdown(_coupon_status_badges(row), unsafe_allow_html=True)
             benefit_type = row.get("benefit_type") or row.get("reward_type") or "discount"
             benefit_desc = (
