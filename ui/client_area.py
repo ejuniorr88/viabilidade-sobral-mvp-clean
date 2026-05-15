@@ -10,12 +10,23 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.client_reports import build_download_signed_url, list_client_reports
+from core.env_secrets import get_secret_str
 from core import snapshot_pdf as snapshot_pdf_module
 from core.coupons import user_can_manage_coupons
 from ui.coupons_admin import render_coupons_admin_section
 from ui.relatorio import render_relatorio_section
 
 _TZ = ZoneInfo("America/Fortaleza")
+
+
+def _pdf_download_enabled() -> bool:
+    """Feature flag para ocultar o download de PDF sem apagar a função.
+
+    Padrão seguro para lançamento: desligado.
+    Para reativar no ambiente, defina PDF_DOWNLOAD_ENABLED=true.
+    """
+    value = get_secret_str("PDF_DOWNLOAD_ENABLED", "false").strip().lower()
+    return value in {"1", "true", "yes", "on", "sim"}
 
 
 def _report_context(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -203,6 +214,9 @@ def _render_primary_download_action(item: Dict[str, Any], signed_url: str) -> No
     The old stored PDF remains as fallback. The visual PDF is generated only after the
     user clicks the button, then cached in session_state for the current page session.
     """
+    if not _pdf_download_enabled():
+        return
+
     ctx = _report_context(item)
     calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
     can_make_visual_pdf = bool(calc_snapshot) and hasattr(snapshot_pdf_module, "generate_snapshot_pdf_bytes")
@@ -243,6 +257,9 @@ def _render_primary_download_action(item: Dict[str, Any], signed_url: str) -> No
         st.button("⬇️ Fazer download", disabled=True, use_container_width=True, key=f"download_disabled_{item.get('id')}")
 
 def _render_snapshot_downloads(item: Dict[str, Any]) -> None:
+    if not _pdf_download_enabled():
+        return
+
     ctx = _report_context(item)
     calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
     if not calc_snapshot:
@@ -381,16 +398,18 @@ def _render_reports_tab(user_id: str) -> None:
                 if st.button("👁️ Visualizar", use_container_width=True, key=f"preview_open_{item.get('id')}"):
                     st.session_state[_PREVIEW_REPORT_KEY] = item.get("id")
         with e:
-            signed_url = ""
-            try:
-                signed_url = build_download_signed_url(path, bucket=bucket)
-            except Exception:
+            if _pdf_download_enabled():
                 signed_url = ""
-            _render_primary_download_action(item, signed_url)
+                try:
+                    signed_url = build_download_signed_url(path, bucket=bucket)
+                except Exception:
+                    signed_url = ""
+                _render_primary_download_action(item, signed_url)
 
         if st.session_state.get(_PREVIEW_REPORT_KEY) == item.get("id"):
             _render_saved_report_preview(item)
-            _render_snapshot_downloads(item)
+            if _pdf_download_enabled():
+                _render_snapshot_downloads(item)
 
 
 def _client_area_tabs_for_user(user_email: str) -> list[str]:
