@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from html import escape
 import json
 from datetime import datetime
 from typing import Any, Dict
@@ -132,12 +133,18 @@ def _to_local_label(item: Dict[str, Any]) -> tuple[str, str]:
     return "—", "—"
 
 
+def _html(value: Any) -> str:
+    if value is None or value == "":
+        return "—"
+    return escape(str(value), quote=True)
+
+
 def _info_card(label: str, value: str) -> None:
     st.markdown(
         f"""
         <div style="border:1px solid #e8e8e8;border-radius:14px;padding:14px 16px;background:#fff;">
-          <div style="font-size:12px;color:#6b7280;margin-bottom:6px;">{label}</div>
-          <div style="font-size:16px;font-weight:700;color:#1f2a44;">{value}</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:6px;">{_html(label)}</div>
+          <div style="font-size:16px;font-weight:700;color:#1f2a44;">{_html(value)}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -350,9 +357,9 @@ def _render_reports_tab(user_id: str) -> None:
         st.markdown(
             f"""
             <div style="border:1px solid #e8e8e8;border-radius:16px;padding:16px 18px;background:#fff;margin-bottom:14px;">
-              <div style="font-size:18px;font-weight:800;color:#1f2a44;margin-bottom:10px;">{title}</div>
-              <div style="font-size:14px;color:#4b5563;margin-bottom:8px;">Zona: <b>{zone}</b> &nbsp; • &nbsp; Rua: <b>{road}</b></div>
-              <div style="font-size:14px;color:#4b5563;">Data: <b>{date_label}</b> &nbsp; • &nbsp; Horário: <b>{time_label}</b></div>
+              <div style="font-size:18px;font-weight:800;color:#1f2a44;margin-bottom:10px;">{_html(title)}</div>
+              <div style="font-size:14px;color:#4b5563;margin-bottom:8px;">Zona: <b>{_html(zone)}</b> &nbsp; • &nbsp; Rua: <b>{_html(road)}</b></div>
+              <div style="font-size:14px;color:#4b5563;">Data: <b>{_html(date_label)}</b> &nbsp; • &nbsp; Horário: <b>{_html(time_label)}</b></div>
             </div>
             """,
             unsafe_allow_html=True,

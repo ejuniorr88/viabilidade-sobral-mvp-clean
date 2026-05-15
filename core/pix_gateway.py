@@ -78,7 +78,7 @@ def create_pix_payment(
 
     if response.status_code >= 400:
         raise MercadoPagoPixError(
-            f"Mercado Pago retornou erro {response.status_code}: {response.text}"
+            f"Mercado Pago retornou erro {response.status_code} ao gerar Pix."
         )
 
     data = response.json()
@@ -116,7 +116,7 @@ def fetch_payment_status(external_payment_id: str) -> Dict[str, Any]:
     )
     if response.status_code >= 400:
         raise MercadoPagoPixError(
-            f"Mercado Pago retornou erro {response.status_code} ao consultar pagamento: {response.text}"
+            f"Mercado Pago retornou erro {response.status_code} ao consultar pagamento."
         )
     data = response.json()
     return {

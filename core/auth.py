@@ -353,13 +353,16 @@ def handle_oauth_callback() -> None:
             ):
                 st.session_state["auth_sync_done"] = True
                 st.session_state.pop("auth_last_error", None)
+                # Mesmo quando o token já foi validado nesta sessão, a URL não deve continuar exibindo ext_access_token.
+                clear_auth_query_params(remove_external_token=True)
+                st.rerun()
                 return
 
             _try_restore_from_external_token(force_verify=True)
             st.session_state["auth_message"] = "Login efetuado com sucesso."
             st.session_state.pop("oauth_url", None)
-            # Mantém o ext_access_token para permitir reidratação no refresh.
-            clear_auth_query_params(remove_external_token=False)
+            # Segurança: após validar o token, removemos o token da URL para evitar vazamento em histórico, prints, logs ou referrer.
+            clear_auth_query_params(remove_external_token=True)
             st.rerun()
             return
         except Exception as e:

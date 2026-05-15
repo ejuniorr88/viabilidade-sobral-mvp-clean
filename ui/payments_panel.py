@@ -308,10 +308,9 @@ def _create_pix_payment(
     coupon_applied: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     try:
-        notification_url = get_secret_str(
-            "MERCADOPAGO_WEBHOOK_URL",
-            "https://dvaskwtqrohfyzndtjwv.supabase.co/functions/v1/mercadopago-webhook",
-        )
+        notification_url = get_secret_str("MERCADOPAGO_WEBHOOK_URL", "").strip()
+        if not notification_url:
+            raise RuntimeError("MERCADOPAGO_WEBHOOK_URL não configurada para este ambiente.")
 
         result = create_pending_payment_and_pix(
             user_id=user_id,
