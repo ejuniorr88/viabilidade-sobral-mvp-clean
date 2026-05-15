@@ -81,3 +81,25 @@ def test_consultation_form_persists_selected_use_for_report_signature_contract()
     content = _read("ui/consultation_form.py")
     assert 'session_state.calc["selected_use_label"] = selected_use_label' in content
     assert 'session_state.calc["categoria_label"] = categoria_label' in content
+
+
+def test_terreno_irregular_preserva_posicao_meio_ou_esquina_para_figuras_contract():
+    content = _read("ui/lote.py")
+    assert "lot_midblock_checkbox_disabled_irregular" not in content
+    assert "lot_corner_checkbox_disabled_irregular" not in content
+    assert "A forma irregular e a posição na quadra são informações diferentes" in content
+    assert 'st.session_state["lot_midblock_checkbox"] = _default_midblock(calc)' in content
+    assert 'st.session_state["lot_corner_checkbox"] = False' in content
+    assert 'calc["lot_is_corner"] = bool(lote_esquina)' in content
+    assert 'st.session_state["lot_is_corner"] = bool(lote_esquina)' in content
+    assert 'tipo_lote = "Terreno irregular"' in content
+
+
+def test_report_pdf_irregular_corner_uses_corner_figures_without_rectangular_dimensions_contract():
+    content = _read("core/report_pdf.py")
+    assert "is_corner = False if is_irregular" not in content
+    assert "is_corner_for_figures" in content
+    assert 'is_corner_for_figures = safe_bool(calc.get("lot_is_corner", session_state.get("lot_is_corner", False)))' in content
+    assert 'is_corner = safe_bool(calc.get("lot_is_corner", session_state.get("lot_is_corner", False)))' in content
+    assert "filter_figuras_by_lot_type(extract_figures_from_rule(rule), is_corner=is_corner_for_figures)" in content
+    assert "Terreno irregular continua sem dimensões retangulares para cálculo" in content
