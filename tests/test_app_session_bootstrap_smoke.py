@@ -9,10 +9,10 @@ def test_app_delegates_bootstrap_to_core_session_module() -> None:
     assert 'def _bootstrap_session_state()' not in text
 
     bootstrap_pos = text.index('bootstrap_session_state(st.session_state)')
-    first_calc_use_pos = text.index('st.session_state.calc["use_type_code"] = selected_use_code')
+    first_form_use_pos = text.index('render_consultation_form(st.session_state)')
     first_signature_use_pos = text.index('if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:')
 
-    assert bootstrap_pos < first_calc_use_pos
+    assert bootstrap_pos < first_form_use_pos
     assert bootstrap_pos < first_signature_use_pos
 
 
@@ -36,6 +36,7 @@ def test_core_session_bootstrap_keeps_required_defaults() -> None:
         'session_state.setdefault("scroll_to_item3", False)',
         'session_state.setdefault("post_login_action", None)',
         'session_state.setdefault("show_inline_payments", False)',
+        'session_state.setdefault("show_plans_page", False)',
         'session_state.setdefault("show_client_area", False)',
     ]
 

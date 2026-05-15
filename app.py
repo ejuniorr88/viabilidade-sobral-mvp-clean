@@ -1,9 +1,8 @@
 import json
-import re
-import unicodedata
 from copy import deepcopy
+from functools import partial
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import streamlit as st
 
@@ -13,6 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 import streamlit.components.v1 as components
+from ui.theme.light_mode_lock import enforce_light_mode
 
 from core.session.bootstrap import bootstrap_session_state
 
@@ -25,10 +25,8 @@ from ui.app_shell import (
 )
 from ui.flow.primary_actions import render_primary_actions
 from ui.how_it_works_panel import render_how_it_works_panel
-from ui.flow.use_selector import render_use_selector
+from ui.consultation_form import render_consultation_form
 from ui.legal import render_privacy_page, render_terms_page
-
-st.set_page_config(layout="wide", page_title="Viabilidade Fácil")
 
 
 bootstrap_session_state(st.session_state)
@@ -47,13 +45,14 @@ except Exception:
     from core.supabase_rule import fetch_rule, pick_rule  # type: ignore
 
 from ui.map.section import render_mapa_section
-from ui.lot.inputs import render_lot_inputs
 from ui.location.section import render_localizacao_section
 from ui.indices.section import render_indices_section
 from ui.analysis.section import render_analise_section
 from ui.report.section import render_report_section
 from ui.runtime.flow_state import apply_post_login_runtime_flags, render_item3_scroll_if_needed
 from ui.runtime.navigation_focus import render_navigation_focus_if_needed
+from ui.mobile_viewport import inject_mobile_viewport_detector, sync_mobile_viewport_state, is_mobile_view
+from ui.mobile_inline_consultation import render_mobile_inline_consultation_header
 from ui.runtime.report_navigation import arm_report_initial_focus
 from ui.relatorio import (
     render_relatorio_section,
@@ -62,6 +61,11 @@ from ui.relatorio import (
     should_block_unifamiliar_preview,
 )
 from core.auth import handle_oauth_callback, safe_get_query_param
+from ui.runtime.app_query_params import (
+    consume_client_area_query_param,
+    consume_home_nav_query_param,
+    consume_landing_checkout_query_params,
+)
 from ui.auth_panel import render_google_login_top
 from ui.access_gates import (
     render_login_gate_block,
@@ -76,12 +80,16 @@ from ui.relatorio_blocks.multifamiliar_guia import (
     should_block_multifamiliar_preview,
 )
 from ui.client_area import render_client_area_page
-from core.credits import consume_viability_credit, get_credit_balance, reconcile_wallet_to_current_user, refund_viability_credit
+from core.credits import get_credit_balance, reconcile_wallet_to_current_user
 from core.report_pdf import generate_report_pdf_bytes
-from core.client_reports import save_client_report, build_report_signature
 from core.state_helpers import clear_all_checkout_states
 from core import report_confirmation as report_confirmation_core
-from core import checkout_flow as checkout_flow_core
+from core.report_delivery import (
+    build_report_delivery_signature,
+    deliver_paid_report,
+    live_report_signature_coords,
+    preflight_report_delivery_credit_balance,
+)
 
 
 @st.cache_data(show_spinner=False)
@@ -134,88 +142,8 @@ def _clear_report_runtime_state(
 
 
 def _build_current_report_signature(calc_ref, session_snapshot):
-    return build_report_signature(calc=calc_ref, session_state=session_snapshot)
-
-
-def _normalize_checkout_plan_slug(value: Any) -> Optional[str]:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-
-    normalized = unicodedata.normalize("NFD", raw)
-    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
-    normalized = re.sub(r"[^a-z0-9]+", "_", normalized.lower()).strip("_")
-
-    if "intermedi" in normalized:
-        return "intermediario"
-    if "profissional" in normalized:
-        return "profissional"
-    if "basico" in normalized:
-        return "basico"
-    return normalized or None
-
-
-def _clear_landing_checkout_query_params() -> None:
-    keys = ["checkout", "plan"]
-    try:
-        for key in keys:
-            try:
-                del st.query_params[key]
-            except Exception:
-                pass
-    except Exception:
-        try:
-            current = st.experimental_get_query_params()
-            cleaned = {k: v for k, v in current.items() if k not in keys}
-            st.experimental_set_query_params(**cleaned)
-        except Exception:
-            pass
-
-
-def _clear_home_nav_query_param() -> None:
-    try:
-        try:
-            del st.query_params["nav"]
-        except Exception:
-            pass
-    except Exception:
-        try:
-            current = st.experimental_get_query_params()
-            cleaned = {k: v for k, v in current.items() if k != "nav"}
-            st.experimental_set_query_params(**cleaned)
-        except Exception:
-            pass
-
-
-def _consume_home_nav_query_param() -> None:
-    nav_value = str(safe_get_query_param("nav") or "").strip().lower()
-    if nav_value != "home":
-        return
-
-    st.session_state["show_plans_page"] = False
-    st.session_state["show_client_area"] = False
-    st.session_state["post_login_action"] = None
-    clear_all_checkout_states()
-    _clear_home_nav_query_param()
-
-
-def _consume_landing_checkout_query_params() -> None:
-    checkout_flag = str(safe_get_query_param("checkout") or "").strip().lower()
-    plan_value = safe_get_query_param("plan")
-    should_open_checkout = checkout_flag in {"1", "true", "yes", "on"} or bool(plan_value)
-
-    if not should_open_checkout:
-        return
-
-    st.session_state["landing_checkout_mode"] = True
-    st.session_state["landing_selected_plan_slug"] = _normalize_checkout_plan_slug(plan_value)
-    st.session_state["show_plans_page"] = True
-    st.session_state["show_client_area"] = False
-
-    if not st.session_state.get("auth_logged_in"):
-        st.session_state["post_login_action"] = "open_plans_page"
-
-    _clear_landing_checkout_query_params()
+    # build_report_signature(calc=calc_ref, session_state=session_snapshot)
+    return build_report_delivery_signature(calc=calc_ref, session_state=session_snapshot)
 
 
 def _should_block_report_preview(calc_ref: Dict[str, Any]) -> bool:
@@ -244,7 +172,7 @@ def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, us
     # amount=1
     # save_client_report(
     # last_saved_report_signature
-    debit_result, pdf_bytes = checkout_flow_core.prepare_and_consume_report(
+    debit_result, pdf_bytes = deliver_paid_report(
         calc_ref=calc_ref,
         session_snapshot=session_snapshot,
         report_signature=report_signature,
@@ -252,11 +180,7 @@ def _prepare_and_consume_report(calc_ref, session_snapshot, report_signature, us
         selected_use_label_value=selected_use_label_value,
         categoria_label_value=categoria_label_value,
         session_state=st.session_state,
-        generate_report_pdf_bytes_func=generate_report_pdf_bytes,
-        consume_viability_credit_func=consume_viability_credit,
-        refund_viability_credit_func=refund_viability_credit,
         commit_report_snapshot_func=_commit_report_snapshot,
-        save_client_report_func=save_client_report,
     )
     return debit_result, pdf_bytes
 
@@ -266,8 +190,10 @@ if safe_get_query_param("auth_flow") == "callback":
 
 handle_oauth_callback()
 inject_global_styles()
-_consume_home_nav_query_param()
-_consume_landing_checkout_query_params()
+enforce_light_mode()
+consume_home_nav_query_param(st.session_state)
+consume_client_area_query_param(st.session_state)
+consume_landing_checkout_query_params(st.session_state)
 
 legal_view = safe_get_query_param("view")
 if legal_view == "terms":
@@ -341,16 +267,43 @@ with login_col:
         render_wallet_summary()
     render_google_login_top()
 
-with st.sidebar:
-    categoria_label, selected_use_label, selected_use_code, selected_multi_tipo = render_use_selector(st.session_state)
-    st.session_state.calc["use_type_code"] = selected_use_code
+inject_mobile_viewport_detector()
+sync_mobile_viewport_state(st.session_state)
+mobile_view_active = is_mobile_view(st.session_state)
 
-    st.markdown("### 📐 3. Dados do Lote")
-    st.caption("Mantido o bloco funcional já consolidado, incluindo a lógica de terreno irregular.")
-
-    lot_area, built_ground, permeable_area = render_lot_inputs()
+if not mobile_view_active:
+    with st.sidebar:
+        (
+            categoria_label,
+            selected_use_label,
+            selected_use_code,
+            selected_multi_tipo,
+            lot_area,
+            built_ground,
+            permeable_area,
+        ) = render_consultation_form(st.session_state)
+else:
+    categoria_label = str(st.session_state.get("vf_categoria", "Residencial"))
+    selected_use_label = str(st.session_state.get("vf_residential_option", "Residencial Unifamiliar (Casa)"))
+    selected_use_code = str(st.session_state.calc.get("use_type_code", "RES_UNI"))
+    selected_multi_tipo = str(st.session_state.calc.get("multi_tipo", ""))
+    lot_area = float(st.session_state.calc.get("lot_area_m2", 300.0) or 300.0)
+    built_ground = float(st.session_state.calc.get("built_ground_m2", 0.0) or 0.0)
+    permeable_area = float(st.session_state.calc.get("area_permeavel_prevista_m2", 0.0) or 0.0)
 
 radius_m = render_mapa_section(zones_gj)
+
+if mobile_view_active:
+    render_mobile_inline_consultation_header()
+    (
+        categoria_label,
+        selected_use_label,
+        selected_use_code,
+        selected_multi_tipo,
+        lot_area,
+        built_ground,
+        permeable_area,
+    ) = render_consultation_form(st.session_state)
 
 clicked_calcular = render_primary_actions(
     session_state=st.session_state,
@@ -370,12 +323,22 @@ st.session_state.calc["lot_depth_m"] = float(st.session_state.get("lot_depth_m")
 st.session_state.calc["lot_is_corner"] = bool(st.session_state.get("lot_is_corner", False))
 st.session_state.calc["lot_is_midblock"] = bool(st.session_state.get("lot_is_midblock", not st.session_state.calc["lot_is_corner"]))
 
+selected_lat_for_signature, selected_lon_for_signature = live_report_signature_coords(session_state=st.session_state)
+
 current_signature = report_confirmation_core.build_calc_signature(
-    selected_lat=st.session_state.get("selected_lat"),
-    selected_lon=st.session_state.get("selected_lon"),
+    selected_lat=selected_lat_for_signature,
+    selected_lon=selected_lon_for_signature,
     use_type_code=st.session_state.calc.get("use_type_code"),
     project_mode=st.session_state.calc.get("project_mode"),
     categoria_label=categoria_label,
+    lot_area_m2=st.session_state.calc.get("lot_area_m2"),
+    built_ground_m2=st.session_state.calc.get("built_ground_m2") or st.session_state.calc.get("built_ground_input_m2") or built_ground,
+    permeable_area_m2=st.session_state.calc.get("area_permeavel_prevista_m2") or st.session_state.calc.get("permeable_area_m2") or permeable_area,
+    lot_front_m=st.session_state.calc.get("lot_front_m"),
+    lot_depth_m=st.session_state.calc.get("lot_depth_m"),
+    lot_is_corner=st.session_state.calc.get("lot_is_corner"),
+    lot_is_midblock=st.session_state.calc.get("lot_is_midblock"),
+    lot_is_irregular=st.session_state.calc.get("lot_is_irregular") or st.session_state.calc.get("lot_irregular"),
 )
 
 if st.session_state.last_calc_signature and st.session_state.last_calc_signature != current_signature:
@@ -523,6 +486,10 @@ render_report_section(
     can_offer_report=can_offer_report,
     pick_func=pick_rule,
     get_credit_balance_func=get_credit_balance,
+    preflight_credit_balance_func=partial(
+        preflight_report_delivery_credit_balance,
+        session_state=st.session_state,
+    ),
     render_payments_panel_func=render_payments_panel,
     render_analise_section_func=render_analise_section,
     render_zone_description_section_func=render_zone_description_section,

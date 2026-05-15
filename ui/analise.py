@@ -49,9 +49,8 @@ def render_analise_section(
     use_type_code = str(calc.get("use_type_code") or "").upper()
     project_mode = str(calc.get("project_mode") or "").upper()
 
-    # Multifamiliar (Fase 1 — Guia): mantém comportamento informativo já consolidado.
+    # Multifamiliar (Fase 1 — Guia): ocultar aviso interno para manter a interface final limpa.
     if use_type_code.startswith("RES_MULTI_") and project_mode == "GUIA_FASE_1":
-        st.info("Modo **Guia do Projetista (Multifamiliar)**: esta etapa é informativa e não faz validações numéricas de TO/TP/IA.")
         return
 
     # Unifamiliar: ocultar o bloco antigo "Análise Urbanística" para não repetir conteúdo.

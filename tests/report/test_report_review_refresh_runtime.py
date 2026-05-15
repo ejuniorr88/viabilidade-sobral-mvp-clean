@@ -135,6 +135,7 @@ def _render_report_section(
         can_offer_report=True,
         pick_func=lambda *a, **k: None,
         get_credit_balance_func=lambda uid: balance,
+        preflight_credit_balance_func=lambda uid: balance,
         render_payments_panel_func=lambda: None,
         render_analise_section_func=lambda *a, **k: None,
         render_zone_description_section_func=lambda *a, **k: None,
@@ -147,6 +148,61 @@ def _render_report_section(
         compute_report_confirmation_state_func=lambda **kwargs: compute_state,
         arm_new_report_confirmation_func=lambda **kwargs: None,
     )
+
+
+
+
+def test_generate_report_uses_preflight_balance_after_recent_payment_credit() -> None:
+    section_module, st_stub = _load_section_module(button_results={"btn_generate_report": True})
+
+    compute_state = _base_report_state(
+        current_signature="sig-credit",
+        current_session={"lot_front_m": 12.0, "lot_depth_m": 30.0},
+        has_snapshot=False,
+        is_same_as_snapshot=False,
+    )
+
+    armed = {"count": 0}
+
+    def arm_new_report_confirmation_func(**kwargs):
+        armed["count"] += 1
+
+    section_module.render_review_panel = lambda *, calc, session_snapshot: None
+    section_module.render_terms_gate = lambda signature: True
+    section_module.render_final_confirmation = lambda *, is_new_report: (False, False)
+
+    try:
+        section_module.render_report_section(
+            calc=_base_calc(),
+            built_ground=120,
+            permeable_area=90,
+            user_logged_in=True,
+            user_id="user-1",
+            selected_use_label="Residencial Unifamiliar",
+            categoria_label="Residencial",
+            preview_inadequado=False,
+            can_offer_report=True,
+            pick_func=lambda *a, **k: None,
+            get_credit_balance_func=lambda uid: 0,
+            preflight_credit_balance_func=lambda uid: 2,
+            render_payments_panel_func=lambda: None,
+            render_analise_section_func=lambda *a, **k: None,
+            render_zone_description_section_func=lambda *a, **k: None,
+            render_relatorio_section_func=lambda *a, **k: None,
+            generate_report_pdf_bytes_func=lambda **kwargs: b"pdf",
+            clear_report_runtime_state_func=lambda **kwargs: None,
+            clear_pending_report_func=lambda: None,
+            prepare_and_consume_report_func=lambda **kwargs: ({"new_balance": 1}, None),
+            build_current_report_signature_func=lambda calc_ref, session_snapshot: compute_state["current_report_signature"],
+            compute_report_confirmation_state_func=lambda **kwargs: compute_state,
+            arm_new_report_confirmation_func=arm_new_report_confirmation_func,
+        )
+    except RerunCalled:
+        pass
+
+    assert armed["count"] == 1
+    assert st_stub.session_state.get("report_review_open") is True
+    assert not any("Você não possui créditos suficientes" in msg for msg in st_stub.errors)
 
 
 def test_refreshes_open_review_with_new_lot_data_and_clears_legacy_pending_confirmation() -> None:
@@ -192,7 +248,7 @@ def test_refreshes_open_review_with_new_lot_data_and_clears_legacy_pending_confi
     assert st_stub.session_state["report_review_signature"] == "sig-new"
     assert st_stub.session_state.get("pending_report_signature") is None
     assert st_stub.session_state.get("confirm_new_report") is None
-    assert st_stub.session_state.get("navigation_focus_target") == "report_section"
+    assert st_stub.session_state.get("nav_focus_target") == "report_confirmation_block"
     assert render_calls, "A revisão deve continuar renderizando após a edição do lote."
     assert render_calls[-1][1]["lot_front_m"] == 12.0
     assert not any("Você tem certeza que deseja gerar outro relatório" in msg for msg in st_stub.warnings)
@@ -230,6 +286,7 @@ def test_generate_report_button_arms_review_and_focuses_confirmation_block() -> 
             can_offer_report=True,
             pick_func=lambda *a, **k: None,
             get_credit_balance_func=lambda uid: 10,
+        preflight_credit_balance_func=lambda uid: 10,
             render_payments_panel_func=lambda: None,
             render_analise_section_func=lambda *a, **k: None,
             render_zone_description_section_func=lambda *a, **k: None,
@@ -248,7 +305,7 @@ def test_generate_report_button_arms_review_and_focuses_confirmation_block() -> 
     assert armed_calls, "O clique no botão principal deve continuar armando a confirmação legada compatível."
     assert st_stub.session_state["report_review_open"] is True
     assert st_stub.session_state["report_review_signature"] == "sig-current"
-    assert st_stub.session_state.get("navigation_focus_target") == "report_review_confirm"
+    assert st_stub.session_state.get("nav_focus_target") == "report_confirmation_block"
 
 
 def test_stale_pending_signature_is_cleared_before_legacy_confirmation_branch_runs() -> None:

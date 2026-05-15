@@ -13,13 +13,22 @@ def render(ctx: dict) -> None:
         "- altura máxima\n"
         "- potencial total de construção"
     )
-    md(
-        f"**Resumo das regras**\n\n"
-        f"- **TO máxima:** {fmt_pct(ctx['to_max'])}\n"
-        f"- **TP mínima:** {fmt_pct(ctx['tp_min'])}\n"
-        f"- **IA máximo:** {fmt_num(ctx['ia_max']) if ctx['ia_max'] is not None else '—'}\n"
-        f"- **IA mínimo:** {ctx['ia_min_texto']}\n"
-        f"- **Recuos:** {ctx['recuos_resumo']}\n"
-        f"- **Altura máxima:** {fmt_num(ctx['gabarito_m'])} m"
-    )
+    linhas = [
+        f"- **TO máxima:** {fmt_pct(ctx['to_max'])}",
+        f"- **TP mínima:** {fmt_pct(ctx['tp_min'])}",
+        f"- **IA máximo:** {fmt_num(ctx['ia_max']) if ctx['ia_max'] is not None else '—'}",
+        f"- **IA mínimo:** {ctx['ia_min_texto']}",
+        f"- **Recuos:** {ctx['recuos_resumo']}",
+        f"- **Altura máxima:** {fmt_num(ctx['gabarito_m'])} m",
+    ]
+    if ctx.get('area_min_lote') is not None:
+        linhas.append(f"- **Área mínima do lote:** {fmt_num(ctx['area_min_lote'])} m²")
+    if ctx.get('area_max_lote') is not None:
+        linhas.append(f"- **Área máxima do lote:** {fmt_num(ctx['area_max_lote'])} m²")
+    if ctx.get('testada_min_lote') is not None:
+        linhas.append(f"- **Testada mínima:** {fmt_num(ctx['testada_min_lote'])} m")
+    if ctx.get('testada_max_lote') is not None:
+        linhas.append(f"- **Testada máxima:** {fmt_num(ctx['testada_max_lote'])} m")
+
+    md("**Resumo das regras**\n\n" + "\n".join(linhas))
     md("Essas são as regras que mais impactam o projeto.")

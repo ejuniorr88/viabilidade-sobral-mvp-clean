@@ -12,6 +12,29 @@ def _safe_float(value: Any) -> float:
         return 0.0
 
 
+
+def _pick_coordinate(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and value.strip() == "":
+            continue
+        return value
+    return None
+
+
+def _coords_from_state(calc_ref: Dict[str, Any], session_state: MutableMapping[str, Any]) -> tuple[Any, Any]:
+    last_click = session_state.get("last_click")
+    click_lat = click_lon = None
+    if isinstance(last_click, dict):
+        click_lat = last_click.get("lat")
+        click_lon = last_click.get("lon")
+
+    return (
+        _pick_coordinate(calc_ref.get("lat"), click_lat, calc_ref.get("selected_lat"), session_state.get("lat"), session_state.get("selected_lat")),
+        _pick_coordinate(calc_ref.get("lon"), click_lon, calc_ref.get("selected_lon"), session_state.get("lon"), session_state.get("selected_lon")),
+    )
+
 def current_report_session_snapshot(
     *,
     calc_ref: Dict[str, Any],
@@ -49,7 +72,12 @@ def current_report_session_snapshot(
     lot_is_irregular_live = bool(
         session_state.get("lot_is_irregular", calc_ref.get("lot_irregular", calc_ref.get("lot_is_irregular", False)))
     )
+    selected_lat_live, selected_lon_live = _coords_from_state(calc_ref, session_state)
     return {
+        "selected_lat": selected_lat_live,
+        "selected_lon": selected_lon_live,
+        "lat": selected_lat_live,
+        "lon": selected_lon_live,
         "lot_area_m2": lot_area_live,
         "built_ground_m2": built_ground_live,
         "permeable_area_m2": permeable_area_live,
@@ -79,12 +107,33 @@ def commit_report_snapshot(
 
 
 def clear_pending_report(session_state: MutableMapping[str, Any]) -> None:
+    """Clear every transient report-confirmation state.
+
+    This function is intentionally broader than the legacy
+    ``confirm_new_report`` reset. The report flow currently has two
+    confirmation paths while the app is being modularized:
+
+    * legacy pending report confirmation;
+    * newer review/terms/final-confirmation panel.
+
+    Both paths can eventually lead to credit consumption. A blocked
+    or inadequate scenario must therefore clear all transient states,
+    otherwise a later allowed scenario can inherit a stale confirmation.
+    """
+
     session_state["confirm_new_report"] = False
     session_state["pending_report_calc"] = None
     session_state["pending_report_session"] = None
     session_state["pending_report_signature"] = None
-    session_state["report_review_open"] = False
 
+    session_state["report_review_open"] = False
+    session_state["report_review_signature"] = None
+    session_state["report_review_calc"] = None
+    session_state["report_review_session"] = None
+    session_state["report_review_is_new_report"] = False
+
+    session_state["report_review_seen_signature"] = None
+    session_state["legacy_report_confirm_seen_signature"] = None
 
 def clear_report_runtime_state(
     *,

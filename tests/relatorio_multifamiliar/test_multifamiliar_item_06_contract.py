@@ -12,7 +12,7 @@ def test_item_06_heading_principal_fica_somente_no_relatorio() -> None:
 def test_item_06_keeps_minimum_content_contract() -> None:
     assert_item_has_required_phrases(
         "item_06",
-        ['A zona permite ocupar até', 'Opção 1 — usando os recuos da zona', 'Opção 2 — no caso do multifamiliar justaposto', 'Área pretendida informada'],
+        ['A zona permite ocupar até', 'Texto didático para R2.1', 'Cenário A — unidades sobrepostas', 'Cenário B — unidades lado a lado', 'Área pretendida informada'],
     )
 
 

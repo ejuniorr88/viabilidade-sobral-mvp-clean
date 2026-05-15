@@ -104,30 +104,41 @@ def render(ctx: dict) -> None:
     area_restante_to = area_lote - area_to
     area_impermeavel_to = area_restante_to - area_permeavel_min
 
-    area_restante_recuos = area_lote - area_recuos
-    area_impermeavel_recuos = area_restante_recuos - area_permeavel_min
+    # O cálculo pelos recuos mostra apenas a área que caberia fisicamente no lote.
+    # Ele não pode virar cenário de ocupação quando for maior que a TO ou quando não deixar
+    # área livre suficiente para a TP. Para relatório leigo, repetimos o limite real do térreo.
+    limite_real_terreo = area_to
+    area_restante_real = area_lote - limite_real_terreo
+    area_impermeavel_real = area_restante_real - area_permeavel_min
 
     if area_pedida_valida and not area_pedida_dentro_to:
         md(
             f"👉 **Como a área digitada pelo usuário ({fmt_num(area_pedida)} m²) ultrapassa a TO máxima permitida, "
-            f"este item continua com a lógica atual e analisa a permeabilidade a partir dos cenários padrão do sistema.**"
+            f"este item continua considerando o limite real permitido no térreo, que é {fmt_num(limite_real_terreo)} m².**"
         )
 
     md("**Cenário 1 — usando o máximo da TO**")
-    md(f"Se você utilizar **{fmt_num(area_to)}** no térreo:")
-    md(f"👉 **Área restante no lote: {fmt_num(area_lote)} − {fmt_num(area_to)} = {fmt_num(area_restante_to)}**")
+    md(f"Se você utilizar **{fmt_num(limite_real_terreo)}** no térreo:")
+    md(f"👉 **Área restante no lote: {fmt_num(area_lote)} − {fmt_num(limite_real_terreo)} = {fmt_num(area_restante_real)}**")
     md("Desses:")
     md(f"- **{fmt_num(area_permeavel_min)}** devem permitir infiltração no solo")
-    md(f"- **{fmt_num(max(area_impermeavel_to, 0.0))}** podem receber piso impermeável")
+    md(f"- **{fmt_num(max(area_impermeavel_real, 0.0))}** podem receber piso impermeável")
 
     md("**Cenário 2 — usando a implantação pelos recuos da zona**")
-    md(f"Se você utilizar **{fmt_num(area_recuos)}** no térreo:")
-    md(f"👉 **Área restante no lote: {fmt_num(area_lote)} − {fmt_num(area_recuos)} = {fmt_num(area_restante_recuos)}**")
+    md(
+        f"Pelos recuos, a construção até caberia fisicamente em uma área de **{fmt_num(area_recuos)} m²**. "
+        "Porém, isso **não significa que seja permitido ocupar tudo isso**."
+    )
+    md(
+        f"Neste caso, a Taxa de Ocupação é mais restritiva e limita a ocupação do térreo a **{fmt_num(limite_real_terreo)} m²**."
+    )
+    md(f"Portanto, para este lote, o limite real de ocupação no térreo é **{fmt_num(limite_real_terreo)} m²**.")
+    md(f"Com esse limite, a área restante no lote continua sendo **{fmt_num(area_restante_real)} m²**.")
     md("Desses:")
     md(f"- **{fmt_num(area_permeavel_min)}** devem permitir infiltração no solo")
-    md(f"- **{fmt_num(max(area_impermeavel_recuos, 0.0))}** podem receber piso impermeável")
+    md(f"- **{fmt_num(max(area_impermeavel_real, 0.0))}** podem receber piso impermeável")
 
     md(
-        "👉 **Leitura prática:** no multifamiliar, quando a implantação aumenta, a área livre diminui. "
-        "Por isso, quanto maior a ocupação do térreo, menor fica a sobra disponível além do mínimo exigido para a permeabilidade."
+        "👉 **Leitura prática:** no multifamiliar, a área física disponível pelos recuos ajuda a entender o desenho possível da implantação, "
+        "mas o projeto não pode ultrapassar a TO nem deixar de atender à TP mínima."
     )

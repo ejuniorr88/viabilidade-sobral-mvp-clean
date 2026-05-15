@@ -1,9 +1,13 @@
 (function () {
   const root = document.getElementById("root");
   const POPUP_TOKEN_KEY = "vf_auth_popup_token";
-  let currentArgs = { auth_url: "", label: "Entrar com Google", subtle: false };
+  const PERSISTED_TOKEN_KEY = "vf_auth_streamlit_access_token";
+  let currentArgs = { auth_url: "", label: "Entrar com Google", subtle: false, restore_token: true, clear_browser_token: false };
+  let restoredPersistedTokenSent = false;
   let activeMessageHandler = null;
+  let activeStorageHandler = null;
   let activeBroadcastChannel = null;
+  let lastDeliveredToken = "";
 
   function sendMessageToStreamlitClient(type, data) {
     const outData = Object.assign(
@@ -47,21 +51,82 @@
     ].join(",");
   }
 
-  function consumePopupToken(rawValue) {
+  function clearBrowserTokens() {
+    try { window.localStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
+    try { window.sessionStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
+    try { window.localStorage.removeItem(PERSISTED_TOKEN_KEY); } catch (_err) {}
+    try { window.sessionStorage.removeItem(PERSISTED_TOKEN_KEY); } catch (_err) {}
+  }
+
+  function persistTokenForRefresh(token) {
+    if (!token) return;
+    try { window.localStorage.setItem(PERSISTED_TOKEN_KEY, token); } catch (_err) {}
+    try { window.sessionStorage.setItem(PERSISTED_TOKEN_KEY, token); } catch (_err) {}
+  }
+
+  function readPersistedToken() {
+    try {
+      return (window.sessionStorage.getItem(PERSISTED_TOKEN_KEY) || window.localStorage.getItem(PERSISTED_TOKEN_KEY) || "").trim();
+    } catch (_err) {
+      return "";
+    }
+  }
+
+  function deliverTokenToStreamlit(rawValue, options) {
     const token = (rawValue || "").trim();
     if (!token) return;
 
+    // Evita entregas duplicadas quando postMessage, BroadcastChannel e storage
+    // disparam para o mesmo token no mesmo ciclo do componente. A defesa
+    // principal contra rerun entre ciclos fica no Python, que reconhece tokens
+    // já recusados e solicita limpeza do navegador.
+    if (token === lastDeliveredToken) return;
+    lastDeliveredToken = token;
+
+    const opts = options || {};
+    if (opts.persist !== false) {
+      persistTokenForRefresh(token);
+    }
     setComponentValue(token);
+  }
+
+  function consumePopupToken(rawValue) {
+    deliverTokenToStreamlit(rawValue, { persist: true });
+
+    try { window.localStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
+    try { window.sessionStorage.removeItem(POPUP_TOKEN_KEY); } catch (_err) {}
+  }
+
+  function getExpectedAuthOrigin() {
+    const authUrl = (currentArgs && currentArgs.auth_url ? currentArgs.auth_url : "").trim();
+    if (!authUrl) return "";
 
     try {
-      window.localStorage.removeItem(POPUP_TOKEN_KEY);
-    } catch (_err) {}
+      return new URL(authUrl).origin;
+    } catch (_err) {
+      return "";
+    }
+  }
+
+  function getExpectedAuthOrigin() {
+    const authUrl = (currentArgs && currentArgs.auth_url ? currentArgs.auth_url : "").trim();
+    if (!authUrl) return "";
+
+    try {
+      return new URL(authUrl).origin;
+    } catch (_err) {
+      return "";
+    }
   }
 
   function cleanupMessageHandler() {
     if (activeMessageHandler) {
       window.removeEventListener("message", activeMessageHandler);
       activeMessageHandler = null;
+    }
+    if (activeStorageHandler) {
+      window.removeEventListener("storage", activeStorageHandler);
+      activeStorageHandler = null;
     }
     if (activeBroadcastChannel) {
       try { activeBroadcastChannel.close(); } catch (_err) {}
@@ -70,6 +135,11 @@
   }
 
   function handleAuthSuccess(event) {
+    const expectedOrigin = getExpectedAuthOrigin();
+    if (!expectedOrigin || !event || event.origin !== expectedOrigin) {
+      return;
+    }
+
     const data = event && event.data ? event.data : null;
     if (!data || data.type !== "vf_auth_success" || !data.access_token) {
       return;
@@ -79,7 +149,7 @@
 
     try {
       if (event.source && typeof event.source.postMessage === "function") {
-        event.source.postMessage({ type: "vf_auth_ack" }, "*");
+        event.source.postMessage({ type: "vf_auth_ack" }, expectedOrigin);
       }
     } catch (_err) {}
 
@@ -97,8 +167,9 @@
   function attachPopupListeners() {
     cleanupMessageHandler();
     activeMessageHandler = handleAuthSuccess;
+    activeStorageHandler = handleStorageEvent;
     window.addEventListener("message", activeMessageHandler);
-    window.addEventListener("storage", handleStorageEvent);
+    window.addEventListener("storage", activeStorageHandler);
 
     try {
       activeBroadcastChannel = new BroadcastChannel("vf-auth-popup");
@@ -145,6 +216,20 @@
     });
 
     root.appendChild(button);
+
+    if (currentArgs.clear_browser_token) {
+      clearBrowserTokens();
+      restoredPersistedTokenSent = true;
+      lastDeliveredToken = "";
+      setComponentValue(null);
+    } else if (currentArgs.restore_token && !restoredPersistedTokenSent) {
+      const persistedToken = readPersistedToken();
+      if (persistedToken) {
+        restoredPersistedTokenSent = true;
+        deliverTokenToStreamlit(persistedToken, { persist: false });
+      }
+    }
+
     setFrameHeight(subtle ? 44 : 54);
   }
 
@@ -157,7 +242,6 @@
   }
 
   window.addEventListener("message", onRenderEvent);
-  window.addEventListener("storage", handleStorageEvent);
   sendMessageToStreamlitClient("streamlit:componentReady", { apiVersion: 1 });
   setFrameHeight(54);
 })();

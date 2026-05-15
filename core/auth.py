@@ -39,26 +39,48 @@ def get_supabase_auth_client() -> Client:
     return client
 
 
-def get_app_url() -> str:
-    raw = get_secret_str("REDIRECT_URL", get_secret_str("APP_URL", "http://localhost:8501")).strip()
+def _normalized_env_url(secret_name: str, fallback: str = "", *, required: bool = False) -> str:
+    raw = get_secret_str(secret_name, fallback).strip()
     if not raw:
-        raw = "http://localhost:8501"
+        if required:
+            raise RuntimeError(f"Missing required environment variable: {secret_name}")
+        return ""
 
     parsed = urlparse(raw)
     if not parsed.scheme or not parsed.netloc:
-        return "http://localhost:8501"
+        if required:
+            raise RuntimeError(f"Invalid URL in environment variable: {secret_name}")
+        return ""
 
     return raw.rstrip("/")
 
 
+def get_app_url() -> str:
+    return _normalized_env_url("REDIRECT_URL", get_secret_str("APP_URL", "http://localhost:8501")) or "http://localhost:8501"
+
+
 def get_external_login_url() -> str:
-    raw = get_secret_str("EXTERNAL_LOGIN_URL", "https://viabilidade-sobral-mvp-clean.vercel.app").strip()
-    return raw.rstrip("/") or "https://viabilidade-sobral-mvp-clean.vercel.app"
+    raw = _normalized_env_url("EXTERNAL_LOGIN_URL")
+    if raw:
+        return raw
+
+    app_url = get_app_url()
+    if app_url.startswith("http://localhost") or app_url.startswith("http://127.0.0.1"):
+        return "http://localhost:3000"
+
+    raise RuntimeError("Missing required environment variable: EXTERNAL_LOGIN_URL")
 
 
 def get_gateway_url() -> str:
-    raw = get_secret_str("AUTH_GATEWAY_URL", "https://viabilidade-auth-gateway.onrender.com").strip()
-    return raw.rstrip("/") or "https://viabilidade-auth-gateway.onrender.com"
+    raw = _normalized_env_url("AUTH_GATEWAY_URL")
+    if raw:
+        return raw
+
+    app_url = get_app_url()
+    if app_url.startswith("http://localhost") or app_url.startswith("http://127.0.0.1"):
+        return "http://localhost:8000"
+
+    raise RuntimeError("Missing required environment variable: AUTH_GATEWAY_URL")
 
 
 def build_auth_callback_url() -> str:
@@ -251,6 +273,21 @@ def _get_external_token() -> Optional[str]:
     return st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
 
 
+def _reject_external_token_for_browser_cleanup(token: Optional[str]) -> None:
+    """Mark a browser-persisted token as rejected and ask the component to clear it.
+
+    A stale token stored in the browser can be returned by the Streamlit
+    component on every render. If validation fails, keep the rejected-token
+    marker until the component returns a clean value; otherwise the same token
+    can be reprocessed in a rerun loop.
+    """
+    cleaned = (token or "").strip()
+    if cleaned:
+        st.session_state["auth_rejected_external_token"] = cleaned
+    st.session_state.pop("auth_external_access_token", None)
+    st.session_state["auth_clear_browser_token"] = True
+
+
 def _try_restore_from_external_token(force_verify: bool = False) -> bool:
     token = _get_external_token()
     if not token:
@@ -283,7 +320,9 @@ def sync_auth_state(force: bool = False) -> bool:
         st.session_state["auth_sync_done"] = True
         return restored
     except Exception as e:
+        failed_token = st.session_state.get("auth_external_access_token") or safe_get_query_param("ext_access_token")
         clear_user_in_state()
+        _reject_external_token_for_browser_cleanup(failed_token)
         st.session_state["auth_last_error"] = f"Falha ao restaurar login: {e}"
         return False
 
@@ -325,6 +364,7 @@ def handle_oauth_callback() -> None:
             return
         except Exception as e:
             clear_user_in_state()
+            _reject_external_token_for_browser_cleanup(external_access_token)
             st.session_state["auth_last_error"] = f"Falha ao concluir login: {e}"
             st.session_state.pop("oauth_url", None)
             # Se o token falhar, limpamos para evitar travar em estado intermediário.
@@ -337,16 +377,27 @@ def handle_oauth_callback() -> None:
 
 def get_auth_url(force_select_account: bool = False) -> Optional[str]:
     base = get_external_login_url()
-    params: Dict[str, Any] = {}
+    supabase_url = _normalized_env_url("SUPABASE_URL", required=True)
+    supabase_anon_key = get_secret_str("SUPABASE_ANON_KEY", required=True).strip()
+    gateway_url = get_gateway_url()
+    app_url = get_app_url()
+
+    params: Dict[str, Any] = {
+        "streamlit_app_url": app_url,
+        "gateway_base_url": gateway_url,
+        "supabase_url": supabase_url,
+        "supabase_anon_key": supabase_anon_key,
+        "login_redirect_url": base,
+        "env_key": f"{supabase_url}|{base}|{app_url}",
+    }
     if force_select_account:
         params["switch_account"] = "1"
 
-    if params:
-        return f"{base}?{urlencode(params)}"
-    return base
+    return f"{base}?{urlencode(params)}"
 
 
 def logout_limpo() -> None:
+    st.session_state["auth_clear_browser_token"] = True
     keep = {
         "_supabase_auth_client": st.session_state.get("_supabase_auth_client"),
     }

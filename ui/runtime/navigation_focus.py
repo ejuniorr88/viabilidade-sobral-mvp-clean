@@ -2,17 +2,24 @@ from __future__ import annotations
 
 from typing import Any, MutableMapping, Optional
 
+from ui.runtime.inline_payments_focus import INLINE_PAYMENTS_FOCUS_TARGETS
+from ui.runtime.pix_generated_focus import PIX_GENERATED_FOCUS_TARGETS
+from ui.runtime.pix_payment_focus import PIX_PAYMENT_FOCUS_TARGETS
 from ui.runtime.report_navigation import REPORT_NAVIGATION_TARGETS
 
 
 _BASE_TARGET_CONFIG = {
-    "login_gate": {"element_id": "login-gate-start", "offset": 0, "behavior": "generic"},
+    # Login gate precisa usar scrollIntoView/alinhamento de container.
+    # Em Streamlit, window.scrollTo sozinho pode não mover a área principal.
+    "login_gate": {"element_id": "login-gate-start", "offset": 0, "behavior": "login_gate"},
     "primary_actions": {"element_id": "primary-actions-start", "offset": 0, "behavior": "generic"},
-    "inline_payments": {"element_id": "inline-payments-start", "offset": 0, "behavior": "generic"},
 }
 
 _TARGET_CONFIG = {
     **_BASE_TARGET_CONFIG,
+    **INLINE_PAYMENTS_FOCUS_TARGETS,
+    **PIX_PAYMENT_FOCUS_TARGETS,
+    **PIX_GENERATED_FOCUS_TARGETS,
     **REPORT_NAVIGATION_TARGETS,
 }
 
@@ -113,21 +120,48 @@ def render_navigation_focus_if_needed(*, session_state: MutableMapping[str, Any]
                 controller.activeToken = token;
 
                 const scrollRoot = () => rootDoc.querySelector('section.main') || rootDoc.scrollingElement || rootDoc.documentElement || rootDoc.body;
-                const tolerance = behavior === 'generated_context' ? 36 : 24;
-                const maxAttempts = behavior === 'generated_context' ? 24 : 18;
+                const robustBehaviors = ['generated_context', 'inline_payments', 'current_payment', 'pix_generated', 'login_gate'];
+                const usesRobustScroll = robustBehaviors.includes(behavior);
+                const tolerance = usesRobustScroll ? 36 : 24;
+                const maxAttempts = usesRobustScroll ? 24 : 18;
                 let attempts = 0;
                 let sawElement = false;
 
+                const findScrollableContainer = (el) => {{
+                    let current = el?.parentElement || null;
+                    while (current) {{
+                        const style = rootWin.getComputedStyle(current);
+                        const overflowY = style?.overflowY || '';
+                        const canScroll = (overflowY === 'auto' || overflowY === 'scroll') && current.scrollHeight > current.clientHeight + 4;
+                        if (canScroll) {{
+                            return current;
+                        }}
+                        current = current.parentElement;
+                    }}
+                    return null;
+                }};
+
                 const computeTargetTop = (el) => Math.max((el.getBoundingClientRect().top || 0) + rootWin.scrollY - offset, 0);
+
+                const alignScrollableContainer = (el) => {{
+                    const container = findScrollableContainer(el);
+                    if (!container) {{
+                        return;
+                    }}
+                    const containerRect = container.getBoundingClientRect();
+                    const elementRect = el.getBoundingClientRect();
+                    const nextTop = Math.max(container.scrollTop + (elementRect.top - containerRect.top) - offset, 0);
+                    container.scrollTo({{ top: nextTop, behavior: 'smooth' }});
+                }};
 
                 const applyScroll = (el) => {{
                     const targetTop = computeTargetTop(el);
-                    if (behavior === 'confirmation') {{
+                    const useElementFirst = behavior === 'confirmation' || behavior === 'initial' || usesRobustScroll;
+                    if (useElementFirst) {{
                         el.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                        rootWin.scrollTo({{ top: targetTop, behavior: 'smooth' }});
-                    }} else {{
-                        rootWin.scrollTo({{ top: targetTop, behavior: 'smooth' }});
+                        alignScrollableContainer(el);
                     }}
+                    rootWin.scrollTo({{ top: targetTop, behavior: 'smooth' }});
                     return targetTop;
                 }};
 

@@ -15,6 +15,7 @@ def test_bootstrap_session_state_initializes_required_defaults() -> None:
     assert session_state["scroll_to_item3"] is False
     assert session_state["post_login_action"] is None
     assert session_state["show_inline_payments"] is False
+    assert session_state["show_plans_page"] is False
     assert session_state["show_client_area"] is False
 
 
@@ -25,6 +26,7 @@ def test_bootstrap_session_state_preserves_existing_values() -> None:
         "confirm_new_report": True,
         "free_calc_done": True,
         "show_login_gate": True,
+        "show_plans_page": True,
     }
 
     bootstrap_session_state(session_state)
@@ -34,3 +36,4 @@ def test_bootstrap_session_state_preserves_existing_values() -> None:
     assert session_state["confirm_new_report"] is True
     assert session_state["free_calc_done"] is True
     assert session_state["show_login_gate"] is True
+    assert session_state["show_plans_page"] is True

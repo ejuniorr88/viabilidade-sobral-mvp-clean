@@ -711,7 +711,7 @@ def render_cover(pdf: ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None
     )
 
     badge_w = status_badge_width(pdf, ctx['status_curto'])
-    gap = 5.0
+    gap = 6.0
     title_w = max(74, full_w(pdf) - badge_w - gap - 6)
 
     try:
@@ -726,7 +726,7 @@ def render_cover(pdf: ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None
         intro_lines = [intro]
 
     title_block_h = max(8, len(title_lines) * 6.1)
-    cover_h = max(56, 10 + title_block_h + len(meta_lines) * 4.7 + len(intro_lines) * 4.9 + 9)
+    cover_h = max(60, 11 + title_block_h + len(meta_lines) * 4.7 + len(intro_lines) * 4.9 + 12)
 
     x = pdf.l_margin
     y = pdf.get_y()
@@ -749,14 +749,14 @@ def render_cover(pdf: ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None
     pdf.set_text_color(86, 94, 108)
     pdf.multi_cell(full_w(pdf) - 6, 4.7, san(meta))
 
-    pdf.set_xy(x + 3, meta_y + len(meta_lines) * 4.7 + 1.2)
+    pdf.set_xy(x + 3, meta_y + len(meta_lines) * 4.7 + 1.4)
     pdf.set_font('Helvetica', 'B', 10)
     pdf.set_text_color(32, 42, 71)
     pdf.cell(0, 4.6, san('Leitura inicial do relatório'), new_x='LMARGIN', new_y='NEXT')
     pdf.set_font('Helvetica', '', 9.9)
     pdf.set_text_color(0, 0, 0)
     pdf.multi_cell(full_w(pdf) - 6, 4.9, san(intro))
-    pdf.set_y(y + cover_h + 2)
+    pdf.set_y(y + cover_h + 2.5)
 
     section_title(pdf, '', 'DADOS PRINCIPAIS DO ESTUDO')
     w3 = (full_w(pdf) - 5.0) / 3
@@ -765,12 +765,15 @@ def render_cover(pdf: ReportPDF, ctx: Dict[str, Any], generated_at: str) -> None
         ('DIMENSÕES', f"{fmt_num(ctx['front'])} m × {fmt_num(ctx['depth'])} m"),
         ('TIPO DE LOTE', ctx['tipo_lote']),
     ], [w3, w3, w3])
+
+    # A via principal ganha a linha própria para dar mais presença visual.
+    card_box(pdf, 'VIA', [ctx['via']], fill=(248, 250, 252))
     kpi_row(pdf, [
         ('SUBZONA / SETOR', ctx['subzona']),
         ('TIPO DE VIA', ctx['via_tipo']),
         ('RESULTADO', ctx['status_curto']),
     ], [w3, w3, w3])
-    card_box(pdf, 'VIA', [ctx['via']], fill=(248, 250, 252))
+
 
 def render_item_01(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "01", "Onde está localizado o terreno?")
@@ -961,9 +964,12 @@ def _resolve_status(zone_class: str | None, via_tipo: str | None, via_class: str
     if not status:
         status = 'SEM DADO'
 
-    if status == 'PERMITE':
+    if status in {'PERMITE', 'PERMITE PELA ZONA E PELA VIA'}:
         icon = icon or 'OK'
-        if not explicacao or 'não foi possível determinar' in explicacao.lower():
+        if status == 'PERMITE PELA ZONA E PELA VIA':
+            if not explicacao or 'não foi possível determinar' in explicacao.lower():
+                explicacao = 'Resumo final: PERMITE PELA ZONA E PELA VIA. A zona e a via permitem o uso. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.'
+        elif not explicacao or 'não foi possível determinar' in explicacao.lower():
             explicacao = 'Resumo final: PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis.'
     elif status == 'NÃO PERMITE':
         icon = icon or 'X'
@@ -1002,9 +1008,12 @@ def render_item_02(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     else:
         via_line = f"Por via: {ctx['via_tipo'] or '-'}"
 
-    if status == 'PERMITE':
+    if status in {'PERMITE', 'PERMITE PELA ZONA E PELA VIA'}:
         fill = (231, 245, 236)
-        resumo = "PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        if status == 'PERMITE PELA ZONA E PELA VIA':
+            resumo = "PERMITE PELA ZONA E PELA VIA. A zona e a via permitem o uso. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
+        else:
+            resumo = "PERMITE. A zona permite. Ainda é obrigatório cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
         reforco = "Mesmo quando o resultado for positivo, ainda é necessário cumprir TO, TP, IA, recuos, altura e as demais regras aplicáveis."
     elif status == 'NÃO PERMITE':
         fill = (254, 242, 242)
@@ -1076,20 +1085,29 @@ def render_item_04(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
 def render_item_05(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "05", "Regras principais para este terreno")
     paragraph(pdf, "Depois de entender a zona, o próximo passo é ver as regras básicas do lote.")
-    paragraph(pdf, "Para este terreno, vale olhar principalmente:")
-    bullet_list(pdf, [
-        "ocupação máxima no térreo",
-        "área que precisa ficar livre",
-        "recuos",
-        "altura máxima",
-        "potencial total de construção",
-    ])
-    paragraph(pdf, "Resumo das regras", bold=True, color=(32, 42, 71))
-    w = (full_w(pdf)-5.0)/2
-    kpi_row(pdf, [("TO MÁXIMA", fmt_pct(ctx['to_max'])), ("TP MÍNIMA", fmt_pct(ctx['tp_min']))], [w,w])
-    kpi_row(pdf, [("IA MÁXIMO", fmt_plain(ctx['ia_max'])), ("IA MÍNIMO", "não informado" if fmt_plain(ctx['ia_min']) == '-' else fmt_plain(ctx['ia_min']))], [w,w])
-    kpi_row(pdf, [("RECUOS", f"Frontal: {fmt_num(ctx['rec_fr'])} m | Laterais: {fmt_num(ctx['rec_lat'])} m | Fundos: {fmt_num(ctx['rec_fun'])} m"), ("ALTURA MÁXIMA", fmt_m(ctx['gabarito']))], [full_w(pdf)-45, 42])
-    paragraph(pdf, "Essas são as regras que mais impactam o projeto.")
+    card_box(pdf, "Leitura executiva do lote", [
+        "Para este terreno, vale olhar principalmente a ocupação máxima no térreo, a área que precisa ficar livre, os recuos, a altura máxima e o potencial total de construção."
+    ], fill=(243, 246, 250))
+    paragraph(pdf, "Painel executivo dos parâmetros", bold=True, color=(32, 42, 71))
+    w3 = (full_w(pdf) - 5.0) / 3
+    kpi_row(pdf, [
+        ("TO MÁXIMA", fmt_pct(ctx['to_max'])),
+        ("TP MÍNIMA", fmt_pct(ctx['tp_min'])),
+        ("IA MÁXIMO", fmt_plain(ctx['ia_max'])),
+    ], [w3, w3, w3])
+    kpi_row(pdf, [
+        ("IA MÍNIMO", "não informado" if fmt_plain(ctx['ia_min']) == '-' else fmt_plain(ctx['ia_min'])),
+        ("ALTURA MÁXIMA", fmt_m(ctx['gabarito'])),
+        ("ÁREA MÁXIMA NO TÉRREO", fmt_area(ctx['a_to'])),
+    ], [w3, w3, w3])
+    card_box(pdf, "RECUOS", [
+        f"Frontal: {fmt_num(ctx['rec_fr'])} m",
+        f"Laterais: {fmt_num(ctx['rec_lat'])} m",
+        f"Fundos: {fmt_num(ctx['rec_fun'])} m",
+    ], fill=(248,250,252))
+    card_box(pdf, "Leitura final das regras", [
+        "Esses são os parâmetros que mais impactam a implantação do projeto no lote e a definição do potencial construtivo inicial."
+    ], fill=(237, 245, 255))
 
 
 def render_item_06(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
@@ -1259,43 +1277,54 @@ def render_figuras(pdf: ReportPDF, figures: List[Dict[str, Any]]) -> None:
 def render_item_13(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     pdf.add_page()
     section_title(pdf, "13", "Dicas valiosas")
-    paragraph(pdf, "Orientações úteis para interpretação prática do relatório.")
-    card_box(pdf, "Flexibilidade de recuos no uso residencial unifamiliar", [
+    card_box(pdf, "Como ler estas orientações", [
+        "As dicas abaixo ajudam a interpretar o relatório de forma mais prática, especialmente em temas que costumam gerar dúvida no desenvolvimento do projeto."
+    ], fill=(243, 246, 250))
+    card_box(pdf, "1. Flexibilidade de recuos", [
         "Art. 112. Será aplicado, para as atividades atrativas de vizinhança de pequeno porte e para o uso residencial unifamiliar, a flexibilidade quanto aos recuos de frente e laterais, podendo zerar, desde que observado o cumprimento da Taxa de Permeabilidade Mínima e da Taxa de Ocupação Máxima da zona em que se encontra.",
         "Na prática: para residência unifamiliar, a legislação admite zerar recuos frontal e laterais, desde que a proposta continue respeitando a TP mínima e a TO máxima da zona."
     ], fill=(255, 247, 237))
-    card_box(pdf, "Calçada", [
-        "Não existe uma largura única e fixa para toda calçada no município. Quando houver padrão definido no loteamento ou na via, ele deve ser seguido. Quando não houver, a referência costuma ser a calçada já existente no local."
-    ], fill=(255, 247, 237))
-    card_box(pdf, "Piscina", [
-        "Piscina não entra como área construída para a Taxa de Ocupação (TO). Mas ela conta como área impermeável para a Taxa de Permeabilidade (TP)."
-    ], fill=(255, 247, 237))
-    card_box(pdf, "Art. 144 e leitura prática", [
+    card_box(pdf, "2. Calçada", [
+        "Não existe uma largura única e fixa para toda calçada no município.",
+        "Quando houver padrão definido no loteamento ou na via, ele deve ser seguido. Quando não houver, a referência costuma ser a calçada já existente no local."
+    ], fill=(239, 246, 255))
+    card_box(pdf, "3. Piscina e TO", [
+        "Piscina não entra como área construída para a Taxa de Ocupação (TO).",
+        "Mas ela conta como área impermeável para a Taxa de Permeabilidade (TP)."
+    ], fill=(254, 249, 195))
+    card_box(pdf, "4. Art. 144 e leitura prática", [
         "As piscinas, espelhos d'água, caixas d'água, cisternas e tanques deverão observar afastamento mínimo de 0,50 m de todas as divisas do terreno.",
         "Na prática: além desse afastamento mínimo, esses elementos também entram no cálculo da TP como área impermeável."
-    ], fill=(255, 247, 237))
+    ], fill=(240, 253, 244))
+
 
 def render_item_14(pdf: ReportPDF, ctx: Dict[str, Any]) -> None:
     section_title(pdf, "14", "Resumo rápido final")
-    paragraph(pdf, "Se você quiser ver só o essencial deste terreno, este é o resumo principal:")
-    card_box(pdf, "Síntese executiva", [
+    card_box(pdf, "Síntese executiva do terreno", [
         f"Uso analisado: {ctx['uso_label']}",
         f"Zona: {ctx['zone_title']}",
         f"Tipo de lote: {ctx['tipo_lote']}",
         f"Via: {ctx['via']}",
         f"Tipo de via: {ctx['via_tipo']}",
-        f"TO máxima: {fmt_pct(ctx['to_max'])}",
-        f"TP mínima: {fmt_pct(ctx['tp_min'])}",
-        f"IA máximo: {fmt_plain(ctx['ia_max'])}",
-        f"Altura máxima: {fmt_m(ctx['gabarito'])}",
-        f"Área máxima no térreo pela TO: {fmt_area(ctx['a_to'])}",
-        f"Área permeável mínima: {fmt_area(ctx['a_perm_min'])}",
-        f"Área total máxima estimada: {fmt_area(ctx['a_total'])}",
     ], fill=(243,246,250))
+    w2 = (full_w(pdf) - 2.5) / 2
+    kpi_row(pdf, [
+        ("TO MÁXIMA", fmt_pct(ctx['to_max'])),
+        ("TP MÍNIMA", fmt_pct(ctx['tp_min'])),
+    ], [w2, w2])
+    kpi_row(pdf, [
+        ("IA MÁXIMO", fmt_plain(ctx['ia_max'])),
+        ("ALTURA MÁXIMA", fmt_m(ctx['gabarito'])),
+    ], [w2, w2])
+    kpi_row(pdf, [
+        ("ÁREA MÁXIMA NO TÉRREO", fmt_area(ctx['a_to'])),
+        ("ÁREA PERMEÁVEL MÍNIMA", fmt_area(ctx['a_perm_min'])),
+    ], [w2, w2])
+    card_box(pdf, "ÁREA TOTAL MÁXIMA ESTIMADA", [fmt_area(ctx['a_total'])], fill=(248,250,252))
     resumo = (
         f"Em resumo: você pode ocupar até {fmt_pct(ctx['to_max'])} do lote no térreo; precisa manter pelo menos {fmt_pct(ctx['tp_min'])} do terreno permeável; a construção pode chegar até {fmt_plain(ctx['ia_max'])} vezes a área do lote no total; e a altura deve respeitar o limite da zona."
     )
-    card_box(pdf, "Leitura final", [resumo], fill=(248,250,252))
+    card_box(pdf, "Leitura final", [resumo], fill=(237, 245, 255))
 
 
 def render_item_15(pdf: ReportPDF) -> None:

@@ -33,6 +33,7 @@ def render_google_login_cta(
     force_select_account: bool = False,
     subtle: bool = False,
     context: str = "default",
+    restore_token: bool = True,
 ) -> None:
     auth_url = start_google_login(force_select_account=force_select_account)
 
@@ -42,6 +43,8 @@ def render_google_login_cta(
     if not auth_url:
         st.error("Não foi possível iniciar o login com Google.")
         return
+
+    clear_browser_token = bool(st.session_state.pop("auth_clear_browser_token", False))
 
     token = render_auth_popup_button(
         auth_url=auth_url,
@@ -53,11 +56,17 @@ def render_google_login_cta(
             subtle=subtle,
             force_select_account=force_select_account,
         ),
+        restore_token=bool(restore_token),
+        clear_browser_token=clear_browser_token,
     )
 
     if token:
-        st.query_params["ext_access_token"] = token
-        st.rerun()
+        current_token = st.session_state.get("auth_external_access_token")
+        already_logged = bool(st.session_state.get("auth_logged_in") and st.session_state.get("auth_user_id"))
+        if token != current_token or not already_logged:
+            st.session_state["auth_external_access_token"] = token
+            st.session_state["auth_sync_done"] = False
+            st.rerun()
 
     if not subtle:
         st.caption("O login abrirá em uma janela popup segura.")
@@ -70,6 +79,7 @@ def _render_logged_in_box(prefix: str) -> None:
 
     with col1:
         if st.button("Sair", key=f"btn_logout_{prefix}", use_container_width=True):
+            st.session_state["auth_clear_browser_token"] = True
             sign_out_current_user()
             st.rerun()
 
@@ -80,6 +90,7 @@ def _render_logged_in_box(prefix: str) -> None:
             force_select_account=True,
             subtle=True,
             context=f"{prefix}_swap_user",
+            restore_token=False,
         )
 
 
