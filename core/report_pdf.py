@@ -703,10 +703,8 @@ def extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict
 def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
     rule = calc.get("rule") or {}
     is_irregular = safe_bool(session_state.get("lot_is_irregular", session_state.get("lot_irregular", calc.get("lot_irregular", False))))
-    # Terreno irregular não deve apagar a posição do lote para fins de figuras.
-    # O lote pode ser irregular + meio de quadra ou irregular + esquina.
-    is_corner_for_figures = bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner"))
-    figs = filter_figuras_by_lot_type(extract_figures_from_rule(rule), is_corner=is_corner_for_figures)
+    is_corner = False if is_irregular else bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner"))
+    figs = filter_figuras_by_lot_type(extract_figures_from_rule(rule), is_corner=is_corner)
     return {
         "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
         "figures": figs,
