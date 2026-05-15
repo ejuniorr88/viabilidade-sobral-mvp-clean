@@ -7,6 +7,8 @@ import os
 import pkgutil
 import re
 from contextlib import contextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from copy import deepcopy
 from typing import Any, Dict, Iterable
 
@@ -20,6 +22,39 @@ def _safe_str(value: Any, default: str = "—") -> str:
         return default
     text = str(value).strip()
     return text if text else default
+
+
+_TRACE_TZ = ZoneInfo("America/Fortaleza")
+
+
+def _format_trace_datetime(value: Any = None) -> str:
+    if value:
+        text = str(value).strip()
+        if text:
+            return text
+    return datetime.now(_TRACE_TZ).strftime("%d/%m/%Y %H:%M")
+
+
+def _build_trace_stamp(item: Dict[str, Any]) -> str:
+    """Return the discreet per-page traceability stamp for printable reports."""
+    ctx = item.get("report_context") if isinstance(item.get("report_context"), dict) else {}
+    session_snapshot = ctx.get("session_snapshot") if isinstance(ctx.get("session_snapshot"), dict) else {}
+    user_name = _safe_str(
+        ctx.get("user_name")
+        or session_snapshot.get("auth_user_name")
+        or session_snapshot.get("auth_name")
+        or session_snapshot.get("user_name"),
+        "Usuário não identificado",
+    )
+    user_email = _safe_str(
+        ctx.get("user_email")
+        or session_snapshot.get("auth_user_email")
+        or session_snapshot.get("auth_email")
+        or session_snapshot.get("user_email"),
+        "e-mail não informado",
+    )
+    generated_at = _format_trace_datetime(ctx.get("saved_at_label") or ctx.get("generated_at_label"))
+    return f"Uso exclusivo da conta: {user_name} · {user_email} · Gerado em {generated_at} · Viabilidade Fácil"
 
 
 def _slug_id(value: Any) -> str:
@@ -309,6 +344,7 @@ def _render_snapshot_body_html(item: Dict[str, Any]) -> str:
 def build_snapshot_print_html(item: Dict[str, Any]) -> str:
     body = _render_snapshot_body_html(item)
     title = _safe_str(item.get("title") or "Relatório visual do snapshot")
+    trace_stamp = html.escape(_build_trace_stamp(item), quote=False)
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -316,10 +352,11 @@ def build_snapshot_print_html(item: Dict[str, Any]) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>{html.escape(title)}</title>
 <style>
-  @page {{ size: A4; margin: 15mm 13mm; }}
+  @page {{ size: A4; margin: 15mm 13mm 18mm 13mm; }}
   * {{ box-sizing: border-box; }}
   body {{ margin:0; font-family: Arial, Helvetica, sans-serif; color:#162033; background:#ffffff; font-size:11.2pt; line-height:1.45; }}
   main {{ max-width: 980px; margin: 0 auto; padding: 10px 0 24px; }}
+  .vf-trace-footer {{ position: fixed; left: 0; right: 0; bottom: 0; padding: 4px 0 0; border-top: 1px solid #e2e8f0; color: #8a94a6; font-size: 7.4pt; line-height: 1.25; text-align: center; background: rgba(255,255,255,0.96); }}
   h1, h2, h3, h4 {{ color:#123a66; page-break-after: avoid; line-height:1.22; }}
   h1 {{ font-size:24pt; margin:0 0 14px; }}
   h2 {{ font-size:18pt; margin:18px 0 10px; }}
@@ -350,13 +387,14 @@ def build_snapshot_print_html(item: Dict[str, Any]) -> str:
   .metric-delta {{ color:#64748b; font-size:9.5pt; }}
   .json-block {{ white-space:pre-wrap; font-size:8.5pt; background:#f8fafc; border:1px solid #d8e1ef; border-radius:8px; padding:8px; }}
   .image-placeholder {{ border:1px dashed #9aa8ba; border-radius:10px; padding:20px; text-align:center; color:#64748b; }}
-  @media print {{ main {{ padding:0; }} .snapshot-expander, .snapshot-figure, .snapshot-metric {{ page-break-inside: avoid; }} }}
+  @media print {{ main {{ padding:0; }} .vf-trace-footer {{ position: fixed; bottom: 0; }} .snapshot-expander, .snapshot-figure, .snapshot-metric {{ page-break-inside: avoid; }} }}
 </style>
 </head>
 <body>
 <main>
 {body}
 </main>
+<div class="vf-trace-footer">{trace_stamp}</div>
 </body>
 </html>"""
 
