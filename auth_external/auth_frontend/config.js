@@ -22,11 +22,13 @@ window.AUTH_CONFIG = {
 
   ALLOWED_GATEWAY_ORIGINS: [
     "https://viabilidade-auth-gateway-staging.onrender.com",
-    "https://viabilidade-auth-gateway.onrender.com"
+    "https://viabilidade-auth-gateway.onrender.com",
+    "https://viabilidade-auth-gateway-staging.onrender.com"
   ],
 
   ALLOWED_LOGIN_REDIRECT_ORIGINS: [
     "https://viabilidade-login-staging.vercel.app",
-    "https://viabilidade-sobral-mvp-clean.vercel.app"
+    "https://viabilidade-sobral-mvp-clean.vercel.app",
+    "https://viabilidade-login-staging.vercel.app"
   ]
 };
