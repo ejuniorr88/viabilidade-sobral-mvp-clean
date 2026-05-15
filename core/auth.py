@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, Optional
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 from urllib.request import Request, urlopen
 
 import streamlit as st
@@ -375,20 +375,51 @@ def handle_oauth_callback() -> None:
     sync_auth_state(force=False)
 
 
-def get_auth_url(force_select_account: bool = False) -> Optional[str]:
+def _build_streamlit_return_url(extra_query_params: Optional[Dict[str, Any]] = None) -> str:
+    """Monta a URL de retorno do app preservando intenção pós-login.
+
+    O login externo sempre recebe uma `streamlit_app_url`. Quando o navegador
+    cai no fluxo de redirecionamento completo, e não apenas no popup, qualquer
+    intenção guardada somente em `st.session_state` pode se perder. Por isso,
+    fluxos críticos como compra de planos precisam carregar a intenção também
+    na URL de retorno.
+    """
+
+    app_url = get_app_url()
+    params_to_add = {
+        key: value
+        for key, value in (extra_query_params or {}).items()
+        if value is not None and str(value).strip() != ""
+    }
+    if not params_to_add:
+        return app_url
+
+    parsed = urlparse(app_url)
+    query_items = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    for key, value in params_to_add.items():
+        query_items[str(key)] = str(value)
+
+    return urlunparse(parsed._replace(query=urlencode(query_items)))
+
+
+def get_auth_url(
+    force_select_account: bool = False,
+    *,
+    return_query_params: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
     base = get_external_login_url()
     supabase_url = _normalized_env_url("SUPABASE_URL", required=True)
     supabase_anon_key = get_secret_str("SUPABASE_ANON_KEY", required=True).strip()
     gateway_url = get_gateway_url()
-    app_url = get_app_url()
+    streamlit_return_url = _build_streamlit_return_url(return_query_params)
 
     params: Dict[str, Any] = {
-        "streamlit_app_url": app_url,
+        "streamlit_app_url": streamlit_return_url,
         "gateway_base_url": gateway_url,
         "supabase_url": supabase_url,
         "supabase_anon_key": supabase_anon_key,
         "login_redirect_url": base,
-        "env_key": f"{supabase_url}|{base}|{app_url}",
+        "env_key": f"{supabase_url}|{base}|{get_app_url()}",
     }
     if force_select_account:
         params["switch_account"] = "1"
@@ -414,8 +445,15 @@ def logout_limpo() -> None:
 
 
 # Compat wrappers for existing ui/auth_panel.py
-def start_google_login(force_select_account: bool = False) -> Optional[str]:
-    return get_auth_url(force_select_account=force_select_account)
+def start_google_login(
+    force_select_account: bool = False,
+    *,
+    return_query_params: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    return get_auth_url(
+        force_select_account=force_select_account,
+        return_query_params=return_query_params,
+    )
 
 
 def sign_out_current_user() -> None:
