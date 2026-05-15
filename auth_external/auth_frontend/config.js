@@ -17,6 +17,7 @@ window.AUTH_CONFIG = {
   ALLOWED_STREAMLIT_ORIGINS: [
     "https://teste.viabilidadefacil.com.br",
     "https://app.viabilidadefacil.com.br"
+    "https://viabilidadeteste.streamlit.app/"
   ],
 
   ALLOWED_GATEWAY_ORIGINS: [
