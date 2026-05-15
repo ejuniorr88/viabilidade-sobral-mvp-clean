@@ -1,12 +1,38 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import streamlit as st
 
 from components.auth_popup_component import render_auth_popup_button
 from core.auth import start_google_login, sign_out_current_user
 from ui.auth_login_keys import build_auth_popup_key
+
+
+
+
+def _build_post_login_return_query_params(context: str) -> Dict[str, Any]:
+    """Preserva a intenção de compra de planos no retorno do login.
+
+    Em fluxo normal de popup, o estado do Streamlit costuma sobreviver. Porém,
+    se o popup for bloqueado, se o navegador trocar a janela ou se o componente
+    cair no redirecionamento completo, o `session_state` pode não ser suficiente.
+    Nesses casos, a URL de retorno precisa carregar `checkout=1` e `plan=...`
+    para que o usuário volte direto para a tela de compra após autenticar.
+    """
+
+    is_plans_context = str(context or "").startswith("plans_gate")
+    wants_plans_after_login = st.session_state.get("post_login_action") == "open_plans_page"
+    landing_checkout_active = bool(st.session_state.get("landing_checkout_mode"))
+
+    if not (is_plans_context or wants_plans_after_login or landing_checkout_active):
+        return {}
+
+    params: Dict[str, Any] = {"checkout": "1"}
+    selected_plan = st.session_state.get("landing_selected_plan_slug")
+    if selected_plan:
+        params["plan"] = selected_plan
+    return params
 
 
 def _is_logged_in() -> bool:
@@ -35,7 +61,10 @@ def render_google_login_cta(
     context: str = "default",
     restore_token: bool = True,
 ) -> None:
-    auth_url = start_google_login(force_select_account=force_select_account)
+    auth_url = start_google_login(
+        force_select_account=force_select_account,
+        return_query_params=_build_post_login_return_query_params(context),
+    )
 
     if message:
         st.info(message)
