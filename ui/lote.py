@@ -106,58 +106,49 @@ def render_lote_section() -> Tuple[float, float, float]:
         )
 
     with f2:
-        if terreno_irregular:
-            st.checkbox(
-                "Lote meio de quadra",
-                value=False,
-                key="lot_midblock_checkbox_disabled_irregular",
-                disabled=True,
-                help="Para terreno irregular, os cálculos usam apenas a área total informada.",
-            )
-        else:
-            st.checkbox(
-                "Lote meio de quadra",
-                key="lot_midblock_checkbox",
-                on_change=_activate_midblock,
-            )
+        st.checkbox(
+            "Lote meio de quadra",
+            key="lot_midblock_checkbox",
+            on_change=_activate_midblock,
+            help=(
+                "Em terreno irregular, esta opção indica a posição do lote na quadra "
+                "para textos e figuras; testada e profundidade continuam desconsideradas."
+                if terreno_irregular
+                else None
+            ),
+        )
 
     f3, f4 = st.columns(2, gap="small")
     with f3:
-        if terreno_irregular:
-            st.checkbox(
-                "Lote de esquina",
-                value=False,
-                key="lot_corner_checkbox_disabled_irregular",
-                disabled=True,
-                help="Para terreno irregular, os cálculos usam apenas a área total informada.",
-            )
-        else:
-            st.checkbox(
-                "Lote de esquina",
-                key="lot_corner_checkbox",
-                on_change=_activate_corner,
-            )
+        st.checkbox(
+            "Lote de esquina",
+            key="lot_corner_checkbox",
+            on_change=_activate_corner,
+            help=(
+                "Em terreno irregular, esta opção indica que o lote também é de esquina "
+                "para textos e figuras; os cálculos continuam pela área total informada."
+                if terreno_irregular
+                else None
+            ),
+        )
 
-    if terreno_irregular:
-        # Terreno irregular não deve combinar com meio de quadra nem esquina.
-        # A regra é aplicada apenas nas variáveis de cálculo, sem reescrever
-        # st.session_state das chaves dos widgets já renderizados.
-        lote_meio_quadra = False
+    # A forma irregular e a posição na quadra são informações diferentes.
+    # Mesmo em terreno irregular, mantemos meio de quadra/esquina para textos,
+    # figuras de calçada, acessos e leitura de esquina, sem usar testada/profundidade
+    # nos cálculos de TO/TP/IA.
+    lote_meio_quadra = bool(st.session_state.get("lot_midblock_checkbox", True))
+    lote_esquina = bool(st.session_state.get("lot_corner_checkbox", False))
+
+    # Proteção lógica sem alterar session_state dos widgets depois da renderização.
+    # Se algum estado antigo vier inconsistente, a regra local corrige o cálculo,
+    # mas não tenta modificar a chave do checkbox no mesmo ciclo do Streamlit.
+    if lote_meio_quadra and lote_esquina:
+        # Estado antigo/inconsistente: preservar o padrão seguro de meio de quadra.
+        lote_meio_quadra = True
         lote_esquina = False
-    else:
-        lote_meio_quadra = bool(st.session_state.get("lot_midblock_checkbox", True))
-        lote_esquina = bool(st.session_state.get("lot_corner_checkbox", False))
-
-        # Proteção lógica sem alterar session_state dos widgets depois da renderização.
-        # Se algum estado antigo vier inconsistente, a regra local corrige o cálculo,
-        # mas não tenta modificar a chave do checkbox no mesmo ciclo do Streamlit.
-        if lote_meio_quadra and lote_esquina:
-            # Estado antigo/inconsistente: preservar o padrão seguro de meio de quadra.
-            lote_meio_quadra = True
-            lote_esquina = False
-        elif not lote_meio_quadra and not lote_esquina:
-            lote_meio_quadra = True
-            lote_esquina = False
+    elif not lote_meio_quadra and not lote_esquina:
+        lote_meio_quadra = True
+        lote_esquina = False
 
     # ======================================================
     # Área do lote quando irregular
