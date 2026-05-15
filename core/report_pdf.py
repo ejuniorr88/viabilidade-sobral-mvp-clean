@@ -604,8 +604,10 @@ def extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict
     depth = pick_number(session_state.get("lot_depth_m"), calc.get("lot_depth_m"), session_state.get("lot_profundidade_m"), calc.get("lot_profundidade_m"), session_state.get("profundidade_m"), calc.get("profundidade_m"))
     built_ground = pick_number(session_state.get("built_ground_m2"), calc.get("built_ground_m2"), session_state.get("built_ground_input_m2"))
     permeable_area = pick_number(session_state.get("permeable_area_m2"), session_state.get("area_permeavel_prevista_m2"), calc.get("area_permeavel_prevista_m2"))
-    is_corner = safe_bool(session_state.get("lot_is_corner", calc.get("lot_is_corner", False)))
-    is_irregular = safe_bool(session_state.get("lot_is_irregular", session_state.get("lot_irregular", calc.get("lot_irregular", False))))
+    # Preferir o contexto salvo no cálculo evita que um estado antigo da sessão
+    # escolha figuras/textos de outro lote ao reabrir ou regerar relatório.
+    is_corner = safe_bool(calc.get("lot_is_corner", session_state.get("lot_is_corner", False)))
+    is_irregular = safe_bool(calc.get("lot_is_irregular", calc.get("lot_irregular", session_state.get("lot_is_irregular", session_state.get("lot_irregular", False)))))
 
     to_max = _to_pct(rule, "to_max_pct", "to_max")
     tp_min = _to_pct(rule, "tp_min_pct", "tp_min")
@@ -622,7 +624,8 @@ def extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict
     if is_irregular:
         front = 0.0
         depth = 0.0
-        is_corner = False
+        # Terreno irregular continua sem dimensões retangulares para cálculo,
+        # mas pode ser meio de quadra ou esquina para textos/figuras de calçada.
         w_util = None
         d_util = None
         a_recuos = None
@@ -702,9 +705,11 @@ def extract_context(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict
 
 def build_report_payload(calc: Dict[str, Any], session_state: Dict[str, Any]) -> Dict[str, Any]:
     rule = calc.get("rule") or {}
-    is_irregular = safe_bool(session_state.get("lot_is_irregular", session_state.get("lot_irregular", calc.get("lot_irregular", False))))
-    is_corner = False if is_irregular else bool(session_state.get("lot_is_corner") or calc.get("lot_is_corner"))
-    figs = filter_figuras_by_lot_type(extract_figures_from_rule(rule), is_corner=is_corner)
+    # A irregularidade define a forma do lote; a posição na quadra continua
+    # existindo para escolher as figuras corretas de calçada/esquina.
+    # Preferir calc evita vazamento de estado antigo da sessão entre relatórios.
+    is_corner_for_figures = safe_bool(calc.get("lot_is_corner", session_state.get("lot_is_corner", False)))
+    figs = filter_figuras_by_lot_type(extract_figures_from_rule(rule), is_corner=is_corner_for_figures)
     return {
         "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
         "figures": figs,
