@@ -7,6 +7,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from core import snapshot_pdf as snapshot_pdf_module
+from core.env_secrets import get_secret_str
 
 from ui.report.final_confirmation import render_final_confirmation
 from ui.report.review_panel import render_review_panel
@@ -27,6 +28,16 @@ _REVIEW_SEEN_SIGNATURE_KEY = "report_review_seen_signature"
 _LEGACY_SEEN_SIGNATURE_KEY = "legacy_report_confirm_seen_signature"
 _NOTICE_FOCUS_SIGNATURE_KEY = "report_section_notice_focus_signature"
 _LEGACY_GENERATE_REPORT_LABEL = "📄 Gerar relatório"
+
+
+def _pdf_download_enabled() -> bool:
+    """Feature flag para ocultar o download de PDF sem remover a função do código.
+
+    Padrão seguro para lançamento: desligado.
+    Para reativar no ambiente, defina PDF_DOWNLOAD_ENABLED=true.
+    """
+    value = get_secret_str("PDF_DOWNLOAD_ENABLED", "false").strip().lower()
+    return value in {"1", "true", "yes", "on", "sim"}
 
 
 def _render_generate_report_button_style() -> None:
@@ -456,35 +467,36 @@ def render_report_section(
         render_zone_description_section_func(report_calc)
         render_relatorio_section_func(report_calc)
 
-        st.markdown("### Download do relatório")
-        current_signature = st.session_state.get("report_snapshot_signature")
-        visual_bytes_key = _visual_pdf_state_key(current_signature, "bytes")
-        visual_error_key = _visual_pdf_state_key(current_signature, "error")
+        if _pdf_download_enabled():
+            st.markdown("### Download do relatório")
+            current_signature = st.session_state.get("report_snapshot_signature")
+            visual_bytes_key = _visual_pdf_state_key(current_signature, "bytes")
+            visual_error_key = _visual_pdf_state_key(current_signature, "error")
 
-        if st.session_state.get(visual_bytes_key):
-            st.download_button(
-                label="⬇️ Baixar relatório em PDF",
-                data=st.session_state[visual_bytes_key],
-                file_name="relatorio_viabilidade.pdf",
-                mime="application/pdf",
-                key="download_report_pdf_visual_ready",
-                use_container_width=True,
-            )
-        else:
-            if st.button("📄 Gerar relatório em PDF", key="prepare_report_visual_pdf", use_container_width=True):
-                st.info("Gerando relatório, aguarde alguns segundos para fazer o download.")
-                try:
-                    snapshot_item = _current_snapshot_item(
-                        report_calc=report_calc,
-                        report_session=report_session,
-                        signature=current_signature,
-                    )
-                    with st.spinner("Gerando relatório em PDF..."):
-                        st.session_state[visual_bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(snapshot_item)
-                    st.session_state.pop(visual_error_key, None)
-                    st.rerun()
-                except Exception as e:
-                    st.session_state[visual_error_key] = str(e)
+            if st.session_state.get(visual_bytes_key):
+                st.download_button(
+                    label="⬇️ Baixar relatório em PDF",
+                    data=st.session_state[visual_bytes_key],
+                    file_name="relatorio_viabilidade.pdf",
+                    mime="application/pdf",
+                    key="download_report_pdf_visual_ready",
+                    use_container_width=True,
+                )
+            else:
+                if st.button("📄 Gerar relatório em PDF", key="prepare_report_visual_pdf", use_container_width=True):
+                    st.info("Gerando relatório, aguarde alguns segundos para fazer o download.")
+                    try:
+                        snapshot_item = _current_snapshot_item(
+                            report_calc=report_calc,
+                            report_session=report_session,
+                            signature=current_signature,
+                        )
+                        with st.spinner("Gerando relatório em PDF..."):
+                            st.session_state[visual_bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(snapshot_item)
+                        st.session_state.pop(visual_error_key, None)
+                        st.rerun()
+                    except Exception as e:
+                        st.session_state[visual_error_key] = str(e)
 
-            if st.session_state.get(visual_error_key):
-                st.warning("Não foi possível gerar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes.")
+                if st.session_state.get(visual_error_key):
+                    st.warning("Não foi possível gerar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes.")
