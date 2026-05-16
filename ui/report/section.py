@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from html import escape
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict
@@ -63,7 +64,7 @@ def _build_current_report_trace_stamp(report_session: Dict[str, Any]) -> str:
 
 
 def _render_current_report_trace_stamp(report_session: Dict[str, Any]) -> None:
-    stamp = _build_current_report_trace_stamp(report_session)
+    stamp = escape(_build_current_report_trace_stamp(report_session), quote=True)
     st.markdown(
         f"""
         <div style="border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;margin:8px 0 18px;background:#fafafa;color:#6b7280;font-size:12px;line-height:1.35;text-align:center;">
@@ -74,14 +75,41 @@ def _render_current_report_trace_stamp(report_session: Dict[str, Any]) -> None:
     )
 
 
-def _pdf_download_enabled() -> bool:
-    """Feature flag para ocultar o download de PDF sem remover a função do código.
+def _normalize_email(value: Any) -> str:
+    return str(value or "").strip().lower()
 
-    Padrão seguro para lançamento: desligado.
-    Para reativar no ambiente, defina PDF_DOWNLOAD_ENABLED=true.
+
+def _configured_pdf_allowed_emails() -> set[str]:
+    """E-mails autorizados a ver o download mesmo com PDF_DOWNLOAD_ENABLED=false."""
+    configured = get_secret_str("PDF_DOWNLOAD_ALLOWED_EMAILS", "")
+    if not isinstance(configured, str):
+        return set()
+    normalized = configured.replace(";", ",").replace("\n", ",")
+    return {_normalize_email(item) for item in normalized.split(",") if _normalize_email(item)}
+
+
+def _current_session_user_email() -> str:
+    return _normalize_email(
+        st.session_state.get("auth_user_email")
+        or st.session_state.get("auth_email")
+        or st.session_state.get("user_email")
+    )
+
+
+def _pdf_download_enabled(user_email: Any = None) -> bool:
+    """Feature flag para ocultar o download sem apagar a função.
+
+    Regras:
+    - PDF_DOWNLOAD_ENABLED=true libera para todos.
+    - PDF_DOWNLOAD_ENABLED=false oculta para o público.
+    - PDF_DOWNLOAD_ALLOWED_EMAILS libera exceções por e-mail para teste interno.
     """
     value = get_secret_str("PDF_DOWNLOAD_ENABLED", "false").strip().lower()
-    return value in {"1", "true", "yes", "on", "sim"}
+    if value in {"1", "true", "yes", "on", "sim"}:
+        return True
+
+    normalized_email = _normalize_email(user_email) or _current_session_user_email()
+    return bool(normalized_email and normalized_email in _configured_pdf_allowed_emails())
 
 
 def _render_generate_report_button_style() -> None:
@@ -503,7 +531,8 @@ def render_report_section(
         report_calc = deepcopy(st.session_state.get("report_snapshot_calc"))
         report_session = deepcopy(st.session_state.get("report_snapshot_session") or {})
 
-        _render_current_report_trace_stamp(report_session)
+        previous_report_trace_stamp = st.session_state.get("report_trace_stamp")
+        st.session_state["report_trace_stamp"] = _build_current_report_trace_stamp(report_session)
 
         render_analise_section_func(
             report_calc,
@@ -513,8 +542,14 @@ def render_report_section(
             pick_func=pick_func,
         )
 
-        render_zone_description_section_func(report_calc)
-        render_relatorio_section_func(report_calc)
+        try:
+            render_zone_description_section_func(report_calc)
+            render_relatorio_section_func(report_calc)
+        finally:
+            if previous_report_trace_stamp is None:
+                st.session_state.pop("report_trace_stamp", None)
+            else:
+                st.session_state["report_trace_stamp"] = previous_report_trace_stamp
 
         if _pdf_download_enabled():
             st.markdown("### Download do relatório")
