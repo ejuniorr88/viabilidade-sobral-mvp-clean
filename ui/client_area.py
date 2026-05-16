@@ -10,12 +10,50 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.client_reports import build_download_signed_url, list_client_reports
+from core.env_secrets import get_secret_str
 from core import snapshot_pdf as snapshot_pdf_module
 from core.coupons import user_can_manage_coupons
 from ui.coupons_admin import render_coupons_admin_section
 from ui.relatorio import render_relatorio_section
 
 _TZ = ZoneInfo("America/Fortaleza")
+
+
+def _normalize_email(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _configured_pdf_allowed_emails() -> set[str]:
+    """E-mails autorizados a ver o download mesmo com PDF_DOWNLOAD_ENABLED=false."""
+    configured = get_secret_str("PDF_DOWNLOAD_ALLOWED_EMAILS", "")
+    if not isinstance(configured, str):
+        return set()
+    normalized = configured.replace(";", ",").replace("\n", ",")
+    return {_normalize_email(item) for item in normalized.split(",") if _normalize_email(item)}
+
+
+def _current_session_user_email() -> str:
+    return _normalize_email(
+        st.session_state.get("auth_user_email")
+        or st.session_state.get("auth_email")
+        or st.session_state.get("user_email")
+    )
+
+
+def _pdf_download_enabled(user_email: Any = None) -> bool:
+    """Feature flag para ocultar o download sem apagar a função.
+
+    Regras:
+    - PDF_DOWNLOAD_ENABLED=true libera para todos.
+    - PDF_DOWNLOAD_ENABLED=false oculta para o público.
+    - PDF_DOWNLOAD_ALLOWED_EMAILS libera exceções por e-mail para teste interno.
+    """
+    value = get_secret_str("PDF_DOWNLOAD_ENABLED", "false").strip().lower()
+    if value in {"1", "true", "yes", "on", "sim"}:
+        return True
+
+    normalized_email = _normalize_email(user_email) or _current_session_user_email()
+    return bool(normalized_email and normalized_email in _configured_pdf_allowed_emails())
 
 
 def _report_context(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -174,6 +212,50 @@ def _restore_saved_session_snapshot(backup: Dict[str, Any]) -> None:
             st.session_state[key] = value
 
 
+
+
+def _build_saved_preview_trace_stamp(item: Dict[str, Any]) -> str:
+    """Carimbo discreto para a visualização salva dentro da Área do Cliente.
+
+    O PDF/HTML imprimível já recebe rodapé próprio no módulo de snapshot.
+    Esta função deixa a mesma rastreabilidade visível também quando o usuário
+    apenas abre o relatório salvo na tela do sistema.
+    """
+    ctx = _report_context(item)
+    session_snapshot = ctx.get("session_snapshot") if isinstance(ctx.get("session_snapshot"), dict) else {}
+    user_name = _first_present(
+        ctx.get("user_name"),
+        session_snapshot.get("auth_user_name"),
+        session_snapshot.get("auth_name"),
+        session_snapshot.get("user_name"),
+        default="Usuário não identificado",
+    )
+    user_email = _first_present(
+        ctx.get("user_email"),
+        session_snapshot.get("auth_user_email"),
+        session_snapshot.get("auth_email"),
+        session_snapshot.get("user_email"),
+        default="e-mail não informado",
+    )
+    generated_at = _first_present(
+        ctx.get("saved_at_label"),
+        ctx.get("generated_at_label"),
+        default="data/hora não informada",
+    )
+    return f"Uso exclusivo da conta: {user_name} · {user_email} · Gerado em {generated_at} · Viabilidade Fácil"
+
+
+def _render_saved_preview_trace_stamp(item: Dict[str, Any]) -> None:
+    stamp = _build_saved_preview_trace_stamp(item)
+    st.markdown(
+        f"""
+        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;margin:8px 0 18px;background:#fafafa;color:#6b7280;font-size:12px;line-height:1.35;text-align:center;">
+          {_html(stamp)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def _render_saved_report_preview(item: Dict[str, Any]) -> None:
     ctx = _report_context(item)
     calc_snapshot = ctx.get("calc_snapshot") or {}
@@ -186,9 +268,15 @@ def _render_saved_report_preview(item: Dict[str, Any]) -> None:
     st.caption("Esta visualização usa o snapshot salvo no momento da geração para reproduzir o relatório dentro da Área do Cliente.")
 
     backup = _apply_saved_session_snapshot(session_snapshot if isinstance(session_snapshot, dict) else {})
+    previous_report_trace_stamp = st.session_state.get("report_trace_stamp")
+    st.session_state["report_trace_stamp"] = _build_saved_preview_trace_stamp(item)
     try:
         render_relatorio_section(deepcopy(calc_snapshot))
     finally:
+        if previous_report_trace_stamp is None:
+            st.session_state.pop("report_trace_stamp", None)
+        else:
+            st.session_state["report_trace_stamp"] = previous_report_trace_stamp
         _restore_saved_session_snapshot(backup)
 
 
@@ -203,6 +291,9 @@ def _render_primary_download_action(item: Dict[str, Any], signed_url: str) -> No
     The old stored PDF remains as fallback. The visual PDF is generated only after the
     user clicks the button, then cached in session_state for the current page session.
     """
+    if not _pdf_download_enabled():
+        return
+
     ctx = _report_context(item)
     calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
     can_make_visual_pdf = bool(calc_snapshot) and hasattr(snapshot_pdf_module, "generate_snapshot_pdf_bytes")
@@ -243,6 +334,9 @@ def _render_primary_download_action(item: Dict[str, Any], signed_url: str) -> No
         st.button("⬇️ Fazer download", disabled=True, use_container_width=True, key=f"download_disabled_{item.get('id')}")
 
 def _render_snapshot_downloads(item: Dict[str, Any]) -> None:
+    if not _pdf_download_enabled():
+        return
+
     ctx = _report_context(item)
     calc_snapshot = ctx.get("calc_snapshot") if isinstance(ctx.get("calc_snapshot"), dict) else {}
     if not calc_snapshot:
@@ -381,16 +475,18 @@ def _render_reports_tab(user_id: str) -> None:
                 if st.button("👁️ Visualizar", use_container_width=True, key=f"preview_open_{item.get('id')}"):
                     st.session_state[_PREVIEW_REPORT_KEY] = item.get("id")
         with e:
-            signed_url = ""
-            try:
-                signed_url = build_download_signed_url(path, bucket=bucket)
-            except Exception:
+            if _pdf_download_enabled():
                 signed_url = ""
-            _render_primary_download_action(item, signed_url)
+                try:
+                    signed_url = build_download_signed_url(path, bucket=bucket)
+                except Exception:
+                    signed_url = ""
+                _render_primary_download_action(item, signed_url)
 
         if st.session_state.get(_PREVIEW_REPORT_KEY) == item.get("id"):
             _render_saved_report_preview(item)
-            _render_snapshot_downloads(item)
+            if _pdf_download_enabled():
+                _render_snapshot_downloads(item)
 
 
 def _client_area_tabs_for_user(user_email: str) -> list[str]:

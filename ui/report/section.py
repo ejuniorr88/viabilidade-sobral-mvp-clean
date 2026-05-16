@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from html import escape
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict
 
 import streamlit as st
 import streamlit.components.v1 as components
 
 from core import snapshot_pdf as snapshot_pdf_module
+from core.env_secrets import get_secret_str
 
 from ui.report.final_confirmation import render_final_confirmation
 from ui.report.review_panel import render_review_panel
@@ -27,6 +31,85 @@ _REVIEW_SEEN_SIGNATURE_KEY = "report_review_seen_signature"
 _LEGACY_SEEN_SIGNATURE_KEY = "legacy_report_confirm_seen_signature"
 _NOTICE_FOCUS_SIGNATURE_KEY = "report_section_notice_focus_signature"
 _LEGACY_GENERATE_REPORT_LABEL = "📄 Gerar relatório"
+_TRACE_TZ = ZoneInfo("America/Fortaleza")
+
+
+def _first_present(*values: Any, default: str = "") -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return default
+
+
+def _build_current_report_trace_stamp(report_session: Dict[str, Any]) -> str:
+    """Carimbo discreto para a visualização imediata após gerar relatório."""
+    session = report_session if isinstance(report_session, dict) else {}
+    user_name = _first_present(
+        session.get("auth_user_name"),
+        session.get("auth_name"),
+        st.session_state.get("auth_user_name"),
+        st.session_state.get("auth_name"),
+        default="Usuário não identificado",
+    )
+    user_email = _first_present(
+        session.get("auth_user_email"),
+        session.get("auth_email"),
+        st.session_state.get("auth_user_email"),
+        st.session_state.get("auth_email"),
+        default="e-mail não informado",
+    )
+    generated_at = datetime.now(_TRACE_TZ).strftime("%d/%m/%Y %H:%M")
+    return f"Uso exclusivo da conta: {user_name} · {user_email} · Gerado em {generated_at} · Viabilidade Fácil"
+
+
+def _render_current_report_trace_stamp(report_session: Dict[str, Any]) -> None:
+    stamp = escape(_build_current_report_trace_stamp(report_session), quote=True)
+    st.markdown(
+        f"""
+        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;margin:8px 0 18px;background:#fafafa;color:#6b7280;font-size:12px;line-height:1.35;text-align:center;">
+          {stamp}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _normalize_email(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _configured_pdf_allowed_emails() -> set[str]:
+    """E-mails autorizados a ver o download mesmo com PDF_DOWNLOAD_ENABLED=false."""
+    configured = get_secret_str("PDF_DOWNLOAD_ALLOWED_EMAILS", "")
+    if not isinstance(configured, str):
+        return set()
+    normalized = configured.replace(";", ",").replace("\n", ",")
+    return {_normalize_email(item) for item in normalized.split(",") if _normalize_email(item)}
+
+
+def _current_session_user_email() -> str:
+    return _normalize_email(
+        st.session_state.get("auth_user_email")
+        or st.session_state.get("auth_email")
+        or st.session_state.get("user_email")
+    )
+
+
+def _pdf_download_enabled(user_email: Any = None) -> bool:
+    """Feature flag para ocultar o download sem apagar a função.
+
+    Regras:
+    - PDF_DOWNLOAD_ENABLED=true libera para todos.
+    - PDF_DOWNLOAD_ENABLED=false oculta para o público.
+    - PDF_DOWNLOAD_ALLOWED_EMAILS libera exceções por e-mail para teste interno.
+    """
+    value = get_secret_str("PDF_DOWNLOAD_ENABLED", "false").strip().lower()
+    if value in {"1", "true", "yes", "on", "sim"}:
+        return True
+
+    normalized_email = _normalize_email(user_email) or _current_session_user_email()
+    return bool(normalized_email and normalized_email in _configured_pdf_allowed_emails())
 
 
 def _render_generate_report_button_style() -> None:
@@ -85,6 +168,9 @@ def _current_snapshot_item(*, report_calc: Dict[str, Any], report_session: Dict[
         "report_context": {
             "calc_snapshot": deepcopy(report_calc),
             "session_snapshot": deepcopy(report_session or {}),
+            "user_name": _first_present((report_session or {}).get("auth_user_name"), (report_session or {}).get("auth_name"), st.session_state.get("auth_user_name"), st.session_state.get("auth_name")),
+            "user_email": _first_present((report_session or {}).get("auth_user_email"), (report_session or {}).get("auth_email"), st.session_state.get("auth_user_email"), st.session_state.get("auth_email")),
+            "generated_at_label": datetime.now(_TRACE_TZ).strftime("%d/%m/%Y %H:%M"),
         },
     }
 
@@ -445,6 +531,9 @@ def render_report_section(
         report_calc = deepcopy(st.session_state.get("report_snapshot_calc"))
         report_session = deepcopy(st.session_state.get("report_snapshot_session") or {})
 
+        previous_report_trace_stamp = st.session_state.get("report_trace_stamp")
+        st.session_state["report_trace_stamp"] = _build_current_report_trace_stamp(report_session)
+
         render_analise_section_func(
             report_calc,
             lot_area=report_session.get("lot_area_m2", calc.get("lot_area_m2")),
@@ -453,38 +542,45 @@ def render_report_section(
             pick_func=pick_func,
         )
 
-        render_zone_description_section_func(report_calc)
-        render_relatorio_section_func(report_calc)
+        try:
+            render_zone_description_section_func(report_calc)
+            render_relatorio_section_func(report_calc)
+        finally:
+            if previous_report_trace_stamp is None:
+                st.session_state.pop("report_trace_stamp", None)
+            else:
+                st.session_state["report_trace_stamp"] = previous_report_trace_stamp
 
-        st.markdown("### Download do relatório")
-        current_signature = st.session_state.get("report_snapshot_signature")
-        visual_bytes_key = _visual_pdf_state_key(current_signature, "bytes")
-        visual_error_key = _visual_pdf_state_key(current_signature, "error")
+        if _pdf_download_enabled():
+            st.markdown("### Download do relatório")
+            current_signature = st.session_state.get("report_snapshot_signature")
+            visual_bytes_key = _visual_pdf_state_key(current_signature, "bytes")
+            visual_error_key = _visual_pdf_state_key(current_signature, "error")
 
-        if st.session_state.get(visual_bytes_key):
-            st.download_button(
-                label="⬇️ Baixar relatório em PDF",
-                data=st.session_state[visual_bytes_key],
-                file_name="relatorio_viabilidade.pdf",
-                mime="application/pdf",
-                key="download_report_pdf_visual_ready",
-                use_container_width=True,
-            )
-        else:
-            if st.button("📄 Gerar relatório em PDF", key="prepare_report_visual_pdf", use_container_width=True):
-                st.info("Gerando relatório, aguarde alguns segundos para fazer o download.")
-                try:
-                    snapshot_item = _current_snapshot_item(
-                        report_calc=report_calc,
-                        report_session=report_session,
-                        signature=current_signature,
-                    )
-                    with st.spinner("Gerando relatório em PDF..."):
-                        st.session_state[visual_bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(snapshot_item)
-                    st.session_state.pop(visual_error_key, None)
-                    st.rerun()
-                except Exception as e:
-                    st.session_state[visual_error_key] = str(e)
+            if st.session_state.get(visual_bytes_key):
+                st.download_button(
+                    label="⬇️ Baixar relatório em PDF",
+                    data=st.session_state[visual_bytes_key],
+                    file_name="relatorio_viabilidade.pdf",
+                    mime="application/pdf",
+                    key="download_report_pdf_visual_ready",
+                    use_container_width=True,
+                )
+            else:
+                if st.button("📄 Gerar relatório em PDF", key="prepare_report_visual_pdf", use_container_width=True):
+                    st.info("Gerando relatório, aguarde alguns segundos para fazer o download.")
+                    try:
+                        snapshot_item = _current_snapshot_item(
+                            report_calc=report_calc,
+                            report_session=report_session,
+                            signature=current_signature,
+                        )
+                        with st.spinner("Gerando relatório em PDF..."):
+                            st.session_state[visual_bytes_key] = snapshot_pdf_module.generate_snapshot_pdf_bytes(snapshot_item)
+                        st.session_state.pop(visual_error_key, None)
+                        st.rerun()
+                    except Exception as e:
+                        st.session_state[visual_error_key] = str(e)
 
-            if st.session_state.get(visual_error_key):
-                st.warning("Não foi possível gerar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes.")
+                if st.session_state.get(visual_error_key):
+                    st.warning("Não foi possível gerar o PDF visual agora. O conversor pode estar iniciando; tente novamente em alguns instantes.")

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
+from html import escape
 from typing import Any, Dict, Optional
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
@@ -25,6 +28,28 @@ from .multifamiliar_items import (
     render_item_15,
     render_item_16,
 )
+
+
+_TRACE_TZ = ZoneInfo("America/Fortaleza")
+_TRACE_STAMP_BEFORE_ITEMS = {"item_01", "item_03", "item_06", "item_08", "item_12", "item_14"}
+
+
+def _render_inline_trace_stamp() -> None:
+    """Carimbo discreto por blocos no guia multifamiliar."""
+    stamp = str(st.session_state.get("report_trace_stamp") or "").strip()
+    if not stamp:
+        user_name = str(st.session_state.get("auth_user_name") or st.session_state.get("auth_name") or "Usuário não identificado").strip()
+        user_email = str(st.session_state.get("auth_user_email") or st.session_state.get("auth_email") or st.session_state.get("user_email") or "e-mail não informado").strip()
+        generated_at = datetime.now(_TRACE_TZ).strftime("%d/%m/%Y %H:%M")
+        stamp = f"Uso exclusivo da conta: {user_name} · {user_email} · Gerado em {generated_at} · Viabilidade Fácil"
+    st.markdown(
+        f"""
+        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:7px 12px;margin:14px 0 8px;background:#fafafa;color:#6b7280;font-size:11.5px;line-height:1.35;text-align:center;">
+          {escape(stamp, quote=True)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # Reexporta helpers usados por outras partes do projeto/tests.
 _fmt_num = common._fmt_num
@@ -155,7 +180,9 @@ def render_multifamiliar_guia(*, calc: Dict[str, Any], rule: Optional[Dict[str, 
     )
 
     render_item_00_intro(ctx)
-    for _, heading, renderer in ITEM_HEADINGS:
+    for item_key, heading, renderer in ITEM_HEADINGS:
+        if item_key in _TRACE_STAMP_BEFORE_ITEMS:
+            _render_inline_trace_stamp()
         st.markdown(heading)
         renderer(ctx)
 
@@ -180,6 +207,8 @@ def render_multifamiliar_inadequado_preview(*, calc: Dict[str, Any], rule: Optio
     for item_key, heading, renderer in ITEM_HEADINGS:
         if item_key not in ("item_01", "item_02"):
             continue
+        if item_key == "item_01":
+            _render_inline_trace_stamp()
         st.markdown(heading)
         renderer(ctx)
     st.markdown("---\n### ⚠️ Situação do estudo")
