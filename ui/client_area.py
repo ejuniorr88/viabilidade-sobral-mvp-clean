@@ -19,14 +19,41 @@ from ui.relatorio import render_relatorio_section
 _TZ = ZoneInfo("America/Fortaleza")
 
 
-def _pdf_download_enabled() -> bool:
-    """Feature flag para ocultar o download de PDF sem apagar a função.
+def _normalize_email(value: Any) -> str:
+    return str(value or "").strip().lower()
 
-    Padrão seguro para lançamento: desligado.
-    Para reativar no ambiente, defina PDF_DOWNLOAD_ENABLED=true.
+
+def _configured_pdf_allowed_emails() -> set[str]:
+    """E-mails autorizados a ver o download mesmo com PDF_DOWNLOAD_ENABLED=false."""
+    configured = get_secret_str("PDF_DOWNLOAD_ALLOWED_EMAILS", "")
+    if not isinstance(configured, str):
+        return set()
+    normalized = configured.replace(";", ",").replace("\n", ",")
+    return {_normalize_email(item) for item in normalized.split(",") if _normalize_email(item)}
+
+
+def _current_session_user_email() -> str:
+    return _normalize_email(
+        st.session_state.get("auth_user_email")
+        or st.session_state.get("auth_email")
+        or st.session_state.get("user_email")
+    )
+
+
+def _pdf_download_enabled(user_email: Any = None) -> bool:
+    """Feature flag para ocultar o download sem apagar a função.
+
+    Regras:
+    - PDF_DOWNLOAD_ENABLED=true libera para todos.
+    - PDF_DOWNLOAD_ENABLED=false oculta para o público.
+    - PDF_DOWNLOAD_ALLOWED_EMAILS libera exceções por e-mail para teste interno.
     """
     value = get_secret_str("PDF_DOWNLOAD_ENABLED", "false").strip().lower()
-    return value in {"1", "true", "yes", "on", "sim"}
+    if value in {"1", "true", "yes", "on", "sim"}:
+        return True
+
+    normalized_email = _normalize_email(user_email) or _current_session_user_email()
+    return bool(normalized_email and normalized_email in _configured_pdf_allowed_emails())
 
 
 def _report_context(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -239,12 +266,17 @@ def _render_saved_report_preview(item: Dict[str, Any]) -> None:
 
     st.markdown("### Visualização salva do relatório")
     st.caption("Esta visualização usa o snapshot salvo no momento da geração para reproduzir o relatório dentro da Área do Cliente.")
-    _render_saved_preview_trace_stamp(item)
 
     backup = _apply_saved_session_snapshot(session_snapshot if isinstance(session_snapshot, dict) else {})
+    previous_report_trace_stamp = st.session_state.get("report_trace_stamp")
+    st.session_state["report_trace_stamp"] = _build_saved_preview_trace_stamp(item)
     try:
         render_relatorio_section(deepcopy(calc_snapshot))
     finally:
+        if previous_report_trace_stamp is None:
+            st.session_state.pop("report_trace_stamp", None)
+        else:
+            st.session_state["report_trace_stamp"] = previous_report_trace_stamp
         _restore_saved_session_snapshot(backup)
 
 
