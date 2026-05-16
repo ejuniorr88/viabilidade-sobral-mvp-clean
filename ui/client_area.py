@@ -185,6 +185,50 @@ def _restore_saved_session_snapshot(backup: Dict[str, Any]) -> None:
             st.session_state[key] = value
 
 
+
+
+def _build_saved_preview_trace_stamp(item: Dict[str, Any]) -> str:
+    """Carimbo discreto para a visualização salva dentro da Área do Cliente.
+
+    O PDF/HTML imprimível já recebe rodapé próprio no módulo de snapshot.
+    Esta função deixa a mesma rastreabilidade visível também quando o usuário
+    apenas abre o relatório salvo na tela do sistema.
+    """
+    ctx = _report_context(item)
+    session_snapshot = ctx.get("session_snapshot") if isinstance(ctx.get("session_snapshot"), dict) else {}
+    user_name = _first_present(
+        ctx.get("user_name"),
+        session_snapshot.get("auth_user_name"),
+        session_snapshot.get("auth_name"),
+        session_snapshot.get("user_name"),
+        default="Usuário não identificado",
+    )
+    user_email = _first_present(
+        ctx.get("user_email"),
+        session_snapshot.get("auth_user_email"),
+        session_snapshot.get("auth_email"),
+        session_snapshot.get("user_email"),
+        default="e-mail não informado",
+    )
+    generated_at = _first_present(
+        ctx.get("saved_at_label"),
+        ctx.get("generated_at_label"),
+        default="data/hora não informada",
+    )
+    return f"Uso exclusivo da conta: {user_name} · {user_email} · Gerado em {generated_at} · Viabilidade Fácil"
+
+
+def _render_saved_preview_trace_stamp(item: Dict[str, Any]) -> None:
+    stamp = _build_saved_preview_trace_stamp(item)
+    st.markdown(
+        f"""
+        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;margin:8px 0 18px;background:#fafafa;color:#6b7280;font-size:12px;line-height:1.35;text-align:center;">
+          {_html(stamp)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def _render_saved_report_preview(item: Dict[str, Any]) -> None:
     ctx = _report_context(item)
     calc_snapshot = ctx.get("calc_snapshot") or {}
@@ -195,6 +239,7 @@ def _render_saved_report_preview(item: Dict[str, Any]) -> None:
 
     st.markdown("### Visualização salva do relatório")
     st.caption("Esta visualização usa o snapshot salvo no momento da geração para reproduzir o relatório dentro da Área do Cliente.")
+    _render_saved_preview_trace_stamp(item)
 
     backup = _apply_saved_session_snapshot(session_snapshot if isinstance(session_snapshot, dict) else {})
     try:
