@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict
 
 import streamlit as st
@@ -28,6 +30,48 @@ _REVIEW_SEEN_SIGNATURE_KEY = "report_review_seen_signature"
 _LEGACY_SEEN_SIGNATURE_KEY = "legacy_report_confirm_seen_signature"
 _NOTICE_FOCUS_SIGNATURE_KEY = "report_section_notice_focus_signature"
 _LEGACY_GENERATE_REPORT_LABEL = "📄 Gerar relatório"
+_TRACE_TZ = ZoneInfo("America/Fortaleza")
+
+
+def _first_present(*values: Any, default: str = "") -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return default
+
+
+def _build_current_report_trace_stamp(report_session: Dict[str, Any]) -> str:
+    """Carimbo discreto para a visualização imediata após gerar relatório."""
+    session = report_session if isinstance(report_session, dict) else {}
+    user_name = _first_present(
+        session.get("auth_user_name"),
+        session.get("auth_name"),
+        st.session_state.get("auth_user_name"),
+        st.session_state.get("auth_name"),
+        default="Usuário não identificado",
+    )
+    user_email = _first_present(
+        session.get("auth_user_email"),
+        session.get("auth_email"),
+        st.session_state.get("auth_user_email"),
+        st.session_state.get("auth_email"),
+        default="e-mail não informado",
+    )
+    generated_at = datetime.now(_TRACE_TZ).strftime("%d/%m/%Y %H:%M")
+    return f"Uso exclusivo da conta: {user_name} · {user_email} · Gerado em {generated_at} · Viabilidade Fácil"
+
+
+def _render_current_report_trace_stamp(report_session: Dict[str, Any]) -> None:
+    stamp = _build_current_report_trace_stamp(report_session)
+    st.markdown(
+        f"""
+        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;margin:8px 0 18px;background:#fafafa;color:#6b7280;font-size:12px;line-height:1.35;text-align:center;">
+          {stamp}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _pdf_download_enabled() -> bool:
@@ -96,6 +140,9 @@ def _current_snapshot_item(*, report_calc: Dict[str, Any], report_session: Dict[
         "report_context": {
             "calc_snapshot": deepcopy(report_calc),
             "session_snapshot": deepcopy(report_session or {}),
+            "user_name": _first_present((report_session or {}).get("auth_user_name"), (report_session or {}).get("auth_name"), st.session_state.get("auth_user_name"), st.session_state.get("auth_name")),
+            "user_email": _first_present((report_session or {}).get("auth_user_email"), (report_session or {}).get("auth_email"), st.session_state.get("auth_user_email"), st.session_state.get("auth_email")),
+            "generated_at_label": datetime.now(_TRACE_TZ).strftime("%d/%m/%Y %H:%M"),
         },
     }
 
@@ -455,6 +502,8 @@ def render_report_section(
         st.markdown("---")
         report_calc = deepcopy(st.session_state.get("report_snapshot_calc"))
         report_session = deepcopy(st.session_state.get("report_snapshot_session") or {})
+
+        _render_current_report_trace_stamp(report_session)
 
         render_analise_section_func(
             report_calc,
