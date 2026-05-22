@@ -5,6 +5,7 @@ import re
 import os
 import tempfile
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Sequence
 from urllib.request import urlopen
 
@@ -87,6 +88,10 @@ PERMEABILIDADE_ROWS = [
 
 
 class ReportPDF(FPDF):
+    def __init__(self, *args: Any, trace_footer_text: str = "", **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.trace_footer_text = trace_footer_text
+
     def rounded_rect(self, x: float, y: float, w: float, h: float, r: float = 0, style: str = "") -> None:
         rect_fn = getattr(super(), "rounded_rect", None)
         if callable(rect_fn):
@@ -108,10 +113,24 @@ class ReportPDF(FPDF):
         self.set_y(22)
 
     def footer(self) -> None:
-        self.set_y(-9)
-        self.set_font("Helvetica", "", 8)
-        self.set_text_color(120, 120, 120)
-        self.cell(0, 4, san(f"Página {self.page_no()}"), align="C")
+        self.set_y(-11)
+        self.set_font("Helvetica", "", 7)
+        self.set_text_color(140, 148, 160)
+        if self.trace_footer_text:
+            page_text = san(f"{self.trace_footer_text} | Página {self.page_no()}")
+        else:
+            page_text = san(f"Página {self.page_no()}")
+        self.cell(0, 4, page_text, align="C")
+
+
+_TRACE_TZ = ZoneInfo("America/Fortaleza")
+
+
+def _report_trace_footer(session_state: Dict[str, Any]) -> str:
+    user_name = str(session_state.get("auth_user_name") or session_state.get("auth_name") or "Usuário não identificado").strip()
+    user_email = str(session_state.get("auth_user_email") or session_state.get("auth_email") or "e-mail não informado").strip()
+    generated_at = datetime.now(_TRACE_TZ).strftime("%d/%m/%Y %H:%M")
+    return f"Uso exclusivo da conta: {user_name} - {user_email} - Gerado em {generated_at} - Viabilidade Fácil"
 
 
 def san(text: Any) -> str:
@@ -1414,7 +1433,7 @@ def generate_report_pdf_bytes(calc: Dict[str, Any], session_state: Dict[str, Any
     payload = build_report_payload(calc, session_state)
     ctx = extract_context(calc, session_state)
 
-    pdf = ReportPDF(orientation='P', unit='mm', format='A4')
+    pdf = ReportPDF(orientation='P', unit='mm', format='A4', trace_footer_text=_report_trace_footer(session_state))
     pdf.set_auto_page_break(auto=True, margin=12)
     pdf.set_margins(14, 24, 14)
     pdf.add_page()

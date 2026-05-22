@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, Dict
+from html import escape
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from .relatorio_blocks.credit_preserved_notice import render_credit_preserved_notice
 
@@ -22,6 +25,9 @@ from .relatorio_blocks.multifamiliar_guia import (
 from core.zone_descriptions import fetch_zone_description
 from urban_rules.zone_profiles import apply_zone_result_policy, zone_context_warnings
 from .relatorio_blocks.unifamiliar_items import UNIFAMILIAR_ITEM_RENDERERS
+
+_TRACE_TZ = ZoneInfo("America/Fortaleza")
+_TRACE_STAMP_BEFORE_ITEMS = {"item_01", "item_03", "item_06", "item_08", "item_12", "item_14"}
 
 
 def _safe_float(v: Any) -> float | None:
@@ -123,6 +129,58 @@ def _use_label(uso: str) -> str:
     }
     return mapping.get(code, code or "uso informado")
 
+
+def _first_present_text(*values: Any, default: str = "") -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return default
+
+
+def _build_inline_trace_stamp(calc: Dict[str, Any] | None = None) -> str:
+    """Carimbo discreto usado manualmente por blocos do relatório em tela.
+
+    A visualização imediata e a visualização salva podem injetar
+    ``st.session_state['report_trace_stamp']`` para preservar a data/e-mail
+    do relatório gerado. Se não houver carimbo salvo, usa os dados da sessão.
+    """
+    existing = str(st.session_state.get("report_trace_stamp") or "").strip()
+    if existing:
+        return existing
+
+    calc = calc if isinstance(calc, dict) else {}
+    user_name = _first_present_text(
+        st.session_state.get("auth_user_name"),
+        st.session_state.get("auth_name"),
+        calc.get("user_name"),
+        default="Usuário não identificado",
+    )
+    user_email = _first_present_text(
+        st.session_state.get("auth_user_email"),
+        st.session_state.get("auth_email"),
+        st.session_state.get("user_email"),
+        calc.get("user_email"),
+        default="e-mail não informado",
+    )
+    generated_at = _first_present_text(
+        st.session_state.get("report_generated_at_label"),
+        calc.get("generated_at_label"),
+        default=datetime.now(_TRACE_TZ).strftime("%d/%m/%Y %H:%M"),
+    )
+    return f"Uso exclusivo da conta: {user_name} · {user_email} · Gerado em {generated_at} · Viabilidade Fácil"
+
+
+def _render_inline_trace_stamp(calc: Dict[str, Any] | None = None) -> None:
+    stamp = escape(_build_inline_trace_stamp(calc), quote=True)
+    st.markdown(
+        f"""
+        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:7px 12px;margin:14px 0 8px;background:#fafafa;color:#6b7280;font-size:11.5px;line-height:1.35;text-align:center;">
+          {stamp}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 
@@ -394,6 +452,8 @@ def render_unifamiliar_inadequado_preview(calc: Dict[str, Any]) -> None:
         "item_02": "---\n### ✅ 2️⃣ O uso residencial unifamiliar é viável neste terreno?",
     }
     for item_key in ["item_01", "item_02"]:
+        if item_key == "item_01":
+            _render_inline_trace_stamp(calc)
         st.markdown(item_headings[item_key])
         UNIFAMILIAR_ITEM_RENDERERS[item_key](ctx)
 
@@ -660,6 +720,8 @@ def render_relatorio_section(calc: Dict[str, Any]) -> None:
         "item_01", "item_02", "item_03", "item_04", "item_05", "item_06", "item_07", "item_08",
         "item_09", "item_10", "item_11", "item_12", "item_13", "item_14", "item_15", "item_16",
     ]:
+        if item_key in _TRACE_STAMP_BEFORE_ITEMS:
+            _render_inline_trace_stamp(calc)
         st.markdown(item_headings[item_key])
         UNIFAMILIAR_ITEM_RENDERERS[item_key](ctx)
 

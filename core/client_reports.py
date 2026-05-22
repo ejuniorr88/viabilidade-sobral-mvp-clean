@@ -364,6 +364,7 @@ def _report_context(
     user_email: str,
     signature: str,
     storage_path: str,
+    user_name: str = "",
     bucket: str,
     pdf_bytes: bytes,
 ) -> Dict[str, Any]:
@@ -376,6 +377,7 @@ def _report_context(
         "saved_at_label": local_now.strftime("%d/%m/%Y %H:%M"),
         "viewer_version": "inline_report_snapshot_v1",
         "user_email": _normalize_text(user_email),
+        "user_name": _normalize_text(user_name or session_state.get("auth_user_name") or session_state.get("auth_name")),
         "title": _build_title(calc, session_state),
         "report_type": "urban_report",
         "project_category": _normalize_text(calc.get("categoria_label")),
@@ -447,6 +449,7 @@ def _row_with_optional_columns(
     *,
     user_id: str,
     user_email: str,
+    user_name: str = "",
     signature: str,
     report_context: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -643,6 +646,7 @@ def save_client_report(
         user_email=user_email,
         signature=signature,
         storage_path=storage_path,
+        user_name=session_state.get("auth_user_name") or session_state.get("auth_name") or "",
         bucket=bucket,
         pdf_bytes=pdf_bytes,
     )
