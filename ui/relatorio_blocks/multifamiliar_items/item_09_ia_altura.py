@@ -36,11 +36,22 @@ def render(ctx):
                 "👉 **Na prática:** mesmo que a zona admita altura maior, o R2.1 continua limitado a até **2 pavimentos**, além de depender da implantação, da **Taxa de Ocupação (TO)**, da **Taxa de Permeabilidade (TP)**, dos recuos, do **Índice de Aproveitamento (IA)**, das normas técnicas e da confirmação no licenciamento municipal."
             )
         elif pav_ref:
-            common.st.markdown(
-                f"Como referência matemática, considerando pé-direito médio de **3,00 m** por pavimento, a altura máxima de **{common._fmt_num(ctx['gabarito_f'])} m** poderia equivaler a aproximadamente **{pav_ref} pavimentos**.\n\n"
-                "Essa é apenas uma referência inicial. No caso do **R3**, a quantidade real de pavimentos depende do **Índice de Aproveitamento (IA)**, da **Taxa de Ocupação (TO)**, da **Taxa de Permeabilidade (TP)**, dos recuos, das vagas, da área recreativa, da circulação vertical e horizontal, das normas técnicas, das exigências da zona e da confirmação no licenciamento municipal.\n\n"
-                "👉 **Na prática:** a altura máxima da zona não é autorização automática para construir todos os pavimentos possíveis. O projeto precisa demonstrar que atende ao conjunto completo de regras urbanísticas, técnicas e funcionais."
-            )
+    common.st.markdown(
+        f"Como referência, uma altura máxima de **{common._fmt_num(ctx['gabarito_f'])} m** pode corresponder a cerca de **{pav_ref} pavimentos de 3,00 m cada**."
+    )
+    common.st.markdown(
+        "Na prática, porém, edifícios residenciais multifamiliares precisam prever vagas de estacionamento. "
+        "Como o estacionamento em subsolo costuma encarecer a obra, uma solução comum é usar o térreo para estacionamento "
+        "e deixar os pavimentos superiores para as unidades residenciais. "
+        f"Nesse exemplo, a altura disponível poderia resultar em **1 pavimento de estacionamento no térreo + {max(pav_ref - 1, 0)} pavimentos residenciais**."
+    )
+    common.st.markdown(
+        "Se as vagas forem resolvidas em **subsolo**, e esse subsolo atender às condições legais para não entrar no cálculo da altura máxima, "
+        f"o térreo também poderá ser usado como pavimento residencial, podendo chegar a **{pav_ref} pavimentos acima do subsolo**."
+    )
+    common.st.markdown(
+        "👉 **A quantidade final de pavimentos depende da solução arquitetônica e das demais regras do projeto.**"
+    )
         else:
             common.st.markdown(
                 "A altura máxima da zona é um parâmetro urbanístico geral. A quantidade real de pavimentos depende do projeto, do Índice de Aproveitamento (IA), da Taxa de Ocupação (TO), da Taxa de Permeabilidade (TP), dos recuos, das normas técnicas e da confirmação no licenciamento municipal."
