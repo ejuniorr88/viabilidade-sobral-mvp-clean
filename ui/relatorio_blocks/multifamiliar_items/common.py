@@ -345,7 +345,7 @@ def _summarize_adequabilidade(*, zone_class: str | None, via_norm: str | None, v
 # a classificação da zona simples, mesmo quando a própria legislação/tabela oficial
 # permite o uso residencial. Sem esse apoio, o relatório exibe apenas "PERMITE PELA VIA"
 # mesmo quando zona e via são favoráveis.
-def _fallback_zone_class_residencial(zone_sigla: str | None) -> str | None:
+def _fallback_zone_class_residencial(zone_sigla: str | None, use_type_code: str | None = None) -> str | None:
     z = str(zone_sigla or "").strip().upper()
     z = z.replace("—", "-").replace("_", "").replace("/", "").replace(" ", "")
     if not z:
@@ -361,11 +361,16 @@ def _fallback_zone_class_residencial(zone_sigla: str | None) -> str | None:
         "ZAM",
         "ZPP",   # ZPP1, ZPP2 e ZPP3.
     )
-    allow_ap_prefixes = (
-        "ZEIS1",
-        "ZEIS2",
-        "ZEIS3",
-    )
+    use_code = _norm(use_type_code)
+    multifamiliar_codes = {"RES_MULTI_R21", "RES_MULTI_R22", "RES_MULTI_R3"}
+
+    # Nas ZEIS, a classificação residencial varia conforme o tipo de uso:
+    # - Unifamiliar: ZEIS 1, 2 e 3 = AP
+    # - Multifamiliar R2.1/R2.2/R3: ZEIS 1 e 2 = AP/AM; ZEIS 3 = A
+    if z.startswith("ZEIS1") or z.startswith("ZEIS2"):
+        return "AP/AM" if use_code in multifamiliar_codes else "AP"
+    if z.startswith("ZEIS3"):
+        return "A" if use_code in multifamiliar_codes else "AP"
     deny_i_prefixes = (
         "ZEPE",  # ZEPE1 e ZEPE2 não devem virar "zona e via" para residencial.
         "ZEIA",  # ZEIA_APP, ZEIA1, ZEIA2 e ZEIA3 mantêm leitura especial/restritiva pela zona.
@@ -375,9 +380,6 @@ def _fallback_zone_class_residencial(zone_sigla: str | None) -> str | None:
     for prefix in allow_a_prefixes:
         if z.startswith(prefix):
             return "A"
-    for prefix in allow_ap_prefixes:
-        if z.startswith(prefix):
-            return "AP"
     for prefix in deny_i_prefixes:
         if z.startswith(prefix):
             return "I"
@@ -428,8 +430,8 @@ def _fetch_adequabilidade(*, zone_sigla: str, via_tipo_texto: Optional[str], use
     # ZAM/ZAP/ZCR/ZOP + via A, que deve aparecer como
     # "PERMITE PELA ZONA E PELA VIA".
     if use_code.startswith("RES_"):
-        fallback_zone_class = _fallback_zone_class_residencial(zona)
-        if fallback_zone_class and _norm(zone_class) != fallback_zone_class:
+        fallback_zone_class = _fallback_zone_class_residencial(zona, use_code)
+        if fallback_zone_class and not _norm(zone_class):
             debug["zone_fallback_previous_class"] = zone_class
             zone_class = fallback_zone_class
             debug["zone_fallback"] = "residential_zone_class"
