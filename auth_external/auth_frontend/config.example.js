@@ -3,7 +3,7 @@ window.AUTH_CONFIG = {
   SUPABASE_ANON_KEY: "YOUR_SUPABASE_ANON_KEY",
   GATEWAY_BASE_URL: "http://127.0.0.1:8000",
   LOGIN_REDIRECT_URL: "http://127.0.0.1:3000",
-  STREAMLIT_APP_URL: "https://viabilidadeteste.streamlit.app",
+  STREAMLIT_APP_URL: "http://127.0.0.1:8501",
   // O patch de segurança exige allowlist/baseCfg no config.js do login externo.
   // Não deixe estas listas vazias em homologação/produção, porque o login deve
   // falhar fechado em vez de aceitar domínios enviados por query string.
