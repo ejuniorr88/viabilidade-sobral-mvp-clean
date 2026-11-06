@@ -1,6 +1,10 @@
-streamlit
-folium
-streamlit-folium
+# versões fixadas e testadas em 2026-11-06 (evita quebra por atualização automática)
+streamlit==1.67.0
+folium==0.20.0
+streamlit-folium==0.27.4
+# pyarrow 26+ exige NumPy 2; o projeto usa numpy 1.26.4 (shapely 2.0.3)
+pyarrow==25.0.1
+pandas==3.0.6
 
 # força ferramentas de build e pkg_resources (evita surpresas)
 setuptools==69.5.1
@@ -16,7 +20,7 @@ shapely==2.0.3
 pyproj==3.6.1
 
 # caso use supabase
-supabase
+supabase==2.34.1
 python-dotenv
 requests
 fpdf2==2.8.3
